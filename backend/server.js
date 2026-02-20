@@ -1,7 +1,7 @@
 
 import express from 'express';
 import cors from 'cors';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -23,7 +23,7 @@ if (!process.env.API_KEY) {
 }
 
 // Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
 // Health Check
 app.get('/api/health', (req, res) => {
