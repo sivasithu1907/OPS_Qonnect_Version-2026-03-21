@@ -385,6 +385,29 @@ app.post("/api/tickets", async (req, res) => {
   }
 });
 
+// Ticket history (events)
+app.get("/api/tickets/:id/history", async (req, res) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) return res.status(400).json({ error: "Ticket id is required" });
+
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM ticket_events
+      WHERE ticket_id = $1
+      ORDER BY created_at ASC
+      `,
+      [id]
+    );
+
+    res.json(rows);
+  } catch (e) {
+    console.error("ticket history error:", e);
+    res.status(500).json({ error: "Failed to load ticket history" });
+  }
+});
+
 // Analyze Endpoint
 app.post('/api/analyze', async (req, res) => {
   try {
