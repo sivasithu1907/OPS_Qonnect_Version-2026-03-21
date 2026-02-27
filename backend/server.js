@@ -34,6 +34,65 @@ async function initDb() {
       );
     `);
 
+      // ==============================
+      // Tickets (DB Bootstrap)
+      // ==============================
+
+      // Sequence for ticket IDs
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ticket_id_seq (
+          id BIGSERIAL PRIMARY KEY
+        );
+      `);
+
+      // Tickets table
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS tickets (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT,
+
+          priority TEXT NOT NULL DEFAULT 'MEDIUM',  -- LOW | MEDIUM | HIGH | URGENT
+          status TEXT NOT NULL DEFAULT 'NEW',       -- NEW | ASSIGNED | IN_PROGRESS | ON_HOLD | RESOLVED | CANCELLED
+
+          customer_id TEXT NULL REFERENCES customers(id) ON DELETE SET NULL,
+
+          assigned_user_id TEXT NULL,
+          assigned_user_name TEXT NULL,
+
+          created_by_user_id TEXT NULL,
+          created_by_user_name TEXT NULL,
+
+          due_at TIMESTAMPTZ NULL,
+
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+      `);
+
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_tickets_customer_id ON tickets(customer_id);`);
+
+      // Ticket events/history table
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ticket_events (
+          id BIGSERIAL PRIMARY KEY,
+          ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+
+          event_type TEXT NOT NULL,                 -- CREATED | ASSIGNED | STATUS_CHANGED | NOTE
+          from_status TEXT NULL,
+          to_status TEXT NULL,
+          note TEXT NULL,
+
+          actor_user_id TEXT NULL,
+          actor_user_name TEXT NULL,
+
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+      `);
+
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket_id ON ticket_events(ticket_id);`);
+
     console.log("✅ DB initialized successfully");
   } catch (err) {
     console.error("❌ DB initialization failed:", err);
