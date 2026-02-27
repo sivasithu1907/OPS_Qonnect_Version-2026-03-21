@@ -24,7 +24,7 @@ import AIChatBot from './components/AIChatBot';
 import SystemDataTools from './components/SystemDataTools';
 import WhatsAppMonitor from './components/WhatsAppMonitor';
 import { Menu, Bell, Search, LogOut, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { generateActivityId, generateTicketId } from './utils/idUtils';
+import { generateActivityId } from './utils/idUtils';
 
 // Logo Component
 const QonnectLogo = ({ className }: { className?: string }) => (
@@ -173,32 +173,49 @@ useEffect(() => {
       setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
-  const handleCreateTicket = (data: any) => {
-      const newTicket: Ticket = {
-          id: generateTicketId(),
-          customerId: data.customerId,
-          customerName: data.customerName,
-          phoneNumber: data.phoneNumber,
-          category: data.category,
-          type: data.type,
-          priority: data.priority,
-          status: TicketStatus.NEW,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          unreadCount: 0,
-          messages: [{
-              id: `m-${Date.now()}`,
-              sender: MessageSender.CLIENT,
-              content: data.initialMessage,
-              timestamp: new Date().toISOString()
-          }],
-          locationUrl: data.locationUrl,
-          houseNumber: data.houseNumber,
-          odooLink: data.odooLink,
-          assignedTechId: data.assignedTechId
-      };
-      setTickets(prev => [newTicket, ...prev]);
-  };
+const handleCreateTicket = async (data: any) => {
+  try {
+    // Build a clean title
+    const title =
+      (data?.type && data?.category)
+        ? `${data.category} - ${data.type}`
+        : (data?.initialMessage ? String(data.initialMessage).slice(0, 80) : "New Ticket");
+
+    // Build a detailed description (keep everything)
+    const descParts = [
+      data?.initialMessage ? `Message: ${data.initialMessage}` : null,
+      data?.phoneNumber ? `Phone: ${data.phoneNumber}` : null,
+      data?.houseNumber ? `House: ${data.houseNumber}` : null,
+      data?.locationUrl ? `Location: ${data.locationUrl}` : null,
+      data?.odooLink ? `Odoo: ${data.odooLink}` : null,
+    ].filter(Boolean);
+
+    const payload: any = {
+      title,
+      description: descParts.join("\n"),
+      priority: data?.priority || "MEDIUM",
+      customerId: data?.customerId || null,
+      createdByUserName: currentUser?.name || "Portal",
+    };
+
+    const res = await fetch("/api/tickets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error || `Failed to create ticket (${res.status})`);
+    }
+
+    // Refresh from DB so UI stays source-of-truth
+    await fetchTickets();
+  } catch (err: any) {
+    console.error(err);
+    alert(err?.message || "Failed to create ticket");
+  }
+};
 
   const handleSendMessage = (ticketId: string, content: string, sender: MessageSender) => {
       setTickets(prev => prev.map(t => {
