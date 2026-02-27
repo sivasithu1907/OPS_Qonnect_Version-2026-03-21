@@ -385,6 +385,25 @@ app.post("/api/tickets", async (req, res) => {
   }
 });
 
+// Get single ticket by id
+app.get("/api/tickets/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const { rows } = await pool.query(
+      `SELECT * FROM tickets WHERE id = $1`,
+      [id]
+    );
+
+    if (!rows[0]) return res.status(404).json({ error: "Not found" });
+
+    res.json(rows[0]);
+  } catch (e) {
+    console.error("ticket get error:", e);
+    res.status(500).json({ error: "Failed to load ticket" });
+  }
+});
+
 // Ticket history (events)
 app.get("/api/tickets/:id/history", async (req, res) => {
   try {
