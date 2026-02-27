@@ -5,6 +5,41 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
 import { pool } from "./db.js";
 
+// ==============================
+// DB Bootstrap (Auto-init)
+// ==============================
+async function initDb() {
+  try {
+    // Create sequence table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customer_id_seq (
+        id BIGSERIAL PRIMARY KEY
+      );
+    `);
+
+    // Create customers table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT,
+        email TEXT,
+        address TEXT,
+        avatar TEXT,
+        building_number TEXT,
+        notes TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+
+    console.log("✅ DB initialized successfully");
+  } catch (err) {
+    console.error("❌ DB initialization failed:", err);
+  }
+}
+
 dotenv.config();
 
 const app = express();
@@ -295,7 +330,8 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Backend server running on http://localhost:${PORT}`);
-  console.log(`🔑 API Key Status: ${process.env.API_KEY ? "Loaded" : "MISSING"}`);
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`✅ Backend server running on http://localhost:${PORT}`);
+  });
 });
