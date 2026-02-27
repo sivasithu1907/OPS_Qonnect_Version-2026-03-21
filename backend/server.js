@@ -319,6 +319,72 @@ app.get("/api/tickets", async (req, res) => {
   }
 });
 
+// Create ticket
+app.post("/api/tickets", async (req, res) => {
+  try {
+    const {
+      title,
+      description = null,
+      priority = "MEDIUM",
+      customerId = null,
+      createdByUserId = null,
+      createdByUserName = null,
+      dueAt = null,
+    } = req.body || {};
+
+    if (!title || String(title).trim().length < 3) {
+      return res.status(400).json({ error: "Ticket title is required" });
+    }
+
+    const id = await nextTicketId();
+
+    const { rows } = await pool.query(
+      `
+      INSERT INTO tickets (
+        id, title, description, priority, status,
+        customer_id,
+        created_by_user_id, created_by_user_name,
+        due_at
+      )
+      VALUES ($1,$2,$3,$4,'NEW',$5,$6,$7,$8)
+      RETURNING *
+      `,
+      [
+        id,
+        String(title).trim(),
+        description ? String(description).trim() : null,
+        String(priority || "MEDIUM").toUpperCase(),
+        customerId ? String(customerId).trim() : null,
+        createdByUserId ? String(createdByUserId).trim() : null,
+        createdByUserName ? String(createdByUserName).trim() : null,
+        dueAt ? new Date(dueAt).toISOString() : null,
+      ]
+    );
+
+    // history event
+    await pool.query(
+      `
+      INSERT INTO ticket_events (
+        ticket_id, event_type, from_status, to_status, note,
+        actor_user_id, actor_user_name
+      )
+      VALUES ($1,'CREATED',NULL,'NEW',$2,$3,$4)
+      `,
+      [
+        id,
+        "Ticket created",
+        createdByUserId ? String(createdByUserId).trim() : null,
+        createdByUserName ? String(createdByUserName).trim() : null,
+      ]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    console.error("tickets create error:", e);
+    res.status(500).json({ error: "Failed to create ticket" });
+  }
+});
+
 // Analyze Endpoint
 app.post('/api/analyze', async (req, res) => {
   try {
