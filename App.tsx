@@ -168,10 +168,61 @@ useEffect(() => {
       setActiveView('dashboard');
   };
 
-  // --- Data Handlers ---
-  const handleUpdateTicket = (updated: Ticket) => {
-      setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
-  };
+const handleUpdateTicket = async (updated: Ticket) => {
+  try {
+    // Find current (old) ticket from state
+    const old = tickets.find(t => t.id === updated.id);
+
+    // If we can't find it, just refresh from DB
+    if (!old) {
+      await fetchTickets();
+      return;
+    }
+
+    // 1) Assignment change → call /assign
+    const oldTechId = (old as any).assignedTechId || null;
+    const newTechId = (updated as any).assignedTechId || null;
+
+    if (newTechId !== oldTechId) {
+      const body: any = {
+        userId: newTechId || null,
+        note: newTechId
+          ? `Assigned via portal`
+          : `Unassigned via portal`,
+      };
+
+      await fetch(`/api/tickets/${encodeURIComponent(updated.id)}/assign`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    }
+
+    // 2) Status change → call /status
+    const oldStatus = (old as any).status;
+    const newStatus = (updated as any).status;
+
+    if (newStatus && newStatus !== oldStatus) {
+      const body: any = {
+        status: newStatus,
+        note: `Status updated via portal`,
+        actorUserName: currentUser?.name || "Portal",
+      };
+
+      await fetch(`/api/tickets/${encodeURIComponent(updated.id)}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    }
+
+    // 3) Refresh from DB so UI matches backend
+    await fetchTickets();
+  } catch (err) {
+    console.error(err);
+    alert("Failed to update ticket (assign/status). Check backend logs.");
+  }
+};
 
 const handleCreateTicket = async (data: any) => {
   try {
