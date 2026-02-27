@@ -41,7 +41,7 @@ function App() {
   const [tickets, setTickets] = useState<Ticket[]>(MOCK_TICKETS);
   const [activities, setActivities] = useState<Activity[]>(MOCK_ACTIVITIES);
   const [technicians, setTechnicians] = useState<Technician[]>(MOCK_TECHNICIANS);
-  const [customers, setCustomers] = useState<Customer[]>(MOCK_CUSTOMERS);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [teams, setTeams] = useState<Team[]>(MOCK_TEAMS);
   const [sites, setSites] = useState<Site[]>(MOCK_SITES);
 
@@ -221,18 +221,90 @@ function App() {
       setActivities(prev => prev.filter(a => a.id !== id));
   };
 
-  // Customer Handlers
-  const handleAddCustomer = (c: Customer) => {
-      setCustomers(prev => [...prev, c]);
-  };
-  
-  const handleUpdateCustomer = (c: Customer) => {
-      setCustomers(prev => prev.map(x => x.id === c.id ? c : x));
-  };
+// Customer Handlers (API-first)
+const handleAddCustomer = async (c: Customer) => {
+  try {
+    const res = await fetch("/api/customers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: c.name,
+        phone: (c as any).phone,
+        email: (c as any).email,
+        address: (c as any).address,
+        notes: (c as any).notes,
+        is_active: (c as any).is_active ?? true,
+      }),
+    });
 
-  const handleDeleteCustomer = (id: string) => {
-      setCustomers(prev => prev.filter(x => x.id !== id));
-  };
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error || "Failed to create customer");
+    }
+
+    await loadCustomers();
+  } catch (e) {
+    console.error(e);
+    alert("Failed to create customer");
+  }
+};
+
+const handleUpdateCustomer = async (c: Customer) => {
+  try {
+    const id = (c as any)?.id ? String((c as any).id).trim() : "";
+    if (!id) {
+      console.error("🚨 Update customer called without id:", c);
+      alert("Failed to update customer: missing customer id.");
+      return;
+    }
+
+    const payload = {
+      name: c.name,
+      phone: (c as any).phone,
+      email: (c as any).email,
+      address: (c as any).address,
+      buildingNumber: (c as any).buildingNumber,
+      notes: (c as any).notes,
+      is_active: (c as any).is_active ?? true,
+    };
+
+    console.log("PUT /api/customers/" + id, payload);
+
+    const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("Update failed:", res.status, text);
+      alert(`Failed to update customer (${res.status})`);
+      return;
+    }
+
+    await loadCustomers();
+  } catch (e) {
+    console.error("Update exception:", e);
+    alert("Failed to update customer");
+  }
+};
+
+const handleDeleteCustomer = async (id: string) => {
+  try {
+    const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error || "Failed to delete customer");
+    }
+
+    await loadCustomers();
+  } catch (e) {
+    console.error(e);
+    alert("Failed to delete customer");
+  }
+};
 
   // Tech/User Handlers
   const handleSaveUser = (u: Technician) => {
@@ -252,10 +324,24 @@ function App() {
       if (data.tickets) setTickets(data.tickets);
       if (data.activities) setActivities(data.activities);
       if (data.technicians) setTechnicians(data.technicians);
-      if (data.customers) setCustomers(data.customers);
+   // if (data.customers) setCustomers(data.customers);
       if (data.teams) setTeams(data.teams);
       if (data.sites) setSites(data.sites);
   };
+
+const loadCustomers = async () => {
+  try {
+    const res = await fetch("/api/customers");
+    const data = await res.json();
+    if (Array.isArray(data)) setCustomers(data);
+  } catch (e) {
+    console.error("Failed to load customers", e);
+  }
+};
+
+useEffect(() => {
+  loadCustomers();
+}, []);
 
   // --- Navigation Logic ---
   const filteredNavItems = useMemo(() => {

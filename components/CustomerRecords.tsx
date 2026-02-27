@@ -3,7 +3,6 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Customer, Activity, Technician, Site } from '../types';
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
 import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home } from 'lucide-react';
-import { generateCustomerId } from '../utils/idUtils';
 
 interface CustomerRecordsProps {
   customers: Customer[];
@@ -157,20 +156,30 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
           return;
       }
 
-      const data = {
-          ...rawData,
-          phone: cleanPhone
-      };
-      
-      if (modalType === 'add') {
-          data.id = generateCustomerId();
-          data.avatar = avatarPreview || `https://ui-avatars.com/api/?name=${data.name}&background=random`;
-      } else if (activeItem) {
-          data.id = activeItem.id;
-          data.avatar = avatarPreview || activeItem.avatar;
-      }
 
-      onSaveCustomer(data as Customer);
+// Build payload but NEVER trust form fields for id
+const data: any = {
+  ...rawData,
+  phone: cleanPhone,
+};
+
+// Remove any accidental id coming from the form
+delete data.id;
+
+if (modalType === 'add') {
+  // ID comes from backend
+  data.avatar = avatarPreview || `https://ui-avatars.com/api/?name=${data.name}&background=random`;
+} else {
+  // Must have activeItem with a real id
+  if (!activeItem?.id) {
+    setFormError("Missing customer ID. Please close and reopen the client, then try again.");
+    return;
+  }
+  data.id = activeItem.id;
+  data.avatar = avatarPreview || activeItem.avatar;
+}
+
+onSaveCustomer(data as Customer);
       closeModal();
   };
 
