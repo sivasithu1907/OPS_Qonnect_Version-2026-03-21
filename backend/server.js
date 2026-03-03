@@ -10,14 +10,7 @@ import { pool } from "./db.js";
 // ==============================
 async function initDb() {
   try {
-    // Create sequence table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS customer_id_seq (
-        id BIGSERIAL PRIMARY KEY
-      );
-    `);
-
-    // Create customers table
+    // 1. Customers Table (Already exists in your code)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS customers (
         id TEXT PRIMARY KEY,
@@ -25,14 +18,49 @@ async function initDb() {
         phone TEXT,
         email TEXT,
         address TEXT,
-        avatar TEXT,
-        building_number TEXT,
         notes TEXT,
-        is_active BOOLEAN NOT NULL DEFAULT true,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT now()
       );
     `);
+
+    // 2. Tickets Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tickets (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT REFERENCES customers(id),
+        customer_name TEXT,
+        category TEXT,
+        priority TEXT,
+        status TEXT DEFAULT 'NEW',
+        location_url TEXT,
+        house_number TEXT,
+        messages JSONB DEFAULT '[]',
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    console.log("✅ DB initialized with Tickets and Customers");
+  } catch (err) {
+    console.error("❌ DB initialization failed:", err);
+  }
+}
+
+// Add Ticket Routes
+app.get("/api/tickets", async (req, res) => {
+  const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC");
+  res.json(result.rows);
+});
+
+app.post("/api/tickets", async (req, res) => {
+  const { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages } = req.body;
+  const result = await pool.query(
+    "INSERT INTO tickets (id, customer_id, customer_name, category, priority, location_url, house_number, messages) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+    [id, customerId, customerName, category, priority, locationUrl, houseNumber, JSON.stringify(messages)]
+  );
+  res.status(201).json(result.rows[0]);
+});
 
     console.log("✅ DB initialized successfully");
   } catch (err) {
