@@ -154,31 +154,25 @@ function App() {
       setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
   };
 
-  const handleCreateTicket = (data: any) => {
-      const newTicket: Ticket = {
+  const handleCreateTicket = async (data: any) => {
+    try {
+      const res = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
           id: generateTicketId(),
-          customerId: data.customerId,
-          customerName: data.customerName,
-          phoneNumber: data.phoneNumber,
-          category: data.category,
-          type: data.type,
-          priority: data.priority,
           status: TicketStatus.NEW,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          unreadCount: 0,
-          messages: [{
-              id: `m-${Date.now()}`,
-              sender: MessageSender.CLIENT,
-              content: data.initialMessage,
-              timestamp: new Date().toISOString()
-          }],
-          locationUrl: data.locationUrl,
-          houseNumber: data.houseNumber,
-          odooLink: data.odooLink,
-          assignedTechId: data.assignedTechId
-      };
-      setTickets(prev => [newTicket, ...prev]);
+          createdAt: new Date().toISOString()
+        }),
+      });
+
+      if (res.ok) {
+        await loadTickets(); // Refresh list from database
+      }
+    } catch (e) {
+      console.error("Failed to save ticket to database", e);
+    }
   };
 
   const handleSendMessage = (ticketId: string, content: string, sender: MessageSender) => {
