@@ -79,6 +79,36 @@ app.get('/api/health', (req, res) => {
 });
 
 // ==============================
+// Tickets (PostgreSQL)
+// ==============================
+
+// 1. Get all tickets from DB
+app.get("/api/tickets", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC");
+    res.json(result.rows);
+  } catch (e) {
+    console.error("Tickets fetch error:", e);
+    res.status(500).json({ error: "Failed to fetch tickets" });
+  }
+});
+
+// 2. Create a new ticket in DB
+app.post("/api/tickets", async (req, res) => {
+  try {
+    const { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages } = req.body;
+    const result = await pool.query(
+      "INSERT INTO tickets (id, customer_id, customer_name, category, priority, location_url, house_number, messages) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+      [id, customerId, customerName, category, priority, locationUrl, houseNumber, JSON.stringify(messages)]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    console.error("Ticket creation error:", e);
+    res.status(500).json({ error: "Failed to create ticket" });
+  }
+});
+
+// ==============================
 // Customers (PostgreSQL)
 // ==============================
 function toCustomerId(n) {
