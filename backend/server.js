@@ -278,28 +278,28 @@ app.post('/api/analyze', async (req, res) => {
       config: {
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
-            summary: { type: Type.STRING },
+            summary: { type: SchemaType.STRING },
             service_category: {
-              type: Type.STRING,
+              type: SchemaType.STRING,
               enum: ["ELV Systems", "Home Automation", "Unknown"]
             },
             priority: {
-              type: Type.STRING,
+              type: SchemaType.STRING,
               enum: ["LOW", "MEDIUM", "HIGH", "URGENT"]
             },
-            remote_possible: { type: Type.BOOLEAN },
+            remote_possible: { type: SchemaType.BOOLEAN },
             recommended_action: {
-              type: Type.STRING,
+              type: SchemaType.STRING,
               enum: ["remote_support", "assign_technician", "request_more_info"]
             },
             suggested_questions: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
+              type: SchemaType.ARRAY,
+              items: { type: SchemaType.STRING }
             },
-            draft_reply: { type: Type.STRING },
-            confidence: { type: Type.NUMBER }
+            draft_reply: { type: SchemaType.STRING },
+            confidence: { type: SchemaType.NUMBER }
           },
           required: [
             "summary",
@@ -315,7 +315,8 @@ app.post('/api/analyze', async (req, res) => {
       }
     });
 
-    const rawText = response.text || "{}";
+    // CORRECTED DATA EXTRACTION
+    const rawText = result.response.text();
     let data;
     try {
         data = JSON.parse(rawText);
@@ -357,15 +358,18 @@ app.post('/api/chat', async (req, res) => {
       parts: [{ text: newMessage }]
     });
 
-   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+   // CORRECTED SYSTEM INSTRUCTION PLACEMENT
+   const model = genAI.getGenerativeModel({ 
+       model: "gemini-1.5-flash",
+       systemInstruction: "You are Qonnect AI, a helpful field operations assistant."
+   });
+   
    const result = await model.generateContent({
-      contents: contents,
-      config: {
-        systemInstruction: "You are Qonnect AI, a helpful field operations assistant.",
-      }
+      contents: contents
     });
 
-    res.json({ text: response.text });
+    // CORRECTED DATA EXTRACTION
+    res.json({ text: result.response.text() });
   } catch (error) {
     console.error("[Chat] Error:", error);
     res.status(500).json({ error: "Failed to process chat" });
