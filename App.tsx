@@ -179,23 +179,35 @@ const handleUpdateTicket = async (updated: Ticket) => {
       return;
     }
 
-    // 1) Assignment change → call /assign
+    // 1) Assignment change → call /assign (only if a tech is selected)
     const oldTechId = (old as any).assignedTechId || null;
     const newTechId = (updated as any).assignedTechId || null;
 
     if (newTechId !== oldTechId) {
-      const body: any = {
-        userId: newTechId || null,
-        note: newTechId
-          ? `Assigned via portal`
-          : `Unassigned via portal`,
-      };
+      if (newTechId) {
+        const tech = technicians.find(t => t.id === newTechId);
+        const body: any = {
+          userId: newTechId,
+          userName: tech?.name || newTechId, // backend requires this
+          note: `Assigned via portal`,
+          actorUserName: currentUser?.name || "Portal",
+        };
 
-      await fetch(`/api/tickets/${encodeURIComponent(updated.id)}/assign`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+        const res = await fetch(`/api/tickets/${encodeURIComponent(updated.id)}/assign`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || `Assign failed (${res.status})`);
+        }
+      } else {
+        // No "unassign" endpoint yet in backend.
+        // So we don't call /assign with null (most backends reject it).
+        console.warn("Unassign requested but no backend endpoint exists. Skipping /assign.");
+      }
     }
 
     // 2) Status change → call /status
@@ -209,18 +221,30 @@ const handleUpdateTicket = async (updated: Ticket) => {
         actorUserName: currentUser?.name || "Portal",
       };
 
-      await fetch(`/api/tickets/${encodeURIComponent(updated.id)}/status`, {
+      const res = await fetch(`/api/tickets/${encodeURIComponent(updated.id)}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+
+      // If backend returns {ok:true, skipped:true} → status unchanged, no history entry
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.skipped) {
+          // no need to do anything special, we still refresh below
+          console.log("Status unchanged → skipped history insert");
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `Status update failed (${res.status})`);
+      }
     }
 
     // 3) Refresh from DB so UI matches backend
     await fetchTickets();
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    alert("Failed to update ticket (assign/status). Check backend logs.");
+    alert(err?.message || "Failed to update ticket (assign/status). Check backend logs.");
   }
 };
 
