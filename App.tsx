@@ -360,9 +360,11 @@ const loadCustomers = async () => {
 };
 
 useEffect(() => {
-  loadCustomers();
-}, []);
-
+    loadCustomers();
+    loadTickets();
+    loadActivities();
+  }, []);
+  
   // --- Navigation Logic ---
   const filteredNavItems = useMemo(() => {
       if (!currentUser) return [];
