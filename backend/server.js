@@ -1,11 +1,13 @@
-dotenv.config();
-const app = express();
 
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
 import { pool } from "./db.js";
+
+dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 8080;
 
 // ==============================
 // DB Bootstrap (Auto-init)
@@ -47,7 +49,6 @@ async function initDb() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS customer_id_seq (
         id BIGSERIAL PRIMARY KEY
-      );
     `);
 
     console.log("✅ DB initialized with Tickets and Customers");
@@ -249,7 +250,7 @@ app.post('/api/analyze', async (req, res) => {
     
     const context = history.length > 0 ? `Conversation History:\n${history.join('\n')}\n\n` : '';
     
-    const response = await ai.models.generateContent({
+    const response = await genAI.models.generateContent({
       model: "gemini-1.5-flash",
       contents: [
         {
@@ -356,7 +357,7 @@ app.post('/api/chat', async (req, res) => {
       parts: [{ text: newMessage }]
     });
 
-    const response = await ai.models.generateContent({
+    const response = await genAI.models.generateContent({
       model: "gemini-1.5-flash",
       contents: contents,
       config: {
