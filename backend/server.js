@@ -73,9 +73,13 @@ async function initDb() {
         const hashedPass = await bcrypt.hash("admin123", 10);
         await pool.query(
             "INSERT INTO users (id, name, email, password, role) VALUES ($1, $2, $3, $4, $5)",
-            ["u-admin", "System Admin", "admin@qonnect.qa", hashedPass, "OPERATIONS_MANAGER"]
+            ["u-admin", "System Admin", "admin@qonnect.qa", hashedPass, "ADMIN"]
         );
         console.log("✅ Default Admin User Created");
+    } else {
+        // Auto-fix the existing user in the live database!
+        await pool.query("UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER'");
+        console.log("✅ Admin Role Fixed in Database");
     }
     
     console.log("✅ DB initialized with Tickets and Customers");
