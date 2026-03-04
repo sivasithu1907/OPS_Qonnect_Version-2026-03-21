@@ -4,6 +4,8 @@ import cors from 'cors';
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import dotenv from 'dotenv';
 import { pool } from "./db.js";
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 const app = express();
@@ -51,6 +53,31 @@ async function initDb() {
       id BIGSERIAL PRIMARY KEY
     );
   `);
+    
+    // 4. Users/Technicians Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL,
+        status TEXT DEFAULT 'ACTIVE',
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    // Create a default admin if none exists
+    const adminCheck = await pool.query("SELECT * FROM users WHERE email = 'admin@qonnect.qa'");
+    if (adminCheck.rows.length === 0) {
+        const hashedPass = await bcrypt.hash("admin123", 10);
+        await pool.query(
+            "INSERT INTO users (id, name, email, password, role) VALUES ($1, $2, $3, $4, $5)",
+            ["u-admin", "System Admin", "admin@qonnect.qa", hashedPass, "OPERATIONS_MANAGER"]
+        );
+        console.log("✅ Default Admin User Created");
+    }
+    
     console.log("✅ DB initialized with Tickets and Customers");
   } catch (err) {
     console.error("❌ DB initialization failed:", err);
@@ -374,6 +401,110 @@ app.post('/api/chat', async (req, res) => {
     console.error("[Chat] Error:", error);
     res.status(500).json({ error: "Failed to process chat" });
   }
+});
+
+// ==============================
+// Authentication & Users (JWT)
+// ==============================
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    
+    if (rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
+    
+    const user = rows[0];
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) return res.status(401).json({ error: "Invalid credentials" });
+
+    const token = jwt.sign(
+        { id: user.id, role: user.role, email: user.email }, 
+        process.env.JWT_SECRET || 'fallback_secret', 
+        { expiresIn: '12h' }
+    );
+
+    res.json({ 
+        token, 
+        user: { id: user.id, name: user.name, email: user.email, role: user.role } 
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
+app.get("/api/users", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status FROM users");
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).json({ error: "Failed to fetch users" });
+    }
+});
+
+// ==============================
+// WhatsApp Webhook Integration
+// ==============================
+app.get("/api/whatsapp/webhook", (req, res) => {
+    // Meta/WhatsApp Verification
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    // The verify token here must match the one you set in Meta Developer Dashboard
+    if (mode === "subscribe" && token === "QONNECT_WA_TOKEN") {
+        res.status(200).send(challenge);
+    } else {
+        res.sendStatus(403);
+    }
+});
+
+app.post("/api/whatsapp/webhook", async (req, res) => {
+    try {
+        const body = req.body;
+        // Verify this is from WhatsApp API
+        if (body.object === "whatsapp_business_account") {
+            for (let entry of body.entry) {
+                for (let change of entry.changes) {
+                    if (change.value && change.value.messages) {
+                        const msg = change.value.messages[0];
+                        const phone = msg.from; // Sender's phone number
+                        const text = msg.text.body;
+
+                        console.log(`[WhatsApp] New message from ${phone}: ${text}`);
+
+                        // Find if an active ticket exists for this phone
+                        const { rows: tickets } = await pool.query(
+                            "SELECT * FROM tickets WHERE messages::text LIKE $1 AND status != 'RESOLVED' ORDER BY updated_at DESC LIMIT 1",
+                            [`%${phone}%`]
+                        );
+
+                        if (tickets.length > 0) {
+                            // Append message to existing ticket
+                            const ticket = tickets[0];
+                            const messages = ticket.messages || [];
+                            messages.push({
+                                id: `wa-${Date.now()}`,
+                                sender: "CLIENT",
+                                content: text,
+                                timestamp: new Date().toISOString()
+                            });
+
+                            await pool.query(
+                                "UPDATE tickets SET messages = $1, updated_at = NOW() WHERE id = $2",
+                                [JSON.stringify(messages), ticket.id]
+                            );
+                        } else {
+                            console.log(`[WhatsApp] No active ticket found for ${phone}.`);
+                        }
+                    }
+                }
+            }
+        }
+        res.sendStatus(200);
+    } catch (error) {
+        console.error("[WhatsApp Webhook Error]:", error);
+        res.sendStatus(500);
+    }
 });
 
 initDb().then(() => {
