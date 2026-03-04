@@ -135,6 +135,19 @@ app.post("/api/tickets", async (req, res) => {
   }
 });
 
+// 3. Delete a ticket in DB (Admin only)
+app.delete("/api/tickets/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const result = await pool.query("DELETE FROM tickets WHERE id=$1", [id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("Ticket deletion error:", e);
+    res.status(500).json({ error: "Failed to delete ticket" });
+  }
+});
+
 // ==============================
 // Customers (PostgreSQL)
 // ==============================
