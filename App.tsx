@@ -183,7 +183,9 @@ const handleLogin = async (email: string, pass: string) => {
       }
   };
 
-  const handleLogout = () => {
+const handleLogout = () => {
+      localStorage.removeItem('qonnect_token');
+      localStorage.removeItem('qonnect_user');
       setCurrentUser(null);
       setActiveView('dashboard');
   };
