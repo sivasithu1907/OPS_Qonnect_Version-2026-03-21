@@ -67,7 +67,7 @@ async function initDb() {
       );
     `);
 
-    // Create a default admin if none exists
+// Create a default admin if none exists
     const adminCheck = await pool.query("SELECT * FROM users WHERE email = 'admin@qonnect.qa'");
     if (adminCheck.rows.length === 0) {
         const hashedPass = await bcrypt.hash("admin123", 10);
@@ -77,9 +77,8 @@ async function initDb() {
         );
         console.log("✅ Default Admin User Created");
     } else {
-        // Auto-fix the existing user in the live database!
+        // This line automatically fixes the broken user currently stuck in your live database!
         await pool.query("UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER'");
-        console.log("✅ Admin Role Fixed in Database");
     }
     
     console.log("✅ DB initialized with Tickets and Customers");
