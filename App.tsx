@@ -182,6 +182,21 @@ const handleLogin = async (email: string, pass: string) => {
         }),
       });
 
+    const handleDeleteTicket = async (id: string) => {
+      if (!window.confirm("Are you sure you want to permanently delete this ticket?")) return;
+      try {
+          const res = await fetch(`/api/tickets/${id}`, { method: "DELETE" });
+          if (res.ok) {
+              setTickets(prev => prev.filter(t => t.id !== id));
+              if (focusedTicketId === id) setFocusedTicketId(null);
+          } else {
+              alert("Failed to delete ticket");
+          }
+      } catch (e) {
+          console.error("Delete error", e);
+      }
+  };
+      
       if (res.ok) {
         await loadTickets(); // Refresh list from database
       }
