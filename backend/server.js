@@ -504,8 +504,9 @@ app.post('/api/chat', async (req, res) => {
 
     const { history, newMessage } = req.body;
     
+    // Convert history to the format Gemini expects
     const contents = history.map(msg => ({
-      role: msg.role,
+      role: msg.role === 'user' ? 'user' : 'model', // Gemini uses 'model' instead of 'assistant'
       parts: [{ text: msg.text }]
     }));
     
@@ -514,17 +515,19 @@ app.post('/api/chat', async (req, res) => {
       parts: [{ text: newMessage }]
     });
 
-   // CORRECTED SYSTEM INSTRUCTION PLACEMENT
+   // FIXED: systemInstruction is passed inside getGenerativeModel as an object property
    const model = genAI.getGenerativeModel({ 
        model: "gemini-1.5-flash",
-       systemInstruction: "You are Qonnect AI, a helpful field operations assistant."
+       systemInstruction: {
+           role: "system",
+           parts: [{ text: "You are Qonnect AI, a helpful field operations assistant for Qonnect W.L.L. in Qatar." }]
+       }
    });
    
    const result = await model.generateContent({
       contents: contents
     });
 
-    // CORRECTED DATA EXTRACTION
     res.json({ text: result.response.text() });
   } catch (error) {
     console.error("[Chat] Error:", error);
