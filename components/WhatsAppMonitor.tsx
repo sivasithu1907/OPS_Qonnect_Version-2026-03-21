@@ -41,10 +41,8 @@ interface ChatThread {
   unreadCount: number;
 }
 
-const MOCK_PHONES = ['+974 5500 1234', '+974 6600 5678', '+974 3300 9999', '+974 7700 4444'];
-const MSG_TYPES = ['text', 'image', 'location', 'interactive'];
-
 function parseMsgType(payloadSummary: string): MessageType {
+  if (!payloadSummary) return 'unknown';
   const lower = payloadSummary.toLowerCase();
   if (lower.includes('type: "text"') || lower.includes("type: 'text'")) return 'text';
   if (lower.includes('type: "image"') || lower.includes("type: 'image'")) return 'image';
@@ -55,16 +53,11 @@ function parseMsgType(payloadSummary: string): MessageType {
 
 function typeLabel(t: MessageType): string {
   switch (t) {
-    case 'text':
-      return 'Text';
-    case 'image':
-      return '📷 Image';
-    case 'location':
-      return '📍 Location';
-    case 'interactive':
-      return '🧩 Interactive';
-    default:
-      return 'Message';
+    case 'text': return 'Text';
+    case 'image': return '📷 Image';
+    case 'location': return '📍 Location';
+    case 'interactive': return '🧩 Interactive';
+    default: return 'Message';
   }
 }
 
@@ -75,13 +68,27 @@ const WhatsAppMonitor: React.FC = () => {
   const [eventFilter, setEventFilter] = useState<EventFilter>('ALL');
   const [threadSearch, setThreadSearch] = useState('');
   const [selectedThreadKey, setSelectedThreadKey] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState({
-    inbound: 142,
-    outbound: 118,
-    errors: 2,
-    latency: 240 // ms
-  });
   
+  // Real-time metrics calculated directly from the live database feed
+  const metrics = useMemo(() => {
+    let inbound = 0, outbound = 0, errors = 0, totalLatency = 0, latencyCount = 0;
+    logs.forEach(log => {
+      if (log.type === 'INBOUND') inbound++;
+      if (log.type === 'OUTBOUND') outbound++;
+      if (log.status === 'ERROR') errors++;
+      if (log.latency) {
+        totalLatency += log.latency;
+        latencyCount++;
+      }
+    });
+    return {
+      inbound, outbound, errors,
+      latency: latencyCount > 0 ? Math.round(totalLatency / latencyCount) : 0
+    };
+  }, [logs]);
+  
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logic
@@ -91,51 +98,38 @@ const WhatsAppMonitor: React.FC = () => {
     }
   }, [logs, isPaused, activeTab]);
 
-  // Traffic Simulation
+  // LIVE API POLLING (Heartbeat)
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (isPaused) return;
+    const fetchLiveLogs = async () => {
+        if (isPaused) return;
+        try {
+            const res = await fetch("/api/whatsapp/logs");
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            // Map the PostgreSQL columns to your frontend interface
+            const liveLogs: LogEntry[] = data.map((d: any) => ({
+                id: d.id,
+                timestamp: new Date(d.timestamp),
+                type: d.type as 'INBOUND' | 'OUTBOUND' | 'SYSTEM',
+                phone: d.phone,
+                status: d.status as LogEntry['status'],
+                payloadSummary: d.payload_summary || '',
+                latency: d.latency
+            }));
+            
+            // Reverse so oldest is at top, newest at bottom (for the terminal view)
+            setLogs(liveLogs.reverse()); 
+        } catch (error) {
+            console.error("Failed to fetch live WhatsApp logs:", error);
+        }
+    };
 
-      const randomType = Math.random() > 0.6 ? 'INBOUND' : 'OUTBOUND';
-      const isSystem = Math.random() > 0.95;
-      const phone = MOCK_PHONES[Math.floor(Math.random() * MOCK_PHONES.length)];
-      
-      let newLog: LogEntry;
-
-      if (isSystem) {
-          newLog = {
-              id: Math.random().toString(36).substr(2, 9),
-              timestamp: new Date(),
-              type: 'SYSTEM',
-              phone: 'SYSTEM',
-              status: 'QUEUED',
-              payloadSummary: 'Webhook health check: OK',
-              latency: 10
-          };
-      } else {
-          newLog = {
-              id: Math.random().toString(36).substr(2, 9),
-              timestamp: new Date(),
-              type: randomType,
-              phone: phone,
-              status: randomType === 'INBOUND' ? 'RECEIVED' : 'DELIVERED',
-              payloadSummary: `Payload: { type: "${MSG_TYPES[Math.floor(Math.random() * MSG_TYPES.length)]}", size: "${Math.floor(Math.random() * 500)}b" }`,
-              latency: Math.floor(Math.random() * 400) + 100
-          };
-          
-          // Update Metrics
-          setMetrics(prev => ({
-              ...prev,
-              inbound: randomType === 'INBOUND' ? prev.inbound + 1 : prev.inbound,
-              outbound: randomType === 'OUTBOUND' ? prev.outbound + 1 : prev.outbound,
-              latency: newLog.latency || prev.latency
-          }));
-      }
-
-      setLogs(prev => [...prev.slice(-99), newLog]); // Keep last 100
-    }, 2500); // New event every 2.5s
-
-    return () => clearInterval(interval);
+    // Fetch immediately on mount, then poll every 3 seconds
+    fetchLiveLogs();
+    const heartbeat = setInterval(fetchLiveLogs, 3000);
+    
+    return () => clearInterval(heartbeat);
   }, [isPaused]);
 
   const messages: ChatMessage[] = useMemo(() => {
