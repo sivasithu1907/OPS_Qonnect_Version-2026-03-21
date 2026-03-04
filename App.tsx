@@ -158,8 +158,15 @@ const handleLogin = async (email: string, pass: string) => {
           }
 
           const data = await res.json();
-          // Store token securely
+          
+          // Store both token and user object securely
           localStorage.setItem('qonnect_token', data.token);
+          localStorage.setItem('qonnect_user', JSON.stringify({
+              email: data.user.email,
+              name: data.user.name,
+              role: data.user.role,
+              techId: data.user.id
+          }));
           
           setCurrentUser({
               email: data.user.email,
@@ -167,7 +174,6 @@ const handleLogin = async (email: string, pass: string) => {
               role: data.user.role,
               techId: data.user.id
           });
-          
           if (data.user.role === Role.FIELD_ENGINEER) setActiveView('tech_portal');
           else setActiveView('dashboard');
 
@@ -439,6 +445,24 @@ const loadUsers = async () => {
   }
 };
 
+// --- Persistent Auth Check ---
+  useEffect(() => {
+    const savedToken = localStorage.getItem('qonnect_token');
+    // We fetch user details from localStorage to restore the session
+    const savedUser = localStorage.getItem('qonnect_user');
+    
+    if (savedToken && savedUser) {
+      try {
+        setCurrentUser(JSON.parse(savedUser));
+        // You don't need a setToken state if you're only using it for API calls
+      } catch (e) {
+        console.error("Failed to restore session", e);
+        localStorage.removeItem('qonnect_token');
+        localStorage.removeItem('qonnect_user');
+      }
+    }
+  }, []);
+  
 useEffect(() => {
     loadUsers();
     loadCustomers();
