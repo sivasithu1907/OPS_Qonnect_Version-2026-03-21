@@ -22,3 +22,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files
+.env
+backend/.env
+frontend/.env
+
+# Backup/save files
+*.save
+*.save.*
+backend/*.save
+backend/*.save.*
+
+# Helper / local files
+get-docker.sh
+-la

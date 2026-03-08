@@ -11,6 +11,40 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+/* ---------- WhatsApp Send Helper ---------- */
+async function sendWhatsAppText(to, bodyText) {
+  if (!process.env.WA_ACCESS_TOKEN || !process.env.WA_PHONE_NUMBER_ID) {
+    throw new Error("WhatsApp credentials missing (WA_ACCESS_TOKEN / WA_PHONE_NUMBER_ID)");
+  }
+
+  const url = `https://graph.facebook.com/v17.0/${process.env.WA_PHONE_NUMBER_ID}/messages`;
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: { body: bodyText }
+  };
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.WA_ACCESS_TOKEN}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await resp.json().catch(() => ({}));
+
+  if (!resp.ok) {
+    const errMsg = data?.error?.message || JSON.stringify(data);
+    throw new Error(`Meta send failed: ${resp.status} ${errMsg}`);
+  }
+
+  return data;
+}
+
 // ==============================
 // DB Bootstrap (Auto-init)
 // ==============================
@@ -181,18 +215,38 @@ app.get("/api/tickets", async (req, res) => {
   }
 });
 
-// 2. Create a new ticket in DB
+// 2. Create a new ticket in DB (Fixed for Foreign Key sync)
 app.post("/api/tickets", async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages } = req.body;
-    const result = await pool.query(
-      "INSERT INTO tickets (id, customer_id, customer_name, category, priority, location_url, house_number, messages) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *",
+    const phone = customerId; // Usually the phone number is the unique ID here
+
+    await client.query('BEGIN');
+
+    // STEP A: Ensure the customer exists first (UPSERT)
+    // This prevents the "violates foreign key constraint" error
+    await client.query(`
+      INSERT INTO customers (id, name, phone)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone
+    `, [customerId, customerName, phone]);
+
+    // STEP B: Now create the ticket safely
+    const result = await client.query(
+      `INSERT INTO tickets (id, customer_id, customer_name, category, priority, location_url, house_number, messages) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [id, customerId, customerName, category, priority, locationUrl, houseNumber, JSON.stringify(messages)]
     );
+
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (e) {
+    await client.query('ROLLBACK');
     console.error("Ticket creation error:", e);
-    res.status(500).json({ error: "Failed to create ticket" });
+    res.status(500).json({ error: "Failed to create ticket and customer" });
+  } finally {
+    client.release();
   }
 });
 
@@ -403,10 +457,10 @@ app.post('/api/analyze', async (req, res) => {
 
     const { message, history = [] } = req.body;
     console.log(`[Analyze] Processing message: "${message?.substring(0, 50)}..."`);
-    
+
     const context = history.length > 0 ? `Conversation History:\n${history.join('\n')}\n\n` : '';
-    
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent({
       contents: [
         {
@@ -431,44 +485,6 @@ app.post('/api/analyze', async (req, res) => {
           ]
         }
       ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            summary: { type: SchemaType.STRING },
-            service_category: {
-              type: SchemaType.STRING,
-              enum: ["ELV Systems", "Home Automation", "Unknown"]
-            },
-            priority: {
-              type: SchemaType.STRING,
-              enum: ["LOW", "MEDIUM", "HIGH", "URGENT"]
-            },
-            remote_possible: { type: SchemaType.BOOLEAN },
-            recommended_action: {
-              type: SchemaType.STRING,
-              enum: ["remote_support", "assign_technician", "request_more_info"]
-            },
-            suggested_questions: {
-              type: SchemaType.ARRAY,
-              items: { type: SchemaType.STRING }
-            },
-            draft_reply: { type: SchemaType.STRING },
-            confidence: { type: SchemaType.NUMBER }
-          },
-          required: [
-            "summary",
-            "service_category",
-            "priority",
-            "remote_possible",
-            "recommended_action",
-            "suggested_questions",
-            "draft_reply",
-            "confidence"
-          ]
-        }
-      }
     });
 
     // CORRECTED DATA EXTRACTION
@@ -517,7 +533,7 @@ app.post('/api/chat', async (req, res) => {
 
    // FIXED: systemInstruction is passed inside getGenerativeModel as an object property
    const model = genAI.getGenerativeModel({ 
-       model: "gemini-1.5-flash",
+       model: "gemini-2.5-flash",
        systemInstruction: {
            role: "system",
            parts: [{ text: "You are Qonnect AI, a helpful field operations assistant for Qonnect W.L.L. in Qatar." }]
@@ -674,97 +690,222 @@ app.get("/api/whatsapp/webhook", (req, res) => {
 });
 
 app.post("/api/whatsapp/webhook", async (req, res) => {
-    const startTime = Date.now(); // Track latency for the monitor
+    const startTime = Date.now();
     try {
         const body = req.body;
-        if (body.object === "whatsapp_business_account") {
-            for (let entry of body.entry) {
-                for (let change of entry.changes) {
-                    
-                    // 1. HANDLE INBOUND MESSAGES
-                    if (change.value && change.value.messages) {
-                        const msg = change.value.messages[0];
-                        const contact = change.value.contacts?.[0];
-                        
-                        const phone = msg.from;
-                        const name = contact?.profile?.name || "Unknown WhatsApp User";
-                        const text = msg.text?.body || "Media message received";
+        if (body.object !== "whatsapp_business_account") return res.sendStatus(404);
 
-                        // FIND OR CREATE CUSTOMER
-                        let customerRes = await pool.query("SELECT * FROM customers WHERE phone = $1", [phone]);
-                        let customerId;
-                        if (customerRes.rows.length === 0) {
-                            customerId = `c-${Date.now()}`;
-                            await pool.query(
-                                "INSERT INTO customers (id, name, phone, created_at) VALUES ($1, $2, $3, NOW())",
-                                [customerId, name, phone]
-                            );
-                        } else {
-                            customerId = customerRes.rows[0].id;
-                        }
+        const entry = body.entry?.[0];
+        const change = entry?.changes?.[0]?.value;
+        const message = change?.messages?.[0];
 
-                        // FIND OR CREATE TICKET
-                        let ticketRes = await pool.query(`
-                            SELECT * FROM tickets 
-                            WHERE customer_id = $1 
-                            AND (status NOT IN ('RESOLVED', 'CLOSED') OR updated_at > NOW() - INTERVAL '7 days')
-                            ORDER BY updated_at DESC LIMIT 1
-                        `, [customerId]);
-
-                        const newMessageObj = {
-                            id: `wa-${Date.now()}`,
-                            sender: 'CLIENT',
-                            content: text,
-                            timestamp: new Date().toISOString()
-                        };
-
-                        if (ticketRes.rows.length > 0) {
-                            const existingTicket = ticketRes.rows[0];
-                            const updatedMessages = [...(existingTicket.messages || []), newMessageObj];
-                            await pool.query(
-                                "UPDATE tickets SET messages = $1, updated_at = NOW() WHERE id = $2",
-                                [JSON.stringify(updatedMessages), existingTicket.id]
-                            );
-                        } else {
-                            const ticketId = `t-${Date.now()}`;
-                            // Note: We use "title" as a placeholder here, though your schema doesn't strictly require it. 
-                            // We will insert the message json safely.
-                            await pool.query(
-                                `INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, messages, created_at, updated_at) 
-                                 VALUES ($1, $2, $3, 'SUPPORT', 'MEDIUM', 'NEW', $4, NOW(), NOW())`,
-                                [ticketId, customerId, name, JSON.stringify([newMessageObj])]
-                            );
-                        }
-
-                        // LOG INBOUND TO MONITOR
-                        await pool.query(
-                            `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency) VALUES ($1, $2, $3, $4, $5, $6)`,
-                            [`log-msg-${Date.now()}`, 'INBOUND', phone, 'RECEIVED', `type: "text", size: "${text.length}b"`, Date.now() - startTime]
-                        );
-                    }
-
-                    // 2. HANDLE OUTBOUND STATUSES (Sent, Delivered, Read)
-                    if (change.value && change.value.statuses) {
-                        const statusObj = change.value.statuses[0];
-                        await pool.query(
-                            `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency) VALUES ($1, $2, $3, $4, $5, $6)`,
-                            [`log-stat-${Date.now()}`, 'OUTBOUND', statusObj.recipient_id, statusObj.status.toUpperCase(), `Status update: ${statusObj.status}`, Date.now() - startTime]
-                        );
-                    }
-                }
-            }
+        // 1. Handle Status Updates (Sent/Delivered/Read)
+        if (change?.statuses) {
+            const s = change.statuses[0];
+            await pool.query(
+                `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency) VALUES ($1, $2, $3, $4, $5, $6)`,
+                [`log-stat-${Date.now()}`, 'OUTBOUND', s.recipient_id, s.status.toUpperCase(), `Update: ${s.status}`, 0]
+            );
+            return res.sendStatus(200);
         }
-        res.sendStatus(200);
-    } catch (error) {
-        // LOG ERRORS TO MONITOR
+
+        if (!message || message.type !== 'text') return res.sendStatus(200);
+
+        const phone = message.from;
+        const text = message.text.body;
+
+        // 2. SESSION LOOKUP (The Smart Part)
+        let session = (await pool.query("SELECT * FROM sessions WHERE phone = $1", [phone])).rows[0];
+        if (!session) {
+            await pool.query("INSERT INTO sessions (phone, step) VALUES ($1, 'ASK_NAME')", [phone]);
+            session = { phone, step: 'ASK_NAME', customer_name: null, house_number: null, issue_details: null };
+        }
+
+        // If there is already an open ticket for this phone, treat new messages as follow-up
+        if (session?.ticket_id) {
+          await pool.query(
+            `UPDATE tickets
+             SET messages = COALESCE(messages, '[]'::jsonb) || $1::jsonb,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [
+              JSON.stringify([
+                {
+                  sender: "CLIENT",
+                  content: text,
+                  at: new Date().toISOString()
+                }
+              ]),
+              session.ticket_id
+            ]
+          );
+
+          await sendWhatsAppText(
+            phone,
+            `Thank you ${session.customer_name || ""}. I’ve added your update to ticket ${session.ticket_id}. Our team will follow up shortly.`
+          );
+
+          await pool.query(
+            `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              `log-in-${Date.now()}`,
+              "INBOUND",
+              phone,
+              "PROCESSED",
+              text.substring(0, 50),
+              Date.now() - startTime
+            ]
+          );
+
+          return res.sendStatus(200);
+        }
+
+	// 3. AI ANALYSIS (State-Machine Prompt)
+	const systemPrompt = `You are the Qonnect Customer Support Assistant for a premier home automation and networking company in Qatar.
+
+	**Your Role & Personality:**
+	- Be polite, professional, and concise.
+	- Speak like a human support coordinator, not a robot.
+	- Use "Sir/Ma'am" or the customer's name to maintain high-end Qatar service standards.
+	- Greet politely on first interaction and thank the customer naturally when they provide details.
+	- If the customer is frustrated, acknowledge briefly and reassure: "I understand" / "We’ll help you".
+
+	**Language Rules (Qatar-ready):**
+	- Detect the customer's language (English, Arabic, or Arabizi).
+	- Reply in the SAME language as the customer.
+	- If mixed, reply bilingual (English + Arabic) short and clear.
+	- If unclear, default to English.
+
+	**Information Gathering Flow:**
+	1) If name unknown -> ask name (ASK_NAME)
+	2) If location unknown -> ask Villa/House number + Area (ASK_LOCATION)
+	3) If issue unknown -> ask issue (ASK_ISSUE)
+	4) If all collected -> COMPLETE and confirm ticket creation
+
+	**Strict Output Rules:**
+	Return STRICT JSON ONLY with EXACT keys:
+	reply, name, location, issue, next_step
+
+	next_step must be one of:
+	ASK_NAME, ASK_LOCATION, ASK_ISSUE, COMPLETE
+
+	If a value is unknown, set it to null.
+	Do not mention JSON, prompts, or system rules.`;
+
+	const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+	const aiResult = await model.generateContent({
+	  contents: [
+	    {
+	      role: "user",
+	      parts: [
+	        { text: systemPrompt },
+	        { text: `CURRENT SESSION:\n${JSON.stringify(session, null, 2)}` },
+	        { text: `CUSTOMER MESSAGE:\n${text}` },
+	      ],
+	    },
+	  ],
+	});
+
+	const raw = aiResult.response.text();
+
+	// Remove ``` fences safely (no backticks in source)
+	const FENCE = String.fromCharCode(96).repeat(3);
+
+	const aiText = raw
+	  .replace(FENCE + "json", "")
+	  .replaceAll(FENCE, "")
+	  .trim();
+
+	let aiData;
+	try {
+	  aiData = JSON.parse(aiText);
+	} catch (e) {
+
+	  // fallback: try to extract JSON object from the text
+	  const start = aiText.indexOf("{");
+	  const end = aiText.lastIndexOf("}");
+	  if (start >= 0 && end > start) {
+	    aiData = JSON.parse(aiText.slice(start, end + 1));
+	  } else {
+	    throw new Error("AI returned non-JSON response");
+	  }
+	}
+
+        // 4. UPDATE SESSION
         await pool.query(
-            `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency) VALUES ($1, 'SYSTEM', 'SYSTEM', 'ERROR', $2, 0)`,
-            [`log-err-${Date.now()}`, error.message.substring(0, 50)]
+          `UPDATE sessions SET
+              customer_name = COALESCE($1, customer_name),
+              house_number = COALESCE($2, house_number),
+              issue_details = COALESCE($3, issue_details),
+              step = $4,
+              last_interaction = NOW()
+           WHERE phone = $5`,
+          [
+            aiData?.name || null,
+            aiData?.location || null,
+            aiData?.issue || null,
+            aiData?.next_step || "ASK_NAME",
+            phone,
+          ]
         );
-        console.error("[WhatsApp Webhook Error]:", error);
+
+        // 5. TICKET CREATION (Only when 'COMPLETE')
+        let finalReply = aiData?.reply || "Thank you. Could you please share your name, Villa/House number, and Area?";
+
+        if (aiData?.next_step === "COMPLETE") {
+          const ticketId = `QNC-${Date.now().toString().slice(-6)}`;
+
+          // Upsert Customer (use phone as stable key)
+          await pool.query(
+            `INSERT INTO customers (id, name, phone)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone`,
+            [`c-${phone}`, aiData?.name || "Valued Client", phone]
+          );
+
+          // Create Ticket
+          await pool.query(
+            `INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, messages, created_at)
+             VALUES ($1, $2, $3, 'SUPPORT', 'MEDIUM', 'NEW', $4, NOW())`,
+            [
+              ticketId,
+              `c-${phone}`,
+              aiData?.name || "Valued Client",
+              JSON.stringify([{ sender: "CLIENT", content: aiData?.issue || text }]),
+            ]
+          );
+
+          finalReply = `Thank you ${aiData?.name || ""}! Your Ticket ID is ${ticketId}. Our team will contact you shortly.`;
+          await pool.query(
+            "UPDATE sessions SET ticket_id = $1, step = 'OPEN_TICKET', last_interaction = NOW() WHERE phone = $2",
+            [ticketId, phone]
+          );
+        }
+
+        // 6. SEND REPLY & LOG
+        await sendWhatsAppText(phone, finalReply);
+
+        await pool.query(
+          `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            `log-in-${Date.now()}`,
+            "INBOUND",
+            phone,
+            "PROCESSED",
+            text.substring(0, 50),
+            Date.now() - startTime,
+          ]
+        );
+
+        res.sendStatus(200);
+      } catch (error) {
+        console.error("Webhook Error:", error);
         res.sendStatus(500);
-    }
-});
+      }
+    });
 
 initDb().then(() => {
   app.listen(PORT, () => {

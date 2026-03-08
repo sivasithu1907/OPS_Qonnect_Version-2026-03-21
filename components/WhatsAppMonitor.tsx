@@ -89,8 +89,6 @@ const WhatsAppMonitor: React.FC = () => {
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-
   // Auto-scroll logic
   useEffect(() => {
     if (!isPaused && scrollRef.current && activeTab !== 'CONVERSATIONS') {
@@ -138,7 +136,7 @@ const WhatsAppMonitor: React.FC = () => {
       .map((l) => {
         const mt = parseMsgType(l.payloadSummary);
         const isText = mt === 'text';
-        const text = isText ? 'Text message' : undefined;
+	const text = (isText ? (l.payloadSummary || '').trim() : '') || (isText ? 'Text message' : undefined);
         return {
           id: l.id,
           threadKey: l.phone,

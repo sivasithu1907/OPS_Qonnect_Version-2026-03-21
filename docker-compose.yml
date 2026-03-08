@@ -5,7 +5,7 @@ services:
       dockerfile: frontend/Dockerfile
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "3000:80"
     depends_on:
       - backend
     environment:
@@ -18,6 +18,9 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy # Wait for DB to be "Ready" before starting
     environment:
       - PORT=8080
       - API_KEY=${API_KEY}
@@ -27,16 +30,24 @@ services:
       - DB_NAME=fieldops
       - DB_USER=fieldops
       - DB_PASSWORD=fieldops_pass
+      - WA_VERIFY_TOKEN=${WA_VERIFY_TOKEN}
+      - WA_PHONE_NUMBER_ID=${WA_PHONE_NUMBER_ID}
+      - WA_ACCESS_TOKEN=${WA_ACCESS_TOKEN}
 
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=fieldops
       - POSTGRES_USER=fieldops
       - POSTGRES_PASSWORD=fieldops_pass
+      - POSTGRES_DB=fieldops
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data # This saves your data permanently
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldops -d fieldops"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  db_data:
+  postgres_data: # Define the storage volume

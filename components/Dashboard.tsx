@@ -265,7 +265,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
         return d;
     }).reverse().map(date => {
         const dateStr = date.toISOString().split('T')[0];
-        const count = tickets.filter(t => t.createdAt.startsWith(dateStr)).length;
+	const count = tickets.filter(t => (t.createdAt || '').startsWith(dateStr)).length;
         return {
             name: date.toLocaleDateString('en-US', { weekday: 'short' }),
             value: count

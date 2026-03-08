@@ -852,7 +852,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              </div>
              
              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
-                {selectedTicket.messages.map(msg => (
+		{(selectedTicket?.messages || []).map(msg => (
                   <div key={msg.id} className={`flex ${msg.sender === MessageSender.CLIENT ? 'justify-start' : 'justify-end'}`}>
                     <div className={`max-w-[80%] rounded-xl p-3 shadow-sm ${msg.sender === MessageSender.CLIENT ? 'bg-white text-slate-800 border border-slate-100' : msg.sender === MessageSender.AGENT ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600 text-sm'}`}>
                       <p>{msg.content}</p>

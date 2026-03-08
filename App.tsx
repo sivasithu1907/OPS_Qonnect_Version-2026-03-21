@@ -207,29 +207,45 @@ const handleLogout = () => {
           createdAt: new Date().toISOString()
         }),
       });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || "Ticket create failed");
+      }
 
-    const handleDeleteTicket = async (id: string) => {
-      if (!window.confirm("Are you sure you want to permanently delete this ticket?")) return;
-      try {
-          const res = await fetch(`/api/tickets/${id}`, { method: "DELETE" });
-          if (res.ok) {
-              setTickets(prev => prev.filter(t => t.id !== id));
-              if (focusedTicketId === id) setFocusedTicketId(null);
-          } else {
-              alert("Failed to delete ticket");
-          }
-      } catch (e) {
-          console.error("Delete error", e);
-      }
-  };
-      
-      if (res.ok) {
-        await loadTickets(); // Refresh list from database
-      }
+      await loadTickets();
     } catch (e) {
-      console.error("Failed to save ticket to database", e);
+      console.error("Failed to create ticket:", e);
+      alert("Failed to create ticket.");
     }
   };
+
+const handleDeleteTicket = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this ticket?")) return;
+
+    try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/tickets/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+
+        if (response.ok) {
+            // Update the UI immediately
+            setTickets(prevTickets => prevTickets.filter(ticket => ticket.id !== id));
+            // Refresh from database to ensure sync
+            await loadTickets(); 
+            console.log(`Ticket ${id} deleted successfully`);
+        } else {
+            const errorData = await response.json();
+            alert(`Error: ${errorData.message || 'Could not delete ticket'}`);
+        }
+    } catch (error) {
+        console.error("Communication error:", error);
+        alert("Failed to connect to the server.");
+    }
+};
 
   const handleSendMessage = (ticketId: string, content: string, sender: MessageSender) => {
       setTickets(prev => prev.map(t => {
