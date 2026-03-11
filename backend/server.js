@@ -282,6 +282,17 @@ async function initDb() {
       );
     `);
     
+// 9. WhatsApp Inbound Message Deduplication
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS whatsapp_inbound_messages (
+    message_id TEXT PRIMARY KEY,
+    phone TEXT,
+    message_type TEXT,
+    message_text TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+`);
+
 // Create a default admin if none exists
     const adminCheck = await pool.query("SELECT * FROM users WHERE email = 'admin@qonnect.qa'");
     if (adminCheck.rows.length === 0) {
@@ -937,10 +948,8 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	    return res.sendStatus(200);
 	}
 
-	const intent = await detectIntent(text, model);
-	console.log("Detected intent:", intent);
+	const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-	// Intent detection (NEW)
 	const intent = await detectIntent(text, model);
 	console.log("Detected intent:", intent);
 
