@@ -420,17 +420,57 @@ const handleDeleteCustomer = async (id: string) => {
   }
 };
 
-  // Tech/User Handlers
-  const handleSaveUser = (u: Technician) => {
-      setTechnicians(prev => {
-          const exists = prev.find(x => x.id === u.id);
-          if (exists) return prev.map(x => x.id === u.id ? u : x);
-          return [...prev, u];
-      });
+  // Tech/User Handlers — saves to database via API
+  const handleSaveUser = async (u: Technician) => {
+      try {
+          const exists = technicians.find(x => x.id === u.id);
+          if (exists) {
+              // Update existing user
+              const res = await fetch(`/api/users/${u.id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                      name: u.name,
+                      email: u.email,
+                      role: u.systemRole || u.role,
+                      status: u.status,
+                      ...(u.password ? { password: u.password } : {})
+                  })
+              });
+              if (!res.ok) throw new Error("Failed to update user");
+          } else {
+              // Create new user
+              const res = await fetch("/api/users", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                      id: u.id,
+                      name: u.name,
+                      email: u.email,
+                      password: u.password || "Qonnect@123",
+                      role: u.systemRole || u.role,
+                      status: u.status || "ACTIVE"
+                  })
+              });
+              if (!res.ok) throw new Error("Failed to create user");
+          }
+          // Reload from DB to keep state in sync
+          await loadUsers();
+      } catch (e) {
+          console.error("handleSaveUser error:", e);
+          alert("Failed to save user. Please try again.");
+      }
   };
 
-  const handleDeleteUser = (id: string) => {
-      setTechnicians(prev => prev.filter(x => x.id !== id));
+  const handleDeleteUser = async (id: string) => {
+      try {
+          const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Failed to delete user");
+          await loadUsers();
+      } catch (e) {
+          console.error("handleDeleteUser error:", e);
+          alert("Failed to delete user. Please try again.");
+      }
   };
 
   // System Import Handler
