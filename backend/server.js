@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
@@ -593,7 +594,10 @@ app.post('/api/analyze', async (req, res) => {
 
     const context = history.length > 0 ? `Conversation History:\n${history.join('\n')}\n\n` : '';
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: { responseMimeType: "application/json" }
+    });
     const result = await model.generateContent({
       contents: [
         {
@@ -605,27 +609,28 @@ app.post('/api/analyze', async (req, res) => {
                 `${context}` +
                 `Analyze the client message and return STRICT JSON only.\n\n` +
                 `Client message:\n"""${message}"""\n\n` +
-                `Decide:\n` +
-                `- Provide a short summary\n` +
-                `- Choose service_category (ELV Systems / Home Automation / Unknown)\n` +
-                `- Choose priority (LOW/MEDIUM/HIGH/URGENT)\n` +
-                `- Decide if remote_possible\n` +
-                `- Choose recommended_action (remote_support / assign_technician / request_more_info)\n` +
-                `- Provide up to 3 suggested_questions\n` +
-                `- Provide a professional draft_reply\n` +
-                `- Provide confidence 0-100\n`
+                `Return a JSON object with exactly these fields:\n` +
+                `- summary: short description of the issue\n` +
+                `- service_category: one of "ELV Systems", "Home Automation", "Unknown"\n` +
+                `- priority: one of "LOW", "MEDIUM", "HIGH", "URGENT"\n` +
+                `- remote_possible: true or false\n` +
+                `- recommended_action: one of "remote_support", "assign_technician", "request_more_info"\n` +
+                `- suggested_questions: array of up to 3 strings\n` +
+                `- draft_reply: a professional reply to send to the customer\n` +
+                `- confidence: number between 0 and 100\n`
             }
           ]
         }
       ],
     });
 
-    // CORRECTED DATA EXTRACTION
+    // JSON mode guarantees clean JSON — parse directly
     const rawText = result.response.text();
     let data;
     try {
         data = JSON.parse(rawText);
     } catch (e) {
+        // Fallback cleanup just in case
         console.warn("[Analyze] JSON parse failed, attempting cleanup.");
         const start = rawText.indexOf("{");
         const end = rawText.lastIndexOf("}");
@@ -1111,7 +1116,7 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	);
 
 	  if (ticketResult.rows.length === 0) {
-	    await sendWhatsAppMessage(
+	    await sendWhatsAppText(
 	      phone,
 	      "I could not find an active service request. Please briefly describe the issue and I will assist you."
 	    );
@@ -1122,11 +1127,7 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 
 	  let reply = `Your service request *${ticket.id}* is currently *${ticket.status}*.`;
 
-	  if (ticket.appointment_time) {
-	    reply += `\n\nTechnician visit scheduled: ${ticket.appointment_time}`;
-	  }
-
-	  await sendWhatsAppMessage(phone, reply);
+	  await sendWhatsAppText(phone, reply);
 
 	  return res.sendStatus(200);
 	}
