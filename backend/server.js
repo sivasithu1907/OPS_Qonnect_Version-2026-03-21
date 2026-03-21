@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
@@ -723,6 +722,76 @@ app.get("/api/users", async (req, res) => {
     }
 });
 
+// POST User (Create)
+app.post("/api/users", async (req, res) => {
+    try {
+        const { id, name, email, password, role, status } = req.body;
+        if (!name || !email || !password || !role) {
+            return res.status(400).json({ error: "name, email, password, and role are required" });
+        }
+        const hashedPass = await bcrypt.hash(password, 10);
+        const userId = id || `u-${Date.now()}`;
+        const { rows } = await pool.query(
+            `INSERT INTO users (id, name, email, password, role, status)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, name, email, role as "systemRole", status`,
+            [userId, name.trim(), email.trim(), hashedPass, role, status || "ACTIVE"]
+        );
+        res.status(201).json(rows[0]);
+    } catch (e) {
+        console.error("User create error:", e);
+        if (e.code === "23505") return res.status(409).json({ error: "Email already exists" });
+        res.status(500).json({ error: "Failed to create user" });
+    }
+});
+
+// PUT User (Update)
+app.put("/api/users/:id", async (req, res) => {
+    try {
+        const { name, email, password, role, status } = req.body;
+        const id = req.params.id;
+        let hashedPass = null;
+        if (password) {
+            hashedPass = await bcrypt.hash(password, 10);
+        }
+        const { rows } = await pool.query(
+            `UPDATE users SET
+                name = COALESCE($1, name),
+                email = COALESCE($2, email),
+                password = COALESCE($3, password),
+                role = COALESCE($4, role),
+                status = COALESCE($5, status)
+             WHERE id = $6
+             RETURNING id, name, email, role as "systemRole", status`,
+            [
+                name ? name.trim() : null,
+                email ? email.trim() : null,
+                hashedPass,
+                role || null,
+                status || null,
+                id
+            ]
+        );
+        if (!rows[0]) return res.status(404).json({ error: "User not found" });
+        res.json(rows[0]);
+    } catch (e) {
+        console.error("User update error:", e);
+        res.status(500).json({ error: "Failed to update user" });
+    }
+});
+
+// DELETE User
+app.delete("/api/users/:id", async (req, res) => {
+    try {
+        const r = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
+        if (r.rowCount === 0) return res.status(404).json({ error: "User not found" });
+        res.json({ ok: true });
+    } catch (e) {
+        console.error("User delete error:", e);
+        res.status(500).json({ error: "Failed to delete user" });
+    }
+});
+
 // ==============================
 // Operations & Planning (Teams, Sites, Activities)
 // ==============================
@@ -736,6 +805,78 @@ app.get("/api/teams", async (req, res) => {
         status: r.status, currentSiteId: r.current_site_id, workloadLevel: r.workload_level
     })));
   } catch (e) { res.status(500).json({error: "Failed to load teams"}); }
+});
+
+// POST Team (Create)
+app.post("/api/teams", async (req, res) => {
+    try {
+        const { id, name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
+        if (!name) return res.status(400).json({ error: "Team name is required" });
+        const teamId = id || `team-${Date.now()}`;
+        await pool.query(
+            `INSERT INTO teams (id, name, lead_id, member_ids, status, current_site_id, workload_level)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+                teamId,
+                name.trim(),
+                leadId || null,
+                JSON.stringify(memberIds || []),
+                status || "AVAILABLE",
+                currentSiteId || null,
+                workloadLevel || "LOW"
+            ]
+        );
+        res.status(201).json({ id: teamId, name, leadId, memberIds: memberIds || [], status: status || "AVAILABLE", currentSiteId: currentSiteId || null, workloadLevel: workloadLevel || "LOW" });
+    } catch (e) {
+        console.error("Team create error:", e);
+        res.status(500).json({ error: "Failed to create team" });
+    }
+});
+
+// PUT Team (Update)
+app.put("/api/teams/:id", async (req, res) => {
+    try {
+        const { name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
+        const id = req.params.id;
+        const { rows } = await pool.query(
+            `UPDATE teams SET
+                name = COALESCE($1, name),
+                lead_id = COALESCE($2, lead_id),
+                member_ids = COALESCE($3, member_ids),
+                status = COALESCE($4, status),
+                current_site_id = COALESCE($5, current_site_id),
+                workload_level = COALESCE($6, workload_level)
+             WHERE id = $7
+             RETURNING *`,
+            [
+                name ? name.trim() : null,
+                leadId || null,
+                memberIds ? JSON.stringify(memberIds) : null,
+                status || null,
+                currentSiteId || null,
+                workloadLevel || null,
+                id
+            ]
+        );
+        if (!rows[0]) return res.status(404).json({ error: "Team not found" });
+        const r = rows[0];
+        res.json({ id: r.id, name: r.name, leadId: r.lead_id, memberIds: r.member_ids, status: r.status, currentSiteId: r.current_site_id, workloadLevel: r.workload_level });
+    } catch (e) {
+        console.error("Team update error:", e);
+        res.status(500).json({ error: "Failed to update team" });
+    }
+});
+
+// DELETE Team
+app.delete("/api/teams/:id", async (req, res) => {
+    try {
+        const r = await pool.query("DELETE FROM teams WHERE id = $1", [req.params.id]);
+        if (r.rowCount === 0) return res.status(404).json({ error: "Team not found" });
+        res.json({ ok: true });
+    } catch (e) {
+        console.error("Team delete error:", e);
+        res.status(500).json({ error: "Failed to delete team" });
+    }
 });
 
 // GET Sites
