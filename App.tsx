@@ -627,6 +627,15 @@ useEffect(() => {
     loadTeams(); // <-- NEW
     loadSites(); // <-- NEW
   }, []);
+
+  // Auto-refresh tickets and activities every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadTickets();
+      loadActivities();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
   
   // --- Navigation Logic ---
   const filteredNavItems = useMemo(() => {
