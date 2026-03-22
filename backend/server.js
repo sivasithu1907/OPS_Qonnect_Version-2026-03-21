@@ -223,8 +223,21 @@ async function initDb() {
         created_at TIMESTAMPTZ DEFAULT now(),
         updated_at TIMESTAMPTZ DEFAULT now()
       );
-      -- Add ai_summary column if upgrading existing DB
+      -- Add columns if upgrading existing DB
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_summary TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assigned_tech_id TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS appointment_time TIMESTAMPTZ;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS odoo_link TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phone_number TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS carry_forward_note TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS next_planned_at TIMESTAMPTZ;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS assignment_note TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS completion_note TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_escalated_at TIMESTAMPTZ;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
     `);
 
     // 3. Customer ID Sequence
@@ -364,11 +377,45 @@ app.get('/api/health', (req, res) => {
 // Tickets (PostgreSQL)
 // ==============================
 
+// Helper: map DB snake_case ticket row → frontend camelCase
+function mapTicket(r) {
+  return {
+    id: r.id,
+    customerId: r.customer_id,
+    customerName: r.customer_name,
+    phoneNumber: r.phone_number || r.phone || '',
+    category: r.category,
+    type: r.type,
+    priority: r.priority,
+    status: r.status,
+    assignedTechId: r.assigned_tech_id || undefined,
+    appointmentTime: r.appointment_time || undefined,
+    locationUrl: r.location_url || undefined,
+    houseNumber: r.house_number || undefined,
+    odooLink: r.odoo_link || undefined,
+    notes: r.notes || undefined,
+    ai_summary: r.ai_summary || undefined,
+    messages: Array.isArray(r.messages) ? r.messages : (r.messages ? JSON.parse(r.messages) : []),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    unreadCount: 0,
+    // Workflow fields
+    startedAt: r.started_at || undefined,
+    completedAt: r.completed_at || undefined,
+    carryForwardNote: r.carry_forward_note || undefined,
+    nextPlannedAt: r.next_planned_at || undefined,
+    assignmentNote: r.assignment_note || undefined,
+    completionNote: r.completion_note || undefined,
+    cancellationReason: r.cancellation_reason || undefined,
+    lastEscalatedAt: r.last_escalated_at || undefined,
+  };
+}
+
 // 1. Get all tickets from DB
 app.get("/api/tickets", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC");
-    res.json(result.rows);
+    res.json(result.rows.map(mapTicket));
   } catch (e) {
     console.error("Tickets fetch error:", e);
     res.status(500).json({ error: "Failed to fetch tickets" });
@@ -400,7 +447,7 @@ app.post("/api/tickets", async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(mapTicket(result.rows[0]));
   } catch (e) {
     await client.query('ROLLBACK');
     console.error("Ticket creation error:", e);
@@ -408,6 +455,69 @@ app.post("/api/tickets", async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// 2b. Full ticket update (category, priority, type, location, assignment etc.)
+app.put("/api/tickets/:id", async (req, res) => {
+    try {
+        const id = req.params.id;
+        const { category, priority, type, customerId, customerName,
+                assignedTechId, appointmentTime, locationUrl, houseNumber, odooLink, notes } = req.body;
+        await pool.query(
+            `UPDATE tickets SET
+                category         = COALESCE($1,  category),
+                priority         = COALESCE($2,  priority),
+                location_url     = COALESCE($3,  location_url),
+                house_number     = COALESCE($4,  house_number),
+                assigned_tech_id = $5,
+                appointment_time = $6,
+                odoo_link        = COALESCE($7,  odoo_link),
+                notes            = COALESCE($8,  notes),
+                customer_id      = COALESCE($9,  customer_id),
+                customer_name    = COALESCE($10, customer_name),
+                updated_at       = NOW()
+             WHERE id = $11`,
+            [
+                category || null, priority || null,
+                locationUrl || null, houseNumber || null,
+                assignedTechId || null, appointmentTime || null,
+                odooLink || null, notes || null,
+                customerId || null, customerName || null,
+                id
+            ]
+        );
+        res.json({ ok: true });
+    } catch (e) {
+        console.error("Ticket update error:", e);
+        res.status(500).json({ error: "Failed to update ticket" });
+    }
+});
+
+// 2c. Append a message to ticket messages array
+app.post("/api/tickets/:id/message", async (req, res) => {
+    try {
+        const id = req.params.id;
+        const { sender, content } = req.body;
+        if (!sender || !content) return res.status(400).json({ error: "sender and content required" });
+        const newMsg = {
+            id: `m-${Date.now()}`,
+            sender,
+            content,
+            timestamp: new Date().toISOString(),
+            at: new Date().toISOString()
+        };
+        await pool.query(
+            `UPDATE tickets
+             SET messages = COALESCE(messages, '[]'::jsonb) || $1::jsonb,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [JSON.stringify([newMsg]), id]
+        );
+        res.json({ ok: true, message: newMsg });
+    } catch (e) {
+        console.error("Message append error:", e);
+        res.status(500).json({ error: "Failed to append message" });
+    }
 });
 
 // 3. Delete a ticket in DB (Admin only)
@@ -1564,9 +1674,9 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	Do not include markdown.
 	Do not include explanations outside JSON.`;
 
-	const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+	const aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-	const aiResult = await model.generateContent({
+	const aiResult = await aiModel.generateContent({
 	  contents: [
 	    {
 	      role: "user",
