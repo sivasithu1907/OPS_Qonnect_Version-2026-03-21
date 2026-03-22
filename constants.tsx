@@ -127,20 +127,6 @@ export const NAVIGATION_ITEMS = [
     roles: [Role.ADMIN, Role.FIELD_ENGINEER],
     category: 'Portals & Tools'
   },
-  { 
-    id: 'simulator', 
-    label: 'Flow Simulator', 
-    icon: <Cpu size={20} />, 
-    roles: [Role.ADMIN],
-    category: 'Portals & Tools'
-  },
-  { 
-    id: 'guide', 
-    label: 'Integration Guide', 
-    icon: <BookOpen size={20} />, 
-    roles: [Role.ADMIN],
-    category: 'Portals & Tools'
-  }
 ];
 
 export const TICKET_CATEGORIES = [
