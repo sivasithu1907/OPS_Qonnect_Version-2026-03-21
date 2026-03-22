@@ -95,7 +95,6 @@ const UserManagement: React.FC<UserManagementProps> = ({
               return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700"><Briefcase size={10} /> Team Lead</span>;
           case Role.FIELD_ENGINEER:
           case 'FIELD_ENGINEER':
-          case 'TECHNICIAN':
               return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600"><Wrench size={10} /> Field Engineer</span>;
           default:
               return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600"><UserCog size={10} /> {role || 'User'}</span>;
