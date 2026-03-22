@@ -700,9 +700,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                  </label>
                                  <label className={`flex-1 p-4 border rounded-xl cursor-pointer transition-all flex items-center gap-3 ${exportFormat === 'pdf' ? 'bg-red-50 border-red-500 ring-1 ring-red-500' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
                                      <input type="radio" name="format" value="pdf" checked={exportFormat === 'pdf'} onChange={() => setExportFormat('pdf')} className="hidden" />
-                                     <div className={`p-2 rounded-lg ${exportFormat === 'pdf' ? 'bg-red-200 text-red-800' : 'bg-slate-100 text-slate-500'}`}><Printer size={24}/></div>
+                                     <div className={`p-2 rounded-lg ${exportFormat === 'pdf' ? 'bg-red-200 text-red-800' : 'bg-slate-100 text-slate-500'}`}><FileText size={24}/></div>
                                      <div>
-                                         <span className="font-bold text-sm block text-slate-800">Print / PDF</span>
+                                         <span className="font-bold text-sm block text-slate-800">PDF Download</span>
                                          <span className="text-xs text-slate-500">Best for sharing & filing</span>
                                      </div>
                                  </label>
