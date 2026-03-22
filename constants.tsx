@@ -1,5 +1,5 @@
 import { TicketStatus, Role, ActivityStatus } from './types';
-import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Cpu, Users, BookOpen, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle } from 'lucide-react';
 
 export const APP_NAME = "Qonnect";
 
