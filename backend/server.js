@@ -1100,7 +1100,18 @@ Return JSON only.
 // GET WhatsApp Logs for the Monitor
 app.get("/api/whatsapp/logs", async (req, res) => {
     try {
-        const { rows } = await pool.query("SELECT * FROM whatsapp_logs ORDER BY timestamp DESC LIMIT 200");
+        const { rows } = await pool.query(`
+            SELECT 
+                wl.*,
+                COALESCE(wim.message_text, wl.payload_summary) AS payload_summary
+            FROM whatsapp_logs wl
+            LEFT JOIN whatsapp_inbound_messages wim 
+                ON wl.phone = wim.phone 
+                AND wl.type = 'INBOUND'
+                AND ABS(EXTRACT(EPOCH FROM (wl.timestamp - wim.created_at))) < 5
+            ORDER BY wl.timestamp DESC 
+            LIMIT 200
+        `);
         res.json(rows);
     } catch (e) {
         res.status(500).json({ error: "Failed to fetch logs" });
