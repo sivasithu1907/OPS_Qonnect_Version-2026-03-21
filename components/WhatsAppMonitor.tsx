@@ -44,10 +44,14 @@ interface ChatThread {
 function parseMsgType(payloadSummary: string): MessageType {
   if (!payloadSummary) return 'unknown';
   const lower = payloadSummary.toLowerCase();
+  // Check for explicit type tags (outbound bot replies stored with type info)
   if (lower.includes('type: "text"') || lower.includes("type: 'text'")) return 'text';
   if (lower.includes('type: "image"') || lower.includes("type: 'image'")) return 'image';
   if (lower.includes('type: "location"') || lower.includes("type: 'location'")) return 'location';
   if (lower.includes('type: "interactive"') || lower.includes("type: 'interactive'")) return 'interactive';
+  // If none of the above — it's a plain customer message stored as raw text
+  // The backend stores raw text directly in payload_summary for inbound messages
+  if (payloadSummary.trim().length > 0) return 'text';
   return 'unknown';
 }
 
@@ -135,8 +139,16 @@ const WhatsAppMonitor: React.FC = () => {
       .filter((l) => l.type === 'INBOUND' || l.type === 'OUTBOUND')
       .map((l) => {
         const mt = parseMsgType(l.payloadSummary);
-        const isText = mt === 'text';
-	const text = (isText ? (l.payloadSummary || '').trim() : '') || (isText ? 'Text message' : undefined);
+        // For text messages, the payload_summary IS the message text (raw customer input)
+        // Strip any type tag prefix if present, otherwise use the full payload
+        let text: string | undefined;
+        if (mt === 'text') {
+          const raw = (l.payloadSummary || '').trim();
+          // Remove type tag prefix if present e.g. 'type: "text" | Hello' -> 'Hello'
+          const pipeIdx = raw.indexOf('|');
+          text = pipeIdx !== -1 ? raw.substring(pipeIdx + 1).trim() : raw;
+          if (!text) text = 'Text message';
+        }
         return {
           id: l.id,
           threadKey: l.phone,
