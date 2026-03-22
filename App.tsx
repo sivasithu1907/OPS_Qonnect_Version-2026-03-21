@@ -244,8 +244,42 @@ const handleLogout = () => {
   };
 
   // --- Data Handlers ---
-  const handleUpdateTicket = (updated: Ticket) => {
+  const handleUpdateTicket = async (updated: Ticket) => {
+      // Optimistic UI update immediately
       setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
+      try {
+          // Save status + assignment + appointment to DB
+          await fetch(`/api/tickets/${updated.id}/status`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                  status: updated.status,
+                  assignedTechId: updated.assignedTechId || null,
+                  appointmentTime: updated.appointmentTime || null,
+                  carryForwardNote: updated.carryForwardNote || null,
+                  nextPlannedAt: updated.nextPlannedAt || null,
+              })
+          });
+          // Also persist full ticket fields (category, type, priority, location etc.)
+          await fetch(`/api/tickets/${updated.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                  category: updated.category,
+                  priority: updated.priority,
+                  type: updated.type,
+                  locationUrl: updated.locationUrl,
+                  houseNumber: updated.houseNumber,
+                  odooLink: updated.odooLink,
+                  customerId: updated.customerId,
+                  customerName: updated.customerName,
+                  assignedTechId: updated.assignedTechId || null,
+                  appointmentTime: updated.appointmentTime || null,
+              })
+          });
+      } catch (e) {
+          console.error("Failed to update ticket:", e);
+      }
   };
 
   const handleCreateTicket = async (data: any) => {
@@ -272,51 +306,53 @@ const handleLogout = () => {
     }
   };
 
-const handleDeleteTicket = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this ticket?")) return;
+  const handleDeleteTicket = async (id: string) => {
+      if (!window.confirm("Are you sure you want to delete this ticket?")) return;
+      try {
+          const response = await fetch(`/api/tickets/${id}`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" }
+          });
+          if (response.ok) {
+              setTickets(prev => prev.filter(t => t.id !== id));
+              await loadTickets();
+          } else {
+              const err = await response.json().catch(() => ({}));
+              alert(`Error: ${err.error || "Could not delete ticket"}`);
+          }
+      } catch (e) {
+          console.error("Delete ticket error:", e);
+          alert("Failed to connect to the server.");
+      }
+  };
 
-    try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/tickets/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-
-        if (response.ok) {
-            // Update the UI immediately
-            setTickets(prevTickets => prevTickets.filter(ticket => ticket.id !== id));
-            // Refresh from database to ensure sync
-            await loadTickets(); 
-            console.log(`Ticket ${id} deleted successfully`);
-        } else {
-            const errorData = await response.json();
-            alert(`Error: ${errorData.message || 'Could not delete ticket'}`);
-        }
-    } catch (error) {
-        console.error("Communication error:", error);
-        alert("Failed to connect to the server.");
-    }
-};
-
-  const handleSendMessage = (ticketId: string, content: string, sender: MessageSender) => {
+  const handleSendMessage = async (ticketId: string, content: string, sender: MessageSender) => {
+      const newMsg = {
+          id: `m-${Date.now()}`,
+          sender,
+          content,
+          timestamp: new Date().toISOString(),
+          at: new Date().toISOString()
+      };
+      // Optimistic UI update
       setTickets(prev => prev.map(t => {
           if (t.id !== ticketId) return t;
           return {
               ...t,
               updatedAt: new Date().toISOString(),
-              messages: [
-                  ...t.messages,
-                  {
-                      id: `m-${Date.now()}`,
-                      sender,
-                      content,
-                      timestamp: new Date().toISOString()
-                  }
-              ]
+              messages: [...(t.messages || []), newMsg]
           };
       }));
+      // Persist to DB
+      try {
+          await fetch(`/api/tickets/${ticketId}/message`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sender, content })
+          });
+      } catch (e) {
+          console.error("Failed to save message:", e);
+      }
   };
 
   // Activity Handlers (API-Connected)
