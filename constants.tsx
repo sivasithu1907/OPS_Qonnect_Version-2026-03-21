@@ -150,3 +150,4 @@ export const TICKET_CATEGORIES = [
   'Intercom',
   'Smart Speaker'
 ];
+
