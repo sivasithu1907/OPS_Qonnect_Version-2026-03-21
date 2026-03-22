@@ -45,6 +45,26 @@ async function sendWhatsAppText(to, bodyText) {
   return data;
 }
 
+// ==============================
+// Notify all Team Leads via WhatsApp
+// ==============================
+async function notifyTeamLeads(message) {
+  try {
+    const { rows } = await pool.query(
+      "SELECT phone FROM users WHERE role = 'TEAM_LEAD' AND status = 'ACTIVE' AND phone IS NOT NULL"
+    );
+    for (const lead of rows) {
+      try {
+        await sendWhatsAppText(lead.phone, message);
+      } catch (e) {
+        console.error(`Failed to notify team lead ${lead.phone}:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error("notifyTeamLeads error:", e.message);
+  }
+}
+
 const SALES_REDIRECT_MESSAGE =
   `Thank you for contacting Qonnect. This number is for after-sales support only.\n` +
   `For sales enquiries, kindly contact +974 3330 0319.\n` +
@@ -220,8 +240,11 @@ async function initDb() {
         password TEXT NOT NULL,
         role TEXT NOT NULL,
         status TEXT DEFAULT 'ACTIVE',
+        phone TEXT,
         created_at TIMESTAMPTZ DEFAULT now()
       );
+      -- Add phone column if upgrading existing DB
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
     `);
 // 5. Teams Table
     await pool.query(`
@@ -400,7 +423,7 @@ app.delete("/api/tickets/:id", async (req, res) => {
 // 4. Update Ticket Status & Trigger Review Message
 app.put("/api/tickets/:id/status", async (req, res) => {
     try {
-        const { status } = req.body;
+        const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt } = req.body;
         const ticketId = req.params.id;
 
         // 1. Update the database
@@ -409,46 +432,93 @@ app.put("/api/tickets/:id/status", async (req, res) => {
             [status, ticketId]
         );
 
-        // 2. If the ticket is marked RESOLVED, send the automated review message
-        if (status === 'RESOLVED') {
-            // Get the customer's phone number
-            const ticketData = await pool.query(`
-                SELECT c.phone, c.name 
-                FROM tickets t 
-                JOIN customers c ON t.customer_id = c.id 
-                WHERE t.id = $1
-            `, [ticketId]);
+        // 2. Fetch customer + ticket info for notifications
+        const ticketData = await pool.query(`
+            SELECT t.id, t.customer_name, t.category, t.priority,
+                   c.phone as customer_phone, c.name as customer_name_from_db
+            FROM tickets t
+            JOIN customers c ON t.customer_id = c.id
+            WHERE t.id = $1
+        `, [ticketId]);
 
-            if (ticketData.rows.length > 0) {
-                const customer = ticketData.rows[0];
-                const reviewText = `Hi ${customer.name}, your Qonnect service request has been marked as resolved! We hope you are happy with our service. If you have a moment, please let us know how we did or reply here if you need further assistance.`;
-                
-                // IMPORTANT: We will replace 'YOUR_META_TOKEN' and 'YOUR_PHONE_ID' when we connect to Meta
-                try {
-                    await fetch(`https://graph.facebook.com/v17.0/${process.env.WA_PHONE_NUMBER_ID}/messages`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${process.env.WA_ACCESS_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            messaging_product: "whatsapp",
-                            to: customer.phone,
-                            type: "text",
-                            text: { body: reviewText }
-                        })
-                    });
-                    console.log(`✅ Review request sent to ${customer.name}`);
-                } catch (metaErr) {
-                    console.error("Failed to send Meta message:", metaErr);
+        if (ticketData.rows.length > 0) {
+            const { customer_phone, customer_name_from_db, category, priority } = ticketData.rows[0];
+            const customerName = customer_name_from_db || "Valued Client";
+
+            try {
+                // ── Notification 2: Engineer assigned + appointment ──
+                if (status === 'ASSIGNED' && assignedTechId) {
+                    const techData = await pool.query(
+                        "SELECT name FROM users WHERE id = $1", [assignedTechId]
+                    );
+                    const techName = techData.rows[0]?.name || "our engineer";
+                    const apptText = appointmentTime
+                        ? `\nAppointment: ${new Date(appointmentTime).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                        : "";
+                    await sendWhatsAppText(customer_phone,
+                        `Hello ${customerName}, your service request *${ticketId}* has been assigned to *${techName}*.${apptText}\n\nWe will keep you updated on the progress.`
+                    );
                 }
+
+                // ── Notification 3a: Engineer on the way ──
+                if (status === 'ON_MY_WAY') {
+                    await sendWhatsAppText(customer_phone,
+                        `Hello ${customerName}, your Qonnect engineer is now *on the way* to your location for service request *${ticketId}*.\n\nPlease ensure someone is available to receive them.`
+                    );
+                }
+
+                // ── Notification 3b: Engineer arrived ──
+                if (status === 'ARRIVED') {
+                    await sendWhatsAppText(customer_phone,
+                        `Hello ${customerName}, your Qonnect engineer has *arrived* at your location for service request *${ticketId}*.`
+                    );
+                }
+
+                // ── Notification 3c: Work started ──
+                if (status === 'IN_PROGRESS') {
+                    await sendWhatsAppText(customer_phone,
+                        `Hello ${customerName}, work has *started* on your service request *${ticketId}*. We will notify you once completed.`
+                    );
+                }
+
+                // ── Notification: Resolved — review request ──
+                if (status === 'RESOLVED') {
+                    await sendWhatsAppText(customer_phone,
+                        `Hello ${customerName}, your service request *${ticketId}* has been *resolved*. We hope you are satisfied with our service.\n\nIf you need further assistance, please message us here.`
+                    );
+                }
+
+                // ── Notification 5: Carry Forward — notify team leads ──
+                if (status === 'CARRY_FORWARD') {
+                    const reason = carryForwardNote || "No reason provided";
+                    const nextDate = nextPlannedAt
+                        ? new Date(nextPlannedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                        : "TBD";
+                    await notifyTeamLeads(
+                        `*Carry Forward Alert*\nTicket: *${ticketId}*\nCustomer: ${customerName}\nCategory: ${category || "Support"}\nReason: ${reason}\nNext visit: ${nextDate}`
+                    );
+                }
+
+            } catch (notifErr) {
+                console.error("Notification error (non-fatal):", notifErr.message);
             }
         }
 
+        // 3. n8n webhook trigger (if configured)
+        if (process.env.N8N_WEBHOOK_URL && status === 'ASSIGNED') {
+            try {
+                await fetch(`${process.env.N8N_WEBHOOK_URL}/ticket-assigned`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ticketId, status, assignedTechId, appointmentTime })
+                });
+            } catch (e) { console.error("n8n webhook error:", e.message); }
+        }
+
         res.json({ ok: true });
-    } catch (e) { 
-        console.error(e); 
-        res.status(500).json({ error: "Failed to update status" }); 
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Failed to update status" });
     }
 });
 
@@ -720,7 +790,7 @@ app.post("/api/login", async (req, res) => {
 
 app.get("/api/users", async (req, res) => {
     try {
-        const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status FROM users");
+        const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status, phone FROM users");
         res.json(result.rows);
     } catch (e) {
         res.status(500).json({ error: "Failed to fetch users" });
@@ -730,17 +800,17 @@ app.get("/api/users", async (req, res) => {
 // POST User (Create)
 app.post("/api/users", async (req, res) => {
     try {
-        const { id, name, email, password, role, status } = req.body;
+        const { id, name, email, password, role, status, phone } = req.body;
         if (!name || !email || !password || !role) {
             return res.status(400).json({ error: "name, email, password, and role are required" });
         }
         const hashedPass = await bcrypt.hash(password, 10);
         const userId = id || `u-${Date.now()}`;
         const { rows } = await pool.query(
-            `INSERT INTO users (id, name, email, password, role, status)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING id, name, email, role as "systemRole", status`,
-            [userId, name.trim(), email.trim(), hashedPass, role, status || "ACTIVE"]
+            `INSERT INTO users (id, name, email, password, role, status, phone)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING id, name, email, role as "systemRole", status, phone`,
+            [userId, name.trim(), email.trim(), hashedPass, role, status || "ACTIVE", phone || null]
         );
         res.status(201).json(rows[0]);
     } catch (e) {
@@ -753,7 +823,7 @@ app.post("/api/users", async (req, res) => {
 // PUT User (Update)
 app.put("/api/users/:id", async (req, res) => {
     try {
-        const { name, email, password, role, status } = req.body;
+        const { name, email, password, role, status, phone } = req.body;
         const id = req.params.id;
         let hashedPass = null;
         if (password) {
@@ -765,15 +835,17 @@ app.put("/api/users/:id", async (req, res) => {
                 email = COALESCE($2, email),
                 password = COALESCE($3, password),
                 role = COALESCE($4, role),
-                status = COALESCE($5, status)
-             WHERE id = $6
-             RETURNING id, name, email, role as "systemRole", status`,
+                status = COALESCE($5, status),
+                phone = COALESCE($6, phone)
+             WHERE id = $7
+             RETURNING id, name, email, role as "systemRole", status, phone`,
             [
                 name ? name.trim() : null,
                 email ? email.trim() : null,
                 hashedPass,
                 role || null,
                 status || null,
+                phone || null,
                 id
             ]
         );
@@ -1716,6 +1788,31 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	     WHERE phone = $2`,
 	    [ticketId, phone]
 	  );
+
+	  // ── Notification 1: Notify all Team Leads of new ticket ──
+	  const priorityLabel = aiData?.action === "site_visit" ? "HIGH" : "MEDIUM";
+	  const actionLabel = aiData?.action === "site_visit" ? "Site Visit Required" : "Remote Support";
+	  const locationLabel = aiData?.location || session?.house_number || "Not provided";
+	  const aiSummary = `*New Ticket: ${ticketId}*\nCustomer: ${customerName}\nIssue: ${issueText}\nCategory: ${issueCategory || "Unknown"}\nPriority: ${priorityLabel}\nAction: ${actionLabel}\nLocation: ${locationLabel}`;
+	  await notifyTeamLeads(aiSummary).catch(e => console.error("Team lead notify error:", e.message));
+
+	  // ── n8n webhook trigger on ticket creation ──
+	  if (process.env.N8N_WEBHOOK_URL) {
+	    fetch(`${process.env.N8N_WEBHOOK_URL}/ticket-created`, {
+	      method: "POST",
+	      headers: { "Content-Type": "application/json" },
+	      body: JSON.stringify({
+	        ticketId,
+	        customerName,
+	        phone,
+	        issueCategory,
+	        priority: priorityLabel,
+	        action: aiData?.action,
+	        location: locationLabel,
+	        summary: issueText
+	      })
+	    }).catch(e => console.error("n8n webhook error:", e.message));
+	  }
 
 	const hasLocationForVisit =
 	  !!((aiData?.location || session?.house_number || "").trim());
