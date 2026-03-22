@@ -1143,6 +1143,10 @@ app.delete("/api/activities/:id", async (req, res) => {
 // Intent Detection
 // ==============================
 async function detectIntent(message, model) {
+  // Maps URL = location sharing = SUPPORT
+  if (message.match(/https?:\/\//i) && message.match(/maps|goo\.gl|google\.com/i)) return "SUPPORT";
+  // Villa/building number = SUPPORT
+  if (/^(villa|building|flat|block|house)?\s*\d+/i.test(message.trim())) return "SUPPORT";
   try {
 
     const intentPrompt = `
@@ -1203,10 +1207,12 @@ Return JSON only.
 `;
 
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
-
-    const parsed = JSON.parse(text);
-
+    const raw = result.response.text().trim();
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start === -1 || end === -1) return "GENERAL";
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
     return parsed.intent || "GENERAL";
 
   } catch (err) {
@@ -1270,10 +1276,93 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
                 `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency) VALUES ($1, $2, $3, $4, $5, $6)`,
                 [`log-stat-${Date.now()}`, 'OUTBOUND', s.recipient_id, s.status.toUpperCase(), `Update: ${s.status}`, 0]
             );
-            return res.sendStatus(200);
+            // processed
         }
 
-	if (!message || message.type !== 'text') return res.sendStatus(200);
+	// Handle different message types
+	if (!message) return res.sendStatus(200);
+
+	// WhatsApp native location share
+	if (message.type === 'location') {
+		const lat = message.location?.latitude;
+		const lng = message.location?.longitude;
+		const locationUrl = 'https://maps.google.com/?q=' + lat + ',' + lng;
+		await pool.query('UPDATE sessions SET location_url = COALESCE(location_url, $1) WHERE phone = $2', [locationUrl, message.from]).catch(() => {});
+		await sendWhatsAppText(message.from, "Location received! Could you also share your villa or building number?");
+		return res.sendStatus(200);
+	}
+
+	// Image — Gemini Vision reads building/villa number
+	if (message.type === 'image') {
+		try {
+			const imageId = message.image && message.image.id;
+			const caption = (message.image && message.image.caption) || '';
+			if (imageId) {
+				const mediaResp = await fetch('https://graph.facebook.com/v17.0/' + imageId, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const mediaData = await mediaResp.json();
+				const imgResp = await fetch(mediaData.url, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const imgBuffer = await imgResp.arrayBuffer();
+				const base64Image = Buffer.from(imgBuffer).toString('base64');
+				const mimeType = mediaData.mime_type || 'image/jpeg';
+				const visionModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+				const visionResult = await visionModel.generateContent([
+					{ inlineData: { data: base64Image, mimeType } },
+					{ text: 'This image is from a customer in Qatar. Extract any visible building number, villa number, street number, or address. Reply with ONLY the extracted text. If nothing found, reply: NOT_FOUND' }
+				]);
+				const extracted = visionResult.response.text().trim();
+				if (extracted && extracted !== 'NOT_FOUND') {
+					await pool.query('UPDATE sessions SET house_number = $1 WHERE phone = $2', [extracted, message.from]).catch(() => {});
+					await sendWhatsAppText(message.from, 'Got it! I can see: ' + extracted + '. Is that correct? If yes, please describe your issue.');
+				} else {
+					await sendWhatsAppText(message.from, 'Thank you for the image! Could you type your villa or building number?');
+				}
+			} else if (caption) {
+				await handleIncomingMessage(message.from, caption);
+			} else {
+				await sendWhatsAppText(message.from, 'Thank you for the image! Could you type your villa or building number?');
+			}
+		} catch (imgErr) {
+			console.error('Image processing error:', imgErr);
+			await sendWhatsAppText(message.from, 'Thank you for the image! Could you also type your villa or building number?');
+		}
+		return res.sendStatus(200);
+	}
+
+	// Voice/Audio — Gemini transcribes Arabic or English
+	if (message.type === 'audio') {
+		try {
+			const audioId = message.audio && message.audio.id;
+			if (audioId) {
+				const mediaResp = await fetch('https://graph.facebook.com/v17.0/' + audioId, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const mediaData = await mediaResp.json();
+				const audioResp = await fetch(mediaData.url, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const audioBuffer = await audioResp.arrayBuffer();
+				const base64Audio = Buffer.from(audioBuffer).toString('base64');
+				const mimeType = mediaData.mime_type || 'audio/ogg';
+				const audioModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+				const audioResult = await audioModel.generateContent([
+					{ inlineData: { data: base64Audio, mimeType } },
+					{ text: 'Transcribe this voice message. The customer may speak Arabic or English. Reply with ONLY the transcribed text.' }
+				]);
+				const transcribed = audioResult.response.text().trim();
+				if (transcribed) {
+					console.log('[Voice] Transcribed: ' + transcribed);
+					await handleIncomingMessage(message.from, transcribed);
+				} else {
+					await sendWhatsAppText(message.from, 'Sorry, I could not understand the voice message. Could you please type your message?');
+				}
+			} else {
+				await sendWhatsAppText(message.from, 'Sorry, I could not process the voice message. Could you please type your message?');
+			}
+		} catch (audioErr) {
+			console.error('Audio processing error:', audioErr);
+			await sendWhatsAppText(message.from, 'Sorry, I could not process the voice message. Could you please type your message?');
+		}
+		return res.sendStatus(200);
+	}
+
+	// Ignore stickers, documents, reactions
+	if (message.type !== 'text') return res.sendStatus(200);
 
 	const inboundMessageId = message.id;
 	const phone = message.from;
@@ -1326,14 +1415,24 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 
 async function handleIncomingMessage(phone, text) {
 	try {
+	const startTime = Date.now();
 	const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
 	const intent = await detectIntent(text, model);
 	console.log("Detected intent:", intent);
 
 	// ==============================
 	// Ticket Follow-up Handler
 	// ==============================
+	// Override TICKET_FOLLOWUP to SUPPORT if active session exists
+	if (intent === "TICKET_FOLLOWUP") {
+		try {
+			const sessCheck = await pool.query("SELECT step FROM sessions WHERE phone = $1", [phone]);
+			if (sessCheck.rows.length > 0 && sessCheck.rows[0].step && sessCheck.rows[0].step !== "DONE") {
+				console.log("[Intent] Active session - routing as SUPPORT");
+				intent = "SUPPORT";
+			}
+		} catch(e) {}
+	}
 	if (intent === "TICKET_FOLLOWUP") {
 
 	const ticketResult = await pool.query(
@@ -1352,7 +1451,7 @@ async function handleIncomingMessage(phone, text) {
 	      phone,
 	      "I could not find an active service request. Please briefly describe the issue and I will assist you."
 	    );
-	    return res.sendStatus(200);
+          // processed
 	  }
 
 	  const ticket = ticketResult.rows[0];
@@ -1361,7 +1460,7 @@ async function handleIncomingMessage(phone, text) {
 
 	  await sendWhatsAppText(phone, reply);
 
-	  return res.sendStatus(200);
+          // processed
 	}
 
 	// Sales enquiry redirect (only if there is no active support session/ticket yet)
@@ -1400,7 +1499,7 @@ async function handleIncomingMessage(phone, text) {
 	    ]
 	  );
 
-	  return res.sendStatus(200);
+          // processed
 	}
 
 	// 2. SESSION LOOKUP (The Smart Part)
@@ -1479,7 +1578,7 @@ async function handleIncomingMessage(phone, text) {
 	      ]
 	    );
 
-	    return res.sendStatus(200);
+          // processed
 	  }
 
 	  let followUpReply = null;
@@ -1553,7 +1652,7 @@ async function handleIncomingMessage(phone, text) {
 	    ]
 	  );
 
-	  return res.sendStatus(200);
+          // processed - response handled via WhatsApp
 	}
 
 	// 3. AI ANALYSIS (State-Machine Prompt)
@@ -1758,7 +1857,8 @@ async function handleIncomingMessage(phone, text) {
 	await pool.query(
 	  `UPDATE sessions SET
 	      customer_name = COALESCE($1, customer_name),
-	      house_number = COALESCE($2, house_number),
+	      location_url = COALESCE(CASE WHEN $2 ~ '^https?://' THEN $2 ELSE NULL END, location_url),
+	      house_number = COALESCE(CASE WHEN $2 !~ '^https?://' THEN $2 ELSE NULL END, house_number),
 	      issue_details = COALESCE($3, issue_details),
 	      step = $4,
 	      issue_category = COALESCE($5, issue_category),
@@ -1811,7 +1911,20 @@ async function handleIncomingMessage(phone, text) {
 
 	const customerName = aiData?.name || session?.customer_name || "Valued Client";
 	const issueText = aiData?.issue || session?.issue_details || text;
-	const issueCategory = aiData?.issue_category || session?.issue_category || "unknown";
+	const rawCategory = aiData?.issue_category || session?.issue_category || "unknown";
+	const categoryMap = {
+	    "cctv": "CCTV",
+	    "wifi_network": "Wi-Fi & Networking",
+	    "internet_down": "Wi-Fi & Networking",
+	    "slow_internet": "Wi-Fi & Networking",
+	    "intercom": "Intercom",
+	    "access_control": "Intercom",
+	    "home_automation": "Light Automation",
+	    "audio_speaker": "Smart Speaker",
+	    "tv_streaming": "Smart Speaker",
+	    "unknown": "Wi-Fi & Networking"
+	};
+	const issueCategory = categoryMap[rawCategory] || rawCategory;
 
 	const explicitSiteVisitRequest =
 	  normalizedIncoming.includes("site visit") ||
@@ -1925,15 +2038,16 @@ async function handleIncomingMessage(phone, text) {
 	  }
 
 	  await pool.query(
-	    `INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, house_number, ai_summary, messages, created_at, updated_at)
-	     VALUES ($1, $2, $3, $4, $5, 'NEW', $6, $7, $8, NOW(), NOW())`,
+	    `INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
+	     VALUES ($1, $2, $3, $4, $5, 'NEW', $6, $7, $8, $9, NOW(), NOW())`,
 	    [
 	      ticketId,
 	      customerId,
 	      customerName,
 	      issueCategory || "SUPPORT",
 	      aiData?.action === "site_visit" ? "HIGH" : "MEDIUM",
-	      aiData?.location || session?.house_number || null,
+	      session?.location_url || null,
+	      session?.house_number || null || null,
 	      techSummary,
 	      JSON.stringify([
 	        {
@@ -1943,7 +2057,7 @@ async function handleIncomingMessage(phone, text) {
 	        },
 	        {
 	          sender: "SYSTEM",
-	          content: `AI Summary: ${techSummary || "N/A"} | Escalation: ${aiData?.action}`,
+	          content: techSummary || "AI Summary not available",
 	          at: new Date().toISOString()
 	        }
 	      ])
