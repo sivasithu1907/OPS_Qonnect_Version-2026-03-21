@@ -1105,15 +1105,7 @@ useEffect(() => {
                         onLogout={handleLogout}
                     />
                 )}
-                {activeView === 'simulator' && (
-                    <FlowSimulator onNewTicket={(t) => {
-                        setTickets(prev => [t, ...prev]);
-                        // Optional: Notify user
-                        alert(`New Simulated Ticket: ${t.id}`);
-                    }} />
-                )}
-                {activeView === 'guide' && <IntegrationGuide />}
-            </div>
+              </div>
 
           {/* AI Assistant Chat Bubble (Global) */}
           <AIChatBot 
