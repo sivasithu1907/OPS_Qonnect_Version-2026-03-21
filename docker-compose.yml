@@ -20,10 +20,11 @@ services:
       - "8080:8080"
     depends_on:
       db:
-        condition: service_healthy # Wait for DB to be "Ready" before starting
+        condition: service_healthy
     environment:
       - PORT=8080
       - API_KEY=${API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
       - CORS_ORIGIN=${CORS_ORIGIN}
       - DB_HOST=db
       - DB_PORT=5432
@@ -33,6 +34,7 @@ services:
       - WA_VERIFY_TOKEN=${WA_VERIFY_TOKEN}
       - WA_PHONE_NUMBER_ID=${WA_PHONE_NUMBER_ID}
       - WA_ACCESS_TOKEN=${WA_ACCESS_TOKEN}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
 
   db:
     image: postgres:16-alpine
@@ -42,7 +44,7 @@ services:
       - POSTGRES_PASSWORD=fieldops_pass
       - POSTGRES_DB=fieldops
     volumes:
-      - postgres_data:/var/lib/postgresql/data # This saves your data permanently
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fieldops -d fieldops"]
       interval: 5s
@@ -50,4 +52,4 @@ services:
       retries: 5
 
 volumes:
-  postgres_data: # Define the storage volume
+  postgres_data:
