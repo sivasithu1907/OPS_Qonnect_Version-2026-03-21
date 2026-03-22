@@ -178,7 +178,7 @@ function App() {
               ticketId: t.id
             }));
 
-      } else if (currentUser.role === Role.FIELD_ENGINEER || (currentUser as any).systemRole === 'TECHNICIAN') {
+      } else if (currentUser.role === Role.FIELD_ENGINEER) {
           // Assigned jobs for this engineer
           const myId = (currentUser as any).techId || (currentUser as any).id;
           tickets
