@@ -274,10 +274,64 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
   }, [tickets]);
 
   const recentActivity = useMemo(() => {
-      return [...tickets]
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-          .slice(0, 5);
-  }, [tickets]);
+      // Build one event per meaningful status change across all tickets
+      // Use updatedAt as the event time, deduplicate by ticket+status
+      type ActivityEvent = {
+          id: string;
+          ticketId: string;
+          customerName: string;
+          category: string;
+          status: TicketStatus;
+          techName?: string;
+          time: Date;
+          priority: string;
+      };
+
+      const events: ActivityEvent[] = [];
+
+      const statusOrder: TicketStatus[] = [
+          TicketStatus.NEW,
+          TicketStatus.ASSIGNED,
+          TicketStatus.ON_MY_WAY,
+          TicketStatus.ARRIVED,
+          TicketStatus.IN_PROGRESS,
+          TicketStatus.CARRY_FORWARD,
+          TicketStatus.RESOLVED,
+          TicketStatus.CANCELLED,
+      ];
+
+      // Only include statuses worth showing in the feed
+      const showableStatuses = new Set([
+          TicketStatus.NEW,
+          TicketStatus.ASSIGNED,
+          TicketStatus.ON_MY_WAY,
+          TicketStatus.ARRIVED,
+          TicketStatus.IN_PROGRESS,
+          TicketStatus.CARRY_FORWARD,
+          TicketStatus.RESOLVED,
+      ]);
+
+      tickets.forEach(t => {
+          if (!showableStatuses.has(t.status)) return;
+          const tech = t.assignedTechId
+              ? technicians.find(x => x.id === t.assignedTechId)
+              : undefined;
+          events.push({
+              id: `${t.id}-${t.status}`,
+              ticketId: t.id,
+              customerName: t.customerName,
+              category: t.category || 'Support',
+              status: t.status,
+              techName: tech?.name,
+              time: new Date(t.updatedAt),
+              priority: t.priority,
+          });
+      });
+
+      return events
+          .sort((a, b) => b.time.getTime() - a.time.getTime())
+          .slice(0, 8);
+  }, [tickets, technicians]);
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in zoom-in duration-300 max-w-[1600px] mx-auto">
@@ -634,7 +688,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center mb-5">
                     <h4 className="text-lg font-bold text-slate-800">Recent Activity</h4>
                     <button 
                         onClick={() => onNavigate({ description: 'All Recent Log' })}
@@ -644,51 +698,62 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                     </button>
                 </div>
                 
-                <div className="space-y-4 flex-1">
-                    {recentActivity.map(ticket => {
-                        const isUrgent = ticket.priority === Priority.URGENT || ticket.priority === Priority.HIGH;
+                <div className="flex-1 space-y-1">
+                    {recentActivity.map(event => {
+                        // Config per status
+                        const cfg: Record<string, { label: string; dot: string; icon: React.ReactNode }> = {
+                            [TicketStatus.NEW]:          { label: 'New Ticket',    dot: 'bg-blue-500',    icon: <FileText size={13}/> },
+                            [TicketStatus.ASSIGNED]:     { label: 'Assigned',      dot: 'bg-violet-500',  icon: <UserIcon size={13}/> },
+                            [TicketStatus.ON_MY_WAY]:    { label: 'On the Way',    dot: 'bg-amber-500',   icon: <ArrowRight size={13}/> },
+                            [TicketStatus.ARRIVED]:      { label: 'Arrived',       dot: 'bg-orange-500',  icon: <MapPin size={13}/> },
+                            [TicketStatus.IN_PROGRESS]:  { label: 'Work Started',  dot: 'bg-purple-500',  icon: <Activity size={13}/> },
+                            [TicketStatus.CARRY_FORWARD]:{ label: 'Carry Forward', dot: 'bg-rose-400',    icon: <Clock size={13}/> },
+                            [TicketStatus.RESOLVED]:     { label: 'Resolved',      dot: 'bg-emerald-500', icon: <CheckCircle size={13}/> },
+                        };
+                        const c = cfg[event.status] ?? { label: event.status, dot: 'bg-slate-400', icon: <FileText size={13}/> };
+
+                        // Relative time
+                        const diffMs = Date.now() - event.time.getTime();
+                        const diffMin = Math.floor(diffMs / 60000);
+                        const timeStr = diffMin < 1 ? 'just now'
+                            : diffMin < 60 ? `${diffMin}m ago`
+                            : diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago`
+                            : `${Math.floor(diffMin / 1440)}d ago`;
+
                         return (
-                            <div 
-                                key={ticket.id} 
-                                className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-                                    isUrgent ? 'bg-red-50/50 border-red-100' : 'bg-white border-slate-100 hover:border-slate-200'
-                                }`}
+                            <div
+                                key={event.id}
+                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group"
+                                onClick={() => onNavigate({ ticketId: event.ticketId })}
                             >
-                                <div className={`mt-1 p-2 rounded-lg shrink-0 ${
-                                    ticket.status === TicketStatus.RESOLVED ? 'bg-emerald-100 text-emerald-600' : 
-                                    isUrgent ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'
-                                }`}>
-                                    {ticket.status === TicketStatus.RESOLVED ? <CheckCircle size={16}/> : isUrgent ? <Zap size={16}/> : <FileText size={16} />}
+                                {/* Dot */}
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`}/>
+
+                                {/* Icon + Event label */}
+                                <span className="text-slate-400 shrink-0">{c.icon}</span>
+                                <span className="text-xs font-semibold text-slate-700 w-24 shrink-0">{c.label}</span>
+
+                                {/* Customer + category */}
+                                <div className="flex-1 min-w-0">
+                                    <span className="text-xs font-bold text-slate-800 truncate block">
+                                        {event.customerName}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 truncate block">
+                                        {event.category}{event.techName ? ` · ${event.techName}` : ''}
+                                    </span>
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <p className="text-sm font-bold text-slate-900 truncate">{ticket.customerName}</p>
-                                        <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-                                            {Math.floor((new Date().getTime() - new Date(ticket.updatedAt).getTime()) / (1000 * 60))}m ago
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-0.5 truncate">
-                                        {ticket.messages && ticket.messages.length > 0 ? ticket.messages[ticket.messages.length-1]?.content : 'No messages'}
-                                    </p>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <span className="text-[10px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-slate-500 font-mono">
-                                            {ticket.id}
-                                        </span>
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                            ticket.status === TicketStatus.RESOLVED ? 'bg-emerald-100 text-emerald-700' :
-                                            ticket.status === TicketStatus.NEW ? 'bg-blue-100 text-blue-700' :
-                                            'bg-slate-100 text-slate-600'
-                                        }`}>
-                                            {formatStatus(ticket.status)}
-                                        </span>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => handleTicketSelect(ticket)}
-                                    className="self-center text-slate-300 hover:text-emerald-600 p-2 rounded-full hover:bg-slate-50 transition-colors"
-                                >
-                                    <ChevronRight size={18} />
-                                </button>
+
+                                {/* Ticket ID */}
+                                <span className="text-[10px] font-mono text-slate-400 shrink-0 hidden sm:block">
+                                    {event.ticketId}
+                                </span>
+
+                                {/* Time */}
+                                <span className="text-[10px] text-slate-400 shrink-0 w-14 text-right">
+                                    {timeStr}
+                                </span>
+
+                                <ChevronRight size={14} className="text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0"/>
                             </div>
                         );
                     })}
