@@ -1,7 +1,7 @@
 {
-  "name": "final-version_v4---whatsapp-monitor_deploy--(chatgpt)-v1",
+  "name": "qonnect-field-ops",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,10 +15,7 @@
     "react-dom": "18.3.1",
     "recharts": "^2.12.7",
     "react-datepicker": "^4.25.0",
-    "jszip": "3.10.1",
-    "express": "^5.2.1",
-    "cors": "^2.8.6",
-    "dotenv": "^17.3.1"
+    "jszip": "3.10.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
