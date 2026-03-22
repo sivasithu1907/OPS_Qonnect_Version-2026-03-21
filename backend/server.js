@@ -218,10 +218,13 @@ async function initDb() {
         status TEXT DEFAULT 'NEW',
         location_url TEXT,
         house_number TEXT,
+        ai_summary TEXT,
         messages JSONB DEFAULT '[]',
         created_at TIMESTAMPTZ DEFAULT now(),
         updated_at TIMESTAMPTZ DEFAULT now()
       );
+      -- Add ai_summary column if upgrading existing DB
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_summary TEXT;
     `);
 
     // 3. Customer ID Sequence
@@ -1746,9 +1749,27 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	  const customerId = await upsertWhatsAppCustomer(phone, customerName);
 	  const ticketId = makeTicketId();
 
+	  // ── Generate AI technical summary for Team Lead ──
+	  let techSummary = null;
+	  try {
+	    const summaryModel = genAI.getGenerativeModel({
+	      model: "gemini-2.5-flash",
+	      generationConfig: { responseMimeType: "application/json" }
+	    });
+	    const summaryResult = await summaryModel.generateContent(
+	      `You are a field operations assistant. Based on the conversation below, write a concise one-line technical summary for the Team Lead to understand and assign this ticket quickly.\n\nReturn ONLY JSON: {"summary": "your summary here"}\n\nRules:\n- Max 20 words\n- Include: system type, specific issue, recommended action\n- Example: "CCTV – 1 camera offline at entrance, other cameras working. Site visit required."\n- Example: "WiFi – full outage all devices after router restart. Remote support needed."\n\nConversation:\nCustomer: ${issueText}\nCategory: ${issueCategory}\nAction decided: ${aiData?.action}\nLocation: ${aiData?.location || session?.house_number || "not provided"}`
+	    );
+	    const summaryData = JSON.parse(summaryResult.response.text());
+	    techSummary = summaryData?.summary || null;
+	  } catch (e) {
+	    console.error("AI summary generation failed (non-fatal):", e.message);
+	    // Fallback: build a basic summary from available data
+	    techSummary = `${issueCategory || "Support"} – ${issueText?.substring(0, 80)}. ${aiData?.action === "site_visit" ? "Site visit required." : "Remote support needed."}`;
+	  }
+
 	  await pool.query(
-	    `INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, house_number, messages, created_at, updated_at)
-	     VALUES ($1, $2, $3, $4, $5, 'NEW', $6, $7, NOW(), NOW())`,
+	    `INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, house_number, ai_summary, messages, created_at, updated_at)
+	     VALUES ($1, $2, $3, $4, $5, 'NEW', $6, $7, $8, NOW(), NOW())`,
 	    [
 	      ticketId,
 	      customerId,
@@ -1756,6 +1777,7 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	      issueCategory || "SUPPORT",
 	      aiData?.action === "site_visit" ? "HIGH" : "MEDIUM",
 	      aiData?.location || session?.house_number || null,
+	      techSummary,
 	      JSON.stringify([
 	        {
 	          sender: "CLIENT",
@@ -1764,7 +1786,7 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	        },
 	        {
 	          sender: "SYSTEM",
-	          content: `Escalation decision: ${aiData?.action}`,
+	          content: `AI Summary: ${techSummary || "N/A"} | Escalation: ${aiData?.action}`,
 	          at: new Date().toISOString()
 	        }
 	      ])
