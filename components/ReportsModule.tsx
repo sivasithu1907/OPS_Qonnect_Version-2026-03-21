@@ -443,50 +443,64 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
           document.body.removeChild(link);
 
       } else {
-          // PDF / Print Logic
-          const printWindow = window.open('', '_blank');
-          if (printWindow) {
-              const html = `
-                <html>
-                <head>
-                    <title>${reportType.toUpperCase()} Report</title>
-                    <style>
-                        body { font-family: sans-serif; padding: 20px; }
-                        h1 { font-size: 24px; margin-bottom: 5px; }
-                        p { color: #666; font-size: 12px; margin-bottom: 20px; }
-                        table { width: 100%; border-collapse: collapse; font-size: 10px; }
-                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                        th { background-color: #f3f4f6; font-weight: bold; }
-                        tr:nth-child(even) { background-color: #f9fafb; }
-                        @media print {
-                            @page { size: landscape; margin: 1cm; }
-                        }
-                    </style>
-                </head>
-                <body>
-                    <h1>${reportType === 'tickets' ? 'After-Sales Tickets Report' : 'Operations Activity Report'}</h1>
-                    <p>Generated on ${new Date().toLocaleString()} | Period: ${startDate} to ${endDate}</p>
-                    <table>
-                        <thead>
-                            <tr>
-                                ${fieldsToExport.map(f => `<th>${f.label}</th>`).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${filteredData.map(item => `
-                                <tr>
-                                    ${fieldsToExport.map(f => `<td>${f.getValue(item)}</td>`).join('')}
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                    <script>window.print();</script>
-                </body>
-                </html>
-              `;
-              printWindow.document.write(html);
-              printWindow.document.close();
-          }
+          // PDF Export using jsPDF + autoTable — real file download, no print dialog
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          script.onload = () => {
+              const script2 = document.createElement('script');
+              script2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+              script2.onload = () => {
+                  try {
+                      const { jsPDF } = (window as any).jspdf;
+                      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+                      // Header
+                      doc.setFontSize(16);
+                      doc.setTextColor(15, 23, 42);
+                      doc.text(
+                          reportType === 'tickets' ? 'After-Sales Tickets Report' : 'Operations Activity Report',
+                          14, 16
+                      );
+                      doc.setFontSize(9);
+                      doc.setTextColor(100, 116, 139);
+                      doc.text(
+                          `Generated: ${new Date().toLocaleString('en-GB')}   |   Period: ${startDate} to ${endDate}   |   Records: ${filteredData.length}`,
+                          14, 23
+                      );
+
+                      // Table
+                      (doc as any).autoTable({
+                          startY: 28,
+                          head: [fieldsToExport.map(f => f.label)],
+                          body: filteredData.map(item => fieldsToExport.map(f => String(f.getValue(item) ?? ''))),
+                          styles: { fontSize: 8, cellPadding: 3 },
+                          headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+                          alternateRowStyles: { fillColor: [248, 250, 252] },
+                          margin: { left: 14, right: 14 },
+                      });
+
+                      // Footer
+                      const pageCount = (doc as any).internal.getNumberOfPages();
+                      for (let i = 1; i <= pageCount; i++) {
+                          doc.setPage(i);
+                          doc.setFontSize(8);
+                          doc.setTextColor(148, 163, 184);
+                          doc.text(
+                              `Qonnect Field Operations   |   Page ${i} of ${pageCount}`,
+                              14,
+                              (doc as any).internal.pageSize.getHeight() - 8
+                          );
+                      }
+
+                      doc.save(`${reportType}_report_${startDate}_to_${endDate}.pdf`);
+                  } catch (err) {
+                      console.error('PDF generation failed:', err);
+                      alert('PDF generation failed. Please try again.');
+                  }
+              };
+              document.head.appendChild(script2);
+          };
+          document.head.appendChild(script);
       }
       setIsExportModalOpen(false);
   };
