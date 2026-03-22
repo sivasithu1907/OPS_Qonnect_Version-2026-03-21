@@ -42,6 +42,18 @@ async function sendWhatsAppText(to, bodyText) {
     throw new Error(`Meta send failed: ${resp.status} ${errMsg}`);
   }
 
+  // Log every outbound message to WhatsApp monitor
+  try {
+    await pool.query(
+      `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [`log-out-${Date.now()}-${Math.random().toString(36).substr(2,5)}`,
+       'OUTBOUND', to, 'SENT', bodyText, 0]
+    );
+  } catch (logErr) {
+    console.error("Failed to log outbound message:", logErr.message);
+  }
+
   return data;
 }
 
@@ -1290,6 +1302,30 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	    return res.sendStatus(200);
 	}
 
+	// ── 13-second message buffer ──
+	// Waits for customer to finish typing before processing
+	if (!global.msgBuffer) global.msgBuffer = new Map();
+	const bufEntry = global.msgBuffer.get(phone) || { texts: [], timer: null };
+	bufEntry.texts.push(text);
+	if (bufEntry.timer) clearTimeout(bufEntry.timer);
+	global.msgBuffer.set(phone, bufEntry);
+	res.sendStatus(200);
+	bufEntry.timer = setTimeout(async () => {
+	    const buf = global.msgBuffer.get(phone);
+	    if (!buf) return;
+	    global.msgBuffer.delete(phone);
+	    const combinedText = buf.texts.join(" ");
+	    console.log(`[Buffer] ${buf.texts.length} msg(s) from ${phone}: "${combinedText}"`);
+	    await handleIncomingMessage(phone, combinedText);
+	}, 13000);
+	return;
+    } catch (webhookErr) {
+        console.error("Webhook outer error:", webhookErr);
+    }
+});
+
+async function handleIncomingMessage(phone, text) {
+	try {
 	const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 	const intent = await detectIntent(text, model);
@@ -2013,12 +2049,10 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
           ]
         );
 
-        res.sendStatus(200);
       } catch (error) {
         console.error("Webhook Error:", error);
-        res.sendStatus(500);
       }
-    });
+}  // end handleIncomingMessage
 
 initDb().then(() => {
   app.listen(PORT, () => {
