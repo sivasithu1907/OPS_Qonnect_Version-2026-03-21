@@ -852,14 +852,21 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              </div>
              
              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
-		{(selectedTicket?.messages || []).map(msg => (
-                  <div key={msg.id} className={`flex ${msg.sender === MessageSender.CLIENT ? 'justify-start' : 'justify-end'}`}>
+		{(selectedTicket?.messages || []).map((msg, idx) => {
+                  // Normalise: DB stores 'at', frontend creates 'timestamp' — handle both
+                  const msgTime = (msg as any).timestamp || (msg as any).at || '';
+                  const msgId = (msg as any).id || `msg-${idx}`;
+                  return (
+                  <div key={msgId} className={`flex ${msg.sender === MessageSender.CLIENT ? 'justify-start' : 'justify-end'}`}>
                     <div className={`max-w-[80%] rounded-xl p-3 shadow-sm ${msg.sender === MessageSender.CLIENT ? 'bg-white text-slate-800 border border-slate-100' : msg.sender === MessageSender.AGENT ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600 text-sm'}`}>
                       <p>{msg.content}</p>
-                      <div className={`text-[10px] mt-1 text-right ${msg.sender === MessageSender.AGENT ? 'text-emerald-100' : 'text-slate-400'}`}>{new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                      <div className={`text-[10px] mt-1 text-right ${msg.sender === MessageSender.AGENT ? 'text-emerald-100' : 'text-slate-400'}`}>
+                        {msgTime ? new Date(msgTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}
+                      </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
              </div>
 
              {/* AI Analysis Panel */}
@@ -1034,6 +1041,16 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              </div>
 
              <div className="flex-1 overflow-y-auto space-y-4 p-4 pr-2">
+                {/* AI Summary Banner */}
+                {(selectedTicket as any)?.ai_summary && (
+                    <div className="flex items-start gap-2 p-3 bg-purple-50 border border-purple-100 rounded-xl">
+                        <Sparkles size={14} className="text-purple-500 mt-0.5 shrink-0" />
+                        <div>
+                            <p className="text-[10px] font-bold text-purple-500 uppercase mb-0.5">AI Summary</p>
+                            <p className="text-xs text-purple-900 leading-snug">{(selectedTicket as any).ai_summary}</p>
+                        </div>
+                    </div>
+                )}
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label><select value={getFormValue('status') as TicketStatus} onChange={(e) => updateField('status', e.target.value)} className={INPUT_STYLES}>{Object.values(TicketStatus).map(s => <option key={s} value={s}>{toTitleCase(s)}</option>)}</select></div>
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Priority</label><select value={getFormValue('priority') as Priority} onChange={(e) => updateField('priority', e.target.value)} className={INPUT_STYLES}>{Object.values(Priority).map(p => <option key={p} value={p}>{toTitleCase(p)}</option>)}</select></div>
                 
