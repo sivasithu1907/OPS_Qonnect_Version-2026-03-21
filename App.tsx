@@ -63,6 +63,24 @@ function App() {
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [isGlobalSearchFocused, setIsGlobalSearchFocused] = useState(false);
 
+  // --- Notification State ---
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [readNotifIds, setReadNotifIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('qonnect_read_notifs');
+      return new Set(saved ? JSON.parse(saved) : []);
+    } catch { return new Set(); }
+  });
+
+  const markAsRead = (id: string) => {
+    setReadNotifIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      localStorage.setItem('qonnect_read_notifs', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
   const globalSearchResults = useMemo(() => {
       if (!globalSearchQuery || globalSearchQuery.length < 2) return null;
       const lower = globalSearchQuery.toLowerCase();
@@ -119,28 +137,63 @@ function App() {
       });
   };
 
-  // Live Notifications Logic
+  // --- Notification Feed (role-aware, activity-based) ---
   const activeUserNotifications = useMemo(() => {
       if (!currentUser) return [];
-      
-      const notifications: any[] = [];
-      
-      if (currentUser.role === 'ADMIN' || currentUser.role === 'TEAM_LEAD') {
-          // Notify Admins of NEW unassigned tickets
-          const newUnassigned = tickets.filter(t => t.status === TicketStatus.NEW && !t.assignedTechId);
-          if (newUnassigned.length > 0) {
-              notifications.push({ id: 'n1', message: `You have ${newUnassigned.length} new unassigned tickets.` });
-          }
-      } 
-      else if (currentUser.role === 'FIELD_ENGINEER') {
-          // Notify Engineers of tickets recently assigned to them that they haven't started
-          const myNewJobs = tickets.filter(t => t.assignedTechId === currentUser.techId && (t.status === TicketStatus.OPEN || t.status === TicketStatus.ASSIGNED));
-          if (myNewJobs.length > 0) {
-              notifications.push({ id: 'n2', message: `You have ${myNewJobs.length} new assigned jobs.` });
-          }
+      const notifs: { id: string; message: string; time: Date; type: string; ticketId?: string }[] = [];
+
+      if (currentUser.role === Role.ADMIN || currentUser.role === Role.TEAM_LEAD) {
+          // New unassigned tickets
+          tickets
+            .filter(t => t.status === TicketStatus.NEW && !t.assignedTechId)
+            .forEach(t => notifs.push({
+              id: `new-${t.id}`,
+              message: `New ticket ${t.id} — ${t.customerName} (${t.category || 'Support'})`,
+              time: new Date(t.createdAt),
+              type: 'new_ticket',
+              ticketId: t.id
+            }));
+
+          // Carry forward tickets (last 24h)
+          const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          tickets
+            .filter(t => t.status === TicketStatus.CARRY_FORWARD && new Date(t.updatedAt) > since)
+            .forEach(t => notifs.push({
+              id: `cf-${t.id}-${t.updatedAt}`,
+              message: `Carry Forward: ${t.id} — ${t.customerName}${t.carryForwardNote ? ` · ${t.carryForwardNote}` : ''}`,
+              time: new Date(t.updatedAt),
+              type: 'carry_forward',
+              ticketId: t.id
+            }));
+
+          // Recent status changes (last 12h)
+          const since12 = new Date(Date.now() - 12 * 60 * 60 * 1000);
+          tickets
+            .filter(t => [TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED].includes(t.status) && new Date(t.updatedAt) > since12)
+            .forEach(t => notifs.push({
+              id: `status-${t.id}-${t.status}`,
+              message: `${t.id} marked ${t.status.replace('_', ' ')} — ${t.customerName}`,
+              time: new Date(t.updatedAt),
+              type: 'status_change',
+              ticketId: t.id
+            }));
+
+      } else if (currentUser.role === Role.FIELD_ENGINEER || (currentUser as any).systemRole === 'TECHNICIAN') {
+          // Assigned jobs for this engineer
+          const myId = (currentUser as any).techId || (currentUser as any).id;
+          tickets
+            .filter(t => t.assignedTechId === myId && [TicketStatus.ASSIGNED, TicketStatus.OPEN].includes(t.status))
+            .forEach(t => notifs.push({
+              id: `assigned-${t.id}`,
+              message: `New job assigned: ${t.id} — ${t.customerName} (${t.category || 'Support'})`,
+              time: new Date(t.updatedAt),
+              type: 'assigned',
+              ticketId: t.id
+            }));
       }
 
-      return notifications;
+      // Sort newest first
+      return notifs.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 20);
   }, [tickets, currentUser]);
 
   // --- Auth Handlers ---
@@ -503,6 +556,17 @@ const loadUsers = async () => {
   }
 };
 
+  // Close notification dropdown on outside click
+  useEffect(() => {
+    if (!isNotifOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-notif-panel]')) setIsNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isNotifOpen]);
+
 // --- Persistent Auth Check ---
   useEffect(() => {
     const savedToken = localStorage.getItem('qonnect_token');
@@ -756,10 +820,87 @@ useEffect(() => {
                          )}
                      </div>
 
-                     <button className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors">
-                         <Bell size={20} />
-                         {activeUserNotifications.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
-                     </button>
+                     {/* Notification Bell */}
+                     <div className="relative" data-notif-panel>
+                         <button
+                             onClick={() => setIsNotifOpen(prev => !prev)}
+                             className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                         >
+                             <Bell size={20} />
+                             {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length > 0 && (
+                                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                             )}
+                         </button>
+
+                         {isNotifOpen && (
+                             <div className="absolute right-0 top-10 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                                 {/* Header */}
+                                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                                     <span className="text-sm font-bold text-slate-800">Notifications</span>
+                                     <div className="flex items-center gap-2">
+                                         {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length > 0 && (
+                                             <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+                                                 {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length} new
+                                             </span>
+                                         )}
+                                         <button onClick={() => setIsNotifOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                             <X size={16} />
+                                         </button>
+                                     </div>
+                                 </div>
+
+                                 {/* List */}
+                                 <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
+                                     {activeUserNotifications.length === 0 ? (
+                                         <div className="px-4 py-8 text-center text-sm text-slate-400">No notifications</div>
+                                     ) : (
+                                         activeUserNotifications.map(n => {
+                                             const isRead = readNotifIds.has(n.id);
+                                             const typeColor: Record<string, string> = {
+                                                 new_ticket: 'bg-emerald-500',
+                                                 carry_forward: 'bg-amber-500',
+                                                 status_change: 'bg-blue-500',
+                                                 assigned: 'bg-purple-500',
+                                             };
+                                             return (
+                                                 <div
+                                                     key={n.id}
+                                                     className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors ${isRead ? 'opacity-50' : ''}`}
+                                                 >
+                                                     <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${typeColor[n.type] || 'bg-slate-400'}`}></span>
+                                                     <div className="flex-1 min-w-0">
+                                                         <p
+                                                             className="text-xs text-slate-700 leading-snug cursor-pointer hover:text-emerald-600"
+                                                             onClick={() => {
+                                                                 if (n.ticketId) {
+                                                                     setActiveView('tickets');
+                                                                     setTicketFilter({ ticketId: n.ticketId });
+                                                                     setIsNotifOpen(false);
+                                                                 }
+                                                             }}
+                                                         >
+                                                             {n.message}
+                                                         </p>
+                                                         <p className="text-[10px] text-slate-400 mt-0.5">
+                                                             {n.time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · {n.time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                                         </p>
+                                                     </div>
+                                                     {!isRead && (
+                                                         <button
+                                                             onClick={() => markAsRead(n.id)}
+                                                             className="text-[10px] text-slate-400 hover:text-emerald-600 shrink-0 mt-1 whitespace-nowrap"
+                                                         >
+                                                             Mark read
+                                                         </button>
+                                                     )}
+                                                 </div>
+                                             );
+                                         })
+                                     )}
+                                 </div>
+                             </div>
+                         )}
+                     </div>
 
                      {/* Divider */}
                      <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
@@ -958,4 +1099,3 @@ useEffect(() => {
 }
 
 export default App;
-
