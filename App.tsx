@@ -16,8 +16,6 @@ import UserManagement from './components/UserManagement';
 import TeamCRM from './components/TeamCRM';
 import { MobileLeadPortal } from './components/MobileLeadPortal';
 import MobileTechPortal from './components/MobileTechPortal';
-import FlowSimulator from './components/FlowSimulator';
-import IntegrationGuide from './components/IntegrationGuide';
 import CustomerRecords from './components/CustomerRecords';
 import AIChatBot from './components/AIChatBot';
 import SystemDataTools from './components/SystemDataTools';
