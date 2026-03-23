@@ -103,43 +103,14 @@ async function upsertWhatsAppCustomer(phone, name) {
   return customerId;
 }
 
-async function createSupportActivity({
-  phone,
-  customerId,
-  customerName,
-  issue,
-  action,
-  issueCategory
-}) {
-  const activityId = makeActivityId("WA");
+// WhatsApp support interactions create TICKETS only, not activities
+// Activities are for planned field operations managed by Team Leads
+async function createSupportActivity({ phone, customerId, customerName, issue, action, issueCategory }) {
+  // No-op: WhatsApp tickets no longer create activity entries
   const reference = `WA-${Date.now().toString().slice(-6)}`;
-
-  await pool.query(
-    `INSERT INTO activities (
-      id, reference, type, priority, status, customer_id, description, duration_hours, details, created_at, updated_at
-    )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
-    [
-      activityId,
-      reference,
-      "WHATSAPP_SUPPORT",
-      "MEDIUM",
-      action === "resolved_in_chat" ? "COMPLETED" : "PLANNED",
-      customerId,
-      issue || "WhatsApp support interaction",
-      0,
-      JSON.stringify({
-        channel: "whatsapp",
-        phone,
-        customerName,
-        action,
-        issueCategory: issueCategory || "unknown"
-      })
-    ]
-  );
-
-  return { activityId, reference };
+  return { activityId: null, reference };
 }
+
 
 function isSalesInquiry(text = "") {
   const t = String(text).trim().toLowerCase();
@@ -683,7 +654,17 @@ app.get("/api/customers", async (req, res) => {
       );
     }
 
-    res.json(result.rows);
+    res.json(result.rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      buildingNumber: r.building_number || r.address || '',
+      avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
+      isActive: r.is_active !== false,
+      notes: r.notes || ''
+    })));
   } catch (e) {
     console.error("customers list error:", e);
     res.status(500).json({ error: "Failed to list customers" });
