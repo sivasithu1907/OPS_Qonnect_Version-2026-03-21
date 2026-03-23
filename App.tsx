@@ -675,7 +675,13 @@ useEffect(() => {
   // --- Navigation Logic ---
   const filteredNavItems = useMemo(() => {
       if (!currentUser) return [];
-      return NAVIGATION_ITEMS.filter(item => item.roles.includes(currentUser.role));
+      const isDesktop = window.innerWidth >= 768;
+      return NAVIGATION_ITEMS.filter(item => {
+          if (!item.roles.includes(currentUser.role)) return false;
+          // Hide mobile portals from sidebar on desktop — they open fullscreen and are meant for mobile
+          if (isDesktop && (item.id === 'lead_portal' || item.id === 'tech_portal')) return false;
+          return true;
+      });
   }, [currentUser]);
 
   const groupedNavItems = useMemo(() => {
@@ -693,61 +699,6 @@ useEffect(() => {
 
   if (!currentUser) {
       return <Login onLogin={handleLogin} />;
-  }
-
-  // ── Fullscreen Portal Mode ─────────────────────────────────────────────
-  // When on portal views, bypass the entire desktop layout completely.
-  // No sidebar, no header, no AI bot — pure full-screen mobile experience.
-  const isPortalView = activeView === 'lead_portal' || activeView === 'tech_portal';
-
-  if (activeView === 'lead_portal') {
-    return (
-      <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
-        <MobileLeadPortal
-          tickets={tickets}
-          technicians={technicians}
-          activities={activities}
-          teams={teams}
-          sites={sites}
-          customers={customers}
-          onAssign={(tId, techId) => {
-            const t = tickets.find(x => x.id === tId);
-            if (t) handleUpdateTicket({...t, assignedTechId: techId, status: TicketStatus.ASSIGNED});
-          }}
-          onUpdateTicket={handleUpdateTicket}
-          onUpdateActivity={handleUpdateActivity}
-          onAddActivity={handleAddActivity}
-          onDeleteActivity={handleDeleteActivity}
-          onAddCustomer={handleAddCustomer}
-          onSaveCustomer={handleUpdateCustomer}
-          onDeleteCustomer={handleDeleteCustomer}
-          isStandalone={true}
-          onLogout={() => setActiveView('dashboard')}
-          focusedTicketId={focusedTicketId}
-          currentUserId={currentUser.techId}
-        />
-      </div>
-    );
-  }
-
-  if (activeView === 'tech_portal') {
-    return (
-      <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
-        <MobileTechPortal
-          tickets={tickets}
-          activities={activities}
-          currentTechId={currentUser.techId || ''}
-          onUpdateStatus={(tId, status) => {
-            const t = tickets.find(x => x.id === tId);
-            if (t) handleUpdateTicket({...t, status});
-          }}
-          onUpdateActivity={handleUpdateActivity}
-          onUpdateTicket={handleUpdateTicket}
-          isStandalone={true}
-          onLogout={handleLogout}
-        />
-      </div>
-    );
   }
 
   return (
