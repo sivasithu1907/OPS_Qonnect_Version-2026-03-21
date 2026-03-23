@@ -47,3 +47,6 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_phone ON whatsapp_logs(phone);
 -- SELECT column_name FROM information_schema.columns WHERE table_name = 'tickets';
 -- SELECT column_name FROM information_schema.columns WHERE table_name = 'customers';
 -- SELECT column_name FROM information_schema.columns WHERE table_name = 'sessions';
+
+-- 8. Users avatar column
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
