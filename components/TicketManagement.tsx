@@ -1077,17 +1077,13 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Category</label><select value={getFormValue('category') as string} onChange={(e) => updateField('category', e.target.value)} className={INPUT_STYLES}>{TICKET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Appointment</label>
-                    <div className="space-y-2">
-                        <div className="grid grid-cols-3 gap-1">
-                            <select value={dateParts.day} onChange={e => updateAppointmentDate('day', e.target.value)} className={INPUT_STYLES}><option value="" disabled>DD</option>{Array.from({ length: getDaysInMonth(selectedYear, selectedMonthIndex) }, (_, i) => i + 1).map(d => (<option key={d} value={d}>{String(d).padStart(2, '0')}</option>))}</select>
-                            <select value={dateParts.month} onChange={e => updateAppointmentDate('month', e.target.value)} className={INPUT_STYLES}><option value="" disabled>MM</option>{MONTHS.map((m, i) => <option key={i} value={m}>{m}</option>)}</select>
-                            <select value={dateParts.year} onChange={e => updateAppointmentDate('year', e.target.value)} className={INPUT_STYLES}><option value="" disabled>YYYY</option>{YEARS.map(y => <option key={y} value={y}>{y}</option>)}</select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1">
-                            <div className="relative"><Clock size={12} className="absolute left-3 top-3.5 text-slate-400 pointer-events-none" /><select value={dateParts.hour} onChange={e => updateAppointmentDate('hour', e.target.value)} className={INPUT_STYLES.replace('px-[14px]', 'pl-9 pr-[14px]')}>{HOURS.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
-                            <select value={dateParts.minute} onChange={e => updateAppointmentDate('minute', e.target.value)} className={INPUT_STYLES}>{MINUTES.map(m => <option key={m} value={m}>{m}</option>)}</select>
-                        </div>
-                    </div>
+                    <input
+                        type="datetime-local"
+                        value={editForm.appointmentTime ? new Date(editForm.appointmentTime).toISOString().slice(0,16) : ''}
+                        onChange={e => updateField('appointmentTime', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                        className={INPUT_STYLES}
+                        min={new Date().toISOString().slice(0,16)}
+                    />
                 </div>
                 <div className="pt-2 border-t border-slate-200">
                     <h4 className="text-xs font-bold text-slate-800 uppercase mb-3 flex items-center gap-2">
