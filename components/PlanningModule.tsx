@@ -41,7 +41,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   const [mobileTab, setMobileTab] = useState<ActivityStatus>('PLANNED');
 
   // Form State
-  const [dateParts, setDateParts] = useState({ year: '', month: '', day: '', hour: '09', minute: '00' });
+  const [plannedDatetime, setPlannedDatetime] = useState(''); // YYYY-MM-DDTHH:mm
   const [durationState, setDurationState] = useState<{ val: string, unit: 'HOURS' | 'DAYS' }>({ val: '2', unit: 'HOURS' });
   
   // Customer Selector State
@@ -86,13 +86,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     if (isModalOpen) {
         if (editingActivity) {
             const d = new Date(editingActivity.plannedDate);
-            setDateParts({
-                year: d.getFullYear().toString(),
-                month: d.getMonth().toString(),
-                day: d.getDate().toString(),
-                hour: String(d.getHours()).padStart(2, '0'),
-                minute: String(d.getMinutes()).padStart(2, '0')
-            });
+            const pad = (n: number) => String(n).padStart(2,'0');
+            setPlannedDatetime(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
             setDurationState({
                 val: editingActivity.durationHours.toString(),
                 unit: editingActivity.durationUnit || 'HOURS'
@@ -100,14 +95,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             setSelectedCustomerId(editingActivity.customerId || '');
         } else {
             const now = new Date();
-            now.setDate(now.getDate() + 1); // Default tomorrow
-            setDateParts({
-                year: now.getFullYear().toString(),
-                month: now.getMonth().toString(),
-                day: now.getDate().toString(),
-                hour: '09',
-                minute: '00'
-            });
+            now.setDate(now.getDate() + 1);
+            now.setHours(9, 0, 0, 0);
+            setPlannedDatetime(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T09:00`);
             setDurationState({ val: '2', unit: 'HOURS' });
             setSelectedCustomerId('');
         }
@@ -128,12 +118,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
   // Determine available associates based on selected date
   const selectedDateString = useMemo(() => {
-      const { year, month, day } = dateParts;
-      if (year && month && day) {
-          return new Date(parseInt(year), parseInt(month), parseInt(day)).toDateString();
-      }
-      return '';
-  }, [dateParts]);
+      if (!plannedDatetime) return '';
+      return new Date(plannedDatetime).toDateString();
+  }, [plannedDatetime]);
 
   const availableAssociates = useMemo(() => {
       if (!selectedDateString) return technicalAssociates;
@@ -521,13 +508,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   const formData = new FormData(e.currentTarget);
                   const data = Object.fromEntries(formData.entries()) as any;
                   
-                  // Construct ISO Date
-                  const { year, month, day, hour, minute } = dateParts;
-                  let plannedDateIso = new Date().toISOString();
-                  if (year && month && day) {
-                      const d = new Date(parseInt(year), parseInt(month), parseInt(day), parseInt(hour), parseInt(minute));
-                      plannedDateIso = d.toISOString();
-                  }
+                  // Construct ISO Date from datetime-local input
+                  const plannedDateIso = plannedDatetime
+                      ? new Date(plannedDatetime).toISOString()
+                      : new Date().toISOString();
 
                   const activityPayload: any = {
                       type: data.type,
@@ -624,58 +608,16 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           <Calendar size={16} /> Planned Date & Time
                       </h4>
                       
-                      {/* Row 1: Date */}
-                      <div className="grid grid-cols-3 gap-2">
-                          <select 
-                            value={dateParts.day} 
-                            onChange={e => setDateParts({...dateParts, day: e.target.value})}
-                            required
-                            className="bg-white border border-slate-300 rounded-lg p-2.5 text-sm"
-                          >
-                             <option value="" disabled>Day</option>
-                             {Array.from({ length: getDaysInMonth(dateParts.year, dateParts.month) }, (_, i) => i + 1).map(d => (
-                                 <option key={d} value={d}>{d}</option>
-                             ))}
-                          </select>
-                          <select 
-                            value={dateParts.month} 
-                            onChange={e => setDateParts({...dateParts, month: e.target.value})}
-                            required
-                            className="bg-white border border-slate-300 rounded-lg p-2.5 text-sm"
-                          >
-                             <option value="" disabled>Month</option>
-                             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
-                          </select>
-                          <select 
-                            value={dateParts.year} 
-                            onChange={e => setDateParts({...dateParts, year: e.target.value})}
-                            required
-                            className="bg-white border border-slate-300 rounded-lg p-2.5 text-sm"
-                          >
-                             <option value="" disabled>Year</option>
-                             {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                          </select>
-                      </div>
-
-                      {/* Row 2: Time */}
-                      <div className="grid grid-cols-2 gap-2">
-                          <div className="relative">
-                             <Clock size={16} className="absolute left-3 top-3 text-slate-400 pointer-events-none" />
-                             <select 
-                                value={dateParts.hour} 
-                                onChange={e => setDateParts({...dateParts, hour: e.target.value})}
-                                className="w-full pl-9 bg-white border border-slate-300 rounded-lg p-2.5 text-sm"
-                              >
-                                 {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
-                              </select>
-                          </div>
-                          <select 
-                            value={dateParts.minute} 
-                            onChange={e => setDateParts({...dateParts, minute: e.target.value})}
-                            className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm"
-                          >
-                             {MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
-                          </select>
+                      {/* Date & Time — single datetime-local picker */}
+                      <div>
+                          <input
+                              type="datetime-local"
+                              value={plannedDatetime}
+                              onChange={e => setPlannedDatetime(e.target.value)}
+                              required
+                              min={new Date().toISOString().slice(0,16)}
+                              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          />
                       </div>
                   </div>
 
