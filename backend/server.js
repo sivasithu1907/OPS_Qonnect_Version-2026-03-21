@@ -329,6 +329,49 @@ await pool.query(`
         await pool.query("UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER'");
     }
     
+    // WhatsApp Sessions Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        phone TEXT PRIMARY KEY,
+        customer_name TEXT,
+        house_number TEXT,
+        location_url TEXT,
+        issue_details TEXT,
+        issue_category TEXT,
+        ticket_id TEXT,
+        step TEXT DEFAULT 'ASK_NAME',
+        last_action TEXT,
+        last_bot_question TEXT,
+        troubleshooting_state JSONB DEFAULT '{}',
+        last_interaction TIMESTAMPTZ DEFAULT now()
+      );
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS location_url TEXT;
+    `);
+
+    // WhatsApp Logs Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS whatsapp_logs (
+        id TEXT PRIMARY KEY,
+        type TEXT,
+        phone TEXT,
+        status TEXT,
+        payload_summary TEXT,
+        latency INTEGER,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    // WhatsApp Inbound Messages Table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS whatsapp_inbound_messages (
+        message_id TEXT PRIMARY KEY,
+        phone TEXT,
+        message_type TEXT,
+        message_text TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
     console.log("✅ DB initialized with Tickets and Customers");
   } catch (err) {
     console.error("❌ DB initialization failed:", err);
