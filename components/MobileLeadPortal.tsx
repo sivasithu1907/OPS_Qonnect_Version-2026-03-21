@@ -126,10 +126,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   
   // Temp Picker Values
-  const [tempDate, setTempDate] = useState(''); // YYYY-MM-DD for input type="date"
-  const [tempHour, setTempHour] = useState('09');
-  const [tempMinute, setTempMinute] = useState('00');
-  const [tempAmPm, setTempAmPm] = useState('AM');
+  const [tempDatetime, setTempDatetime] = useState(''); // YYYY-MM-DDTHH:mm for datetime-local
 
   // Initialize focused ticket
   useEffect(() => {
@@ -359,27 +356,22 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             Math.abs(parseInt(curr) - mins) < Math.abs(parseInt(prev) - mins) ? curr : prev
           );
       }
-      setTempMinute(nearestMin);
-      
-      setTempAmPm(ampm);
+      // Init datetime-local to existing appointment or +1 hour from now
+      const initDt = existingDate && !isNaN(existingDate.getTime()) && existingDate > new Date()
+          ? existingDate
+          : (() => { const d = new Date(); d.setHours(d.getHours()+1, 0, 0, 0); return d; })();
+      const pad = (n: number) => String(n).padStart(2,'0');
+      setTempDatetime(`${initDt.getFullYear()}-${pad(initDt.getMonth()+1)}-${pad(initDt.getDate())}T${pad(initDt.getHours())}:${pad(initDt.getMinutes())}`);
       setShowDatePicker(true);
   };
 
   const confirmDateTime = () => {
-      if (!tempDate) return;
-      
-      let hours = parseInt(tempHour);
-      if (tempAmPm === 'PM' && hours < 12) hours += 12;
-      if (tempAmPm === 'AM' && hours === 12) hours = 0;
-      
-      const combined = new Date(`${tempDate}T${String(hours).padStart(2, '0')}:${tempMinute}:00`);
-      
-      // Validation: Disallow past dates
-      if (combined < new Date()) {
-          alert("Cannot schedule a visit in the past.");
+      if (!tempDatetime) return;
+      const combined = new Date(tempDatetime);
+      if (isNaN(combined.getTime()) || combined < new Date()) {
+          alert("Please select a future date and time.");
           return;
       }
-
       setNextDate(combined.toISOString());
       setShowDatePicker(false);
   };
@@ -1154,10 +1146,39 @@ const TeamView = () => {
                                             {viewJob.type === 'ticket' ? viewJob.data.category : viewJob.data.type}
                                         </h2>
                                         <p className="text-sm text-slate-500">
-                                            {viewJob.type === 'ticket' ? viewJob.data.messages[0]?.content : viewJob.data.description}
+                                            {viewJob.type === 'ticket' 
+                                                ? (viewJob.data.messages?.find((m: any) => m.sender === 'CLIENT')?.content || viewJob.data.notes || viewJob.data.ai_summary || `${viewJob.data.category} — No description provided`)
+                                                : (viewJob.data.description || 'No description provided')}
                                         </p>
                                     </div>
                                 </div>
+
+                                    {/* Work Actions for TL's own assigned ticket */}
+                                    {viewJob.type === 'ticket' && viewJob.data.assignedTechId === currentUserId && (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mx-6 mb-2">
+                                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Your Work Actions</h4>
+                                            <div className="space-y-2">
+                                                {(viewJob.data.status === 'OPEN' || viewJob.data.status === 'ASSIGNED') && (
+                                                    <button onClick={() => { handleStartWork(viewJob.data); setViewJob(null); }}
+                                                        className="w-full bg-amber-400 text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+                                                        ▶ Start Work
+                                                    </button>
+                                                )}
+                                                {viewJob.data.status === 'IN_PROGRESS' && (
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button onClick={() => { handleOpenJobAction('job_carry', viewJob.data); setViewJob(null); }}
+                                                            className="py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl text-xs active:scale-[0.98]">
+                                                            Carry Forward
+                                                        </button>
+                                                        <button onClick={() => { handleOpenJobAction('job_done', viewJob.data); setViewJob(null); }}
+                                                            className="py-3 bg-emerald-500 text-white font-bold rounded-xl text-xs active:scale-[0.98]">
+                                                            Complete ✓
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 <div className="p-4 border-t border-slate-100 flex gap-3 bg-white shrink-0 pb-safe">
                                     <button onClick={() => setViewJob(null)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">Back</button>
                                 </div>
@@ -1554,66 +1575,16 @@ const TeamView = () => {
                             <button onClick={confirmDateTime} className="text-emerald-600 font-bold text-sm">Set</button>
                         </div>
                         
-                        <div className="space-y-6">
-                            {/* Date Section */}
+                        <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Date</label>
-                                <input 
-                                    type="date" 
-                                    value={tempDate}
-                                    onChange={(e) => setTempDate(e.target.value)}
-                                    onKeyDown={(e) => e.preventDefault()}
-                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-lg font-bold text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all appearance-none"
-                                    min={new Date().toISOString().split('T')[0]}
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Date &amp; Time</label>
+                                <input
+                                    type="datetime-local"
+                                    value={tempDatetime}
+                                    onChange={e => setTempDatetime(e.target.value)}
+                                    min={new Date().toISOString().slice(0,16)}
+                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-lg font-bold text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
                                 />
-                            </div>
-
-                            {/* Time Section */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Time</label>
-                                <div className="flex gap-2">
-                                    {/* Hour */}
-                                    <div className="flex-1 relative">
-                                        <select 
-                                            value={tempHour}
-                                            onChange={(e) => setTempHour(e.target.value)}
-                                            className="w-full appearance-none bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-lg font-bold text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-center"
-                                        >
-                                            {HOURS_12.map(h => <option key={h} value={h}>{h}</option>)}
-                                        </select>
-                                        <div className="absolute inset-0 pointer-events-none flex items-center justify-end px-3">
-                                            {/* Hide default arrow if custom styling needed, but native select is fine for dropdown req */}
-                                        </div>
-                                    </div>
-                                    
-                                    <span className="text-2xl font-bold text-slate-300 self-center">:</span>
-
-                                    {/* Minute */}
-                                    <div className="flex-1 relative">
-                                        <select 
-                                            value={tempMinute}
-                                            onChange={(e) => setTempMinute(e.target.value)}
-                                            className="w-full appearance-none bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-lg font-bold text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-center"
-                                        >
-                                            {MINUTES_STEP.map(m => <option key={m} value={m}>{m}</option>)}
-                                        </select>
-                                    </div>
-
-                                    {/* AM/PM */}
-                                    <div className="flex-1 relative">
-                                        <select 
-                                            value={tempAmPm}
-                                            onChange={(e) => setTempAmPm(e.target.value)}
-                                            className="w-full appearance-none bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-lg font-bold text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-center"
-                                        >
-                                            {AMPM_OPTS.map(ap => <option key={ap} value={ap}>{ap}</option>)}
-                                        </select>
-                                        {/* Custom styled arrow/icon could go here */}
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                            <ChevronDown size={16} className="text-slate-400" />
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                         <div className="h-4" /> {/* Spacer */}
