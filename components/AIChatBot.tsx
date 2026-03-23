@@ -166,11 +166,11 @@ const AIChatBot: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
+    <div className="fixed bottom-6 right-6 z-[100] hidden md:flex flex-col items-end">
       
       {/* Chat Window */}
       {isOpen && (
-        <div className="bg-white w-80 md:w-96 h-[600px] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden mb-4 animate-in slide-in-from-bottom-10 fade-in duration-200">
+        <div className="bg-white w-[340px] h-[500px] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden mb-4 animate-in slide-in-from-bottom-10 fade-in duration-200">
           {/* Header */}
           <div className="bg-slate-900 p-4 flex justify-between items-center text-white shrink-0 shadow-sm z-10">
             <div className="flex items-center gap-3">
