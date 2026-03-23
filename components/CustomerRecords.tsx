@@ -424,13 +424,14 @@ onSaveCustomer(data as Customer);
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
                                 <div className="flex">
+                                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 text-slate-500 text-sm font-medium">+974</span>
                                     <input 
                                         name="phone" 
-                                        defaultValue={activeItem ? formatPhoneDisplay(activeItem.phone) : '+974'}
+                                        defaultValue={activeItem?.phone ? activeItem.phone.replace(/^\+974\s?/, '').replace(/^974/, '') : ''}
                                         required 
                                         disabled={readOnly}
-                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
-                                        placeholder="+974 3300 0000"
+                                        className="rounded-none rounded-r-lg flex-1 bg-white border border-slate-300 p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
+                                        placeholder="3300 0000"
                                     />
                                 </div>
                             </div>
