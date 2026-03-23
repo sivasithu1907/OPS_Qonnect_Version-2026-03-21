@@ -289,7 +289,8 @@ const handleLogout = () => {
           ...data,
           id: generateTicketId(),
           status: TicketStatus.NEW,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          messages: []
         }),
       });
       if (!res.ok) {
@@ -469,7 +470,6 @@ const handleUpdateCustomer = async (c: Customer) => {
       is_active: (c as any).is_active ?? true,
     };
 
-    console.log("PUT /api/customers/" + id, payload);
 
     const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
       method: "PUT",
@@ -521,6 +521,7 @@ const handleDeleteCustomer = async (id: string) => {
                       email: u.email,
                       role: u.systemRole || u.role,
                       status: u.status,
+                      phone: u.phone || null,
                       ...(u.password ? { password: u.password } : {})
                   })
               });
@@ -630,9 +631,15 @@ useEffect(() => {
 
   // Auto-refresh tickets and activities every 10 seconds
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadTickets();
-      loadActivities();
+    let isRefreshing = false;
+    const interval = setInterval(async () => {
+      if (isRefreshing) return;
+      isRefreshing = true;
+      try {
+        await Promise.all([loadTickets(), loadActivities()]);
+      } finally {
+        isRefreshing = false;
+      }
     }, 10000);
     return () => clearInterval(interval);
   }, []);
