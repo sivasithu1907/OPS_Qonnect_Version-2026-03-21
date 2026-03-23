@@ -568,6 +568,16 @@ const handleDeleteCustomer = async (id: string) => {
       }
   };
 
+  const handleChangePassword = async (userId: string, currentPassword: string, newPassword: string): Promise<void> => {
+      const res = await fetch(`/api/users/${userId}/password`, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to change password");
+  };
+
   // System Import Handler
   const handleSystemImport = (data: any) => {
       if (data.tickets) setTickets(data.tickets);
@@ -1070,6 +1080,7 @@ useEffect(() => {
                         teams={teams}
                         onSaveUser={handleSaveUser}
                         onDeleteUser={handleDeleteUser}
+                        onChangePassword={handleChangePassword}
                     />
                 )}
                 {activeView === 'team' && (
