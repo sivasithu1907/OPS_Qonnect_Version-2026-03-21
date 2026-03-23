@@ -532,8 +532,9 @@ const handleDeleteCustomer = async (id: string) => {
                       name: u.name,
                       email: u.email,
                       role: u.systemRole || u.role,
-                      status: u.status,
+                      status: u.isActive === false ? 'INACTIVE' : (u.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'),
                       phone: u.phone || null,
+                      avatar: u.avatar || null,
                       ...(u.password ? { password: u.password } : {})
                   })
               });
@@ -549,7 +550,9 @@ const handleDeleteCustomer = async (id: string) => {
                       email: u.email,
                       password: u.password || "Qonnect@123",
                       role: u.systemRole || u.role,
-                      status: u.status || "ACTIVE"
+                      status: u.status || "ACTIVE",
+                      phone: u.phone || null,
+                      avatar: u.avatar || null
                   })
               });
               if (!res.ok) throw new Error("Failed to create user");
@@ -726,6 +729,7 @@ useEffect(() => {
           onDeleteCustomer={handleDeleteCustomer}
           isStandalone={true}
           onLogout={() => setActiveView('dashboard')}
+          onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId, cur, nxt); }}
           focusedTicketId={focusedTicketId}
           currentUserId={currentUser.techId}
         />
@@ -748,6 +752,7 @@ useEffect(() => {
           onUpdateTicket={handleUpdateTicket}
           isStandalone={true}
           onLogout={handleLogout}
+          onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId, cur, nxt); }}
         />
       </div>
     );
