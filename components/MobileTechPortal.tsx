@@ -13,6 +13,7 @@ interface MobileTechPortalProps {
   onUpdateActivity?: (activity: Activity) => void;
   isStandalone?: boolean;
   onLogout?: () => void;
+  onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
   // Handler for custom actions
   onUpdateTicket?: (ticket: Ticket) => void; 
 }
@@ -24,7 +25,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
     onUpdateStatus, 
     onUpdateActivity,
     isStandalone = false, 
-    onLogout,
+    onLogout, onChangePassword,
     onUpdateTicket // Optional if needed, but we can reuse onUpdateStatus for basic status changes
 }) => {
   // --- Responsive Check ---
@@ -43,6 +44,10 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   // Carry Forward State
   const [isCarryForwardOpen, setIsCarryForwardOpen] = useState(false);
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [cpForm, setCpForm] = useState({ current: '', next: '', confirm: '' });
+  const [cpError, setCpError] = useState('');
+  const [cpSuccess, setCpSuccess] = useState(false);
   const [carryForwardRemark, setCarryForwardRemark] = useState('');
   const [carryForwardDatetime, setCarryForwardDatetime] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -250,7 +255,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                 ) : (
                     <div className="flex items-center gap-3">
                         <h1 className="font-bold text-lg">My Jobs</h1>
-                        {onLogout && <button onClick={onLogout}><LogOut size={16} className="text-slate-600 hover:text-white"/></button>}
+                        {onChangePassword && <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 active:scale-95 transition-all" title="Change Password"><KeyRound size={16} className="text-slate-300"/></button>}
+                        {onLogout && <button onClick={onLogout} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 active:scale-95 transition-all" title="Exit Portal"><LogOut size={16} className="text-slate-300"/></button>}
                     </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -516,6 +522,51 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
             </div>
         </div>
     </div>
+
+      {/* Change Password Modal */}
+      {showChangePwd && (
+        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-slate-900">Change Password</h3>
+              <button onClick={() => setShowChangePwd(false)} className="text-slate-400 p-1">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              {cpSuccess ? (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <p className="text-emerald-700 font-bold">✅ Password changed!</p>
+                  <button onClick={() => setShowChangePwd(false)} className="mt-3 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm">Done</button>
+                </div>
+              ) : (
+                <>
+                  {cpError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{cpError}</div>}
+                  <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase">Current Password</label>
+                    <input type="password" value={cpForm.current} onChange={e => setCpForm(p => ({...p, current: e.target.value}))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Current password"/></div>
+                  <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase">New Password</label>
+                    <input type="password" value={cpForm.next} onChange={e => setCpForm(p => ({...p, next: e.target.value}))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Min 8 characters"/></div>
+                  <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase">Confirm Password</label>
+                    <input type="password" value={cpForm.confirm} onChange={e => setCpForm(p => ({...p, confirm: e.target.value}))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Repeat new password"/></div>
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setShowChangePwd(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 text-sm">Cancel</button>
+                    <button onClick={() => {
+                      setCpError('');
+                      if (!cpForm.current) { setCpError('Enter current password'); return; }
+                      if (cpForm.next.length < 8) { setCpError('Min 8 characters'); return; }
+                      if (cpForm.next !== cpForm.confirm) { setCpError('Passwords do not match'); return; }
+                      onChangePassword?.(cpForm.current, cpForm.next)
+                        .then(() => setCpSuccess(true))
+                        .catch((err: any) => setCpError(err?.message || 'Failed'));
+                    }} className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm">Change</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
   );
 };
 
