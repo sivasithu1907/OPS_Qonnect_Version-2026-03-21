@@ -231,8 +231,13 @@ const handleLogin = async (email: string, pass: string) => {
               role: data.user.role,
               techId: data.user.id
           });
-          if (data.user.role === Role.FIELD_ENGINEER) setActiveView('tech_portal');
-          else setActiveView('dashboard');
+          if (data.user.role === Role.FIELD_ENGINEER) {
+              setActiveView('tech_portal');
+          } else if (data.user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
+              setActiveView('lead_portal');
+          } else {
+              setActiveView('dashboard');
+          }
 
       } catch (error) {
           console.error("Login Error:", error);
@@ -627,8 +632,14 @@ const loadUsers = async () => {
     
     if (savedToken && savedUser) {
       try {
-        setCurrentUser(JSON.parse(savedUser));
-        // You don't need a setToken state if you're only using it for API calls
+        const user = JSON.parse(savedUser);
+        setCurrentUser(user);
+        // Auto-route based on role and device
+        if (user.role === Role.FIELD_ENGINEER) {
+          setActiveView('tech_portal');
+        } else if (user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
+          setActiveView('lead_portal');
+        }
       } catch (e) {
         console.error("Failed to restore session", e);
         localStorage.removeItem('qonnect_token');
