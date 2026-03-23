@@ -208,27 +208,32 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   }, [technicians]);
 
   const liveFeed = useMemo(() => {
+      const today = new Date().toDateString();
       const feedItems = [
-          ...tickets.map(t => ({
-              id: t.id,
-              type: 'ticket' as const,
-              refLine: t.id,
-              clientLine: t.customerName,
-              descLine: t.messages[0]?.content || t.category,
-              time: new Date(t.updatedAt),
-              status: t.status
-          })),
-          ...activities.map(a => ({
-              id: a.id,
-              type: 'activity' as const,
-              refLine: a.reference,
-              clientLine: sites.find(s=>s.id===a.siteId)?.clientName || 'Client Site',
-              descLine: a.description || a.type,
-              time: new Date(a.updatedAt || a.createdAt),
-              status: a.status
-          }))
+          ...tickets
+              .filter(t => new Date(t.updatedAt).toDateString() === today || new Date(t.createdAt).toDateString() === today)
+              .map(t => ({
+                  id: t.id,
+                  type: 'ticket' as const,
+                  refLine: t.id,
+                  clientLine: t.customerName,
+                  descLine: t.messages[0]?.content || t.category,
+                  time: new Date(t.updatedAt),
+                  status: t.status
+              })),
+          ...activities
+              .filter(a => a.type !== 'WHATSAPP_SUPPORT' && (new Date(a.updatedAt || a.createdAt).toDateString() === today))
+              .map(a => ({
+                  id: a.id,
+                  type: 'activity' as const,
+                  refLine: a.reference,
+                  clientLine: sites.find(s=>s.id===a.siteId)?.clientName || 'Client Site',
+                  descLine: a.description || a.type,
+                  time: new Date(a.updatedAt || a.createdAt),
+                  status: a.status
+              }))
       ];
-      return feedItems.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 50);
+      return feedItems.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 20);
   }, [tickets, activities, sites]);
 
   const metrics = useMemo(() => {
