@@ -257,7 +257,7 @@ async function initDb() {
       );
       -- Add columns if upgrading existing DB
       ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;phone TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
     `);
 // 5. Teams Table
     await pool.query(`
