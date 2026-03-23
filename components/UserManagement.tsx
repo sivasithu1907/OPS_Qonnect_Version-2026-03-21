@@ -83,16 +83,18 @@ const UserManagement: React.FC<UserManagementProps> = ({
     if (data.systemRole === Role.ADMIN) level = 'TEAM_LEAD'; // Admins default to Lead level visibility
 
     // Construct User Object
+    const phoneRaw = (data.phone || '').replace(/\D/g, '').replace(/^974/, '');
+    const normalizedPhone = phoneRaw ? `+974${phoneRaw}` : '';
     const newUser: Technician = {
         id: editingUser ? editingUser.id : generateTechId(),
         name: data.name,
         email: data.email,
-        phone: data.phone,
+        phone: normalizedPhone,
         role: data.position, // UI Label: Position
         systemRole: data.systemRole as Role,
         isActive: data.isActive === 'true',
         teamId: editingUser?.teamId, 
-        status: editingUser ? editingUser.status : 'AVAILABLE',
+        status: data.isActive === 'true' ? 'ACTIVE' : 'INACTIVE',
         avatar: avatarPreview || (editingUser ? editingUser.avatar : `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}&background=random&color=fff&bold=true&size=128`),
         level: level,
         password: data.password || editingUser?.password
@@ -299,9 +301,12 @@ const UserManagement: React.FC<UserManagementProps> = ({
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
-                                <div className="relative">
-                                    <Phone className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                                    <input name="phone" type="tel" defaultValue={editingUser?.phone} className="w-full pl-9 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="+974..."/>
+                                <div className="flex">
+                                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-200 bg-slate-100 text-slate-500 text-sm font-medium">+974</span>
+                                    <input name="phone" type="tel"
+                                        defaultValue={editingUser?.phone ? editingUser.phone.replace(/^\+974\s?/, '').replace(/^974/, '') : ''}
+                                        className="rounded-none rounded-r-lg w-full bg-slate-50 border border-slate-200 p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        placeholder="3300 0000"/>
                                 </div>
                             </div>
                         </div>
