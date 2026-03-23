@@ -1,4 +1,3 @@
-
 import { AnalysisResult, Priority } from "../types";
 
 const FALLBACK_RESULT: AnalysisResult = {
@@ -12,21 +11,17 @@ const FALLBACK_RESULT: AnalysisResult = {
     confidence: 0
 };
 
+// In production (Docker/nginx), only the proxy endpoint works
+// localhost fallbacks only apply for local development
+const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+
 export const analyzeTicketMessage = async (message: string, history: string[] = []): Promise<AnalysisResult> => {
-  // List of endpoints to try in order. 
-  // 1. Vite Proxy (standard)
-  // 2. Direct Localhost (if proxy fails)
-  // 3. IP fallback (common in some local setups)
-  const endpoints = [
-      '/api/analyze',
-      'http://localhost:8080/api/analyze',
-      'http://127.0.0.1:8080/api/analyze'
-  ];
+  const endpoints = isProduction
+      ? ['/api/analyze']
+      : ['/api/analyze', 'http://localhost:8080/api/analyze'];
 
   for (const endpoint of endpoints) {
       try {
-          console.log(`[Gemini Service] Attempting connection to: ${endpoint}`);
-          
           const response = await fetch(endpoint, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -36,12 +31,11 @@ export const analyzeTicketMessage = async (message: string, history: string[] = 
           if (!response.ok) {
               const text = await response.text();
               console.warn(`[Gemini Service] Error from ${endpoint}: ${response.status} ${text}`);
-              continue; // Try next endpoint
+              continue;
           }
 
           const data = await response.json();
-          
-          // Normalize Priority
+
           let priorityVal = Priority.MEDIUM;
           if (data.priority === 'LOW') priorityVal = Priority.LOW;
           if (data.priority === 'HIGH') priorityVal = Priority.HIGH;
@@ -51,21 +45,17 @@ export const analyzeTicketMessage = async (message: string, history: string[] = 
 
       } catch (e) {
           console.warn(`[Gemini Service] Connection failed to ${endpoint}`, e);
-          // Continue to next endpoint
       }
   }
 
-  // If loop finishes without success
   console.error("[Gemini Service] All connection attempts failed.");
-  throw new Error("Backend Unreachable. Please ensure 'node server.js' is running in the 'backend' folder on port 8080.");
+  return FALLBACK_RESULT;
 };
 
 export const getChatResponse = async (history: { role: 'user' | 'model'; text: string }[], newMessage: string): Promise<string> => {
-    const endpoints = [
-        '/api/chat',
-        'http://localhost:8080/api/chat',
-        'http://127.0.0.1:8080/api/chat'
-    ];
+    const endpoints = isProduction
+        ? ['/api/chat']
+        : ['/api/chat', 'http://localhost:8080/api/chat'];
 
     for (const endpoint of endpoints) {
         try {
