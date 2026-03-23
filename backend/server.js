@@ -526,9 +526,17 @@ app.post("/api/tickets", authenticate, async (req, res) => {
 
     // STEP B: Now create the ticket safely
     const result = await client.query(
-      `INSERT INTO tickets (id, customer_id, customer_name, category, priority, location_url, house_number, messages) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [id, customerId, customerName, category, priority, locationUrl, houseNumber, JSON.stringify(messages)]
+      `INSERT INTO tickets (id, customer_id, customer_name, category, type, priority, status, location_url, house_number, messages, assigned_tech_id, appointment_time)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [id, customerId, customerName, category,
+       req.body.type || 'Under Warranty',
+       priority,
+       req.body.status || 'NEW',
+       locationUrl, houseNumber,
+       JSON.stringify(messages || []),
+       req.body.assignedTechId || null,
+       req.body.appointmentTime || null
+      ]
     );
 
     await client.query('COMMIT');
