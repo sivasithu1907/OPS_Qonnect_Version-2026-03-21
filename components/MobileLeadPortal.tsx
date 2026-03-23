@@ -854,7 +854,7 @@ const TeamView = () => {
 
             {/* Mobile Bottom Navigation */}
             {!selectedTicketId && mobileModule === 'none' && (
-                <div className="bg-white border-t border-slate-200 flex justify-between px-2 z-30 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"">
+                <div className="bg-white border-t border-slate-200 flex justify-between px-2 z-30 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"}}>
                     <NavButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={ListTodo} label="Live Feed" />
                     <NavButton active={activeTab === 'my_jobs'} onClick={() => setActiveTab('my_jobs')} icon={Briefcase} label="My Jobs" />
                     <NavButton active={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={Users} label="Field Team" />
