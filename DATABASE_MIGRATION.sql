@@ -14,8 +14,15 @@ ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_summary TEXT;
 -- 3. Fix any users stuck with old role name
 UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER';
 
+-- 4. Add location_url to sessions (stores WhatsApp location pin separately from house number)
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS location_url TEXT;
+
+-- 5. Add location_url to tickets (stores map URL separately from house/building number)
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS location_url TEXT;
+
 -- ============================================================
 -- Verification — run these SELECTs to confirm migration worked
 -- ============================================================
 -- SELECT column_name FROM information_schema.columns WHERE table_name = 'users';
 -- SELECT column_name FROM information_schema.columns WHERE table_name = 'tickets';
+-- SELECT column_name FROM information_schema.columns WHERE table_name = 'sessions';
