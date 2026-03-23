@@ -184,10 +184,14 @@ async function initDb() {
         phone TEXT,
         email TEXT,
         address TEXT,
+        building_number TEXT,
+        avatar TEXT,
         notes TEXT,
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMPTZ DEFAULT now()
       );
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS building_number TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS avatar TEXT;
     `);
 
     // 2. Tickets Table
@@ -197,11 +201,19 @@ async function initDb() {
         customer_id TEXT REFERENCES customers(id),
         customer_name TEXT,
         category TEXT,
+        type TEXT DEFAULT 'Under Warranty',
         priority TEXT,
         status TEXT DEFAULT 'NEW',
         location_url TEXT,
         house_number TEXT,
         ai_summary TEXT,
+        assigned_tech_id TEXT,
+        appointment_time TIMESTAMPTZ,
+        odoo_link TEXT,
+        notes TEXT,
+        phone_number TEXT,
+        carry_forward_note TEXT,
+        next_planned_at TIMESTAMPTZ,
         messages JSONB DEFAULT '[]',
         created_at TIMESTAMPTZ DEFAULT now(),
         updated_at TIMESTAMPTZ DEFAULT now()
@@ -372,6 +384,17 @@ await pool.query(`
       );
     `);
 
+    // Performance indexes
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+        CREATE INDEX IF NOT EXISTS idx_tickets_customer_id ON tickets(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_tickets_updated_at ON tickets(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+        CREATE INDEX IF NOT EXISTS idx_sessions_phone ON sessions(phone);
+        CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
+        CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_phone ON whatsapp_logs(phone);
+    `).catch(() => {}); // Non-fatal if indexes already exist
+
     console.log("✅ DB initialized with Tickets and Customers");
   } catch (err) {
     console.error("❌ DB initialization failed:", err);
@@ -381,9 +404,25 @@ await pool.query(`
 // Middleware
 app.use(express.json({ limit: '10mb' })); 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*', 
-  methods: ['GET', 'POST', 'OPTIONS']
+  origin: process.env.CORS_ORIGIN || 'https://qonnectops.duckdns.org',
+  credentials: true
 }));
+
+// Simple in-memory rate limiter for login endpoint
+const loginAttempts = new Map();
+const loginRateLimit = (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    const attempts = loginAttempts.get(ip) || [];
+    const recent = attempts.filter(t => now - t < 15 * 60 * 1000); // 15 min window
+    if (recent.length >= 10) {
+        return res.status(429).json({ error: 'Too many login attempts. Try again in 15 minutes.' });
+    }
+    recent.push(now);
+    loginAttempts.set(ip, recent);
+    next();
+};
+
 
 // Check API Key
 if (!process.env.API_KEY) {
@@ -393,6 +432,26 @@ if (!process.env.API_KEY) {
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+
+// ── JWT Authentication Middleware ──────────────────────────
+if (!process.env.JWT_SECRET) {
+    console.error("❌ FATAL: JWT_SECRET environment variable is not set. Shutting down.");
+    process.exit(1);
+}
+
+const authenticate = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized — no token' });
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        req.user = jwt.verify(token, process.env.JWT_SECRET);
+        next();
+    } catch (e) {
+        return res.status(401).json({ error: 'Unauthorized — invalid token' });
+    }
+};
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -438,7 +497,7 @@ function mapTicket(r) {
 }
 
 // 1. Get all tickets from DB
-app.get("/api/tickets", async (req, res) => {
+app.get("/api/tickets", authenticate, async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC");
     res.json(result.rows.map(mapTicket));
@@ -449,7 +508,7 @@ app.get("/api/tickets", async (req, res) => {
 });
 
 // 2. Create a new ticket in DB (Fixed for Foreign Key sync)
-app.post("/api/tickets", async (req, res) => {
+app.post("/api/tickets", authenticate, async (req, res) => {
   const client = await pool.connect();
   try {
     const { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages } = req.body;
@@ -484,7 +543,7 @@ app.post("/api/tickets", async (req, res) => {
 });
 
 // 2b. Full ticket update (category, priority, type, location, assignment etc.)
-app.put("/api/tickets/:id", async (req, res) => {
+app.put("/api/tickets/:id", authenticate, async (req, res) => {
     try {
         const id = req.params.id;
         const { category, priority, type, customerId, customerName,
@@ -520,7 +579,7 @@ app.put("/api/tickets/:id", async (req, res) => {
 });
 
 // 2c. Append a message to ticket messages array
-app.post("/api/tickets/:id/message", async (req, res) => {
+app.post("/api/tickets/:id/message", authenticate, async (req, res) => {
     try {
         const id = req.params.id;
         const { sender, content } = req.body;
@@ -547,7 +606,7 @@ app.post("/api/tickets/:id/message", async (req, res) => {
 });
 
 // 3. Delete a ticket in DB (Admin only)
-app.delete("/api/tickets/:id", async (req, res) => {
+app.delete("/api/tickets/:id", authenticate, async (req, res) => {
   try {
     const id = req.params.id;
     const result = await pool.query("DELETE FROM tickets WHERE id=$1", [id]);
@@ -560,15 +619,23 @@ app.delete("/api/tickets/:id", async (req, res) => {
 });
 
 // 4. Update Ticket Status & Trigger Review Message
-app.put("/api/tickets/:id/status", async (req, res) => {
+app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
     try {
         const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt } = req.body;
         const ticketId = req.params.id;
 
-        // 1. Update the database
+        // 1. Update the database — status + assignment + appointment
         await pool.query(
-            "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2",
-            [status, ticketId]
+            `UPDATE tickets SET 
+                status = $1,
+                assigned_tech_id = COALESCE($2, assigned_tech_id),
+                appointment_time = COALESCE($3, appointment_time),
+                carry_forward_note = COALESCE($4, carry_forward_note),
+                next_planned_at = COALESCE($5, next_planned_at),
+                updated_at = NOW()
+             WHERE id = $6`,
+            [status, assignedTechId || null, appointmentTime || null,
+             carryForwardNote || null, nextPlannedAt || null, ticketId]
         );
 
         // 2. Fetch customer + ticket info for notifications
@@ -676,7 +743,7 @@ async function nextCustomerId() {
 }
 
 // List customers (optional search: ?q=)
-app.get("/api/customers", async (req, res) => {
+app.get("/api/customers", authenticate, async (req, res) => {
   try {
     const q = String(req.query.q || "").trim();
     let result;
@@ -715,7 +782,7 @@ app.get("/api/customers", async (req, res) => {
 });
 
 // Create customer
-app.post("/api/customers", async (req, res) => {
+app.post("/api/customers", authenticate, async (req, res) => {
   try {
     const { name, phone, email, address, notes, is_active } = req.body || {};
 
@@ -750,7 +817,7 @@ app.post("/api/customers", async (req, res) => {
 });
 
 // Update customer
-app.put("/api/customers/:id", async (req, res) => {
+app.put("/api/customers/:id", authenticate, async (req, res) => {
   try {
     const id = req.params.id;
     const { name, phone, email, address, notes, is_active } = req.body || {};
@@ -781,7 +848,14 @@ app.put("/api/customers/:id", async (req, res) => {
     );
 
     if (!rows[0]) return res.status(404).json({ error: "Not found" });
-    res.json(rows[0]);
+    const r = rows[0];
+    res.json({
+      id: r.id, name: r.name, phone: r.phone || '',
+      email: r.email || '', address: r.address || '',
+      buildingNumber: r.building_number || '',
+      avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
+      isActive: r.is_active !== false, notes: r.notes || ''
+    });
   } catch (e) {
     console.error("customers update error:", e);
     res.status(500).json({ error: "Failed to update customer" });
@@ -789,7 +863,7 @@ app.put("/api/customers/:id", async (req, res) => {
 });
 
 // Delete customer
-app.delete("/api/customers/:id", async (req, res) => {
+app.delete("/api/customers/:id", authenticate, async (req, res) => {
   try {
     const id = req.params.id;
     const r = await pool.query(`DELETE FROM customers WHERE id=$1`, [id]);
@@ -802,7 +876,7 @@ app.delete("/api/customers/:id", async (req, res) => {
 });
 
 // Analyze Endpoint
-app.post('/api/analyze', async (req, res) => {
+app.post('/api/analyze', authenticate, async (req, res) => {
   try {
     if (!process.env.API_KEY) {
         throw new Error("API_KEY not configured on server");
@@ -871,7 +945,7 @@ app.post('/api/analyze', async (req, res) => {
 });
 
 // Chat Endpoint
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', authenticate, async (req, res) => {
   try {
     if (!process.env.API_KEY) throw new Error("API_KEY not configured");
 
@@ -911,7 +985,7 @@ app.post('/api/chat', async (req, res) => {
 // ==============================
 // Authentication & Users (JWT)
 // ==============================
-app.post("/api/login", async (req, res) => {
+app.post("/api/login", loginRateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;
     const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
@@ -924,7 +998,7 @@ app.post("/api/login", async (req, res) => {
 
     const token = jwt.sign(
         { id: user.id, role: user.role, email: user.email }, 
-        process.env.JWT_SECRET || 'fallback_secret', 
+        process.env.JWT_SECRET,
         { expiresIn: '12h' }
     );
 
@@ -937,7 +1011,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-app.get("/api/users", async (req, res) => {
+app.get("/api/users", authenticate, async (req, res) => {
     try {
         const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status, phone FROM users");
         res.json(result.rows);
@@ -947,7 +1021,7 @@ app.get("/api/users", async (req, res) => {
 });
 
 // POST User (Create)
-app.post("/api/users", async (req, res) => {
+app.post("/api/users", authenticate, async (req, res) => {
     try {
         const { id, name, email, password, role, status, phone } = req.body;
         if (!name || !email || !password || !role) {
@@ -970,7 +1044,7 @@ app.post("/api/users", async (req, res) => {
 });
 
 // PUT User (Update)
-app.put("/api/users/:id", async (req, res) => {
+app.put("/api/users/:id", authenticate, async (req, res) => {
     try {
         const { name, email, password, role, status, phone } = req.body;
         const id = req.params.id;
@@ -1007,7 +1081,7 @@ app.put("/api/users/:id", async (req, res) => {
 });
 
 // DELETE User
-app.delete("/api/users/:id", async (req, res) => {
+app.delete("/api/users/:id", authenticate, async (req, res) => {
     try {
         const r = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
         if (r.rowCount === 0) return res.status(404).json({ error: "User not found" });
@@ -1023,7 +1097,7 @@ app.delete("/api/users/:id", async (req, res) => {
 // ==============================
 
 // GET Teams
-app.get("/api/teams", async (req, res) => {
+app.get("/api/teams", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM teams");
     res.json(rows.map(r => ({
@@ -1034,7 +1108,7 @@ app.get("/api/teams", async (req, res) => {
 });
 
 // POST Team (Create)
-app.post("/api/teams", async (req, res) => {
+app.post("/api/teams", authenticate, async (req, res) => {
     try {
         const { id, name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
         if (!name) return res.status(400).json({ error: "Team name is required" });
@@ -1060,7 +1134,7 @@ app.post("/api/teams", async (req, res) => {
 });
 
 // PUT Team (Update)
-app.put("/api/teams/:id", async (req, res) => {
+app.put("/api/teams/:id", authenticate, async (req, res) => {
     try {
         const { name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
         const id = req.params.id;
@@ -1094,7 +1168,7 @@ app.put("/api/teams/:id", async (req, res) => {
 });
 
 // DELETE Team
-app.delete("/api/teams/:id", async (req, res) => {
+app.delete("/api/teams/:id", authenticate, async (req, res) => {
     try {
         const r = await pool.query("DELETE FROM teams WHERE id = $1", [req.params.id]);
         if (r.rowCount === 0) return res.status(404).json({ error: "Team not found" });
@@ -1106,7 +1180,7 @@ app.delete("/api/teams/:id", async (req, res) => {
 });
 
 // GET Sites
-app.get("/api/sites", async (req, res) => {
+app.get("/api/sites", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM sites");
     res.json(rows.map(r => ({
@@ -1117,7 +1191,7 @@ app.get("/api/sites", async (req, res) => {
 });
 
 // GET Activities
-app.get("/api/activities", async (req, res) => {
+app.get("/api/activities", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC");
     res.json(rows.map(r => ({
@@ -1131,7 +1205,7 @@ app.get("/api/activities", async (req, res) => {
 });
 
 // POST Activity (Create)
-app.post("/api/activities", async (req, res) => {
+app.post("/api/activities", authenticate, async (req, res) => {
     try {
         const { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
         await pool.query(
@@ -1144,7 +1218,7 @@ app.post("/api/activities", async (req, res) => {
 });
 
 // PUT Activity (Update)
-app.put("/api/activities/:id", async (req, res) => {
+app.put("/api/activities/:id", authenticate, async (req, res) => {
     try {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
         await pool.query(
@@ -1156,7 +1230,7 @@ app.put("/api/activities/:id", async (req, res) => {
 });
 
 // DELETE Activity
-app.delete("/api/activities/:id", async (req, res) => {
+app.delete("/api/activities/:id", authenticate, async (req, res) => {
     try {
         await pool.query("DELETE FROM activities WHERE id=$1", [req.params.id]);
         res.json({ok: true});
@@ -1250,7 +1324,7 @@ Return JSON only.
 // ==============================
 
 // GET WhatsApp Logs for the Monitor
-app.get("/api/whatsapp/logs", async (req, res) => {
+app.get("/api/whatsapp/logs", authenticate, async (req, res) => {
     try {
         const { rows } = await pool.query(`
             SELECT 
@@ -1429,7 +1503,12 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
 	    global.msgBuffer.delete(phone);
 	    const combinedText = buf.texts.join(" ");
 	    console.log(`[Buffer] ${buf.texts.length} msg(s) from ${phone}: "${combinedText}"`);
-	    await handleIncomingMessage(phone, combinedText);
+	    try {
+	        await handleIncomingMessage(phone, combinedText);
+	    } catch (bufErr) {
+	        console.error(`[Buffer] Error processing message from ${phone}:`, bufErr.message);
+	        global.msgBuffer.delete(phone); // Ensure cleanup on error
+	    }
 	}, 13000);
 	return;
     } catch (webhookErr) {
