@@ -1076,7 +1076,7 @@ app.get("/api/sites", async (req, res) => {
 // GET Activities
 app.get("/api/activities", async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM activities ORDER BY created_at DESC");
+    const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC");
     res.json(rows.map(r => ({
         id: r.id, reference: r.reference, type: r.type, priority: r.priority,
         status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
@@ -1656,11 +1656,12 @@ async function handleIncomingMessage(phone, text) {
 
 	Flow rules:
 	1) If customer name is missing -> ask for name (ASK_NAME)
-	2) If location is missing -> ask for location and villa number (ASK_LOCATION)
-	3) If issue is missing -> ask for issue (ASK_ISSUE)
-	4) If name, location, and issue are available -> move to TROUBLESHOOT
-	5) In TROUBLESHOOT, do first-level troubleshooting over WhatsApp before deciding on ticket creation
-	6) Do not create or confirm a ticket automatically
+	2) If issue is missing -> ask for issue (ASK_ISSUE)
+	3) Move to TROUBLESHOOT — do first-level troubleshooting to understand the problem
+	4) ONLY ask for location and villa number (ASK_LOCATION) when you are ready to create a ticket
+	5) NEVER ask for location during the early conversation — only right before ticket creation
+	6) If customer already provided location at any point, never ask again
+	7) Do not create or confirm a ticket automatically
 
 	Issue categories:
 	- wifi_network
@@ -1801,7 +1802,15 @@ async function handleIncomingMessage(phone, text) {
 		{ text: `CURRENT SESSION:\n${JSON.stringify(session, null, 2)}` },
 		{ text: `CURRENT TROUBLESHOOTING STATE:\n${JSON.stringify(session?.troubleshooting_state || {}, null, 2)}` },
 		{ text: `CUSTOMER MESSAGE:\n${text}` },
-		{ text: `Important: If session.step is TROUBLESHOOT, continue troubleshooting and do not restart intake unless required information is actually missing. If troubleshooting_state.restart_done is true, do not ask for restart again. If troubleshooting_state.affected_scope or area_scope are already known, do not ask them again. If troubleshooting_state.location_pending is true and issue details are already available, do not ask for location again unless the workflow now requires site visit scheduling.` },
+		{ text: `CRITICAL RULES:
+1. Last bot question was: "${session?.last_bot_question || 'none'}". Do NOT ask the same question again.
+2. If session.step is TROUBLESHOOT, continue troubleshooting — do not restart intake.
+3. If restart_done is true, do NOT ask customer to restart again.
+4. If affected_scope or area_scope are already known, do NOT ask again.
+5. If customer already gave their name (session.customer_name exists), do NOT ask for name.
+6. If customer already gave location or house_number, do NOT ask again.
+7. Never repeat a question already answered in this session.
+8. Ask for location ONLY when about to create a ticket — not during troubleshooting.` },
 	      ],
 	    },
 	  ],
@@ -1893,6 +1902,16 @@ async function handleIncomingMessage(phone, text) {
 	const customerName = aiData?.name || session?.customer_name || "Valued Client";
 	const issueText = aiData?.issue || session?.issue_details || text;
 	const rawCategory = aiData?.issue_category || session?.issue_category || "unknown";
+
+	// Parse aiData.location — split URL from house number if combined
+	const rawLocation = aiData?.location || "";
+	const urlMatch = rawLocation.match(/https?:\/\/[^\s]+/i);
+	const extractedUrl = urlMatch ? urlMatch[0] : null;
+	const extractedHouse = rawLocation.replace(/https?:\/\/[^\s]+/gi, '').trim() || null;
+	// Use session values as fallback
+	const resolvedLocationUrl = session?.location_url || extractedUrl || null;
+	const resolvedHouseNumber = session?.house_number || extractedHouse || null;
+
 	const categoryMap = {
 	    "cctv": "CCTV",
 	    "wifi_network": "Wi-Fi & Networking",
@@ -2027,8 +2046,8 @@ async function handleIncomingMessage(phone, text) {
 	      customerName,
 	      issueCategory || "SUPPORT",
 	      aiData?.action === "site_visit" ? "HIGH" : "MEDIUM",
-	      session?.location_url || null,
-	      session?.house_number || null || null,
+	      resolvedLocationUrl,
+	      resolvedHouseNumber,
 	      techSummary,
 	      JSON.stringify([
 	        {
