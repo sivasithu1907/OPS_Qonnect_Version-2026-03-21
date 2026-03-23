@@ -1030,6 +1030,7 @@ app.get("/api/users", authenticate, async (req, res) => {
             email: r.email,
             systemRole: r.systemRole,
             status: r.status,
+            isActive: r.status === 'ACTIVE',
             phone: r.phone || '',
             avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'U')}&background=random&color=fff&bold=true&size=128`
         })));
@@ -1096,6 +1097,7 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
         const r = rows[0];
         res.json({
             ...r,
+            isActive: r.status === 'ACTIVE',
             avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'U')}&background=random&color=fff&bold=true&size=128`
         });
     } catch (e) {
