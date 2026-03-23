@@ -13,27 +13,49 @@ interface UserManagementProps {
   teams: Team[];
   onSaveUser: (user: Technician) => void;
   onDeleteUser: (id: string) => void;
+  onChangePassword?: (userId: string, currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const UserManagement: React.FC<UserManagementProps> = ({ 
     users, 
     onSaveUser,
-    onDeleteUser 
+    onDeleteUser,
+    onChangePassword
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Technician | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [changePwdModal, setChangePwdModal] = useState<Technician | null>(null);
+  const [changePwdForm, setChangePwdForm] = useState({ current: '', next: '', confirm: '' });
+  const [changePwdError, setChangePwdError] = useState('');
+  const [changePwdSuccess, setChangePwdSuccess] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Generate initials avatar URL
+  const getAvatar = (user: Technician) =>
+    user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'U')}&background=random&color=fff&bold=true&size=128`;
+
+  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => setAvatarPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const handleEdit = (user: Technician) => {
     setEditingUser(user);
+    setAvatarPreview(null);
     setModalOpen(true);
     setShowPassword(false);
   };
 
   const handleAddNew = () => {
     setEditingUser(null);
+    setAvatarPreview(null);
     setModalOpen(true);
     setShowPassword(false);
   };
@@ -71,7 +93,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         isActive: data.isActive === 'true',
         teamId: editingUser?.teamId, 
         status: editingUser ? editingUser.status : 'AVAILABLE',
-        avatar: editingUser ? editingUser.avatar : `https://ui-avatars.com/api/?name=${data.name}&background=random`,
+        avatar: avatarPreview || (editingUser ? editingUser.avatar : `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || 'U')}&background=random&color=fff&bold=true&size=128`),
         level: level,
         password: data.password || editingUser?.password
     };
@@ -134,7 +156,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                             <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                                        <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                                        <img src={getAvatar(user)} alt={user.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6366f1&color=fff&bold=true&size=128`; }} />
                                     </div>
                                     <div>
                                         <div className="font-bold text-slate-900">{user.name}</div>
@@ -161,6 +183,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
                             </td>
                             <td className="px-6 py-4 text-right">
                                 <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => { setChangePwdModal(user); setChangePwdForm({ current: '', next: '', confirm: '' }); setChangePwdError(''); setChangePwdSuccess(false); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Change Password">
+                                        <KeyRound size={16} />
+                                    </button>
                                     <button onClick={() => handleEdit(user)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                                         <Edit size={16} />
                                     </button>
@@ -232,6 +257,33 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     </div>
                     
                     <form onSubmit={handleSubmit} className="p-6 space-y-4">
+
+                        {/* Avatar Upload */}
+                        <div className="flex items-center gap-4 pb-2">
+                            <div className="w-16 h-16 rounded-full bg-slate-200 overflow-hidden shrink-0 border-2 border-slate-300">
+                                <img
+                                    src={avatarPreview || (editingUser ? getAvatar(editingUser) : `https://ui-avatars.com/api/?name=New+User&background=6366f1&color=fff&bold=true&size=128`)}
+                                    alt="Avatar"
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Profile Photo</p>
+                                <button
+                                    type="button"
+                                    onClick={() => fileRef.current?.click()}
+                                    className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors"
+                                >
+                                    {avatarPreview ? 'Change Photo' : 'Upload Photo'}
+                                </button>
+                                {avatarPreview && (
+                                    <button type="button" onClick={() => setAvatarPreview(null)} className="ml-2 text-xs text-red-500 hover:text-red-700">Remove</button>
+                                )}
+                                <p className="text-[10px] text-slate-400 mt-1">Or initials will be used automatically</p>
+                                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarFile} />
+                            </div>
+                        </div>
+
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
                             <input name="name" defaultValue={editingUser?.name} required className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="e.g. John Doe"/>
@@ -315,6 +367,70 @@ const UserManagement: React.FC<UserManagementProps> = ({
                              </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        )}
+
+        {/* ── Change Password Modal ── */}
+        {changePwdModal && (
+            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-900">Change Password</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">{changePwdModal.name}</p>
+                        </div>
+                        <button onClick={() => setChangePwdModal(null)} className="text-slate-400 hover:text-slate-600"><XCircle size={20}/></button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        {changePwdSuccess ? (
+                            <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                <CheckCircle2 size={20} className="text-emerald-600 shrink-0"/>
+                                <p className="text-sm text-emerald-800 font-medium">Password changed successfully!</p>
+                            </div>
+                        ) : (
+                            <>
+                                {changePwdError && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{changePwdError}</div>
+                                )}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase">Current Password</label>
+                                    <input type="password" value={changePwdForm.current}
+                                        onChange={e => setChangePwdForm(p => ({...p, current: e.target.value}))}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        placeholder="Enter current password"/>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase">New Password</label>
+                                    <input type="password" value={changePwdForm.next}
+                                        onChange={e => setChangePwdForm(p => ({...p, next: e.target.value}))}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        placeholder="Minimum 8 characters"/>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase">Confirm New Password</label>
+                                    <input type="password" value={changePwdForm.confirm}
+                                        onChange={e => setChangePwdForm(p => ({...p, confirm: e.target.value}))}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        placeholder="Repeat new password"/>
+                                </div>
+                                <div className="flex gap-3 pt-2">
+                                    <button type="button" onClick={() => setChangePwdModal(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                                    <button type="button" onClick={() => {
+                                        setChangePwdError('');
+                                        if (!changePwdForm.current) { setChangePwdError('Enter current password'); return; }
+                                        if (changePwdForm.next.length < 8) { setChangePwdError('Min 8 characters required'); return; }
+                                        if (changePwdForm.next !== changePwdForm.confirm) { setChangePwdError('Passwords do not match'); return; }
+                                        onChangePassword?.(changePwdModal.id, changePwdForm.current, changePwdForm.next)
+                                            .then(() => setChangePwdSuccess(true))
+                                            .catch((err: any) => setChangePwdError(err?.message || 'Failed to change password'));
+                                    }} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800">
+                                        Change Password
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         )}
