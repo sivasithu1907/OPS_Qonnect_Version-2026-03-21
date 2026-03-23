@@ -252,10 +252,12 @@ async function initDb() {
         role TEXT NOT NULL,
         status TEXT DEFAULT 'ACTIVE',
         phone TEXT,
+        avatar TEXT,
         created_at TIMESTAMPTZ DEFAULT now()
       );
-      -- Add phone column if upgrading existing DB
+      -- Add columns if upgrading existing DB
       ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;phone TEXT;
     `);
 // 5. Teams Table
     await pool.query(`
@@ -1021,8 +1023,16 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
 
 app.get("/api/users", authenticate, async (req, res) => {
     try {
-        const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status, phone FROM users");
-        res.json(result.rows);
+        const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status, phone, avatar FROM users");
+        res.json(result.rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            systemRole: r.systemRole,
+            status: r.status,
+            phone: r.phone || '',
+            avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'U')}&background=random&color=fff&bold=true&size=128`
+        })));
     } catch (e) {
         res.status(500).json({ error: "Failed to fetch users" });
     }
@@ -1054,7 +1064,7 @@ app.post("/api/users", authenticate, async (req, res) => {
 // PUT User (Update)
 app.put("/api/users/:id", authenticate, async (req, res) => {
     try {
-        const { name, email, password, role, status, phone } = req.body;
+        const { name, email, password, role, status, phone, avatar } = req.body;
         const id = req.params.id;
         let hashedPass = null;
         if (password) {
@@ -1067,9 +1077,10 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
                 password = COALESCE($3, password),
                 role = COALESCE($4, role),
                 status = COALESCE($5, status),
-                phone = COALESCE($6, phone)
-             WHERE id = $7
-             RETURNING id, name, email, role as "systemRole", status, phone`,
+                phone = COALESCE($6, phone),
+                avatar = COALESCE($7, avatar)
+             WHERE id = $8
+             RETURNING id, name, email, role as "systemRole", status, phone, avatar`,
             [
                 name ? name.trim() : null,
                 email ? email.trim() : null,
@@ -1077,11 +1088,16 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
                 role || null,
                 status || null,
                 phone || null,
+                avatar || null,
                 id
             ]
         );
         if (!rows[0]) return res.status(404).json({ error: "User not found" });
-        res.json(rows[0]);
+        const r = rows[0];
+        res.json({
+            ...r,
+            avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'U')}&background=random&color=fff&bold=true&size=128`
+        });
     } catch (e) {
         console.error("User update error:", e);
         res.status(500).json({ error: "Failed to update user" });
@@ -1089,6 +1105,37 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
 });
 
 // DELETE User
+// Change own password
+app.put("/api/users/:id/password", authenticate, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const id = req.params.id;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: "Current and new password are required" });
+        }
+        if (newPassword.length < 8) {
+            return res.status(400).json({ error: "New password must be at least 8 characters" });
+        }
+
+        // Verify current password
+        const { rows } = await pool.query("SELECT password FROM users WHERE id = $1", [id]);
+        if (!rows[0]) return res.status(404).json({ error: "User not found" });
+
+        const isValid = await bcrypt.compare(currentPassword, rows[0].password);
+        if (!isValid) return res.status(401).json({ error: "Current password is incorrect" });
+
+        // Hash and save new password
+        const hashedPass = await bcrypt.hash(newPassword, 10);
+        await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hashedPass, id]);
+
+        res.json({ ok: true, message: "Password changed successfully" });
+    } catch (e) {
+        console.error("Change password error:", e);
+        res.status(500).json({ error: "Failed to change password" });
+    }
+});
+
 app.delete("/api/users/:id", authenticate, async (req, res) => {
     try {
         const r = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
