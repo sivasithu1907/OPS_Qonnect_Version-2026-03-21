@@ -44,8 +44,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // Carry Forward State
   const [isCarryForwardOpen, setIsCarryForwardOpen] = useState(false);
   const [carryForwardRemark, setCarryForwardRemark] = useState('');
-  const [carryForwardDate, setCarryForwardDate] = useState('');
-  const [carryForwardTime, setCarryForwardTime] = useState('');
+  const [carryForwardDatetime, setCarryForwardDatetime] = useState('');
   const [showToast, setShowToast] = useState(false);
 
   // Combine Tickets and Activities into a single "Job" concept for display
@@ -151,16 +150,15 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       const hh = String(now.getHours()).padStart(2, '0');
       const min = String(now.getMinutes()).padStart(2, '0');
 
-      setCarryForwardDate(`${yyyy}-${mm}-${dd}`);
-      setCarryForwardTime(`${hh}:${min}`);
+      setCarryForwardDatetime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
       setCarryForwardRemark('');
       setIsCarryForwardOpen(true);
   };
 
   const handleConfirmCarryForward = () => {
-      if (!carryForwardRemark.trim() || !carryForwardDate || !carryForwardTime) return;
+      if (!carryForwardRemark.trim() || !carryForwardDatetime) return;
 
-      const nextIso = new Date(`${carryForwardDate}T${carryForwardTime}`).toISOString();
+      const nextIso = new Date(carryForwardDatetime).toISOString();
 
       if (activeJobItem?.type === 'ticket') {
           const t = activeJobItem.data as Ticket;
@@ -476,29 +474,15 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     />
                                 </div>
                                 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Next Date <span className="text-red-500">*</span></label>
-                                        <input 
-                                            type="date"
-                                            value={carryForwardDate}
-                                            onChange={e => setCarryForwardDate(e.target.value)}
-                                            className={INPUT_STYLES}
-                                            min={new Date().toISOString().split('T')[0]}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Next Time <span className="text-red-500">*</span></label>
-                                        <select 
-                                            value={carryForwardTime}
-                                            onChange={e => setCarryForwardTime(e.target.value)}
-                                            className={INPUT_STYLES}
-                                        >
-                                            {timeOptions.map(t => (
-                                                <option key={t} value={t}>{t}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Next Date &amp; Time <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="datetime-local"
+                                        value={carryForwardDatetime}
+                                        onChange={e => setCarryForwardDatetime(e.target.value)}
+                                        className={INPUT_STYLES}
+                                        min={new Date().toISOString().slice(0,16)}
+                                    />
                                 </div>
                                 
                                 <div className="pt-4 flex gap-3">
@@ -510,7 +494,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     </button>
                                     <button 
                                         onClick={handleConfirmCarryForward}
-                                        disabled={!carryForwardRemark.trim() || !carryForwardDate || !carryForwardTime}
+                                        disabled={!carryForwardRemark.trim() || !carryForwardDatetime}
                                         className="flex-[2] py-3.5 rounded-xl font-bold text-white bg-slate-900 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Confirm
