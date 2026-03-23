@@ -32,6 +32,7 @@ interface MobileLeadPortalProps {
   
   isStandalone?: boolean;
   onLogout?: () => void;
+  onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
   focusedTicketId?: string | null;
   currentUserId?: string; // New: For "My Jobs"
 }
@@ -84,7 +85,7 @@ const engineerTeamMap: Record<string, string> = {
 export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({ 
     tickets, technicians, activities = [], teams = [], sites = [], customers = [],
     onUpdateTicket, onUpdateActivity, onAddActivity, onDeleteActivity, onAddCustomer, onSaveCustomer, onDeleteCustomer,
-    isStandalone = false, onLogout, focusedTicketId, currentUserId
+    isStandalone = false, onLogout, onChangePassword, focusedTicketId, currentUserId
 }) => {
   // --- Responsive Check ---
   // When embedded in the main app (isStandalone=false), always use mobile layout
@@ -124,6 +125,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Date Picker State
   const [nextDate, setNextDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // Change password state
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [cpForm, setCpForm] = useState({ current: '', next: '', confirm: '' });
+  const [cpError, setCpError] = useState('');
+  const [cpSuccess, setCpSuccess] = useState(false);
   
   // Temp Picker Values
   const [tempDatetime, setTempDatetime] = useState(''); // YYYY-MM-DDTHH:mm for datetime-local
@@ -709,7 +715,10 @@ const TeamView = () => {
                       <span className="font-bold text-slate-800">Clients</span>
                   </button>
                   
-                  <button onClick={onLogout} className="col-span-2 mt-8 bg-slate-200 text-slate-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2">
+                  <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="col-span-2 bg-slate-800 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                      <KeyRound size={20}/> Change Password
+                  </button>
+                  <button onClick={onLogout} className="col-span-2 bg-slate-200 text-slate-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2">
                       <LogOut size={20}/> Logout
                   </button>
               </div>
@@ -820,13 +829,13 @@ const TeamView = () => {
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col h-full overflow-hidden relative min-h-0">
             
-            {/* MOBILE HEADER */}
-            {!selectedTicketId && mobileModule === 'none' && activeTab !== 'menu' && (
+            {/* MOBILE HEADER — always visible */}
+            {!selectedTicketId && (
                 <div className="bg-slate-900 text-white p-4 flex items-center justify-between shrink-0 shadow-md z-30 rounded-b-2xl">
                     <div>
                         <h2 className="font-bold text-lg leading-none">Team Lead Portal</h2>
                         <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
-                            LIVE FEED
+                            {mobileModule !== 'none' ? mobileModule.toUpperCase() : activeTab === 'menu' ? 'MENU' : 'LIVE FEED'}
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -835,6 +844,11 @@ const TeamView = () => {
                             {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-slate-900" />}
                         </div>
                         <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs shadow-inner border border-slate-800">TL</div>
+                        {onLogout && (
+                            <button onClick={onLogout} className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center hover:bg-slate-600 active:scale-95 transition-all" title="Exit to Dashboard">
+                                <LogOut size={15} className="text-slate-300" />
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
@@ -1593,6 +1607,59 @@ const TeamView = () => {
             )}
 
         </div>
+
+      {/* ── Change Password Modal ── */}
+      {showChangePwd && (
+        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-slate-900">Change Password</h3>
+              <button onClick={() => setShowChangePwd(false)} className="text-slate-400 hover:text-slate-600 p-1">✕</button>
+            </div>
+            <div className="p-5 space-y-4">
+              {cpSuccess ? (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <p className="text-emerald-700 font-bold">✅ Password changed successfully!</p>
+                  <button onClick={() => setShowChangePwd(false)} className="mt-3 px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm">Done</button>
+                </div>
+              ) : (
+                <>
+                  {cpError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{cpError}</div>}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Current Password</label>
+                    <input type="password" value={cpForm.current} onChange={e => setCpForm(p => ({...p, current: e.target.value}))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Enter current password"/>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">New Password</label>
+                    <input type="password" value={cpForm.next} onChange={e => setCpForm(p => ({...p, next: e.target.value}))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Minimum 8 characters"/>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Confirm New Password</label>
+                    <input type="password" value={cpForm.confirm} onChange={e => setCpForm(p => ({...p, confirm: e.target.value}))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Repeat new password"/>
+                  </div>
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setShowChangePwd(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 text-sm">Cancel</button>
+                    <button onClick={() => {
+                      setCpError('');
+                      if (!cpForm.current) { setCpError('Enter current password'); return; }
+                      if (cpForm.next.length < 8) { setCpError('Min 8 characters'); return; }
+                      if (cpForm.next !== cpForm.confirm) { setCpError('Passwords do not match'); return; }
+                      onChangePassword?.(cpForm.current, cpForm.next)
+                        .then(() => setCpSuccess(true))
+                        .catch((err: any) => setCpError(err?.message || 'Failed'));
+                    }} className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm">
+                      Change Password
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
