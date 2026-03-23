@@ -87,13 +87,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     isStandalone = false, onLogout, focusedTicketId, currentUserId
 }) => {
   // --- Responsive Check ---
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  // When embedded in the main app (isStandalone=false), always use mobile layout
+  // When accessed directly (isStandalone=true), check actual screen width
+  const [isMobile, setIsMobile] = useState(!isStandalone || window.innerWidth < 768);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    if (isStandalone) {
+      const handleResize = () => setIsMobile(window.innerWidth < 768);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [isStandalone]);
 
   // State
   const [activeTab, setActiveTab] = useState<'live' | 'my_jobs' | 'team' | 'menu'>('live'); 
