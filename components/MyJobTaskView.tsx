@@ -18,7 +18,9 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
 
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (ticket.status === TicketStatus.ASSIGNED) {
+    if (ticket.status === TicketStatus.NEW || ticket.status === TicketStatus.OPEN) {
+      onUpdateStatus(ticket.id, TicketStatus.ASSIGNED);
+    } else if (ticket.status === TicketStatus.ASSIGNED) {
       onUpdateStatus(ticket.id, TicketStatus.ON_MY_WAY);
     } else if (ticket.status === TicketStatus.ON_MY_WAY) {
       onUpdateStatus(ticket.id, TicketStatus.ARRIVED);
@@ -29,12 +31,14 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
 
   const handleFinalize = () => {
     if (remark.length < 5) return;
-    onUpdateStatus(ticket.id, TicketStatus.RESOLVED, remark); // Map DONE to RESOLVED
+    onUpdateStatus(ticket.id, TicketStatus.RESOLVED, remark);
     setIsModalOpen(false);
   };
 
   const getButtonText = () => {
     switch (ticket.status) {
+      case TicketStatus.NEW:
+      case TicketStatus.OPEN: return 'Accept & Start Journey';
       case TicketStatus.ASSIGNED: return 'Update: On My Way';
       case TicketStatus.ON_MY_WAY: return 'Update: Arrived';
       case TicketStatus.ARRIVED: return 'Finalize & Mark Done';
@@ -89,6 +93,18 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
           {ticket.category}
         </span>
       </div>
+
+      {/* Issue Description */}
+      {(ticket.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (ticket as any).notes || (ticket as any).ai_summary) && (
+        <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4">
+          <p className="text-[10px] font-bold text-amber-600 uppercase mb-1">Issue Description</p>
+          <p className="text-xs text-slate-700 leading-relaxed">
+            {ticket.messages?.find((m: any) => m.sender === 'CLIENT')?.content
+              || (ticket as any).notes
+              || (ticket as any).ai_summary}
+          </p>
+        </div>
+      )}
 
       {/* Actions Row */}
       <div className="flex gap-3 mb-4">
