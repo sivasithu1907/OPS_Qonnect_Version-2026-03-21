@@ -31,6 +31,12 @@ const QonnectLogo = ({ className }: { className?: string }) => (
 );
 
 function App() {
+  // --- Auth Helper — must be first so all handlers can use it ---
+  const getAuthHeaders = (): Record<string, string> => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('qonnect_token') || ''}`
+  });
+
   // --- Global State ---
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
@@ -199,7 +205,7 @@ const handleLogin = async (email: string, pass: string) => {
       try {
           const res = await fetch("/api/login", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify({ email, password: pass })
           });
           
@@ -249,7 +255,7 @@ const handleLogout = () => {
           // Save status + assignment + appointment to DB
           await fetch(`/api/tickets/${updated.id}/status`, {
               method: "PUT",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify({
                   status: updated.status,
                   assignedTechId: updated.assignedTechId || null,
@@ -261,7 +267,7 @@ const handleLogout = () => {
           // Also persist full ticket fields (category, type, priority, location etc.)
           await fetch(`/api/tickets/${updated.id}`, {
               method: "PUT",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify({
                   category: updated.category,
                   priority: updated.priority,
@@ -284,7 +290,7 @@ const handleLogout = () => {
     try {
       const res = await fetch("/api/tickets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           ...data,
           id: generateTicketId(),
@@ -310,7 +316,7 @@ const handleLogout = () => {
       try {
           const response = await fetch(`/api/tickets/${id}`, {
               method: "DELETE",
-              headers: { "Content-Type": "application/json" }
+              headers: getAuthHeaders()
           });
           if (response.ok) {
               setTickets(prev => prev.filter(t => t.id !== id));
@@ -346,7 +352,7 @@ const handleLogout = () => {
       try {
           await fetch(`/api/tickets/${ticketId}/message`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify({ sender, content })
           });
       } catch (e) {
@@ -361,7 +367,7 @@ const handleLogout = () => {
       try {
           const res = await fetch("/api/activities", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify(payload)
           });
           if (res.ok) await loadActivities(); // Refresh from DB
@@ -372,7 +378,7 @@ const handleLogout = () => {
       try {
           const res = await fetch(`/api/activities/${updated.id}`, {
               method: "PUT",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify(updated)
           });
           if (res.ok) await loadActivities(); // Refresh from DB
@@ -382,14 +388,15 @@ const handleLogout = () => {
   const handleDeleteActivity = async (id: string) => {
       if (!window.confirm("Are you sure you want to delete this activity?")) return;
       try {
-          const res = await fetch(`/api/activities/${id}`, { method: "DELETE" });
+          const res = await fetch(`/api/activities/${id}`, { method: "DELETE", headers: getAuthHeaders() });
           if (res.ok) await loadActivities(); // Refresh from DB
       } catch (e) { console.error("Failed to delete activity", e); }
   };
   
 const loadTickets = async () => {
     try {
-      const res = await fetch("/api/tickets");
+      const res = await fetch("/api/tickets", { headers: getAuthHeaders() });
+      if (res.status === 401) { handleLogout(); return; }
       const data = await res.json();
       if (Array.isArray(data)) setTickets(data);
     } catch (e) {
@@ -399,7 +406,7 @@ const loadTickets = async () => {
 
   const loadActivities = async () => {
     try {
-      const res = await fetch("/api/activities");
+      const res = await fetch("/api/activities", { headers: getAuthHeaders() });
       const data = await res.json();
       if (Array.isArray(data)) setActivities(data);
     } catch (e) {
@@ -409,7 +416,7 @@ const loadTickets = async () => {
 
   const loadTeams = async () => {
     try {
-      const res = await fetch("/api/teams");
+      const res = await fetch("/api/teams", { headers: getAuthHeaders() });
       const data = await res.json();
       if (Array.isArray(data)) setTeams(data);
     } catch (e) { console.error("Failed to load teams", e); }
@@ -417,7 +424,7 @@ const loadTickets = async () => {
 
   const loadSites = async () => {
     try {
-      const res = await fetch("/api/sites");
+      const res = await fetch("/api/sites", { headers: getAuthHeaders() });
       const data = await res.json();
       if (Array.isArray(data)) setSites(data);
     } catch (e) { console.error("Failed to load sites", e); }
@@ -428,7 +435,7 @@ const handleAddCustomer = async (c: Customer) => {
   try {
     const res = await fetch("/api/customers", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         name: c.name,
         phone: (c as any).phone,
@@ -473,7 +480,7 @@ const handleUpdateCustomer = async (c: Customer) => {
 
     const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(payload),
     });
 
@@ -493,7 +500,7 @@ const handleUpdateCustomer = async (c: Customer) => {
 
 const handleDeleteCustomer = async (id: string) => {
   try {
-    const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/customers/${id}`, { method: "DELETE", headers: getAuthHeaders() });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -515,7 +522,7 @@ const handleDeleteCustomer = async (id: string) => {
               // Update existing user
               const res = await fetch(`/api/users/${u.id}`, {
                   method: "PUT",
-                  headers: { "Content-Type": "application/json" },
+                  headers: getAuthHeaders(),
                   body: JSON.stringify({
                       name: u.name,
                       email: u.email,
@@ -530,7 +537,7 @@ const handleDeleteCustomer = async (id: string) => {
               // Create new user
               const res = await fetch("/api/users", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: getAuthHeaders(),
                   body: JSON.stringify({
                       id: u.id,
                       name: u.name,
@@ -552,7 +559,7 @@ const handleDeleteCustomer = async (id: string) => {
 
   const handleDeleteUser = async (id: string) => {
       try {
-          const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+          const res = await fetch(`/api/users/${id}`, { method: "DELETE", headers: getAuthHeaders() });
           if (!res.ok) throw new Error("Failed to delete user");
           await loadUsers();
       } catch (e) {
@@ -573,7 +580,7 @@ const handleDeleteCustomer = async (id: string) => {
 
 const loadCustomers = async () => {
   try {
-    const res = await fetch("/api/customers");
+    const res = await fetch("/api/customers", { headers: getAuthHeaders() });
     const data = await res.json();
     if (Array.isArray(data)) setCustomers(data);
   } catch (e) {
@@ -583,7 +590,7 @@ const loadCustomers = async () => {
 
 const loadUsers = async () => {
   try {
-    const res = await fetch("/api/users");
+    const res = await fetch("/api/users", { headers: getAuthHeaders() });
     const data = await res.json();
     if (Array.isArray(data)) setTechnicians(data);
   } catch (e) {
