@@ -244,6 +244,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const containerClasses = "w-full h-full bg-slate-900 flex flex-col";
 
   return (
+    <>
     <div className="h-full w-full bg-slate-900">
         {/* Phone Container / Full Screen Container */}
         <div className={containerClasses}>
@@ -567,6 +568,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           </div>
         </div>
       )}
+    </>
   );
 };
 
