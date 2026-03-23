@@ -925,12 +925,15 @@ const TeamView = () => {
                                 <div>
                                     <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Issue Description</h4>
                                     <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
-                                        {viewTicket.messages[0]?.content}
+                                        {viewTicket.messages?.find((m: any) => m.sender === 'CLIENT')?.content
+                                            || (viewTicket as any).notes
+                                            || (viewTicket as any).ai_summary
+                                            || `${viewTicket.category} — No description provided`}
                                     </p>
                                 </div>
 
-                                {/* Your Work Actions (For My Jobs) */}
-                                {activeTab === 'my_jobs' && viewTicket.assignedTechId === currentUserId && (
+                                {/* Your Work Actions — show whenever this ticket is assigned to current user */}
+                                {viewTicket.assignedTechId === currentUserId && (
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
                                         <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
                                             <Briefcase size={14}/> Your Work Actions
