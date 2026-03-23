@@ -29,13 +29,17 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
     onUpdateTicket // Optional if needed, but we can reuse onUpdateStatus for basic status changes
 }) => {
   // --- Responsive Check ---
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  // When embedded via fullscreen bypass (isStandalone=true), always render mobile
+  // When accessed standalone, check actual screen width
+  const [isMobile, setIsMobile] = useState(isStandalone || window.innerWidth < 768);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    if (!isStandalone) {
+      const handleResize = () => setIsMobile(window.innerWidth < 768);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [isStandalone]);
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [completionStep, setCompletionStep] = useState(false);
