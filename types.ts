@@ -1,4 +1,3 @@
-
 export enum Role {
   ADMIN = 'ADMIN',
   TEAM_LEAD = 'TEAM_LEAD',
@@ -67,6 +66,8 @@ export interface Technician {
   isActive: boolean;
   email: string; // Mandatory for login
   password?: string; // Mock password
+  phone?: string;
+  avatar?: string; // Profile photo URL or auto-generated initials
   
   level: 'TEAM_LEAD' | 'FIELD_ENGINEER' | 'SALES' | 'TECHNICAL_ASSOCIATE'; // Operational Level / Department
   phone?: string;
@@ -95,6 +96,7 @@ export interface Ticket {
   odooLink?: string;
   locationUrl?: string; // Mandatory URL
   houseNumber?: string;
+  ai_summary?: string; // AI-generated summary for Team Lead
   
   // Workflow Tracking
   startedAt?: string;
