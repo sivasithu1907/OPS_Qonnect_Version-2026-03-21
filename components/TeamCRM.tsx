@@ -76,7 +76,8 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
 
   const getLocalPhone = (fullPhone?: string) => {
       if (!fullPhone) return '';
-      return fullPhone.replace(/^\+974\s?/, '');
+      // Strip +974 with or without space, and any non-digit prefix
+      return fullPhone.replace(/^\+974\s?/, '').replace(/^974/, '');
   };
 
   const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -236,7 +237,9 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         e.preventDefault();
                         const formData = new FormData(e.currentTarget);
                         const rawData: any = Object.fromEntries(formData.entries());
-                        const fullPhone = `+974 ${rawData.phone}`;
+                        // Standardise phone — store as full international format
+                        const phoneRaw = (rawData.phone || '').replace(/\D/g, '').replace(/^974/, '');
+                        const fullPhone = phoneRaw ? `+974${phoneRaw}` : '';
                         
                         // Handle potential empty system role
                         const finalSystemRole = rawData.systemRole || undefined;
@@ -247,7 +250,10 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                             systemRole: finalSystemRole
                         };
 
-                        data.isActive = activeTech?.isActive ?? true;
+                        // Derive isActive from the status field in the form
+                        const statusVal = rawData.status || 'AVAILABLE';
+                        data.isActive = activeTech ? (activeTech.isActive ?? true) : true;
+                        data.status = statusVal;
                         
                         if (modalType === 'add') {
                             data.id = generateTechId();
