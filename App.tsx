@@ -678,8 +678,8 @@ useEffect(() => {
       const isDesktop = window.innerWidth >= 768;
       return NAVIGATION_ITEMS.filter(item => {
           if (!item.roles.includes(currentUser.role)) return false;
-          // Hide mobile portals from sidebar on desktop — they open fullscreen and are meant for mobile
-          if (isDesktop && (item.id === 'lead_portal' || item.id === 'tech_portal')) return false;
+          // Hide mobile portals on desktop for non-Admin roles — Admin keeps access for troubleshooting
+          if (isDesktop && currentUser.role !== Role.ADMIN && (item.id === 'lead_portal' || item.id === 'tech_portal')) return false;
           return true;
       });
   }, [currentUser]);
