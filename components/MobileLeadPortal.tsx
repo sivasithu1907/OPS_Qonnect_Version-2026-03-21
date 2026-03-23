@@ -820,27 +820,10 @@ const TeamView = () => {
       );
   };
 
-  if (!isMobile) {
-      return (
-          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-              <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center">
-                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-                      <Smartphone size={32} />
-                  </div>
-                  <h2 className="text-2xl font-semibold text-gray-900 mb-3">
-                        Oops! This View Works Best on Mobile 📱</h2>
-                  <p className="text-gray-600 leading-relaxed">
-                    The Team Lead Portal is built for field mobility.
-                    <br />
-                    Please access this module from a mobile device for the best experience.
-                </p>
-              </div>
-          </div>
-      );
-  }
+  // Portal always renders — fullscreen bypass handles device routing
 
   return (
-    <div className={`flex h-[100dvh] bg-slate-100 font-sans ${isStandalone ? '' : 'pt-0'} overflow-hidden`}>
+    <div className="flex h-[100dvh] bg-slate-100 font-sans overflow-hidden" style={{paddingTop: 'env(safe-area-inset-top)', paddingBottom: 0}}>
         
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col h-full overflow-hidden relative min-h-0">
@@ -871,7 +854,7 @@ const TeamView = () => {
 
             {/* Mobile Bottom Navigation */}
             {!selectedTicketId && mobileModule === 'none' && (
-                <div className="bg-white border-t border-slate-200 flex justify-between px-2 pb-safe z-30 shrink-0 h-16 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                <div className="bg-white border-t border-slate-200 flex justify-between px-2 z-30 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"">
                     <NavButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={ListTodo} label="Live Feed" />
                     <NavButton active={activeTab === 'my_jobs'} onClick={() => setActiveTab('my_jobs')} icon={Briefcase} label="My Jobs" />
                     <NavButton active={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={Users} label="Field Team" />
