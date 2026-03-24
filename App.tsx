@@ -729,7 +729,7 @@ useEffect(() => {
           onDeleteCustomer={handleDeleteCustomer}
           isStandalone={true}
           onLogout={() => setActiveView('dashboard')}
-          onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId, cur, nxt); }}
+          onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
           focusedTicketId={focusedTicketId}
           currentUserId={currentUser.techId}
         />
@@ -752,7 +752,7 @@ useEffect(() => {
           onUpdateTicket={handleUpdateTicket}
           isStandalone={true}
           onLogout={handleLogout}
-          onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId, cur, nxt); }}
+          onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
         />
       </div>
     );
