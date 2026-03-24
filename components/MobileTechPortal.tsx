@@ -62,7 +62,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // Exclude: RESOLVED, CANCELLED
   const myJobs = [
       ...tickets
-        .filter(t => t.assignedTechId === currentTechId && t.status !== TicketStatus.CANCELLED)
+        .filter(t => t.assignedTechId === currentTechId && t.status !== TicketStatus.CANCELLED && t.status !== TicketStatus.RESOLVED)
         .map(t => ({
           type: 'ticket' as const, 
           data: t, 
