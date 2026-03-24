@@ -4,7 +4,7 @@ import {
   ChevronLeft, Phone, MapPin, Search, Plus, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
   CheckCircle2, History, AlertTriangle, X, UserPlus,
-  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown
+  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound
 } from 'lucide-react';
 import ReportsModule from './ReportsModule';
 import PlanningModule from './PlanningModule';
