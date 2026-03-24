@@ -70,8 +70,6 @@ export interface Technician {
   avatar?: string; // Profile photo URL or auto-generated initials
   
   level: 'TEAM_LEAD' | 'FIELD_ENGINEER' | 'SALES' | 'TECHNICAL_ASSOCIATE'; // Operational Level / Department
-  phone?: string;
-  avatar: string;
   teamId?: string;
 }
 
