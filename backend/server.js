@@ -542,7 +542,22 @@ app.post("/api/tickets", authenticate, async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.status(201).json(mapTicket(result.rows[0]));
+
+    const ticket = mapTicket(result.rows[0]);
+
+    // ── Notification 1 (manual): Notify all Team Leads of new manually-created ticket ──
+    try {
+      const priorityLabel = priority || 'MEDIUM';
+      const locationLabel = houseNumber || locationUrl || 'Not provided';
+      const createdByName = req.user?.name || 'Dashboard';
+      await notifyTeamLeads(
+        `*New Ticket (Dashboard): ${id}*\nCustomer: ${customerName}\nCategory: ${category || 'Support'}\nPriority: ${priorityLabel}\nLocation: ${locationLabel}\nCreated by: ${createdByName}`
+      );
+    } catch (notifErr) {
+      console.error('Team lead notify error (manual ticket):', notifErr.message);
+    }
+
+    res.status(201).json(ticket);
   } catch (e) {
     await client.query('ROLLBACK');
     console.error("Ticket creation error:", e);
@@ -670,7 +685,7 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
                     const techName = techData.rows[0]?.name || "our engineer";
                     const apptText = appointmentTime
                         ? `\nAppointment: ${new Date(appointmentTime).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                        : "";
+                        : `\nAppointment: *To be confirmed* — our team will reach out shortly.`;
                     await sendWhatsAppText(customer_phone,
                         `Hello ${customerName}, your service request *${ticketId}* has been assigned to *${techName}*.${apptText}\n\nWe will keep you updated on the progress.`
                     );
