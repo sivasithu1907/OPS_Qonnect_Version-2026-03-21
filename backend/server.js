@@ -1674,7 +1674,7 @@ async function handleIncomingMessage(phone, text) {
 	    ]
 	  );
 
-          // processed
+	  return; // ← stop here — do NOT fall through to session/ticket creation
 	}
 
 	// 2. SESSION LOOKUP (The Smart Part)
