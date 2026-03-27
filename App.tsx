@@ -254,6 +254,20 @@ const handleLogout = () => {
   };
 
   // --- Data Handlers ---
+  // Auto-transition NEW → OPEN when a ticket is first opened/viewed on desktop
+  const handleOpenTicket = async (ticket: Ticket) => {
+      if (ticket.status !== 'NEW') return; // only act on NEW tickets
+      const updated = { ...ticket, status: 'OPEN' as any, updatedAt: new Date().toISOString() };
+      setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
+      try {
+          await fetch(`/api/tickets/${ticket.id}/status`, {
+              method: "PUT",
+              headers: getAuthHeaders(),
+              body: JSON.stringify({ status: 'OPEN' })
+          });
+      } catch (e) { console.error("Failed to auto-open ticket:", e); }
+  };
+
   const handleUpdateTicket = async (updated: Ticket) => {
       // Optimistic UI update immediately
       setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
@@ -1122,6 +1136,7 @@ useEffect(() => {
                         onDeleteTicket={handleDeleteTicket}
                         onAddCustomer={handleAddCustomer}
                         onUpdateTicket={handleUpdateTicket}
+                        onOpenTicket={handleOpenTicket}
                         onSendMessage={handleSendMessage}
                         onCreateTicket={handleCreateTicket}
                         activeFilter={ticketFilter}
