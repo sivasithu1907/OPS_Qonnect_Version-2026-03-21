@@ -16,6 +16,7 @@ interface TicketManagementProps {
   onAddCustomer?: (customer: Customer) => void;
   
   onUpdateTicket: (ticket: Ticket) => void;
+  onOpenTicket?: (ticket: Ticket) => void;
   onSendMessage: (ticketId: string, content: string, sender: MessageSender) => void;
   onCreateTicket: (ticket: { 
     customerName: string; 
@@ -63,7 +64,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     technicians,
     customers = [],
     onAddCustomer = (_: Customer) => {}, // Fixed default signature
-    onUpdateTicket, 
+    onUpdateTicket,
+    onOpenTicket,
     onSendMessage, 
     onCreateTicket,
     activeFilter,
@@ -402,7 +404,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const hasUnsavedChanges = () => {
       if (!selectedTicket || !editForm) return false;
       return (
-          editForm.status !== selectedTicket.status ||
+          // status is auto-managed — excluded from unsaved-changes check
           editForm.type !== selectedTicket.type ||
           editForm.priority !== selectedTicket.priority ||
           editForm.category !== selectedTicket.category ||
@@ -430,16 +432,20 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         return;
     }
     
-    // Assignment Logic
+    // Auto-status logic — derived from workflow action, never from a manual dropdown
     const oldTechId = selectedTicket.assignedTechId || '';
     const newTechId = editForm.assignedTechId;
-    
-    // Rule: If assigning a tech (and was New/unassigned), ensure status becomes OPEN (Assigned), 
-    // but DO NOT set to IN_PROGRESS.
-    let newStatus = editForm.status;
-    if (newTechId && !oldTechId && selectedTicket.status === TicketStatus.NEW && newStatus === TicketStatus.NEW) {
+
+    let newStatus = selectedTicket.status; // always start from current persisted status
+
+    if (newTechId && newTechId !== oldTechId) {
+        // Engineer assigned (new or re-assigned) → ASSIGNED
+        newStatus = TicketStatus.ASSIGNED;
+    } else if (!newTechId && oldTechId && selectedTicket.status === TicketStatus.ASSIGNED) {
+        // Engineer removed from an ASSIGNED ticket → back to OPEN
         newStatus = TicketStatus.OPEN;
     }
+    // CARRY_FORWARD, IN_PROGRESS, RESOLVED, CANCELLED set via dedicated actions only
 
     if (newTechId && newTechId !== oldTechId) {
         const tech = technicians.find(t => t.id === newTechId);
@@ -738,7 +744,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                          <div className="flex items-center gap-2">
                              {[
                                  { val: priorityFilter, set: setPriorityFilter, opts: Object.values(Priority), label: 'Priorities' },
-                                 { val: statusFilter, set: setStatusFilter, opts: Object.values(TicketStatus), label: 'Statuses' },
+                                 { val: statusFilter, set: setStatusFilter, opts: [
+                      TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED,
+                      TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD,
+                      TicketStatus.RESOLVED, TicketStatus.CANCELLED
+                  ], label: 'Statuses' },
                                  { val: assigneeFilter, set: setAssigneeFilter, opts: engineerOptions, label: 'Engineers', valKey: 'id', nameKey: 'name' }
                              ].map((f, i) => (
                                  <div key={i} className="relative flex-1">
@@ -795,7 +805,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 const healthColor = getHealthColor(health);
                 
                 return (
-                    <div key={ticket.id} onClick={() => setSelectedTicketId(ticket.id)} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' : ''}`}>
+                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' : ''}`}>
                         <div className="flex justify-between items-start mb-1">
                             <span className="font-medium text-slate-900">{ticket.customerName}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${(new Date().getTime() - new Date(ticket.createdAt).getTime()) / 36e5 < 24 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{(new Date().getTime() - new Date(ticket.createdAt).getTime()) / 36e5 < 24 ? 'New' : 'Pending'}</span>
@@ -1051,7 +1061,37 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         </div>
                     </div>
                 )}
-                <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label><select value={getFormValue('status') as TicketStatus} onChange={(e) => updateField('status', e.target.value)} className={INPUT_STYLES}>{Object.values(TicketStatus).map(s => <option key={s} value={s}>{toTitleCase(s)}</option>)}</select></div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
+                  <span className={`block w-full px-3 py-2 rounded-lg text-sm font-bold text-center border ${
+                    selectedTicket?.status === TicketStatus.NEW           ? 'bg-slate-100 text-slate-700 border-slate-300' :
+                    selectedTicket?.status === TicketStatus.OPEN          ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    selectedTicket?.status === TicketStatus.ASSIGNED      ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                    selectedTicket?.status === TicketStatus.IN_PROGRESS   ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    selectedTicket?.status === TicketStatus.CARRY_FORWARD ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                    selectedTicket?.status === TicketStatus.RESOLVED      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    selectedTicket?.status === TicketStatus.CANCELLED     ? 'bg-red-50 text-red-600 border-red-200' :
+                    'bg-slate-50 text-slate-500 border-slate-200'
+                  }`}>
+                    {toTitleCase(selectedTicket?.status || '')}
+                  </span>
+                  <p className="text-[10px] text-slate-400 mt-1">Auto-managed by workflow actions</p>
+                </div>
+                {selectedTicket && selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm('Cancel this ticket? This cannot be undone.')) {
+                          onUpdateTicket({ ...selectedTicket, status: TicketStatus.CANCELLED, updatedAt: new Date().toISOString() });
+                        }
+                      }}
+                      className="w-full py-2 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
+                    >
+                      Cancel Ticket
+                    </button>
+                  </div>
+                )}
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Priority</label><select value={getFormValue('priority') as Priority} onChange={(e) => updateField('priority', e.target.value)} className={INPUT_STYLES}>{Object.values(Priority).map(p => <option key={p} value={p}>{toTitleCase(p)}</option>)}</select></div>
                 
                 {/* Assignment Dropdown with Hint Highlight */}
