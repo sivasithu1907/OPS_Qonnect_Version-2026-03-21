@@ -47,6 +47,7 @@ function App() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [portalDataReady, setPortalDataReady] = useState(false);
 
   // UI State - Persistent Sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -660,6 +661,27 @@ useEffect(() => {
     loadSites(); // <-- NEW
   }, []);
 
+useEffect(() => {
+    if (activeView !== 'lead_portal') return;
+
+    const prepareLeadPortal = async () => {
+        setPortalDataReady(false);
+        try {
+            await Promise.all([
+                loadUsers(),
+                loadTickets(),
+                loadTeams(),
+            ]);
+        } catch (error) {
+            console.error('Failed to prepare Lead Portal data:', error);
+        } finally {
+            setPortalDataReady(true);
+        }
+    };
+
+    prepareLeadPortal();
+}, [activeView]);
+
   // Auto-refresh tickets and activities every 10 seconds
   useEffect(() => {
     let isRefreshing = false;
@@ -707,6 +729,17 @@ useEffect(() => {
   // ── Fullscreen Portal Mode ─────────────────────────────────────────────
   // Bypasses entire desktop layout — no sidebar, no header, no AI bot
   if (activeView === 'lead_portal') {
+	if (!portalDataReady) {
+	  return (
+	    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-100">
+	      <div className="text-center">
+	        <div className="text-lg font-semibold text-slate-700">Loading Lead Portal...</div>
+	        <div className="text-sm text-slate-500 mt-2">Please wait</div>
+	      </div>
+	    </div>
+	  );
+	}
+
     return (
       <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
         <MobileLeadPortal
@@ -728,7 +761,7 @@ useEffect(() => {
           onSaveCustomer={handleUpdateCustomer}
           onDeleteCustomer={handleDeleteCustomer}
           isStandalone={true}
-          onLogout={() => setActiveView('dashboard')}
+	  onLogout={handleLogout}
           onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
           focusedTicketId={focusedTicketId}
           currentUserId={currentUser.techId}
@@ -1174,31 +1207,7 @@ useEffect(() => {
                 {activeView === 'whatsapp_monitor' && (
                     <WhatsAppMonitor />
                 )}
-                {activeView === 'lead_portal' && (
-                    <MobileLeadPortal 
-                        tickets={tickets} 
-                        technicians={technicians}
-                        activities={activities}
-                        teams={teams}
-                        sites={sites}
-                        customers={customers}
-                        onAssign={(tId, techId) => {
-                            const t = tickets.find(x => x.id === tId);
-                            if (t) handleUpdateTicket({...t, assignedTechId: techId, status: TicketStatus.ASSIGNED});
-                        }}
-                        onUpdateTicket={handleUpdateTicket}
-                        onUpdateActivity={handleUpdateActivity}
-                        onAddActivity={handleAddActivity}
-                        onDeleteActivity={handleDeleteActivity}
-                        onAddCustomer={handleAddCustomer}
-                        onSaveCustomer={handleUpdateCustomer}
-                        onDeleteCustomer={handleDeleteCustomer}
-                        isStandalone={false}
-                        onLogout={() => setActiveView('dashboard')}
-                        focusedTicketId={focusedTicketId}
-                        currentUserId={currentUser.techId}
-                    />
-                )}
+
                 {activeView === 'tech_portal' && (
                     <MobileTechPortal 
                         tickets={tickets}

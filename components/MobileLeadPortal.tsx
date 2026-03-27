@@ -718,9 +718,11 @@ const TeamView = () => {
                   <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="col-span-2 bg-slate-800 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
                       <KeyRound size={20}/> Change Password
                   </button>
-                  <button onClick={onLogout} className="col-span-2 bg-slate-200 text-slate-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2">
-                      <LogOut size={20}/> Logout
-                  </button>
+		  {onLogout && (
+		    <button onClick={onLogout} className="col-span-2 bg-slate-200 text-slate-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2">
+		        <LogOut size={20}/> Logout
+		    </button>
+		)}
               </div>
           );
       }
@@ -844,11 +846,6 @@ const TeamView = () => {
                             {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-slate-900" />}
                         </div>
                         <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs shadow-inner border border-slate-800">TL</div>
-                        {onLogout && (
-                            <button onClick={onLogout} className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center hover:bg-slate-600 active:scale-95 transition-all" title="Exit to Dashboard">
-                                <LogOut size={15} className="text-slate-300" />
-                            </button>
-                        )}
                     </div>
                 </div>
             )}
