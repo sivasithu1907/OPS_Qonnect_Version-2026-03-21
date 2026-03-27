@@ -238,7 +238,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
 
   const metrics = useMemo(() => {
     const activeActs = activities.filter(a => normalizeStatus(a.status) === 'IN_PROGRESS').length;
-    const activeTickets = tickets.filter(t => normalizeStatus(t.status) === 'IN_PROGRESS').length;
+    const activeTickets = tickets.filter(t => ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status))).length;
     const activeJobs = activeActs + activeTickets;
     const crewsOnSite = operationsStaff.filter(t => t.status === 'BUSY').length;
     const plannedToday = activities.filter(a => new Date(a.plannedDate).toDateString() === new Date().toDateString()).length;
@@ -578,7 +578,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
 
                             // 2. Normalize Tickets (only if assigned and IN_PROGRESS/OPEN)
                             const techTickets = tickets
-                                .filter(t => t.assignedTechId === tech.id && normalizeStatus(t.status) === 'IN_PROGRESS')
+                                .filter(t => t.assignedTechId === tech.id && ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status)))
                                 .map(t => ({
                                     id: t.id,
                                     reference: t.id,
