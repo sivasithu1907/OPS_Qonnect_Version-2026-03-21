@@ -707,7 +707,7 @@ useEffect(() => {
       } finally {
         isRefreshing = false;
       }
-    }, 10000);
+    }, 5000); // 5s for near-real-time status updates
     return () => clearInterval(interval);
   }, []);
   
