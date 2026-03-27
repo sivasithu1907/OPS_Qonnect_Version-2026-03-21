@@ -288,7 +288,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 const job = item.data as any; // Unified access
                                 
                                 if (!isActivity) {
-                                    return <MyJobTaskView key={job.id} ticket={job} onUpdateStatus={handleStatusUpdate} />;
+                                    return <MyJobTaskView key={job.id} ticket={job} onUpdateStatus={handleStatusUpdate} onSelect={() => setSelectedJobId(job.id)} />;
                                 }
 
                                 const delayed = item.delayed;
@@ -350,7 +350,17 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                     </div>
                 )}
 
-                {/* Job Detail (Only for Activities now, as Tickets use MyJobTaskView) */}
+                {/* Ticket Detail — full screen when ticket tapped */}
+                {activeJob && activeJobItem?.type !== 'activity' && !completionStep && (
+                    <div className="flex flex-col h-full overflow-y-auto p-4 pt-6">
+                        <MyJobTaskView
+                            ticket={activeJob as any}
+                            onUpdateStatus={handleStatusUpdate}
+                        />
+                    </div>
+                )}
+
+                {/* Activity Detail */}
                 {activeJob && activeJobItem?.type === 'activity' && !completionStep && (
                     <div className="flex flex-col h-full">
                         {/* Map Placeholder */}
