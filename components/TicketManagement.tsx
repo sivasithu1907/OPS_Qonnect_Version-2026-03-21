@@ -808,7 +808,18 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' : ''}`}>
                         <div className="flex justify-between items-start mb-1">
                             <span className="font-medium text-slate-900">{ticket.customerName}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${(new Date().getTime() - new Date(ticket.createdAt).getTime()) / 36e5 < 24 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{(new Date().getTime() - new Date(ticket.createdAt).getTime()) / 36e5 < 24 ? 'New' : 'Pending'}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                              ticket.status === 'NEW'           ? 'bg-slate-100 text-slate-600' :
+                                              ticket.status === 'OPEN'          ? 'bg-blue-100 text-blue-700' :
+                                              ticket.status === 'ASSIGNED'      ? 'bg-purple-100 text-purple-700' :
+                                              ticket.status === 'IN_PROGRESS'   ? 'bg-amber-100 text-amber-700' :
+                                              ticket.status === 'ON_MY_WAY'     ? 'bg-cyan-100 text-cyan-700' :
+                                              ticket.status === 'ARRIVED'       ? 'bg-indigo-100 text-indigo-700' :
+                                              ticket.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                                              ticket.status === 'RESOLVED'      ? 'bg-emerald-100 text-emerald-700' :
+                                              ticket.status === 'CANCELLED'     ? 'bg-red-100 text-red-600' :
+                                              'bg-slate-100 text-slate-600'
+                                            }`}>{ticket.status.replace(/_/g, ' ')}</span>
                         </div>
                         <div className="text-sm text-slate-500 mb-2 truncate"><span className="text-xs text-slate-400 font-medium">{ticket.id}</span> • {(safeString(ticket.type) || '—')} • {ticket.category} • {safeString(ticket.phoneNumber)}</div>
                         <div className="flex justify-between items-center text-xs">
