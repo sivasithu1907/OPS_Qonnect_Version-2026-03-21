@@ -2211,6 +2211,19 @@ async function handleIncomingMessage(phone, text) {
 
 	} else if (aiData?.action === "remote_support" || aiData?.action === "site_visit") {
 	  const customerId = await upsertWhatsAppCustomer(phone, customerName);
+
+	  // ── If session already has a ticket and customer escalates to site_visit → UPDATE not create ──
+	  if (session?.ticket_id && aiData?.action === "site_visit") {
+	    await pool.query(
+	      `UPDATE tickets SET priority = 'HIGH',
+	          ai_summary = CONCAT(COALESCE(ai_summary,''), ' [Escalated to site visit by customer]'),
+	          updated_at = NOW()
+	       WHERE id = $1`,
+	      [session.ticket_id]
+	    );
+	    finalReply = `Noted ${customerName}. We have updated your ticket ${session.ticket_id} as site visit required. Our team will follow up shortly regarding the appointment.`;
+	    await pool.query(`UPDATE sessions SET last_interaction = NOW() WHERE phone = $1`, [phone]);
+	  } else {
 	  const ticketId = makeTicketId();
 
 	  // ── Generate AI technical summary for Team Lead ──
@@ -2315,7 +2328,7 @@ async function handleIncomingMessage(phone, text) {
 	} else {
 	  finalReply = `Thank you ${customerName}. We have created a support ticket for remote review. Your Ticket ID is ${ticketId}. Our team will follow up shortly.`;
 	}
-
+	  } // end new ticket creation
 	} else if (aiData?.action === "need_more_info") {
 	  const customerId = await upsertWhatsAppCustomer(phone, customerName);
 
