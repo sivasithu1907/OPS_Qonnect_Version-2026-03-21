@@ -55,11 +55,20 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const [carryForwardRemark, setCarryForwardRemark] = useState('');
   const [carryForwardDatetime, setCarryForwardDatetime] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Combine Tickets and Activities into a single "Job" concept for display
   // Prioritize Delayed Jobs
   // Tickets: Show ONLY tickets assigned to currentTechId
   // Exclude: RESOLVED, CANCELLED
+  const completedJobs = [
+      ...tickets
+        .filter(t => t.assignedTechId === currentTechId &&
+            (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED))
+        .sort((a, b) => new Date(b.updatedAt||b.updated_at||0).getTime() - new Date(a.updatedAt||a.updated_at||0).getTime())
+        .slice(0, 50)
+  ];
+
   const myJobs = [
       ...tickets
         .filter(t => t.assignedTechId === currentTechId && t.status !== TicketStatus.CANCELLED && t.status !== TicketStatus.RESOLVED)
@@ -276,13 +285,23 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                 {/* Job List */}
                 {!selectedJobId && (
                     <div className="p-4 space-y-4 pt-6 h-full overflow-y-auto no-scrollbar">
-                        <p className="text-sm text-slate-500 font-medium px-2">TODAY'S SCHEDULE</p>
-                        {myJobs.length === 0 ? (
+                        <div className="flex items-center justify-between px-2 mb-1">
+                            <p className="text-sm text-slate-500 font-medium">{showHistory ? 'COMPLETED JOBS' : "TODAY'S SCHEDULE"}</p>
+                            <button
+                                onClick={() => setShowHistory(s => !s)}
+                                className={`text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${showHistory ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'}`}
+                            >
+                                {showHistory ? '← Active' : 'History'}
+                            </button>
+                        </div>
+
+                        {/* Active jobs */}
+                        {!showHistory && myJobs.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-48 text-slate-400">
                                 <CheckCircle2 size={48} className="mb-2"/>
                                 <p>All clear for now!</p>
                             </div>
-                        ) : (
+                        ) : !showHistory ? (
                             myJobs.map(item => {
                                 const isActivity = item.type === 'activity';
                                 const job = item.data as any; // Unified access
@@ -346,6 +365,35 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     </div>
                                 );
                             })
+                        ) : null}
+
+                        {/* History list */}
+                        {showHistory && (
+                            completedJobs.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-48 text-slate-400">
+                                    <CheckCircle2 size={48} className="mb-2"/>
+                                    <p>No completed jobs yet</p>
+                                </div>
+                            ) : (
+                                completedJobs.map(ticket => (
+                                    <div key={ticket.id}
+                                        onClick={() => setSelectedJobId(ticket.id)}
+                                        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3 cursor-pointer active:scale-[0.99] transition-transform"
+                                    >
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <div className="text-[10px] font-bold text-slate-400 mb-0.5">{ticket.id}</div>
+                                                <div className="font-bold text-slate-800">{ticket.customerName}</div>
+                                            </div>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${ticket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                                {ticket.status.replace('_',' ')}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-slate-500 mb-1">{ticket.category}</div>
+                                        <div className="text-xs text-slate-400">{new Date(ticket.updatedAt||ticket.updated_at).toLocaleDateString()} {new Date(ticket.updatedAt||ticket.updated_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                                    </div>
+                                ))
+                            )
                         )}
                     </div>
                 )}
