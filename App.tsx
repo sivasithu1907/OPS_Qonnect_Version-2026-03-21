@@ -676,13 +676,14 @@ const loadUsers = async () => {
   }, []);
   
 useEffect(() => {
+    if (!currentUser) return; // wait until logged in before fetching data
     loadUsers();
     loadCustomers();
     loadTickets();
     loadActivities();
-    loadTeams(); // <-- NEW
-    loadSites(); // <-- NEW
-  }, []);
+    loadTeams();
+    loadSites();
+  }, [currentUser?.id]); // re-run when user logs in
 
 useEffect(() => {
     if (activeView !== 'lead_portal') return;
@@ -705,20 +706,21 @@ useEffect(() => {
     prepareLeadPortal();
 }, [activeView]);
 
-  // Auto-refresh tickets and activities every 10 seconds
+  // Auto-refresh every 8s — paused when user is in a portal (to avoid interrupting edits)
   useEffect(() => {
     let isRefreshing = false;
     const interval = setInterval(async () => {
       if (isRefreshing) return;
+      if (activeView === 'lead_portal' || activeView === 'tech_portal') return;
       isRefreshing = true;
       try {
         await Promise.all([loadTickets(), loadActivities()]);
       } finally {
         isRefreshing = false;
       }
-    }, 5000); // 5s for near-real-time status updates
+    }, 8000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeView]);
   
   // --- Navigation Logic ---
   const filteredNavItems = useMemo(() => {
