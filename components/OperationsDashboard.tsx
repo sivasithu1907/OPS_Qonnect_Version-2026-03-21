@@ -194,9 +194,12 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   // --- Data Derivation ---
 
   const operationsStaff = useMemo(() => {
-      // Filter for Team Leads AND Field Engineers
-      return technicians.filter(t => 
-          (t.level === 'TEAM_LEAD' || t.level === 'FIELD_ENGINEER') && 
+      // level comes from systemRole since the API doesn't return level directly
+      const isOpsRole = (t: any) =>
+          t.systemRole === 'TEAM_LEAD' || t.systemRole === 'FIELD_ENGINEER' ||
+          t.level === 'TEAM_LEAD'      || t.level === 'FIELD_ENGINEER';
+      return technicians.filter(t =>
+          isOpsRole(t) &&
           t.isActive !== false &&
           t.status !== 'LEAVE'
       ).sort((a, b) => {
@@ -217,7 +220,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                   type: 'ticket' as const,
                   refLine: t.id,
                   clientLine: t.customerName,
-                  descLine: t.messages[0]?.content || t.category,
+                  descLine: t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category,
                   time: new Date(t.updatedAt),
                   status: t.status
               })),
@@ -237,10 +240,20 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   }, [tickets, activities, sites]);
 
   const metrics = useMemo(() => {
-    const activeActs = activities.filter(a => normalizeStatus(a.status) === 'IN_PROGRESS').length;
+    const todayDate = new Date().toDateString();
+    const activeActs = activities.filter(a =>
+        ['IN_PROGRESS', 'PLANNED'].includes(normalizeStatus(a.status)) &&
+        new Date(a.plannedDate || a.createdAt).toDateString() === todayDate
+    ).length;
     const activeTickets = tickets.filter(t => ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status))).length;
     const activeJobs = activeActs + activeTickets;
-    const crewsOnSite = operationsStaff.filter(t => t.status === 'BUSY').length;
+    // crewsOnSite = techs who are actively on a job right now
+    const activeTechIds = new Set(
+        tickets
+            .filter(t => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status)) && t.assignedTechId)
+            .map(t => t.assignedTechId!)
+    );
+    const crewsOnSite = operationsStaff.filter(t => activeTechIds.has(t.id)).length;
     const plannedToday = activities.filter(a => new Date(a.plannedDate).toDateString() === new Date().toDateString()).length;
     const completedToday = activities.filter(a => a.status === 'DONE' && new Date(a.updatedAt).toDateString() === new Date().toDateString()).length;
     const alertsCount = activities.filter(a => (a.escalationLevel || 0) > 0 && a.status !== 'DONE' && a.status !== 'CANCELLED').length;
@@ -564,7 +577,12 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         {operationsStaff.map(tech => {
                             // Unified timeline items (both Activities and Tickets)
                             // 1. Normalize Activities
-                            const techActivities = activities.filter(a => a.leadTechId === tech.id).map(a => ({
+                            const techActivities = activities.filter(a => {
+                                if (a.leadTechId !== tech.id) return false;
+                                // Only show today's activities in the schedule
+                                const d = new Date(a.plannedDate || a.createdAt);
+                                return d.toDateString() === new Date().toDateString();
+                            }).map(a => ({
                                 id: a.id,
                                 reference: a.reference,
                                 type: 'activity',
@@ -578,14 +596,27 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
 
                             // 2. Normalize Tickets (only if assigned and IN_PROGRESS/OPEN)
                             const techTickets = tickets
-                                .filter(t => t.assignedTechId === tech.id && ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status)))
+                                .filter(t => {
+                                if (t.assignedTechId !== tech.id) return false;
+                                if (!['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status))) return false;
+                                // If appointment is set, only show if it's today; otherwise always show active tickets
+                                if (t.appointmentTime) {
+                                    return new Date(t.appointmentTime).toDateString() === new Date().toDateString();
+                                }
+                                return true; // no appointment = show always if active
+                            })
                                 .map(t => ({
                                     id: t.id,
                                     reference: t.id,
                                     type: 'ticket',
-                                    status: 'IN_PROGRESS',
+                                    status: normalizeStatus(t.status),
                                     priority: t.priority,
-                                    plannedDate: t.appointmentTime || t.createdAt || new Date().toISOString(),
+                                    plannedDate: t.appointmentTime || (() => {
+                                        // No appointment set — place at current time so it's visible on timeline
+                                        const d = new Date();
+                                        d.setMinutes(0, 0, 0);
+                                        return d.toISOString();
+                                    })(),
                                     durationHours: 2, // Default duration for tickets if untracked
                                     description: t.customerName + ' - ' + t.category,
                                     escalationLevel: 0
@@ -603,10 +634,13 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             <div 
                                                 key={item.id}
                                                 className={`absolute top-3 bottom-3 rounded border shadow-sm p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-md hover:ring-2 ring-opacity-50 transition-all z-20 overflow-hidden ${
-                                                    isTicket ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
-                                                    item.status === 'DONE' ? 'bg-slate-100 border-slate-200 text-slate-500 grayscale' :
+                                                    isTicket && item.status === 'IN_PROGRESS'  ? 'bg-amber-50 border-amber-300 text-amber-900 ring-amber-400' :
+                                                    isTicket && item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-300 text-cyan-900 ring-cyan-400' :
+                                                    isTicket && item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-300 text-indigo-900 ring-indigo-400' :
+                                                    isTicket                                  ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
+                                                    item.status === 'DONE'      ? 'bg-slate-100 border-slate-200 text-slate-500 grayscale' :
                                                     item.status === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-900 ring-blue-400' :
-                                                    item.escalationLevel > 0 ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
+                                                    item.escalationLevel > 0   ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
                                                     'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                                                 }`}
                                                 style={style}
