@@ -625,7 +625,16 @@ const loadUsers = async () => {
   try {
     const res = await fetch("/api/users", { headers: getAuthHeaders() });
     const data = await res.json();
-    if (Array.isArray(data)) setTechnicians(data);
+    if (Array.isArray(data)) {
+        // Derive 'level' from systemRole since it's not stored in DB
+        const withLevel = data.map((u: any) => ({
+            ...u,
+            level: u.systemRole === 'TEAM_LEAD' ? 'TEAM_LEAD' :
+                   u.systemRole === 'FIELD_ENGINEER' ? 'FIELD_ENGINEER' :
+                   u.systemRole === 'ADMIN' ? 'TEAM_LEAD' : 'TECHNICAL_ASSOCIATE'
+        }));
+        setTechnicians(withLevel);
+    }
   } catch (e) {
     console.error("Failed to load users", e);
   }
