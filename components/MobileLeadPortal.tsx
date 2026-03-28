@@ -125,6 +125,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Date Picker State
   const [nextDate, setNextDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showJobHistory, setShowJobHistory] = useState(false);
   // Change password state
   const [showChangePwd, setShowChangePwd] = useState(false);
   const [cpForm, setCpForm] = useState({ current: '', next: '', confirm: '' });
@@ -179,6 +180,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       }
       return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [tickets, searchTerm]);
+
+  const completedJobs = useMemo(() => {
+      if (!currentUserId) return [];
+      return tickets
+          .filter(t =>
+              t.assignedTechId === currentUserId &&
+              (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED)
+          )
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+          .slice(0, 50); // last 50 completed
+  }, [tickets, currentUserId]);
 
   const myJobs = useMemo(() => {
       if (!currentUserId) return [];
@@ -803,18 +815,44 @@ const TeamView = () => {
               
               {activeTab === 'my_jobs' && (
                   <div className="p-4 space-y-4">
-                      <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 px-1">
-                          My Assigned Jobs ({myJobs.length})
-                      </h3>
+                      <div className="flex items-center justify-between mb-2 px-1">
+                          <h3 className="text-xs font-bold text-slate-500 uppercase">
+                              {showJobHistory ? 'Completed Jobs' : `My Active Jobs (${myJobs.length})`}
+                          </h3>
+                          <button
+                              onClick={() => setShowJobHistory(s => !s)}
+                              className={`text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${showJobHistory ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'}`}
+                          >
+                              {showJobHistory ? '← Active' : 'History'}
+                          </button>
+                      </div>
 
-                      {myJobs.length === 0 && (
-                          <p className="text-center text-slate-400 text-sm py-8">No jobs assigned to you</p>
+                      {/* Active jobs */}
+                      {!showJobHistory && myJobs.length === 0 && (
+                          <p className="text-center text-slate-400 text-sm py-8">No active jobs assigned to you</p>
                       )}
-
-                      {myJobs.map(item => {
+                      {!showJobHistory && myJobs.map(item => {
                           if (item.kind === 'ticket') return <JobCard key={item.data.id} ticket={item.data} />;
                           return <ActivityJobCard key={item.data.id} activity={item.data} />;
                       })}
+
+                      {/* History — completed & cancelled jobs */}
+                      {showJobHistory && completedJobs.length === 0 && (
+                          <p className="text-center text-slate-400 text-sm py-8">No completed jobs yet</p>
+                      )}
+                      {showJobHistory && completedJobs.map(ticket => (
+                          <div key={ticket.id} onClick={() => setViewTicket(ticket)}
+                              className="bg-white rounded-xl border border-slate-200 p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
+                              <div className="flex justify-between items-start mb-1">
+                                  <span className="font-bold text-slate-800">{ticket.customerName}</span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${ticket.status === TicketStatus.RESOLVED ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                      {ticket.status.replace('_',' ')}
+                                  </span>
+                              </div>
+                              <div className="text-xs text-slate-500 mb-1">{ticket.id} · {ticket.category}</div>
+                              <div className="text-xs text-slate-400">{new Date(ticket.updatedAt).toLocaleDateString()} {new Date(ticket.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                          </div>
+                      ))}
                   </div>
               )}
 
@@ -841,10 +879,14 @@ const TeamView = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <div className="relative">
-                            <Bell size={20} className="text-slate-400" />
+                        <button
+                            onClick={() => setActiveTab('live')}
+                            className="relative p-1 rounded-full hover:bg-slate-700 transition-colors"
+                            title={stalledCount > 0 ? `${stalledCount} stalled ticket(s) — click to view` : 'Live feed'}
+                        >
+                            <Bell size={20} className={stalledCount > 0 ? 'text-red-400' : 'text-slate-400'} />
                             {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-slate-900" />}
-                        </div>
+                        </button>
                         <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs shadow-inner border border-slate-800">TL</div>
                     </div>
                 </div>
