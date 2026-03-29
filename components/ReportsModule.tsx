@@ -165,7 +165,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'priority', label: 'Priority', getValue: (t: Ticket) => t.priority },
       { id: 'status', label: 'Status', getValue: (t: Ticket) => t.status },
       { id: 'tech', label: 'Assigned Engineer', getValue: (t: Ticket) => technicians.find(tech => tech.id === t.assignedTechId)?.name || 'Unassigned' },
-      { id: 'desc', label: 'Description', getValue: (t: Ticket) => t.(t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category || '') },
+      { id: 'desc', label: 'Description', getValue: (t: Ticket) => (t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category || '') },
       { id: 'location', label: 'Location URL', getValue: (t: Ticket) => t.locationUrl || '' },
       { id: 'house', label: 'House Number', getValue: (t: Ticket) => t.houseNumber || '' },
       { id: 'odoo', label: 'Odoo Ref', getValue: (t: Ticket) => t.odooLink || '' },
