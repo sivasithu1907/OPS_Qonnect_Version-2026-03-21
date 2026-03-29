@@ -220,6 +220,7 @@ const handleLogin = async (email: string, pass: string) => {
           // Store both token and user object securely
           localStorage.setItem('qonnect_token', data.token);
           localStorage.setItem('qonnect_user', JSON.stringify({
+              id: data.user.id,
               email: data.user.email,
               name: data.user.name,
               role: data.user.role,
@@ -227,6 +228,7 @@ const handleLogin = async (email: string, pass: string) => {
           }));
           
           setCurrentUser({
+              id: data.user.id,
               email: data.user.email,
               name: data.user.name,
               role: data.user.role,
@@ -624,6 +626,7 @@ const loadCustomers = async () => {
 const loadUsers = async () => {
   try {
     const res = await fetch("/api/users", { headers: getAuthHeaders() });
+    if (res.status === 401) { handleLogout(); return; }
     const data = await res.json();
     if (Array.isArray(data)) {
         // Derive 'level' from systemRole since it's not stored in DB
@@ -683,7 +686,7 @@ useEffect(() => {
     loadActivities();
     loadTeams();
     loadSites();
-  }, [currentUser?.id]); // re-run when user logs in
+  }, [currentUser?.id || currentUser?.techId]); // re-run when user logs in
 
 useEffect(() => {
     if (activeView !== 'lead_portal') return;
