@@ -359,6 +359,9 @@ await pool.query(`
         troubleshooting_state JSONB DEFAULT '{}',
         last_interaction TIMESTAMPTZ DEFAULT now()
       );
+      -- Add new structured fields (safe to run on existing DB)
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS location_url TEXT;
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS issue_category TEXT;
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS location_url TEXT;
     `);
 
@@ -1831,563 +1834,397 @@ async function handleIncomingMessage(phone, text) {
 	}
 
 	// 3. AI ANALYSIS (State-Machine Prompt)
-	const systemPrompt = `You are the Qonnect WhatsApp Support Assistant for a home automation, networking, CCTV, intercom, access control, and ELV company in Qatar.
 
-	Your style:
-	- Be polite, professional, and concise.
-	- Reply like a real WhatsApp support coordinator.
-	- Keep replies short, natural, and WhatsApp-friendly.
-	- Do not write email-style replies.
-	- Do not say "Dear Valued Client".
-	- Do not repeat the same question if the information is already available.
-	- Ask only one clear question or give one clear instruction at a time.
-	- Avoid long explanations unless the customer asks for more detail.
+	// ══════════════════════════════════════════════════════════════
+	// 3. STRUCTURED FIELD-COMPLETION ENGINE
+	// Backend owns all flow decisions. AI is only used for:
+	//   - entity extraction (name, location, category, fields)
+	//   - natural language reply generation for the chosen question
+	// ══════════════════════════════════════════════════════════════
 
-	Language:
-	- Detect the customer's language.
-	- Reply in the same language where possible.
-	- If unclear, reply in English.
+	// ── 3a. Extract fields from this message using AI ──
+	const extractionPrompt = `You are an entity extractor for a home automation/CCTV/networking support bot in Qatar.
 
-	Flow rules:
-	1) If customer name is missing -> ask for name (ASK_NAME)
-	2) If issue is missing -> ask for issue (ASK_ISSUE)
-	3) Move to TROUBLESHOOT — do first-level troubleshooting to understand the problem
-	4) ONLY ask for location and villa number (ASK_LOCATION) when you are ready to create a ticket
-	5) NEVER ask for location during the early conversation — only right before ticket creation
-	6) If customer already provided location at any point, never ask again
-	7) Do not create or confirm a ticket automatically
+Extract ANY of the following fields from the customer message below.
+Return STRICT JSON ONLY — no markdown, no explanation.
 
-	Issue categories:
-	- wifi_network
-	- internet_down
-	- slow_internet
-	- cctv
-	- intercom
-	- access_control
-	- home_automation
-	- audio_speaker
-	- tv_streaming
-	- power_issue
-	- general_elv
-	- unknown
+Fields to extract (return null for any you cannot determine):
+{
+  "name": "customer's first name or full name if mentioned",
+  "issue_category": "one of: cctv | wifi_network | internet_down | slow_internet | intercom | access_control | home_automation | audio_speaker | tv_streaming | power_issue | general_elv | unknown — or null",
+  "technician_requested": "true if customer asks for technician/site visit/someone to come — else false",
+  "villa_number": "villa number, building number, flat number, unit number — or null",
+  "area": "area name, street, zone, city district — or null",
+  "location_pin_received": "true if this message IS a location pin share — else false",
+  "affected_scope": "one of: single_camera | multiple_cameras | all_cameras | single_device | multiple_devices | all_devices | single_area | all_areas | unknown — or null",
+  "affected_camera_location": "which camera/location is affected e.g. front entrance, back garden, parking — or null",
+  "other_cameras_working": "true if customer says other cameras are working — false if all down — null if unknown",
+  "restart_done": "true if customer already tried restarting — false if not — null if unknown",
+  "issue_resolved": "true if customer says issue is now fixed — else false",
+  "photo_shared": "true if customer is sharing a photo of the issue — else false",
+  "photo_not_possible": "true if customer says they cannot share a photo — else false",
+  "issue_description": "brief description of the problem in the customer's words — or null"
+}
 
-	Troubleshooting rules:
-	- Ask one short troubleshooting question or give one short instruction at a time
-	- Do not ask multiple questions in one message unless absolutely necessary
-	- Keep replies short and practical for WhatsApp
-	- Start with the most useful first-level check based on the issue category
-	- If the customer confirms the issue is fixed, mark resolved_in_chat
-	- If more details, photo, or video are needed, mark need_more_info
-	- If remote technical review is needed after basic checks, mark remote_support
-	- If a physical fault or site attendance is likely needed, mark site_visit
-	- If restart_done is already true in the session troubleshooting_state, do not ask the customer to restart again
-	- If affected_scope and area_scope are already known in the session troubleshooting_state, do not ask those again
-	- If location_pending is true and issue details are already available, do not ask for location again during troubleshooting
-	- If the customer already confirms that one camera is affected while other cameras are working, do not repeat NVR/DVR power questions
+Rules:
+- "one", "only one", "just one" for cameras => affected_scope = single_camera
+- "front one", "main entrance", "entrance" => affected_camera_location
+- "yes" after asking if other cameras work => other_cameras_working = true
+- "no" after asking if other cameras work => other_cameras_working = false
+- Location/map pin message => location_pin_received = true
+- "not possible", "cannot", "can't" for photo => photo_not_possible = true
+- Any form of "send technician", "need someone", "arrange visit", "come and check", "fix it on site" => technician_requested = true
+- Do not invent values. If not mentioned, return null.
 
-	Category guidance:
+CUSTOMER MESSAGE:
+"${text}"
 
-	For wifi_network or internet_down:
-	- First ask whether all devices are affected or only one device
-	- Then ask whether router / modem / access points have power
-	- Then ask customer to restart router / modem once and wait 2 minutes
-	- Then ask whether the connection is back
-	- If still not working after basic checks, prefer remote_support
-	- If power/device issue is suspected on-site, prefer site_visit
-	- If the customer says internet is slow overall but one room has no internet, do not get confused by the mixed wording
-	- Continue with practical troubleshooting and classify based on the best fit using affected_scope and area_scope
+PREVIOUS BOT QUESTION (for context):
+"${session?.last_bot_question || 'none'}"
+`;
 
-	For slow_internet:
-	- Ask whether the issue is on all devices or only one
-	- Ask whether the issue is in all areas or only one area
-	- Ask for one router restart if not already done
-	- If issue continues, prefer remote_support
-	- If the customer reports mixed symptoms such as slow internet generally but no internet in one room, treat it as a connectivity issue with partial area impact
-	- In that case, prefer identifying whether the issue is across all devices, one device, or one area, without restarting intake
-
-	For cctv:
-	- Ask whether all cameras are affected or only some cameras
-	- If only one camera or some cameras are affected and other cameras are working, do not keep repeating recorder/NVR power checks
-	- If other cameras are working, recorder power can usually be treated as already confirmed
-	- In partial camera issues, prefer identifying which camera/location is affected
-	- If only some cameras are down, site_visit is more likely
-	- Ask for recorder/NVR restart only when it is useful and not already ruled out by context
-	- If all cameras are down and basic checks fail, remote_support or site_visit depending on context
-
-	For intercom:
-	- Ask whether the indoor monitor/screen turns on
-	- Ask whether issue is calling, video, audio, or door opening
-	- If power/display issue is suspected, prefer site_visit
-	- If app/config behavior is suspected, prefer remote_support
-
-	For access_control:
-	- Ask whether issue affects all users or only one user/card/fingerprint
-	- Ask whether the device/controller has power
-	- If single-user issue, remote_support may be possible
-	- If door hardware or full system issue, prefer site_visit
-
-	For home_automation:
-	- Ask whether one device is affected or multiple devices
-	- Ask whether internet/router is working normally
-	- Ask which device type is affected (light, curtain, AC, etc.)
-	- If app/config/system issue is suspected, prefer remote_support
-	- If device hardware issue is suspected, prefer site_visit
-
-	For unknown issues:
-	- Ask which system is affected: Wi-Fi, CCTV, intercom, access control, or automation
-	- Or ask customer to send a short photo/video
-
-	Decision rules:
-	- Do not create ticket during ASK_NAME / ASK_LOCATION / ASK_ISSUE
-	- Do not create ticket just because issue is collected
-	- CRITICAL RULE 1: If the customer explicitly asks for a technician visit at ANY point in the conversation (e.g. "can I have a technician", "send technician", "I want technician", "please send someone", "I need someone to visit", "visit me", "can someone come"), you MUST set action = site_visit immediately. Do NOT ask more troubleshooting questions after this.
-	- CRITICAL RULE 2: If action = site_visit AND location and villa number are already provided in the session, set next_step = TROUBLESHOOT and action = site_visit. Do NOT set next_step = ASK_LOCATION.
-	- CRITICAL RULE 3: If the customer has already provided their location (map or address) AND villa/building number, NEVER ask for location again.
-	- CRITICAL RULE 4: If the customer has already described which specific camera/device/area is affected, do NOT ask the same question again.
-	- Only ask troubleshooting questions if the customer has NOT explicitly requested a technician. Once technician is requested, stop troubleshooting and proceed to site_visit.
-	- Only recommend escalation after at least one troubleshooting step, UNLESS the customer explicitly requests a technician — in that case go to site_visit immediately.
-	- If restart_done is true and the issue still affects all devices or all areas, prefer escalation instead of repeating restart steps.
-	- If location_pending is true, do not ask for location again during troubleshooting unless site_visit handling now requires visit details.
-
-	Location handling:
-	- If the customer says they will share the location later or shortly, do not keep repeating the same location request immediately
-	- Continue troubleshooting if possible
-	- Keep location as pending
-	- Before site visit ticket creation, location and villa number must be confirmed
-	- If the customer already mentioned they will share location later, do not ask again immediately unless the workflow now requires it for escalation
-	- If the customer says they will share location later, shortly, or after some time, set location_pending = true
-	- If location_pending is true, do not ask for location again during troubleshooting unless escalation now requires it
-
-	Strict output:
-	Return STRICT JSON ONLY with these exact keys:
-	reply, name, location, issue, next_step, issue_category, action, affected_scope, area_scope, restart_done, location_pending, last_bot_question
-
-	Allowed next_step values:
-	ASK_NAME, ASK_LOCATION, ASK_ISSUE, TROUBLESHOOT
-
-	Allowed action values:
-	ask_name
-	ask_location
-	ask_issue
-	continue_troubleshooting
-	need_more_info
-	resolved_in_chat
-	remote_support
-	site_visit
-
-	Additional field rules:
-	- affected_scope: one of all_devices, one_device, some_devices, unknown, or null
-	- area_scope: one of all_areas, one_area, some_areas, unknown, or null
-	- restart_done: true, false, or null
-	- location_pending: true, false, or null
-	- last_bot_question: short summary of the question or instruction you are giving now
-	- Reuse the current session troubleshooting_state if the customer already answered something earlier
-	- Do not ask again for affected_scope, area_scope, or restart_done if already clearly known in the session
-	- If the customer asks for technician/site visit after basic troubleshooting failed, prefer site_visit
-
-	If unknown, use null.
-	Do not include markdown.
-	Do not include explanations outside JSON.`;
-
-	const aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-	const aiResult = await aiModel.generateContent({
-	  contents: [
-	    {
-	      role: "user",
-	      parts: [
-	        { text: systemPrompt },
-		{ text: `CURRENT SESSION:\n${JSON.stringify(session, null, 2)}` },
-		{ text: `CURRENT TROUBLESHOOTING STATE:\n${JSON.stringify(session?.troubleshooting_state || {}, null, 2)}` },
-		{ text: `CUSTOMER MESSAGE:\n${text}` },
-		{ text: `CRITICAL RULES:
-1. Last bot question was: "${session?.last_bot_question || 'none'}". Do NOT ask the same question again.
-2. If session.step is TROUBLESHOOT, continue troubleshooting — do not restart intake.
-3. If restart_done is true, do NOT ask customer to restart again.
-4. If affected_scope or area_scope are already known, do NOT ask again.
-5. If customer already gave their name (session.customer_name exists), do NOT ask for name.
-6. If customer already gave location or house_number, do NOT ask again.
-7. Never repeat a question already answered in this session.
-8. Ask for location ONLY when about to create a ticket — not during troubleshooting.` },
-	      ],
-	    },
-	  ],
-	});
-
-	const raw = aiResult.response.text();
-
-	// Remove ``` fences safely (no backticks in source)
-	const FENCE = String.fromCharCode(96).repeat(3);
-
-	const aiText = raw
-	  .replace(FENCE + "json", "")
-	  .replaceAll(FENCE, "")
-	  .trim();
-
-	let aiData;
+	let extracted = {};
 	try {
-	  aiData = JSON.parse(aiText);
+		const extractModel = genAI.getGenerativeModel({
+			model: "gemini-2.5-flash",
+			generationConfig: { responseMimeType: "application/json" }
+		});
+		const extractResult = await extractModel.generateContent(extractionPrompt);
+		const raw = extractResult.response.text().replace(/```json|```/g, "").trim();
+		extracted = JSON.parse(raw);
 	} catch (e) {
-
-	  // fallback: try to extract JSON object from the text
-	  const start = aiText.indexOf("{");
-	  const end = aiText.lastIndexOf("}");
-	  if (start >= 0 && end > start) {
-	    aiData = JSON.parse(aiText.slice(start, end + 1));
-	  } else {
-	    throw new Error("AI returned non-JSON response");
-	  }
+		console.error("Extraction failed:", e.message);
+		extracted = {};
 	}
 
- 	const normalizedIncoming = (text || "").trim().toLowerCase();
+	// ── 3b. Merge extracted fields into session state ──
+	// Build the new troubleshooting_state by merging old + new
+	const prev = session?.troubleshooting_state || {};
 
-	// 4. UPDATE SESSION
+	const newState = {
+		// Preserve everything from prev, override only with non-null new values
+		affected_scope:            extracted.affected_scope           ?? prev.affected_scope           ?? null,
+		affected_camera_location:  extracted.affected_camera_location ?? prev.affected_camera_location ?? null,
+		other_cameras_working:     extracted.other_cameras_working    ?? prev.other_cameras_working    ?? null,
+		restart_done:              extracted.restart_done             ?? prev.restart_done             ?? null,
+		area:                      extracted.area                     ?? prev.area                     ?? null,
+		location_pin_received:     extracted.location_pin_received === true ? true : (prev.location_pin_received ?? false),
+		technician_requested:      extracted.technician_requested === true  ? true : (prev.technician_requested  ?? false),
+		photo_not_possible:        extracted.photo_not_possible === true     ? true : (prev.photo_not_possible    ?? false),
+		photo_shared:              extracted.photo_shared === true           ? true : (prev.photo_shared          ?? false),
+		issue_resolved:            extracted.issue_resolved === true         ? true : (prev.issue_resolved        ?? false),
+		last_question_key:         prev.last_question_key ?? null,
+	};
+
+	// Merge top-level session fields
+	const newName         = (extracted.name           && extracted.name.trim())          ? extracted.name.trim()           : session?.customer_name  || null;
+	const newCategory     = (extracted.issue_category && extracted.issue_category !== 'unknown') ? extracted.issue_category : session?.issue_category || null;
+	const newIssueDesc    = (extracted.issue_description && extracted.issue_description.trim()) ? extracted.issue_description.trim() : session?.issue_details  || null;
+	const newVilla        = (extracted.villa_number   && extracted.villa_number.trim())  ? extracted.villa_number.trim()   : session?.house_number   || null;
+	const newLocationUrl  = session?.location_url || null; // already set via location handler
+	const locationKnown   = !!(newLocationUrl || newState.location_pin_received || newState.area);
+	const villaKnown      = !!newVilla;
+
+	// ── 3c. Determine what action to take ──
+
+	// IMMEDIATE: customer resolved issue
+	if (newState.issue_resolved && !session?.ticket_id) {
+		await pool.query(
+			`UPDATE sessions SET step='RESOLVED', customer_name=COALESCE($1,customer_name),
+			 issue_category=COALESCE($2,issue_category), issue_details=COALESCE($3,issue_details),
+			 house_number=COALESCE($4,house_number),
+			 troubleshooting_state=COALESCE(troubleshooting_state,'{}'::jsonb)||$5::jsonb,
+			 last_interaction=NOW() WHERE phone=$6`,
+			[newName, newCategory, newIssueDesc, newVilla, JSON.stringify(newState), phone]
+		);
+		const finalReply = `Glad to hear that, ${newName || ""}! Issue resolved. If it happens again, feel free to message us here.`.trim();
+		await sendWhatsAppText(phone, finalReply);
+
+
+	// ── 3d. STRUCTURED FIELD-COMPLETION FLOW ──
+	// Backend decides the EXACT next question based on what's missing.
+	// AI only generates the natural language reply for a pre-decided question key.
+
+	} else {
+
+	// STEP 1 — We need a name first
+	const needsName     = !newName;
+	// STEP 2 — We need to know the issue category
+	const needsCategory = !newCategory && !!newName;
+	// STEP 3 — Technician requested OR issue category known → decide flow
+	const isTechnicianFlow = newState.technician_requested;
+
+	// ── What is the next missing TICKET FIELD? ──
+	// For site visit ticket we need: name, category, affected_scope (CCTV), affected_camera_location (CCTV), villa, location
+	const missingFields = [];
+	if (!newName)                                                                   missingFields.push("name");
+	if (!newCategory)                                                               missingFields.push("issue_category");
+	if (!newIssueDesc && !isTechnicianFlow)                                         missingFields.push("issue_description");
+	if (newCategory === 'cctv' && !newState.affected_scope)                         missingFields.push("cctv_scope");
+	if (newCategory === 'cctv' && newState.affected_scope && newState.affected_scope !== 'all_cameras' && !newState.affected_camera_location) missingFields.push("camera_location");
+	if (!villaKnown)                                                                missingFields.push("villa_number");
+	if (!locationKnown)                                                             missingFields.push("location");
+
+	const nextMissingField = missingFields[0] || null;
+	const prevQuestionKey  = newState.last_question_key;
+
+	// ── TICKET READINESS CHECK ──
+	// For CCTV site visit: name + category + scope + camera_location + villa + location
+	// For others: name + category + issue + villa + location
+	const cctv = newCategory === 'cctv';
+	const ticketReady = isTechnicianFlow && newName && newCategory && villaKnown && locationKnown &&
+		(!cctv || (newState.affected_scope && newState.affected_camera_location));
+
+	// ── TROUBLESHOOTING READINESS ──
+	// Only do troubleshooting if technician NOT yet requested and enough info exists
+	const readyToTroubleshoot = newName && newCategory && newIssueDesc && !isTechnicianFlow;
+
+	// Determine what to ask / do
+	let questionKey  = null;   // the structured field we are asking for
+	let shouldCreateTicket   = false;
+	let shouldDoTroubleshooting = false;
+
+	if (ticketReady) {
+		shouldCreateTicket = true;
+	} else if (isTechnicianFlow) {
+		// In technician flow — ask only for missing ticket fields
+		questionKey = nextMissingField;
+	} else if (needsName) {
+		questionKey = "name";
+	} else if (needsCategory) {
+		questionKey = "issue_category";
+	} else if (!newIssueDesc) {
+		questionKey = "issue_description";
+	} else if (readyToTroubleshoot) {
+		shouldDoTroubleshooting = true;
+	} else {
+		questionKey = nextMissingField;
+	}
+
+	// ── DUPLICATE QUESTION GUARD ──
+	// Never ask the same question key twice in a row
+	if (questionKey && questionKey === prevQuestionKey) {
+		// Customer didn't answer — be patient, try rephrasing
+		// (still ask, but mark as repeat so AI knows to rephrase)
+		newState._repeat_question = true;
+	} else {
+		newState._repeat_question = false;
+	}
+	newState.last_question_key = shouldCreateTicket ? null : (questionKey || (shouldDoTroubleshooting ? "troubleshoot" : null));
+
+	// ── SAVE MERGED SESSION STATE ──
 	await pool.query(
-	  `UPDATE sessions SET
-	      customer_name = COALESCE($1, customer_name),
-	      location_url = COALESCE(CASE WHEN $2 ~ '^https?://' THEN $2 ELSE NULL END, location_url),
-	      house_number = COALESCE(CASE WHEN $2 !~ '^https?://' THEN $2 ELSE NULL END, house_number),
-	      issue_details = COALESCE($3, issue_details),
-	      step = $4,
-	      issue_category = COALESCE($5, issue_category),
-	      last_bot_question = $6,
-	      last_action = $7,
-	      troubleshooting_state = COALESCE(troubleshooting_state, '{}'::jsonb) || $8::jsonb,
-	      last_interaction = NOW()
-	   WHERE phone = $9`,
-	  [
-	    aiData?.name || null,
-	    aiData?.location || null,
-	    aiData?.issue || null,
-	    aiData?.next_step || session.step || "ASK_NAME",
-	    aiData?.issue_category || null,
-	    aiData?.last_bot_question || null,
-	    aiData?.action || null,
-		JSON.stringify({
-		  affected_scope: aiData?.affected_scope ?? session?.troubleshooting_state?.affected_scope ?? null,
-		  area_scope: aiData?.area_scope ?? session?.troubleshooting_state?.area_scope ?? null,
-		  restart_done: aiData?.restart_done ?? session?.troubleshooting_state?.restart_done ?? null,
-		  location_pending:
-		   aiData?.location
-		    ? false
-		    : (aiData?.location_pending ?? session?.troubleshooting_state?.location_pending ?? null),
-		  location_requested_once:
-		    session?.troubleshooting_state?.location_requested_once === true ||
-		    aiData?.next_step === "ASK_LOCATION" ||
-		    (aiData?.last_bot_question || "").toLowerCase().includes("location"),
-		  partial_cctv_issue:
-		    session?.troubleshooting_state?.partial_cctv_issue === true ||
-		    (
-		      (aiData?.issue_category === "cctv" || session?.issue_category === "cctv") &&
-      			(
-        		normalizedIncoming.includes("one camera") ||
-        		normalizedIncoming.includes("only one camera") ||
-        		normalizedIncoming.includes("other cameras are fine") ||
-        		normalizedIncoming.includes("rest are fine") ||
-		        normalizedIncoming.includes("others are fine") ||
-		        normalizedIncoming.includes("only one is not working")
-		      )
-		    )
-		}),
-
-	    phone,
-	  ]
+		`UPDATE sessions SET
+		 customer_name      = COALESCE($1, customer_name),
+		 house_number       = COALESCE($2, house_number),
+		 issue_details      = COALESCE($3, issue_details),
+		 issue_category     = COALESCE($4, issue_category),
+		 troubleshooting_state = COALESCE(troubleshooting_state,'{}'::jsonb) || $5::jsonb,
+		 last_interaction   = NOW()
+		 WHERE phone = $6`,
+		[newName, newVilla, newIssueDesc, newCategory, JSON.stringify(newState), phone]
 	);
 
-	// 5. ACTION HANDLING
-	let finalReply = aiData?.reply || "Thank you. Could you please share your name and location with villa number?";
 
-	const customerName = aiData?.name || session?.customer_name || "Valued Client";
-	const issueText = aiData?.issue || session?.issue_details || text;
-	const rawCategory = aiData?.issue_category || session?.issue_category || "unknown";
+	// ── 3e. GENERATE REPLY ──
+	// AI generates natural language for the pre-decided question.
+	// If creating ticket, AI generates confirmation reply.
+	let finalReply = "";
+	const customerName = newName || "there";
 
-	// Parse aiData.location — split URL from house number if combined
-	const rawLocation = aiData?.location || "";
-	const urlMatch = rawLocation.match(/https?:\/\/[^\s]+/i);
-	const extractedUrl = urlMatch ? urlMatch[0] : null;
-	const extractedHouse = rawLocation.replace(/https?:\/\/[^\s]+/gi, '').trim() || null;
-	// Use session values as fallback
-	const resolvedLocationUrl = session?.location_url || extractedUrl || null;
-	const resolvedHouseNumber = session?.house_number || extractedHouse || null;
+	if (shouldCreateTicket) {
+		// Generate ticket and confirmation
+		const ticketId = makeTicketId();
+		const priority = "HIGH";
 
-	const categoryMap = {
-	    "cctv": "CCTV",
-	    "wifi_network": "Wi-Fi & Networking",
-	    "internet_down": "Wi-Fi & Networking",
-	    "slow_internet": "Wi-Fi & Networking",
-	    "intercom": "Intercom",
-	    "access_control": "Intercom",
-	    "home_automation": "Light Automation",
-	    "audio_speaker": "Smart Speaker",
-	    "tv_streaming": "Smart Speaker",
-	    "unknown": "Wi-Fi & Networking"
-	};
-	const issueCategory = categoryMap[rawCategory] || rawCategory;
+		// Build tech summary
+		const summaryParts = [
+			newCategory ? newCategory.toUpperCase() : "Support",
+			newState.affected_camera_location ? `– ${newState.affected_camera_location}` : "",
+			newState.affected_scope ? `(${newState.affected_scope.replace(/_/g,' ')})` : "",
+			"– Site visit required.",
+			`Villa: ${newVilla || "TBD"}`,
+		].filter(Boolean).join(" ");
 
-	const explicitSiteVisitRequest =
-	  normalizedIncoming.includes("site visit") ||
-	  normalizedIncoming.includes("technician visit") ||
-	  normalizedIncoming.includes("need technician") ||
-	  normalizedIncoming.includes("prefer technician") ||
-	  normalizedIncoming.includes("prefer site visit") ||
-	  normalizedIncoming.includes("remote not possible") ||
-	  normalizedIncoming.includes("not possible, need technician") ||
-	  normalizedIncoming.includes("not possible need technician") ||
-	  normalizedIncoming.includes("send technician") ||
-	  normalizedIncoming.includes("can i have a technician") ||
-	  normalizedIncoming.includes("can you send") ||
-	  normalizedIncoming.includes("please send someone") ||
-	  normalizedIncoming.includes("send someone") ||
-	  normalizedIncoming.includes("i want technician") ||
-	  normalizedIncoming.includes("i need a technician") ||
-	  normalizedIncoming.includes("arrange technician") ||
-	  normalizedIncoming.includes("arrange a technician") ||
-	  normalizedIncoming.includes("visit me") ||
-	  normalizedIncoming.includes("someone to visit") ||
-	  normalizedIncoming.includes("come and check") ||
-	  normalizedIncoming.includes("come check") ||
-	  normalizedIncoming.includes("see and fix") ||
-	  normalizedIncoming.includes("fix the issue") ||
-	  normalizedIncoming.includes("not possible");
+		const customerId = await upsertWhatsAppCustomer(phone, newName || "WhatsApp Customer");
 
-	// Force site_visit whenever customer explicitly requests a technician — at ANY step
-	if (explicitSiteVisitRequest) {
-	  aiData.action = "site_visit";
-	}
+		await pool.query(
+			`INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
+			 VALUES ($1,$2,$3,$4,$5,'NEW',$6,$7,$8,$9,NOW(),NOW())`,
+			[
+				ticketId, customerId, newName || "WhatsApp Customer",
+				newCategory || "SUPPORT", priority,
+				newLocationUrl || null, newVilla || null,
+				summaryParts,
+				JSON.stringify([
+					{ sender: "CLIENT", content: newIssueDesc || "Site visit requested", at: new Date().toISOString() },
+					{ sender: "SYSTEM", content: summaryParts, at: new Date().toISOString() }
+				])
+			]
+		);
 
-	const locationPendingNow =
-	  session?.troubleshooting_state?.location_pending === true;
+		await pool.query(
+			`UPDATE sessions SET ticket_id=$1, step='OPEN_TICKET', last_action='site_visit',
+			 last_bot_question='Ticket created for site visit', last_interaction=NOW() WHERE phone=$2`,
+			[ticketId, phone]
+		);
 
-	const alreadyHasIssue =
-	  !!(session?.issue_details && String(session.issue_details).trim());
+		// Notify team leads
+		await notifyTeamLeads(
+			`*New Ticket: ${ticketId}*\nCustomer: ${newName || "Unknown"}\nCategory: ${newCategory || "Unknown"}\nPriority: HIGH\nAction: Site Visit Required\nLocation: ${newVilla || ""}${newState.area ? ", " + newState.area : ""}\nIssue: ${newIssueDesc || "Site visit requested"}`
+		).catch(e => console.error("Notify error:", e.message));
 
-	if (
-	  session?.step === "TROUBLESHOOT" &&
-	  locationPendingNow &&
-	  alreadyHasIssue &&
-	  aiData?.next_step === "ASK_LOCATION" &&
-	  !aiData?.location
-	) {
-	  aiData.next_step = "TROUBLESHOOT";
-	  if (aiData.action === "ask_location") {
-	    aiData.action = "continue_troubleshooting";
-	  }
-	}
+		// n8n webhook
+		if (process.env.N8N_WEBHOOK_URL) {
+			fetch(`${process.env.N8N_WEBHOOK_URL}/ticket-created`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ ticketId, customerName: newName, phone, issueCategory: newCategory, priority, action: "site_visit", location: newVilla || newState.area || "Not provided", summary: newIssueDesc })
+			}).catch(e => console.error("n8n error:", e.message));
+		}
 
-	const partialCctvIssue =
-	  (aiData?.issue_category === "cctv" || session?.issue_category === "cctv") &&
-	  (
-	    normalizedIncoming.includes("one camera") ||
-	    normalizedIncoming.includes("only one camera") ||
-	    normalizedIncoming.includes("other cameras are fine") ||
-	    normalizedIncoming.includes("rest are fine") ||
-	    normalizedIncoming.includes("others are fine") ||
-	    normalizedIncoming.includes("only one is not working") ||
-	    normalizedIncoming.includes("front camera") ||
-	    normalizedIncoming.includes("main entrance") ||
-	    normalizedIncoming.includes("entrance camera") ||
-	    // Also check session history — if affected_scope was already set to one_device
-	    session?.troubleshooting_state?.affected_scope === "one_device"
-	  );
+		finalReply = `Thank you ${newName}. We have created a site visit ticket for your request. Your Ticket ID is *${ticketId}*. Our team will follow up shortly to schedule your appointment. You will receive the details here once confirmed.`;
 
-	// ── HARD GUARD: If location + villa are confirmed AND site_visit decided → stop asking questions ──
-	const locationConfirmed = !!(resolvedLocationUrl || resolvedHouseNumber);
-	const villaConfirmed    = !!resolvedHouseNumber;
-	const readyForSiteVisit = locationConfirmed && villaConfirmed && aiData?.action === "site_visit";
+	} else if (shouldDoTroubleshooting) {
+		// Let AI do one troubleshooting step — but with strict context
+		const tsPrompt = `You are the Qonnect WhatsApp support assistant. You are doing structured troubleshooting.
 
-	if (readyForSiteVisit && aiData?.action !== "remote_support") {
-	  // Location + villa known + site visit decided → stop ALL further troubleshooting questions
-	  aiData.action = "site_visit";
-	  aiData.next_step = "TROUBLESHOOT"; // don't go back to ASK_LOCATION
-	}
+KNOWN SESSION STATE:
+- Customer name: ${newName}
+- Issue category: ${newCategory}
+- Issue description: ${newIssueDesc}
+- Affected scope: ${newState.affected_scope || "unknown"}
+- Affected camera location: ${newState.affected_camera_location || "not specified"}
+- Other cameras working: ${newState.other_cameras_working ?? "unknown"}
+- Restart done: ${newState.restart_done ?? "unknown"}
+- Last question asked: "${session?.last_bot_question || "none"}"
+- Technician requested: ${newState.technician_requested ? "YES" : "no"}
 
-	if (
-	  session?.step === "TROUBLESHOOT" &&
-	  partialCctvIssue
-	) {
-	  if (aiData?.action === "ask_more_info" || aiData?.action === "continue_troubleshooting") {
-	    aiData.action = "site_visit";
-	  }
+RULES:
+1. Ask ONLY ONE short, simple question
+2. NEVER repeat the last question asked
+3. Do NOT ask for location, villa, or name — those are handled separately
+4. If technician was requested, do NOT troubleshoot — just confirm and say team will follow up
+5. For CCTV single-camera: do NOT ask about NVR power (other cameras are working = NVR is fine)
+6. Do NOT ask for photo if photo_not_possible is true
+7. If you have enough info for a recommendation (restart done, scope known), suggest remote_support or site_visit
+8. Keep reply under 2 sentences, WhatsApp style
+9. End with action: one of continue_troubleshooting | remote_support | site_visit | resolved_in_chat
 
-	  if (
-	    aiData?.last_bot_question &&
-	    aiData.last_bot_question.toLowerCase().includes("nvr")
-	  ) {
-	    aiData.last_bot_question = "Proceeding with site visit for partial CCTV issue";
-	  }
-	}
+Return STRICT JSON: { "reply": "...", "action": "..." }
+Do not include markdown.
 
-	if (aiData?.action === "resolved_in_chat") {
-	  const customerId = await upsertWhatsAppCustomer(phone, customerName);
+Customer just said: "${text}"`;
 
-	  await createSupportActivity({
-	    phone,
-	    customerId,
-	    customerName,
-	    issue: issueText,
-	    action: "resolved_in_chat",
-	    issueCategory
-	  });
+		let tsAction = "continue_troubleshooting";
+		try {
+			const tsModel = genAI.getGenerativeModel({
+				model: "gemini-2.5-flash",
+				generationConfig: { responseMimeType: "application/json" }
+			});
+			const tsResult = await tsModel.generateContent(tsPrompt);
+			const tsRaw = tsResult.response.text().replace(/```json|```/g, "").trim();
+			const tsData = JSON.parse(tsRaw);
+			finalReply = tsData.reply || `Could you tell me a bit more about the issue?`;
+			tsAction   = tsData.action || "continue_troubleshooting";
+		} catch (e) {
+			console.error("Troubleshoot AI error:", e.message);
+			finalReply = `Could you tell me a bit more about the issue?`;
+		}
 
-	  finalReply =
-	    aiData?.reply ||
-	    `Glad to know the issue is resolved. If it happens again, please message us here.`;
+		// If AI recommends escalation, create remote support ticket
+		if (tsAction === "remote_support" || tsAction === "site_visit") {
+			const ticketId = makeTicketId();
+			const customerId = await upsertWhatsAppCustomer(phone, newName || "WhatsApp Customer");
+			const priority = tsAction === "site_visit" ? "HIGH" : "MEDIUM";
 
-	  await pool.query(
-	    `UPDATE sessions
-	     SET step = 'RESOLVED',
-	         last_interaction = NOW()
-	     WHERE phone = $1`,
-	    [phone]
-	  );
+			await pool.query(
+				`INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
+				 VALUES ($1,$2,$3,$4,$5,'NEW',$6,$7,$8,$9,NOW(),NOW())`,
+				[
+					ticketId, customerId, newName || "WhatsApp Customer",
+					newCategory || "SUPPORT", priority,
+					newLocationUrl || null, newVilla || null,
+					`${newCategory?.toUpperCase() || "Support"} – ${newIssueDesc || "Issue reported"}. ${tsAction === "site_visit" ? "Site visit required." : "Remote support needed."}`,
+					JSON.stringify([
+						{ sender: "CLIENT", content: newIssueDesc || text, at: new Date().toISOString() }
+					])
+				]
+			);
 
-	} else if (aiData?.action === "remote_support" || aiData?.action === "site_visit") {
-	  const customerId = await upsertWhatsAppCustomer(phone, customerName);
+			await pool.query(
+				`UPDATE sessions SET ticket_id=$1, step='OPEN_TICKET', last_action=$2,
+				 last_bot_question=$3, last_interaction=NOW() WHERE phone=$4`,
+				[ticketId, tsAction, finalReply.substring(0,100), phone]
+			);
 
-	  // ── If session already has a ticket and customer escalates to site_visit → UPDATE not create ──
-	  if (session?.ticket_id && aiData?.action === "site_visit") {
-	    await pool.query(
-	      `UPDATE tickets SET priority = 'HIGH',
-	          ai_summary = CONCAT(COALESCE(ai_summary,''), ' [Escalated to site visit by customer]'),
-	          updated_at = NOW()
-	       WHERE id = $1`,
-	      [session.ticket_id]
-	    );
-	    finalReply = `Noted ${customerName}. We have updated your ticket ${session.ticket_id} as site visit required. Our team will follow up shortly regarding the appointment.`;
-	    await pool.query(`UPDATE sessions SET last_interaction = NOW() WHERE phone = $1`, [phone]);
-	  } else {
-	  const ticketId = makeTicketId();
+			await notifyTeamLeads(
+				`*New Ticket: ${ticketId}*\nCustomer: ${newName || "Unknown"}\nCategory: ${newCategory || "Unknown"}\nPriority: ${priority}\nAction: ${tsAction === "site_visit" ? "Site Visit Required" : "Remote Support"}\nIssue: ${newIssueDesc || "Reported via WhatsApp"}`
+			).catch(e => console.error("Notify error:", e.message));
 
-	  // ── Generate AI technical summary for Team Lead ──
-	  let techSummary = null;
-	  try {
-	    const summaryModel = genAI.getGenerativeModel({
-	      model: "gemini-2.5-flash",
-	      generationConfig: { responseMimeType: "application/json" }
-	    });
-	    const summaryResult = await summaryModel.generateContent(
-	      `You are a field operations assistant. Based on the conversation below, write a concise one-line technical summary for the Team Lead to understand and assign this ticket quickly.\n\nReturn ONLY JSON: {"summary": "your summary here"}\n\nRules:\n- Max 20 words\n- Include: system type, specific issue, recommended action\n- Example: "CCTV – 1 camera offline at entrance, other cameras working. Site visit required."\n- Example: "WiFi – full outage all devices after router restart. Remote support needed."\n\nConversation:\nCustomer: ${issueText}\nCategory: ${issueCategory}\nAction decided: ${aiData?.action}\nLocation: ${aiData?.location || session?.house_number || "not provided"}`
-	    );
-	    const summaryData = JSON.parse(summaryResult.response.text());
-	    techSummary = summaryData?.summary || null;
-	  } catch (e) {
-	    console.error("AI summary generation failed (non-fatal):", e.message);
-	    // Fallback: build a basic summary from available data
-	    techSummary = `${issueCategory || "Support"} – ${issueText?.substring(0, 80)}. ${aiData?.action === "site_visit" ? "Site visit required." : "Remote support needed."}`;
-	  }
+			finalReply = `Thank you ${newName}. We have created a support ticket *${ticketId}*. Our team will follow up shortly.`;
+		} else {
+			// Update session with last question
+			await pool.query(
+				`UPDATE sessions SET last_bot_question=$1, last_action='continue_troubleshooting', last_interaction=NOW() WHERE phone=$2`,
+				[finalReply.substring(0, 200), phone]
+			);
+		}
 
-	  await pool.query(
-	    `INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
-	     VALUES ($1, $2, $3, $4, $5, 'NEW', $6, $7, $8, $9, NOW(), NOW())`,
-	    [
-	      ticketId,
-	      customerId,
-	      customerName,
-	      issueCategory || "SUPPORT",
-	      aiData?.action === "site_visit" ? "HIGH" : "MEDIUM",
-	      resolvedLocationUrl,
-	      resolvedHouseNumber,
-	      techSummary,
-	      JSON.stringify([
-	        {
-	          sender: "CLIENT",
-	          content: issueText,
-	          at: new Date().toISOString()
-	        },
-	        {
-	          sender: "SYSTEM",
-	          content: techSummary || "AI Summary not available",
-	          at: new Date().toISOString()
-	        }
-	      ])
-	    ]
-	  );
-
-	  await createSupportActivity({
-	    phone,
-	    customerId,
-	    customerName,
-	    issue: issueText,
-	    action: aiData?.action,
-	    issueCategory
-	  });
-
-	  await pool.query(
-	    `UPDATE sessions
-	     SET ticket_id = $1,
-	         step = 'OPEN_TICKET',
-	         last_interaction = NOW()
-	     WHERE phone = $2`,
-	    [ticketId, phone]
-	  );
-
-	  // ── Notification 1: Notify all Team Leads of new ticket ──
-	  const priorityLabel = aiData?.action === "site_visit" ? "HIGH" : "MEDIUM";
-	  const actionLabel = aiData?.action === "site_visit" ? "Site Visit Required" : "Remote Support";
-	  const locationLabel = aiData?.location || session?.house_number || "Not provided";
-	  const aiSummary = `*New Ticket: ${ticketId}*\nCustomer: ${customerName}\nIssue: ${issueText}\nCategory: ${issueCategory || "Unknown"}\nPriority: ${priorityLabel}\nAction: ${actionLabel}\nLocation: ${locationLabel}`;
-	  await notifyTeamLeads(aiSummary).catch(e => console.error("Team lead notify error:", e.message));
-
-	  // ── n8n webhook trigger on ticket creation ──
-	  if (process.env.N8N_WEBHOOK_URL) {
-	    fetch(`${process.env.N8N_WEBHOOK_URL}/ticket-created`, {
-	      method: "POST",
-	      headers: { "Content-Type": "application/json" },
-	      body: JSON.stringify({
-	        ticketId,
-	        customerName,
-	        phone,
-	        issueCategory,
-	        priority: priorityLabel,
-	        action: aiData?.action,
-	        location: locationLabel,
-	        summary: issueText
-	      })
-	    }).catch(e => console.error("n8n webhook error:", e.message));
-	  }
-
-	const hasLocationForVisit =
-	  !!((aiData?.location || session?.house_number || "").trim());
-
-	const locationPendingForVisit =
-	  session?.troubleshooting_state?.location_pending === true;
-
-	if (aiData?.action === "site_visit") {
-	  finalReply =
-	    !hasLocationForVisit || locationPendingForVisit
-	      ? `Thank you ${customerName}. We have created a site visit ticket for your request. Your Ticket ID is ${ticketId}. Please share your location and villa number so we can schedule the appointment. Once scheduled, you will receive the details here.`
-	      : `Thank you ${customerName}. We have created a site visit ticket for your request. Your Ticket ID is ${ticketId}. Our team will follow up shortly regarding the appointment. Once scheduled, you will receive the details here.`;
 	} else {
-	  finalReply = `Thank you ${customerName}. We have created a support ticket for remote review. Your Ticket ID is ${ticketId}. Our team will follow up shortly.`;
+		// Generate a natural language reply for the pre-decided questionKey
+		const questionPrompts = {
+			"name":              `Ask the customer politely for their name. Keep it short and WhatsApp-friendly. One sentence.`,
+			"issue_category":    `Ask the customer what system they are having an issue with (Wi-Fi, CCTV, intercom, access control, home automation, speakers, or something else). One sentence.`,
+			"issue_description": `Ask the customer to briefly describe the issue they are facing. One sentence.`,
+			"cctv_scope":        `Ask whether all cameras are affected or only one/some cameras. One sentence.`,
+			"camera_location":   `Ask which camera location is affected (e.g. front entrance, back garden, parking, etc.). One sentence.`,
+			"villa_number":      `Ask for the villa or building number. One sentence. Do not ask for location pin here, just the number.`,
+			"location":          `Ask the customer to share their location pin or mention their area so the team can schedule the visit. One sentence.`,
+		};
+
+		const promptForKey = questionPrompts[questionKey] || `Ask for any remaining details needed to assist the customer. One sentence.`;
+		const repeatNote   = newState._repeat_question ? " Note: the customer did not answer last time, so rephrase slightly." : "";
+
+		const replyPrompt = `You are a WhatsApp support assistant for Qonnect (home automation company in Qatar).
+Customer name: ${newName || "unknown"}.
+${promptForKey}${repeatNote}
+Reply in the same language as the customer's last message: "${text}"
+Return ONLY the reply text, no JSON, no markdown.`;
+
+		try {
+			const replyModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+			const replyResult = await replyModel.generateContent(replyPrompt);
+			finalReply = replyResult.response.text().trim();
+		} catch (e) {
+			console.error("Reply gen error:", e.message);
+			// Fallback replies
+			const fallbacks = {
+				"name":              "Could I get your name please?",
+				"issue_category":    "Which system are you having an issue with — Wi-Fi, CCTV, intercom, automation, or something else?",
+				"issue_description": "Could you briefly describe the issue you're facing?",
+				"cctv_scope":        "Are all cameras affected or just one camera?",
+				"camera_location":   "Which camera location is affected? (e.g. front entrance, back, parking)",
+				"villa_number":      "Could you share your villa or building number?",
+				"location":          "Could you share your location pin or let us know your area so we can schedule the visit?",
+			};
+			finalReply = fallbacks[questionKey] || "Could you provide a bit more detail so I can assist you?";
+		}
+
+		// Save last_bot_question
+		await pool.query(
+			`UPDATE sessions SET last_bot_question=$1, last_action=$2,
+			 troubleshooting_state=COALESCE(troubleshooting_state,'{}'::jsonb)||$3::jsonb,
+			 last_interaction=NOW() WHERE phone=$4`,
+			[finalReply.substring(0, 200), questionKey || "ask", JSON.stringify(newState), phone]
+		);
 	}
-	  } // end new ticket creation
-	} else if (aiData?.action === "need_more_info") {
-	  const customerId = await upsertWhatsAppCustomer(phone, customerName);
 
-	  await createSupportActivity({
-	    phone,
-	    customerId,
-	    customerName,
-	    issue: issueText,
-	    action: "need_more_info",
-	    issueCategory
-	  });
+	// ── 3f. SEND FINAL REPLY ──
+	await sendWhatsAppText(phone, finalReply);
 
-	  finalReply =
-	    aiData?.reply ||
-	    `Please share a photo, video, or a little more detail so we can proceed.`;
+	} // end main else (not issue_resolved early exit)
 
-	} else if (
-	  aiData?.action === "continue_troubleshooting" ||
-	  aiData?.next_step === "TROUBLESHOOT"
-	) {
-	  finalReply =
-	    aiData?.reply ||
-	    `Understood. Let me check a few quick details to help you.`;
-	}
-
-        // 6. SEND REPLY & LOG
-        await sendWhatsAppText(phone, finalReply);
 
         await pool.query(
           `INSERT INTO whatsapp_logs (id, type, phone, status, payload_summary, latency)
