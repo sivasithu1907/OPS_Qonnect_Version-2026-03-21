@@ -579,7 +579,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             // 1. Normalize Activities
                             const techActivities = activities.filter(a => {
                                 if (a.leadTechId !== tech.id) return false;
-                                // Only show today's activities in the schedule
+                                // IN_PROGRESS jobs always appear regardless of planned date
+                                if (a.status === 'IN_PROGRESS') return true;
                                 const d = new Date(a.plannedDate || a.createdAt);
                                 return d.toDateString() === new Date().toDateString();
                             }).map(a => ({
@@ -598,12 +599,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             const techTickets = tickets
                                 .filter(t => {
                                 if (t.assignedTechId !== tech.id) return false;
-                                if (!['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status))) return false;
-                                // If appointment is set, only show if it's today; otherwise always show active tickets
-                                if (t.appointmentTime) {
-                                    return new Date(t.appointmentTime).toDateString() === new Date().toDateString();
-                                }
-                                return true; // no appointment = show always if active
+                                const activeStatuses = ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'];
+                                if (!activeStatuses.includes(normalizeStatus(t.status))) return false;
+                                return true; // always show active tickets regardless of appointment date
                             })
                                 .map(t => ({
                                     id: t.id,
