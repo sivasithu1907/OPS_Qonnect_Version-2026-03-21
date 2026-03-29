@@ -634,7 +634,7 @@ const loadUsers = async () => {
             ...u,
             level: u.systemRole === 'TEAM_LEAD' ? 'TEAM_LEAD' :
                    u.systemRole === 'FIELD_ENGINEER' ? 'FIELD_ENGINEER' :
-                   u.systemRole === 'ADMIN' ? 'TEAM_LEAD' : 'TECHNICAL_ASSOCIATE'
+                   u.systemRole === 'ADMIN' ? 'ADMIN' : 'TECHNICAL_ASSOCIATE'
         }));
         setTechnicians(withLevel);
     }
