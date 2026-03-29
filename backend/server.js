@@ -1940,10 +1940,14 @@ async function handleIncomingMessage(phone, text) {
 	Decision rules:
 	- Do not create ticket during ASK_NAME / ASK_LOCATION / ASK_ISSUE
 	- Do not create ticket just because issue is collected
-	- Only recommend escalation after at least one troubleshooting step, unless there is an obvious urgent physical issue
-	- If the customer explicitly says remote is not possible and requests technician/site attendance after basic troubleshooting, prefer site_visit
-	- If restart_done is true and the issue still affects all devices or all areas, prefer escalation instead of repeating restart steps
-	- If location_pending is true, do not ask for location again during troubleshooting unless site_visit handling now requires visit details
+	- CRITICAL RULE 1: If the customer explicitly asks for a technician visit at ANY point in the conversation (e.g. "can I have a technician", "send technician", "I want technician", "please send someone", "I need someone to visit", "visit me", "can someone come"), you MUST set action = site_visit immediately. Do NOT ask more troubleshooting questions after this.
+	- CRITICAL RULE 2: If action = site_visit AND location and villa number are already provided in the session, set next_step = TROUBLESHOOT and action = site_visit. Do NOT set next_step = ASK_LOCATION.
+	- CRITICAL RULE 3: If the customer has already provided their location (map or address) AND villa/building number, NEVER ask for location again.
+	- CRITICAL RULE 4: If the customer has already described which specific camera/device/area is affected, do NOT ask the same question again.
+	- Only ask troubleshooting questions if the customer has NOT explicitly requested a technician. Once technician is requested, stop troubleshooting and proceed to site_visit.
+	- Only recommend escalation after at least one troubleshooting step, UNLESS the customer explicitly requests a technician — in that case go to site_visit immediately.
+	- If restart_done is true and the issue still affects all devices or all areas, prefer escalation instead of repeating restart steps.
+	- If location_pending is true, do not ask for location again during troubleshooting unless site_visit handling now requires visit details.
 
 	Location handling:
 	- If the customer says they will share the location later or shortly, do not keep repeating the same location request immediately
@@ -2127,15 +2131,27 @@ async function handleIncomingMessage(phone, text) {
 	  normalizedIncoming.includes("prefer technician") ||
 	  normalizedIncoming.includes("prefer site visit") ||
 	  normalizedIncoming.includes("remote not possible") ||
-	  normalizedIncoming.includes("remote not possible,") ||
-	  normalizedIncoming.includes("remote not possible.") ||
 	  normalizedIncoming.includes("not possible, need technician") ||
-	  normalizedIncoming.includes("not possible need technician");
+	  normalizedIncoming.includes("not possible need technician") ||
+	  normalizedIncoming.includes("send technician") ||
+	  normalizedIncoming.includes("can i have a technician") ||
+	  normalizedIncoming.includes("can you send") ||
+	  normalizedIncoming.includes("please send someone") ||
+	  normalizedIncoming.includes("send someone") ||
+	  normalizedIncoming.includes("i want technician") ||
+	  normalizedIncoming.includes("i need a technician") ||
+	  normalizedIncoming.includes("arrange technician") ||
+	  normalizedIncoming.includes("arrange a technician") ||
+	  normalizedIncoming.includes("visit me") ||
+	  normalizedIncoming.includes("someone to visit") ||
+	  normalizedIncoming.includes("come and check") ||
+	  normalizedIncoming.includes("come check") ||
+	  normalizedIncoming.includes("see and fix") ||
+	  normalizedIncoming.includes("fix the issue") ||
+	  normalizedIncoming.includes("not possible");
 
-	if (
-	  explicitSiteVisitRequest &&
-	  session?.step === "TROUBLESHOOT"
-	) {
+	// Force site_visit whenever customer explicitly requests a technician — at ANY step
+	if (explicitSiteVisitRequest) {
 	  aiData.action = "site_visit";
 	}
 
@@ -2166,8 +2182,24 @@ async function handleIncomingMessage(phone, text) {
 	    normalizedIncoming.includes("other cameras are fine") ||
 	    normalizedIncoming.includes("rest are fine") ||
 	    normalizedIncoming.includes("others are fine") ||
-	    normalizedIncoming.includes("only one is not working")
+	    normalizedIncoming.includes("only one is not working") ||
+	    normalizedIncoming.includes("front camera") ||
+	    normalizedIncoming.includes("main entrance") ||
+	    normalizedIncoming.includes("entrance camera") ||
+	    // Also check session history — if affected_scope was already set to one_device
+	    session?.troubleshooting_state?.affected_scope === "one_device"
 	  );
+
+	// ── HARD GUARD: If location + villa are confirmed AND site_visit decided → stop asking questions ──
+	const locationConfirmed = !!(resolvedLocationUrl || resolvedHouseNumber);
+	const villaConfirmed    = !!resolvedHouseNumber;
+	const readyForSiteVisit = locationConfirmed && villaConfirmed && aiData?.action === "site_visit";
+
+	if (readyForSiteVisit && aiData?.action !== "remote_support") {
+	  // Location + villa known + site visit decided → stop ALL further troubleshooting questions
+	  aiData.action = "site_visit";
+	  aiData.next_step = "TROUBLESHOOT"; // don't go back to ASK_LOCATION
+	}
 
 	if (
 	  session?.step === "TROUBLESHOOT" &&
