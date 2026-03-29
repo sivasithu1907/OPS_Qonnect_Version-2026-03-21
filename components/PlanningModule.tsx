@@ -196,8 +196,22 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
   // --- View Components ---
 
-  const ListView = () => (
+  const ListView = () => {
+  const [listFilter, setListFilter] = React.useState<string>('ALL');
+  const statusFilters = ['ALL', 'PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
+  const filteredActs = listFilter === 'ALL'
+    ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
+    : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
+  return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50/80 overflow-x-auto">
+        {statusFilters.map(f => (
+          <button key={f} onClick={() => setListFilter(f)}
+            className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${listFilter === f ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+            {f.replace('_',' ')} ({f === 'ALL' ? activities.length : activities.filter(a => a.status === f).length})
+          </button>
+        ))}
+      </div>
       <table className="w-full text-sm text-left">
         <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
           <tr>
@@ -212,7 +226,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {activities.map(act => {
+          {filteredActs.map(act => {
             const customer = customers.find(c => c.id === act.customerId);
             const lead = technicians.find(t => t.id === act.leadTechId);
             const salesLead = technicians.find(t => t.id === act.salesLeadId);
@@ -294,6 +308,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       </table>
     </div>
   );
+};
 
   const KanbanView = () => {
     const columns: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
@@ -393,10 +408,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  <div className="text-[10px] text-slate-500 mt-1">{lead.role}</div>
                </div>
                {days.map(d => {
-                 const dayActs = activities.filter(a => 
-                    a.leadTechId === lead.id && 
-                    new Date(a.plannedDate).toDateString() === d.toDateString()
-                 );
+                 const dayActs = activities.filter(a => {
+                    if (!a.plannedDate) return false;
+                    if (new Date(a.plannedDate).toDateString() !== d.toDateString()) return false;
+                    return a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                 });
                  
                  return (
                    <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-slate-50/50 transition-colors">
