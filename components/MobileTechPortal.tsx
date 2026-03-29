@@ -8,6 +8,7 @@ import { MyJobTaskView } from './MyJobTaskView';
 interface MobileTechPortalProps {
   tickets: Ticket[];
   activities?: Activity[]; // Now accepts activities
+  customers?: any[]; // For activity customer name lookup
   currentTechId: string;
   onUpdateStatus: (ticketId: string, status: TicketStatus) => void;
   onUpdateActivity?: (activity: Activity) => void;
@@ -21,6 +22,7 @@ interface MobileTechPortalProps {
 const MobileTechPortal: React.FC<MobileTechPortalProps> = ({ 
     tickets, 
     activities = [], 
+    customers = [],
     currentTechId, 
     onUpdateStatus, 
     onUpdateActivity,
@@ -65,9 +67,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       ...tickets
         .filter(t => t.assignedTechId === currentTechId &&
             (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED))
-        .sort((a, b) => new Date(b.updatedAt||b.updated_at||0).getTime() - new Date(a.updatedAt||a.updated_at||0).getTime())
-        .slice(0, 50)
-  ];
+        .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || (t as any).updated_at || t.createdAt })),
+      ...activities
+        .filter(a => a.leadTechId === currentTechId && (a.status === 'DONE' || a.status === 'CANCELLED'))
+        .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.updatedAt || a.createdAt })),
+  ].sort((a, b) => new Date(b.sortDate || 0).getTime() - new Date(a.sortDate || 0).getTime())
+   .slice(0, 50);
 
   const myJobs = [
       ...tickets
@@ -375,24 +380,32 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     <p>No completed jobs yet</p>
                                 </div>
                             ) : (
-                                completedJobs.map(ticket => (
-                                    <div key={ticket.id}
-                                        onClick={() => setSelectedJobId(ticket.id)}
-                                        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3 cursor-pointer active:scale-[0.99] transition-transform"
-                                    >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <div className="text-[10px] font-bold text-slate-400 mb-0.5">{ticket.id}</div>
-                                                <div className="font-bold text-slate-800">{ticket.customerName}</div>
+                                completedJobs.map(item => {
+                                    const isAct = item.kind === 'activity';
+                                    const job = item.data as any;
+                                    const label     = isAct ? (job.type || 'Activity') : (job.customerName || job.id);
+                                    const sub       = isAct ? (job.serviceCategory || job.description?.substring(0,40) || '') : (job.category || '');
+                                    const statusVal = job.status || '';
+                                    const dt        = new Date(item.sortDate || job.updatedAt || job.createdAt);
+                                    return (
+                                        <div key={job.id}
+                                            onClick={() => setSelectedJobId(job.id)}
+                                            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3 cursor-pointer active:scale-[0.99] transition-transform"
+                                        >
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-slate-400 mb-0.5">{job.reference || job.id}</div>
+                                                    <div className="font-bold text-slate-800">{label}</div>
+                                                </div>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${statusVal === 'RESOLVED' || statusVal === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                                    {statusVal.replace('_',' ')}
+                                                </span>
                                             </div>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${ticket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
-                                                {ticket.status.replace('_',' ')}
-                                            </span>
+                                            {sub && <div className="text-xs text-slate-500 mb-1">{sub}</div>}
+                                            <div className="text-xs text-slate-400">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
                                         </div>
-                                        <div className="text-xs text-slate-500 mb-1">{ticket.category}</div>
-                                        <div className="text-xs text-slate-400">{new Date(ticket.updatedAt||ticket.updated_at).toLocaleDateString()} {new Date(ticket.updatedAt||ticket.updated_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )
                         )}
                     </div>
@@ -408,62 +421,137 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                     </div>
                 )}
 
-                {/* Activity Detail */}
-                {activeJob && activeJobItem?.type === 'activity' && !completionStep && (
-                    <div className="flex flex-col h-full">
-                        {/* Map Placeholder */}
-                        <div className="h-48 bg-emerald-50 w-full flex items-center justify-center text-emerald-200">
-                             <MapPin size={48} />
+                {/* Activity Detail — rich job view matching ticket layout */}
+                {activeJob && activeJobItem?.type === 'activity' && !completionStep && (() => {
+                    const act = activeJob as Activity;
+                    const actCustomer = (customers as any[]).find((cu: any) => cu.id === act.customerId);
+                    const actStatus = act.status;
+                    const actSteps = [
+                        { key: 'PLANNED',     label: 'Assigned' },
+                        { key: 'IN_PROGRESS', label: 'Working'  },
+                        { key: 'DONE',        label: 'Done'     },
+                    ];
+                    const actStep    = actSteps.findIndex(s => s.key === actStatus);
+                    const actProgress = actStatus === 'DONE' ? 100 : Math.max(5, ((actStep + 1) / actSteps.length) * 100);
+                    return (
+                    <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
+                        {/* Progress bar */}
+                        <div className="h-1 bg-slate-200 shrink-0">
+                            <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgress}%` }}/>
                         </div>
-                        <div className="flex-1 bg-white -mt-6 rounded-t-3xl p-6 shadow-lg flex flex-col">
-                            <h2 className="text-2xl font-bold text-slate-800 mb-1">
-                                {(activeJob as Activity).type}
-                            </h2>
-                            <p className="text-slate-500 mb-6">
-                                {(activeJob as Activity).description}
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                <button className="flex flex-col items-center justify-center p-3 bg-slate-50 rounded-xl text-slate-600">
-                                    <Navigation size={24} className="mb-1" />
-                                    <span className="text-xs font-semibold">Navigate</span>
-                                </button>
-                                <button className="flex flex-col items-center justify-center p-3 bg-slate-50 rounded-xl text-slate-600">
-                                    <Camera size={24} className="mb-1" />
+                        <div className="p-5 space-y-4">
+                            {/* Header */}
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{act.reference || act.id}</div>
+                                    <h2 className="text-xl font-bold text-slate-900">{act.type}</h2>
+                                    {actCustomer && <div className="text-sm text-slate-500 mt-0.5">{actCustomer.name}</div>}
+                                </div>
+                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+                                    actStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
+                                    actStatus === 'DONE'        ? 'bg-emerald-100 text-emerald-700' :
+                                    'bg-purple-100 text-purple-700'
+                                }`}>{actStatus.replace('_',' ')}</span>
+                            </div>
+                            {/* Scope of work */}
+                            {act.description && (
+                                <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Scope of Work</div>
+                                    <p className="text-sm text-slate-700 leading-relaxed">{act.description}</p>
+                                </div>
+                            )}
+                            {/* Job details */}
+                            <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
+                                {act.serviceCategory && (
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400 font-medium">Category</span>
+                                        <span className="font-semibold text-slate-700">{act.serviceCategory}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400 font-medium">Priority</span>
+                                    <span className={`font-bold ${act.priority === 'URGENT' ? 'text-red-600' : act.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{act.priority}</span>
+                                </div>
+                                {act.plannedDate && (
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400 font-medium">Planned</span>
+                                        <span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString()} {new Date(act.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                                    </div>
+                                )}
+                                {(act.houseNumber || act.locationUrl) && (
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400 font-medium">Location</span>
+                                        <span className="font-semibold text-slate-700 text-right max-w-[55%] truncate">{act.houseNumber || act.locationUrl}</span>
+                                    </div>
+                                )}
+                            </div>
+                            {/* Step progress indicators */}
+                            {actStatus !== 'DONE' && (
+                                <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
+                                    {actSteps.map((step, i) => (
+                                        <React.Fragment key={step.key}>
+                                            <div className="flex flex-col items-center">
+                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                                    i < actStep   ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                    i === actStep ? 'bg-slate-900 border-slate-900 text-white' :
+                                                    'bg-white border-slate-200 text-slate-400'
+                                                }`}>{i < actStep ? '✓' : i + 1}</div>
+                                                <span className={`text-[9px] mt-1 font-medium ${i === actStep ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
+                                            </div>
+                                            {i < actSteps.length - 1 && <div className={`flex-1 h-0.5 mx-2 mb-3 ${i < actStep ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            )}
+                            {/* Navigate + Photos */}
+                            <div className="grid grid-cols-2 gap-3">
+                                {act.locationUrl ? (
+                                    <a href={act.locationUrl} target="_blank" rel="noopener noreferrer"
+                                        className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform">
+                                        <Navigation size={22} className="mb-1 text-blue-500"/>
+                                        <span className="text-xs font-semibold">Navigate</span>
+                                    </a>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center p-3 bg-slate-50 rounded-xl text-slate-400">
+                                        <Navigation size={22} className="mb-1"/>
+                                        <span className="text-xs font-semibold">Navigate</span>
+                                    </div>
+                                )}
+                                <button className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50">
+                                    <Camera size={22} className="mb-1"/>
                                     <span className="text-xs font-semibold">Photos</span>
                                 </button>
                             </div>
-
-                            <div className="mt-auto space-y-3">
-                                {((activeJob as Activity).status === 'PLANNED') && (
-                                    <button 
-                                        onClick={handleStart}
-                                        className="w-full py-4 rounded-xl bg-slate-900 text-white font-bold shadow-lg active:bg-slate-800 flex items-center justify-center gap-2"
-                                    >
+                            {/* Workflow action buttons */}
+                            <div className="space-y-3 pb-6">
+                                {actStatus === 'PLANNED' && (
+                                    <button onClick={handleStart}
+                                        className="w-full py-4 rounded-2xl bg-amber-500 text-white font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
                                         <Play size={20} className="fill-current"/> Start Work
                                     </button>
                                 )}
-                                
-                                {((activeJob as Activity).status === 'IN_PROGRESS') && (
+                                {actStatus === 'IN_PROGRESS' && (
                                     <div className="grid grid-cols-2 gap-3">
-                                        <button 
-                                            onClick={handleCarryForwardClick}
-                                            className="w-full py-4 rounded-xl bg-slate-200 text-slate-600 font-bold active:bg-slate-300"
-                                        >
+                                        <button onClick={handleCarryForwardClick}
+                                            className="w-full py-4 rounded-2xl bg-slate-200 text-slate-700 font-bold active:bg-slate-300">
                                             Carry Forward
                                         </button>
-                                        <button 
-                                            onClick={() => setCompletionStep(true)}
-                                            className="w-full py-4 rounded-xl bg-emerald-500 text-white font-bold shadow-lg active:bg-emerald-600 flex items-center justify-center gap-2"
-                                        >
-                                            <Check size={20} /> Complete
+                                        <button onClick={() => setCompletionStep(true)}
+                                            className="w-full py-4 rounded-2xl bg-emerald-500 text-white font-bold shadow-lg active:bg-emerald-600 flex items-center justify-center gap-2">
+                                            <Check size={20}/> Complete
                                         </button>
+                                    </div>
+                                )}
+                                {actStatus === 'DONE' && (
+                                    <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 rounded-2xl text-emerald-700 font-bold">
+                                        <CheckCircle2 size={20}/> Job Completed
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
-                )}
+                    );
+                })()}
 
                 {/* Completion Screen (Only for Activities) */}
                 {activeJob && completionStep && (
