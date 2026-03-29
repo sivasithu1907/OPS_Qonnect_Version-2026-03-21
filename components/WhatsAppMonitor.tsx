@@ -105,7 +105,8 @@ const WhatsAppMonitor: React.FC = () => {
     const fetchLiveLogs = async () => {
         if (isPaused) return;
         try {
-            const res = await fetch("/api/whatsapp/logs");
+            const token = localStorage.getItem("qonnect_token") || "";
+            const res = await fetch("/api/whatsapp/logs", { headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } });
             if (!res.ok) return;
             const data = await res.json();
             
