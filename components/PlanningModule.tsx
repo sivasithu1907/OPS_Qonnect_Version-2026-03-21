@@ -1,846 +1,814 @@
 
-import React, { useMemo, useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { Team, Site, Technician, Activity, Ticket, TicketStatus, Priority, Customer } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Activity, Team, Site, Customer, ActivityStatus, Priority, ActivityType, Technician, ServiceCategory, Role } from '../types';
 import { 
-  MapPin, Clock, Truck, ShieldAlert, 
-  Activity as ActivityIcon, Calendar, ZoomIn, ZoomOut,
-  CheckCircle2, AlertCircle, History, Ticket as TicketIcon, 
-  Zap, ArrowRight, X, ExternalLink, Users, ChevronRight, User, Phone
+  Calendar, List, Layout, Plus, Search, Filter, Clock, 
+  MoreHorizontal, ChevronLeft, ChevronRight, User, MapPin, 
+  CheckCircle2, AlertCircle, X, Save, BriefcaseBusiness, Link as LinkIcon, Home
 } from 'lucide-react';
+import CustomerSelector from './CustomerSelector';
+import { getActivityStatusLabel } from '../constants';
 
-interface OperationsDashboardProps {
-  teams: Team[];
-  sites: Site[];
-  technicians: Technician[];
+interface PlanningModuleProps {
   activities: Activity[];
-  tickets: Ticket[];
+  teams: Team[]; 
+  sites: Site[];
   customers: Customer[];
-  onUpdateActivity?: (activity: Activity) => void;
-  onNavigate?: (type: 'ticket' | 'activity', id: string) => void;
-  readOnly?: boolean;
+  technicians?: Technician[];
+  onAddActivity: (activity: Omit<Activity, 'id' | 'reference' | 'createdAt' | 'updatedAt'>) => void;
+  onUpdateActivity: (activity: Activity) => void;
+  onDeleteActivity: (id: string) => void;
+  onAddCustomer?: (customer: Customer) => void;
+  isMobile?: boolean; // New prop for mobile responsiveness
+  initialActivityId?: string | null;
+  onClearInitialActivity?: () => void;
+  currentUserId?: string; // For self-assign logic
 }
 
-// Define a union type for the selected item in the drawer
-type DrawerItem = { type: 'ticket', data: Ticket } | { type: 'activity', data: Activity };
-
-const OperationsDashboard: React.FC<OperationsDashboardProps> = ({ 
-    teams, 
-    sites, 
-    technicians,
-    activities,
-    tickets,
-    customers,
-    onUpdateActivity,
-    onNavigate,
-    readOnly = false
+const PlanningModule: React.FC<PlanningModuleProps> = ({ 
+  activities, sites, customers, technicians = [],
+  onAddActivity, onUpdateActivity, onDeleteActivity, onAddCustomer = (_: Customer) => {}, // Fixed default signature
+  isMobile = false,
+  initialActivityId,
+  onClearInitialActivity,
+  currentUserId
 }) => {
-  const [selectedItem, setSelectedItem] = useState<DrawerItem | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>('kanban');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   
-  // Timeline Configuration
-  const [zoomLevel, setZoomLevel] = useState(140); // Pixels per hour
+  // Mobile Tab State
+  const [mobileTab, setMobileTab] = useState<ActivityStatus>('PLANNED');
+
+  // Form State
+  const [plannedDatetime, setPlannedDatetime] = useState(''); // YYYY-MM-DDTHH:mm
+  const [durationState, setDurationState] = useState<{ val: string, unit: 'HOURS' | 'DAYS' }>({ val: '2', unit: 'HOURS' });
   
-  // Constants for Fixed Timeline (00:00 - 24:00)
-  const TIMELINE_START = 0;
-  const TIMELINE_END = 24;
-  const TOTAL_HOURS = TIMELINE_END - TIMELINE_START; 
-  const totalGridWidth = TOTAL_HOURS * zoomLevel;
-  const LEFT_COL_WIDTH = 280;
+  // Customer Selector State
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
 
-  // Filters
-  const [bodyScrollLeft, setBodyScrollLeft] = useState(0);
+  // Filter Active Staff Only
+  const teamLeads = technicians.filter(t => t.systemRole === Role.TEAM_LEAD && t.status !== 'LEAVE' && t.isActive !== false);
+  const fieldEngineers = technicians.filter(t => t.systemRole === Role.FIELD_ENGINEER && t.status !== 'LEAVE' && t.isActive !== false);
+  const assignableLeads = technicians.filter(t => (t.systemRole === Role.TEAM_LEAD || t.systemRole === Role.FIELD_ENGINEER) && t.status !== 'LEAVE' && t.isActive !== false);
+  const salesTeam = technicians.filter(t => t.level === 'SALES' && t.status !== 'LEAVE' && t.isActive !== false);
+  const technicalAssociates = technicians.filter(t => t.level === 'TECHNICAL_ASSOCIATE' && t.status !== 'LEAVE' && t.isActive !== false);
 
+  // Self Assign Logic for Team Lead
+  const currentUser = technicians.find(t => t.id === currentUserId);
+  const canSelfAssign = currentUser?.systemRole === Role.TEAM_LEAD;
 
-  // Refs for Scroll Sync
-  const leftColRef = useRef<HTMLDivElement>(null);
-  const headerScrollRef = useRef<HTMLDivElement>(null);
-  const bodyScrollRef = useRef<HTMLDivElement>(null);
-  const hasAutoScrolled = useRef(false);
+  // Date Constants
+  const currentYear = new Date().getFullYear();
+  const YEARS = Array.from({ length: 5 }, (_, i) => currentYear + i);
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June', 
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
 
-  // Update clock every minute
+  // Handle Initial ID from Navigation
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
+      if (initialActivityId) {
+          const act = activities.find(a => a.id === initialActivityId);
+          if (act) {
+              setEditingActivity(act);
+              setIsModalOpen(true);
+          }
+          // Clear ID to prevent reopen loops if needed, though parent handles unmount usually
+          if (onClearInitialActivity) onClearInitialActivity();
+      }
+  }, [initialActivityId, activities]);
 
-  // Auto-scroll to current time on open
+  // Initialize form state when opening modal
   useEffect(() => {
-    const el = bodyScrollRef.current;
-    if (!el) return;
+    if (isModalOpen) {
+        if (editingActivity) {
+            const d = new Date(editingActivity.plannedDate);
+            const pad = (n: number) => String(n).padStart(2,'0');
+            setPlannedDatetime(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+            setDurationState({
+                val: editingActivity.durationHours.toString(),
+                unit: editingActivity.durationUnit || 'HOURS'
+            });
+            setSelectedCustomerId(editingActivity.customerId || '');
+        } else {
+            const now = new Date();
+            now.setDate(now.getDate() + 1);
+            now.setHours(9, 0, 0, 0);
+            setPlannedDatetime(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T09:00`);
+            setDurationState({ val: '2', unit: 'HOURS' });
+            setSelectedCustomerId('');
+        }
+    }
+  }, [isModalOpen, editingActivity]);
 
-    const now = new Date();
-    const nowX =
-      ((now.getHours() - TIMELINE_START) + now.getMinutes() / 60) * zoomLevel;
+  const getDaysInMonth = (year: string, month: string) => {
+      if (!year || !month) return 31;
+      return new Date(parseInt(year), parseInt(month) + 1, 0).getDate();
+  };
 
-    const target = Math.max(0, nowX - el.clientWidth * 0.4);
-    el.scrollLeft = target;
-  }, []);
+  const getDisplayLocation = (act: Activity) => {
+      const site = sites.find(s => s.id === act.siteId);
+      if (site) return site.name;
+      if (act.houseNumber) return `House: ${act.houseNumber}`;
+      return 'Location URL Provided';
+  };
 
-  // --- Scroll Synchronization ---
-  const handleBodyScroll = () => {
-      if (bodyScrollRef.current) {
-          const { scrollLeft, scrollTop } = bodyScrollRef.current;
-          setBodyScrollLeft(scrollLeft);
+  // Determine available associates based on selected date
+  const selectedDateString = useMemo(() => {
+      if (!plannedDatetime) return '';
+      return new Date(plannedDatetime).toDateString();
+  }, [plannedDatetime]);
+
+  const availableAssociates = useMemo(() => {
+      if (!selectedDateString) return technicalAssociates;
+      
+      return technicalAssociates.filter(tech => {
+          // Check if tech is booked on this date in another activity
+          const isBooked = activities.some(act => {
+              // Ignore self if editing
+              if (editingActivity && act.id === editingActivity.id) return false; 
+              // Ignore closed/cancelled
+              if (act.status === 'DONE' || act.status === 'CANCELLED') return false;
+              
+              const actDate = new Date(act.plannedDate).toDateString();
+              // Check date collision
+              if (actDate !== selectedDateString) return false;
+              
+              // Check if tech is listed as assistant
+              return act.assistantTechIds?.includes(tech.id);
+          });
           
-          // Sync Header Horizontally
-          if (headerScrollRef.current) {
-              headerScrollRef.current.scrollLeft = scrollLeft;
-          }
-          
-          // Sync Left Column Vertically
-          if (leftColRef.current) {
-              leftColRef.current.scrollTop = scrollTop;
-          }
-      }
-  };
-
-  const handleHeaderScroll = () => {
-      if (headerScrollRef.current && bodyScrollRef.current) {
-          bodyScrollRef.current.scrollLeft = headerScrollRef.current.scrollLeft;
-      }
-  };
-
-  const handleLeftWheel = (e: React.WheelEvent) => {
-      if (bodyScrollRef.current) {
-          bodyScrollRef.current.scrollTop += e.deltaY;
-      }
-  };
-
-  // --- Helpers ---
-
-  const normalizeStatus = (status: string | undefined) => {
-      if (!status) return '';
-      // Convert "In Progress", "INPROGRESS", "in_progress" -> "IN_PROGRESS"
-      return status.toUpperCase().replace(/\s/g, '_').replace('INPROGRESS', 'IN_PROGRESS');
-  };
-
-  const getTechWorkload = (techId: string) => {
-      const today = new Date().toDateString();
-      const todaysActs = activities.filter(a => 
-          a.leadTechId === techId && 
-          new Date(a.plannedDate).toDateString() === today &&
-          a.status !== 'CANCELLED'
-      );
-      return todaysActs.reduce((acc, curr) => acc + curr.durationHours, 0);
-  };
-
-  const getNowX = () => {
-      const hours = currentTime.getHours() + currentTime.getMinutes() / 60;
-      if (hours < TIMELINE_START) return 0;
-      if (hours > TIMELINE_END) return totalGridWidth;
-      return (hours - TIMELINE_START) * zoomLevel;
-  };
-
-  // Auto-scroll to NOW on initial load
-  useLayoutEffect(() => {
-      if (bodyScrollRef.current && !hasAutoScrolled.current && totalGridWidth > 0) {
-          const nowX = getNowX();
-          // Only scroll if we are within the timeline range
-          if (nowX > 0 && nowX < totalGridWidth) {
-              const containerWidth = bodyScrollRef.current.clientWidth;
-              const targetScroll = Math.max(0, nowX - (containerWidth / 2));
-              bodyScrollRef.current.scrollLeft = targetScroll;
-          }
-          hasAutoScrolled.current = true;
-      }
-  }, [totalGridWidth, zoomLevel]);
-
-  const getPositionStyle = (dateStr: string, durationHours: number = 2) => {
-  let date = new Date(dateStr);
-  if (isNaN(date.getTime())) date = new Date();
-
-  const startHours = date.getHours() + date.getMinutes() / 60;
-  const offsetHours = startHours - TIMELINE_START;
-
-  // start X (clamp within grid start)
-  const left = Math.max(0, offsetHours * zoomLevel);
-
-  // compute end X and clamp to timeline end (24:00)
-  const rawEndHours = startHours + durationHours;
-  const clampedEndHours = Math.min(rawEndHours, TIMELINE_END); // 24.0
-
-  const endOffsetHours = clampedEndHours - TIMELINE_START;
-  const endX = Math.max(0, endOffsetHours * zoomLevel);
-
-  // width should never exceed the grid end
-  const width = Math.max(4, endX - left);
-
-  // if start is already beyond grid end, keep it at the edge with minimal width
-  const clampedLeft = Math.min(left, totalGridWidth);
-
-  // also clamp width so it never extends beyond totalGridWidth
-  const maxWidth = Math.max(4, totalGridWidth - clampedLeft);
-  const clampedWidth = Math.min(width, maxWidth);
-
-  return { left: `${clampedLeft}px`, width: `${clampedWidth}px` };
-};
-
-
-  const formatTimeHeader = (hour: number) => {
-      const displayHour = hour === 24 ? 0 : hour;
-      return `${String(displayHour).padStart(2, '0')}:00`;
-  };
-
-  const handleItemClick = (type: 'ticket' | 'activity', id: string) => {
-      if (type === 'ticket') {
-          const t = tickets.find(x => x.id === id);
-          if (t) setSelectedItem({ type: 'ticket', data: t });
-      } else {
-          const a = activities.find(x => x.id === id);
-          if (a) setSelectedItem({ type: 'activity', data: a });
-      }
-  };
-
-  // --- Data Derivation ---
-
-  const operationsStaff = useMemo(() => {
-      // Only Team Leads and Field Engineers appear in the schedule — not Admins or others
-      const isOpsRole = (t: any) =>
-          (t.systemRole === 'TEAM_LEAD' || t.systemRole === 'FIELD_ENGINEER') &&
-          t.systemRole !== 'ADMIN';
-      return technicians.filter(t =>
-          isOpsRole(t) &&
-          t.isActive !== false &&
-          t.status !== 'LEAVE'
-      ).sort((a, b) => {
-          // Prioritize Team Leads in the sort order
-          if (a.level === 'TEAM_LEAD' && b.level !== 'TEAM_LEAD') return -1;
-          if (a.level !== 'TEAM_LEAD' && b.level === 'TEAM_LEAD') return 1;
-          return a.name.localeCompare(b.name);
+          return !isBooked;
       });
-  }, [technicians]);
+  }, [technicalAssociates, activities, selectedDateString, editingActivity]);
 
-  const liveFeed = useMemo(() => {
-      const today = new Date().toDateString();
-      const feedItems = [
-          ...tickets
-              .filter(t => new Date(t.updatedAt).toDateString() === today || new Date(t.createdAt).toDateString() === today)
-              .map(t => ({
-                  id: t.id,
-                  type: 'ticket' as const,
-                  refLine: t.id,
-                  clientLine: t.customerName,
-                  descLine: t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category,
-                  time: new Date(t.updatedAt),
-                  status: t.status
-              })),
-          ...activities
-              .filter(a => a.type !== 'WHATSAPP_SUPPORT' && (new Date(a.updatedAt || a.createdAt).toDateString() === today))
-              .map(a => ({
-                  id: a.id,
-                  type: 'activity' as const,
-                  refLine: a.reference,
-                  clientLine: sites.find(s=>s.id===a.siteId)?.clientName || 'Client Site',
-                  descLine: a.description || a.type,
-                  time: new Date(a.updatedAt || a.createdAt),
-                  status: a.status
-              }))
-      ];
-      return feedItems.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 20);
-  }, [tickets, activities, sites]);
-
-  const metrics = useMemo(() => {
-    const todayDate = new Date().toDateString();
-    const activeActs = activities.filter(a =>
-        ['IN_PROGRESS', 'PLANNED'].includes(normalizeStatus(a.status)) &&
-        new Date(a.plannedDate || a.createdAt).toDateString() === todayDate
-    ).length;
-    const activeTickets = tickets.filter(t => ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status))).length;
-    const activeJobs = activeActs + activeTickets;
-    // crewsOnSite = techs who are actively on a job right now
-    const activeTechIds = new Set(
-        tickets
-            .filter(t => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status)) && t.assignedTechId)
-            .map(t => t.assignedTechId!)
-    );
-    const crewsOnSite = operationsStaff.filter(t => activeTechIds.has(t.id)).length;
-    const plannedToday = activities.filter(a => new Date(a.plannedDate).toDateString() === new Date().toDateString()).length;
-    const completedToday = activities.filter(a => a.status === 'DONE' && new Date(a.updatedAt).toDateString() === new Date().toDateString()).length;
-    const alertsCount = activities.filter(a => (a.escalationLevel || 0) > 0 && a.status !== 'DONE' && a.status !== 'CANCELLED').length;
-    const utilization = Math.round((activeJobs / (operationsStaff.length || 1)) * 100);
-
-    return { activeJobs, crewsOnSite, plannedToday, alertsCount, utilization, completedToday };
-  }, [activities, tickets, operationsStaff]);
-
-  const timeMarkers = Array.from(
-      { length: TOTAL_HOURS }, // Strictly 0 to 23
-      (_, i) => TIMELINE_START + i
-  );
-
-  const getSystemStatus = () => {
-      if (metrics.alertsCount > 3) return { 
-          label: 'System Critical', 
-          bgColor: 'bg-red-50', 
-          borderColor: 'border-red-200', 
-          textColor: 'text-red-900', 
-          dotColor: 'bg-red-500'
-      };
-      if (metrics.alertsCount > 0) return { 
-          label: 'Warnings Detected', 
-          bgColor: 'bg-amber-50', 
-          borderColor: 'border-amber-200', 
-          textColor: 'text-amber-900',
-          dotColor: 'bg-amber-500'
-      };
-      return { 
-          label: 'Operations Normal', 
-          bgColor: 'bg-emerald-50', 
-          borderColor: 'border-emerald-200', 
-          textColor: 'text-emerald-900', 
-          dotColor: 'bg-emerald-500'
-      };
+  // --- Handlers ---
+  const handleNewCustomer = (cust: Customer) => {
+      onAddCustomer(cust);
+      setSelectedCustomerId(cust.id);
   };
 
-  const statusConfig = getSystemStatus();
-  const nowX = getNowX();
-
-  return (
-    <div className="flex flex-col h-[calc(100vh)] bg-slate-100 overflow-hidden font-sans text-slate-900">
+  // --- Shared Activity Card (Mobile/Kanban) ---
+  const ActivityCard: React.FC<{ act: Activity, isMobileCard?: boolean }> = ({ act, isMobileCard = false }) => {
+        const customer = customers.find(c => c.id === act.customerId);
+        // Note: leadTechId now points to a FIELD_ENGINEER or Self-Assigned Team Lead
+        const lead = technicians.find(t => t.id === act.leadTechId);
+        const isDelayed = (act.escalationLevel || 0) > 0;
         
-        {/* TOP: KPI & Controls */}
-        <div className="flex-none bg-white z-30 shadow-sm">
-            {/* KPI Row */}
-            <div className="p-4 pb-2 grid grid-cols-6 gap-4 border-b border-slate-200">
-                {/* KPI Cards */}
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Jobs</span>
-                        <ActivityIcon size={14} className="text-blue-500"/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.activeJobs}</span>
-                        <span className="text-[10px] font-bold text-emerald-600 mb-0.5">↑</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: '45%' }}></div>
-                    </div>
+        return (
+          <div 
+            onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} 
+            className={`bg-white rounded-lg shadow-sm border cursor-pointer hover:shadow-md transition-all group ${
+                isDelayed ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'
+            } ${isMobileCard ? 'p-4 mb-3 mx-1' : 'p-4'}`}
+          >
+             <div className="flex justify-between items-start mb-2">
+                <span className="font-mono text-[10px] text-slate-400">{act.reference}</span>
+                <div className="flex gap-1">
+                   {isDelayed && <span className="bg-red-500 text-white text-[9px] px-1 rounded font-bold">L{act.escalationLevel}</span>}
+                   <MoreHorizontal size={14} className="text-slate-300 group-hover:text-emerald-600"/>
                 </div>
-                {/* ... KPI Cards ... */}
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teams On-Site</span>
-                        <Truck size={14} className="text-indigo-500"/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.crewsOnSite}</span>
-                        <span className="text-[10px] font-medium text-slate-400 mb-0.5">/ {operationsStaff.length}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-indigo-500" style={{ width: `${(metrics.crewsOnSite/operationsStaff.length)*100}%` }}></div>
-                    </div>
-                </div>
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Planned Today</span>
-                        <Calendar size={14} className="text-slate-400"/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.plannedToday}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-slate-400" style={{ width: '70%' }}></div>
-                    </div>
-                </div>
-                <div className={`p-3 rounded-lg border shadow-sm flex flex-col justify-between ${metrics.alertsCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
-                    <div className="flex justify-between items-start">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${metrics.alertsCount > 0 ? 'text-red-600' : 'text-slate-400'}`}>Alerts</span>
-                        <ShieldAlert size={14} className={metrics.alertsCount > 0 ? 'text-red-600 animate-pulse' : 'text-slate-300'}/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className={`text-2xl font-bold leading-none ${metrics.alertsCount > 0 ? 'text-red-700' : 'text-slate-800'}`}>{metrics.alertsCount}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className={`h-full ${metrics.alertsCount > 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: metrics.alertsCount > 0 ? '100%' : '0%' }}></div>
-                    </div>
-                </div>
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Utilization</span>
-                        <Zap size={14} className={metrics.utilization > 80 ? 'text-amber-500' : 'text-slate-300'}/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.utilization}%</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className={`h-full ${metrics.utilization > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${metrics.utilization}%` }}></div>
-                    </div>
-                </div>
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Completed</span>
-                        <CheckCircle2 size={14} className="text-emerald-500"/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.completedToday}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: '30%' }}></div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Toolbar & Status Pill */}
-            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-4">
-                
-                {/* Status Pill */}
-                <div className={`flex items-center gap-3 px-4 py-1.5 rounded-full border ${statusConfig.bgColor} ${statusConfig.borderColor} transition-colors`}>
-                    <div className={`w-2 h-2 rounded-full ${statusConfig.dotColor} animate-pulse`} />
-                    <span className={`text-xs font-bold ${statusConfig.textColor}`}>{statusConfig.label}</span>
-                    <span className={`text-[10px] ${statusConfig.textColor} opacity-60 border-l border-current pl-3 ml-1`}>
-                        Last updated {currentTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                    </span>
-                </div>
-
-                {/* Zoom Controls */}
-                <div className="flex items-center gap-2">
-                    <button onClick={() => setZoomLevel(prev => Math.max(60, prev - 20))} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-transparent hover:border-slate-200 transition-colors"><ZoomOut size={16}/></button>
-                    <span className="text-[10px] font-mono text-slate-400 min-w-[60px] text-center font-medium">{zoomLevel} px/hr</span>
-                    <button onClick={() => setZoomLevel(prev => Math.min(300, prev + 20))} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-transparent hover:border-slate-200 transition-colors"><ZoomIn size={16}/></button>
-                </div>
-            </div>
-        </div>
-
-        {/* MAIN LAYOUT: FIXED 3-COLUMN GRID */}
-        <div className="flex-1 overflow-hidden grid grid-cols-[280px_minmax(0,1fr)_240px]">
-            
-            {/* COLUMN 1: LEFT TEAMS (Fixed Width) */}
-            <div className="flex flex-col border-r border-slate-200 bg-white relative z-20">
-                {/* Header Row */}
-                <div className="h-10 border-b border-slate-200 bg-slate-50 flex items-center px-4 font-bold text-[10px] text-slate-500 uppercase tracking-wider shrink-0">
-                    Field Operations
-                </div>
-                {/* Vertically Scrollable List (Synced via JS) */}
-                <div 
-                    ref={leftColRef}
-                    className="flex-1 overflow-hidden bg-white"
-                    onWheel={handleLeftWheel}
-                >
-                    {operationsStaff.map(tech => {
-                        const workload = getTechWorkload(tech.id);
-                        const capacity = 8;
-                        const utilization = Math.min(100, Math.round((workload/capacity)*100));
-                        
-                        // Dynamically find Associates assigned to this Lead's jobs today
-                        const todayActs = activities.filter(a => 
-                            a.leadTechId === tech.id && 
-                            new Date(a.plannedDate).toDateString() === new Date().toDateString() &&
-                            a.status !== 'CANCELLED'
-                        );
-                        
-                        // Extract unique associate IDs from all of today's jobs
-                        const uniqueAssocIds = Array.from(new Set(todayActs.flatMap(a => a.assistantTechIds || [])));
-                        
-                        const associates = uniqueAssocIds
-                            .map(mId => technicians.find(t => t.id === mId))
-                            .filter(Boolean);
-
-                        return (
-                            <div key={tech.id} className="h-24 border-b border-slate-200 p-3 flex flex-col justify-center">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="relative">
-                                        <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 border border-slate-100 object-cover" alt=""/>
-                                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                                            tech.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-blue-500'
-                                        }`} />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-slate-800 text-xs truncate">
-                                                {`Team ${tech.name.split(' ')[0]}`}
-                                            </span>
-                                            {tech.status === 'BUSY' && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" title="On Site"/>}
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 flex items-center gap-1">
-                                            <span className={utilization > 100 ? 'text-red-500 font-bold' : 'text-slate-400'}>
-                                                {workload}h / {capacity}h
-                                            </span>
-                                            <span className="text-slate-300">|</span>
-                                            <span className="text-slate-400">{utilization}% Util</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                {/* Associates Chip List (Show for ALL rows) */}
-                                <div className="flex flex-wrap gap-1 mb-1">
-                                {associates.length > 0 ? (
-                                    associates.map((assoc: any) => (
-                                    <span
-                                        key={assoc.id}
-                                        className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-medium text-slate-600 rounded flex items-center gap-1"
-                                    >
-                                        <Users size={8} className="text-slate-400" /> {assoc.name.split(' ')[0]}
-                                    </span>
-                                    ))
-                                ) : (
-                                    <span className="text-[9px] text-slate-300 italic">No associates assigned</span>
-                                )}
-                                </div>
-
-                                
-                                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
-                                    <div 
-                                        className={`h-full rounded-full ${utilization > 100 ? 'bg-red-500' : utilization > 80 ? 'bg-amber-400' : 'bg-emerald-400'}`} 
-                                        style={{ width: `${utilization}%` }} 
-                                    />
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* COLUMN 2: CENTER TIMELINE (Horizontal Scroll) */}
-            <div className="flex flex-col overflow-hidden relative min-w-0">
-                {/* Header Scroller */}
-                <div 
-                    ref={headerScrollRef}
-                    className="h-10 border-b border-slate-200 bg-white overflow-x-auto overflow-y-hidden no-scrollbar shrink-0"
-                    onScroll={handleHeaderScroll}
-                >
-                    <div className="relative h-full" style={{ width: `${totalGridWidth}px` }}>
-                        {timeMarkers.map(hour => {
-                            if (hour > TIMELINE_END) return null; // Don't render marker after end
-                            const offset = (hour - TIMELINE_START) * zoomLevel;
-                            const displayHour = hour === 24 ? 0 : hour;
-                            const hh = String(displayHour).padStart(2, '0');
-                            const showHalf = zoomLevel >= 180;
-                            
-                            return (
-                                <div 
-                                    key={hour} 
-                                    className="absolute top-0 bottom-0 border-l border-slate-200 pl-1 flex items-center text-[10px] font-mono font-medium tracking-wide text-slate-500 select-none" 
-                                    style={{ left: `${offset}px`, width: `${zoomLevel}px` }}
-                                >
-                                    <span>{hh}:00</span>
-                                    {hour < TIMELINE_END && showHalf && (
-                                        <span className="absolute left-1/2 text-slate-300 font-normal">
-                                            {hh}:30
-                                        </span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                        {/* Header Red Line (NOW) */}
-                        {nowX >= 0 && nowX <= totalGridWidth && (
-                            <div 
-                                className="absolute top-0 bottom-0 z-50 pointer-events-none" 
-                                style={{ left: `${nowX}px` }}
-                            >
-                                <div className="h-full border-l-2 border-red-500 relative">
-                                    <div className="absolute -top-0 -left-[5px] w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-red-500" />
-                                    <div className="absolute -top-6 left-2 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap opacity-90 shadow-sm">
-                                        NOW - {currentTime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Body Scroller (Main Driver) */}
-                <div 
-                    ref={bodyScrollRef}
-                    className="relative flex-1 overflow-x-auto overflow-y-auto bg-slate-50/50"
-                    onScroll={handleBodyScroll}
-                >
-                    <div className="relative" style={{ width: `${totalGridWidth}px` }}>
-                        {/* Grid Background */}
-                        <div className="absolute inset-0 flex pointer-events-none z-0 h-full">
-                            {timeMarkers.map(hour => {
-                                if (hour > TIMELINE_END) return null;
-                                const showHalf = zoomLevel >= 180;
-                                return (
-                                  <div
-                                    key={hour}
-                                    className={`relative h-full flex-shrink-0 border-r border-slate-200/80 ${hour % 2 === 0 ? "bg-slate-50/30" : ""}`}
-                                    style={{ width: `${zoomLevel}px` }}
-                                  >
-                                    {hour < TIMELINE_END && showHalf && (
-                                        <div className="absolute left-1/2 top-0 bottom-0 border-r border-slate-100 pointer-events-none" />
-                                    )}
-                                  </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Body Red Line (NOW) - Standard Absolute Positioning */}
-                        {nowX >= 0 && nowX <= totalGridWidth && (
-                            <div 
-                                className="absolute top-0 bottom-0 z-40 pointer-events-none border-l-2 border-red-500"
-                                style={{ left: `${nowX}px` }}
-                            >
-                                {/* Triangle Indicator */}
-                                <div className="absolute -top-[5px] -left-[5px] w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-red-500" />
-                            </div>
-                        )}
-
-                        {/* Rows */}
-                        {operationsStaff.map(tech => {
-                            // Unified timeline items (both Activities and Tickets)
-                            // 1. Normalize Activities
-                            const techActivities = activities.filter(a => {
-                                if (a.leadTechId !== tech.id) return false;
-                                // IN_PROGRESS jobs always appear regardless of planned date
-                                if (a.status === 'IN_PROGRESS') return true;
-                                const d = new Date(a.plannedDate || a.createdAt);
-                                return d.toDateString() === new Date().toDateString();
-                            }).map(a => ({
-                                id: a.id,
-                                reference: a.reference,
-                                type: 'activity',
-                                status: normalizeStatus(a.status),
-                                priority: a.priority,
-                                plannedDate: a.plannedDate || a.createdAt || new Date().toISOString(),
-                                durationHours: a.durationHours || 2,
-                                description: a.description || a.type,
-                                escalationLevel: a.escalationLevel || 0
-                            }));
-
-                            // 2. Normalize Tickets (only if assigned and IN_PROGRESS/OPEN)
-                            const techTickets = tickets
-                                .filter(t => {
-                                if (t.assignedTechId !== tech.id) return false;
-                                const activeStatuses = ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'];
-                                if (!activeStatuses.includes(normalizeStatus(t.status))) return false;
-                                return true; // always show active tickets regardless of appointment date
-                            })
-                                .map(t => ({
-                                    id: t.id,
-                                    reference: t.id,
-                                    type: 'ticket',
-                                    status: normalizeStatus(t.status),
-                                    priority: t.priority,
-                                    plannedDate: t.appointmentTime || (() => {
-                                        // No appointment set — place at current time so it's visible on timeline
-                                        const d = new Date();
-                                        d.setMinutes(0, 0, 0);
-                                        return d.toISOString();
-                                    })(),
-                                    durationHours: 2, // Default duration for tickets if untracked
-                                    description: t.customerName + ' - ' + t.category,
-                                    escalationLevel: 0
-                                }));
-
-                            const timelineItems = [...techActivities, ...techTickets];
-
-                            return (
-                                <div key={tech.id} className="h-24 border-b border-slate-200 relative w-full hover:bg-slate-100/50 transition-colors">
-                                    {timelineItems.map((item: any) => {
-                                        const style = getPositionStyle(item.plannedDate, item.durationHours);
-                                        const isTicket = item.type === 'ticket';
-                                        
-                                        return (
-                                            <div 
-                                                key={item.id}
-                                                className={`absolute top-3 bottom-3 rounded border shadow-sm p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-md hover:ring-2 ring-opacity-50 transition-all z-20 overflow-hidden ${
-                                                    isTicket && item.status === 'IN_PROGRESS'  ? 'bg-amber-50 border-amber-300 text-amber-900 ring-amber-400' :
-                                                    isTicket && item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-300 text-cyan-900 ring-cyan-400' :
-                                                    isTicket && item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-300 text-indigo-900 ring-indigo-400' :
-                                                    isTicket                                  ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
-                                                    item.status === 'DONE'      ? 'bg-slate-100 border-slate-200 text-slate-500 grayscale' :
-                                                    item.status === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-900 ring-blue-400' :
-                                                    item.escalationLevel > 0   ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
-                                                    'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                                                }`}
-                                                style={style}
-                                                onClick={() => handleItemClick(isTicket ? 'ticket' : 'activity', item.id)}
-                                                title={`${item.description} - ${new Date(item.plannedDate).toLocaleTimeString()}`}
-                                            >
-                                                <div className="flex items-center gap-1 font-bold text-[10px] leading-tight truncate">
-                                                    {isTicket && <TicketIcon size={10} />}
-                                                    {item.reference}
-                                                </div>
-                                                <div className="text-[9px] truncate opacity-80 leading-tight">
-                                                    {item.description}
-                                                </div>
-                                                {item.status === 'IN_PROGRESS' && (
-                                                    <div className="mt-1 h-0.5 w-full bg-blue-200 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-blue-500 animate-pulse w-2/3"></div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
-            {/* COLUMN 3: RIGHT FEED (Fixed Width) */}
-            <div className="flex flex-col border-l border-slate-200 bg-white z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
-                <div className="h-10 border-b border-slate-100 bg-slate-50 flex items-center px-3 justify-between shrink-0">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                        <History size={12} /> Live Feed
-                    </span>
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-0">
-                    {liveFeed.map((item, i) => (
-                        <div 
-                            key={`${item.id}-${i}`} 
-                            onClick={() => handleItemClick(item.type, item.id)}
-                            className="p-3 border-b border-slate-50 hover:bg-black/[0.03] transition-colors group cursor-pointer relative"
-                        >
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-[9px] font-mono text-slate-400">{item.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                                    normalizeStatus(item.status) === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                                    item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
-                                    item.status === 'NEW' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'
-                                }`}>{item.status.replace('_', ' ')}</span>
-                            </div>
-                            <div className="flex items-start gap-2 pr-4">
-                                <div className={`mt-0.5 p-1 rounded-full ${item.type === 'ticket' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
-                                    {item.type === 'ticket' ? <TicketIcon size={10} /> : <ActivityIcon size={10} />}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-[10px] font-bold text-slate-800 leading-tight">{item.refLine}</p>
-                                    <p className="text-[10px] text-slate-600 mt-0.5 font-medium truncate">{item.clientLine}</p>
-                                    <p className="text-[9px] text-slate-400 mt-0.5 truncate">{item.descLine}</p>
-                                </div>
-                            </div>
-                            <ChevronRight size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-900/45 group-hover:text-slate-900/75 transition-colors" />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-
-        {/* Details Drawer (Overlay) */}
-        {selectedItem && (
-             <div className="absolute top-0 right-0 h-full w-[350px] md:w-[420px] bg-white shadow-2xl border-l border-slate-200 z-50 animate-in slide-in-from-right duration-300 flex flex-col">
-                 <div className="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50">
-                     <div>
-                         <div className="flex items-center gap-2 mb-1">
-                             <span className="text-xs font-mono text-slate-400 bg-white border px-1 rounded">
-                                {selectedItem.type === 'activity' ? (selectedItem.data as Activity).reference : (selectedItem.data as Ticket).id}
-                             </span>
-                             <span className="text-[10px] font-bold uppercase text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                                {selectedItem.data.status.replace('_', ' ')}
-                             </span>
-                         </div>
-                         <h3 className="font-bold text-slate-900 text-sm leading-tight uppercase tracking-tight">
-                             {selectedItem.type === 'activity' ? (selectedItem.data as Activity).type : (selectedItem.data as Ticket).category}
-                         </h3>
-                     </div>
-                     <button onClick={() => setSelectedItem(null)} className="p-1 hover:bg-slate-200 rounded transition-colors"><X size={16} className="text-slate-500"/></button>
-                 </div>
-                 
-                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                     {/* Customer Info Section */}
-                     <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm space-y-2">
-                         <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase border-b border-slate-100 pb-2 mb-2">
-                             <User size={12}/> Customer
-                         </div>
-                         <div className="flex justify-between items-start">
-                             <div>
-                                 <div className="text-sm font-bold text-slate-800">
-                                     {selectedItem.type === 'activity' ? 
-                                        (customers?.find(c => c.id === (selectedItem.data as Activity).customerId)?.name || 'Unknown') : 
-                                        (selectedItem.data as Ticket).customerName}
-                                 </div>
-                                 <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                                     <Phone size={10} /> 
-                                     {selectedItem.type === 'ticket' ? (selectedItem.data as Ticket).phoneNumber : 'Contact on file'}
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-
-                     {/* Location Section */}
-                     <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 space-y-2">
-                         <h4 className="text-[10px] font-bold text-blue-800 uppercase flex items-center gap-1">
-                             <MapPin size={10} /> Location
-                         </h4>
-                         <div className="text-xs text-slate-700 font-medium">
-                            {selectedItem.type === 'activity' ? 
-                                (sites.find(s=>s.id===(selectedItem.data as Activity).siteId)?.name || (selectedItem.data as Activity).houseNumber || 'Client Site') : 
-                                ((selectedItem.data as Ticket).houseNumber || 'Location Provided')}
-                         </div>
-                         {selectedItem.data.locationUrl && (
-                             <a href={selectedItem.data.locationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline">
-                                 <ExternalLink size={10} /> Open Map
-                             </a>
-                         )}
-                     </div>
-
-                     {/* Time & Schedule */}
-                     <div>
-                         <label className="text-[10px] font-bold text-slate-400 uppercase">Timing</label>
-                         <div className="flex items-center gap-2 text-xs font-mono text-slate-700 mt-1 bg-slate-50 p-2 rounded border border-slate-100">
-                             <Clock size={12} className="text-slate-400" />
-                             {selectedItem.type === 'activity' ? (
-                                 <>
-                                    {new Date((selectedItem.data as Activity).plannedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                    <ArrowRight size={10} className="text-slate-300"/>
-                                    {new Date(new Date((selectedItem.data as Activity).plannedDate).getTime() + (selectedItem.data as Activity).durationHours*3600000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                 </>
-                             ) : (
-                                 <span>Created: {new Date((selectedItem.data as Ticket).createdAt).toLocaleString()}</span>
-                             )}
-                         </div>
-                         {selectedItem.type === 'ticket' && (selectedItem.data as Ticket).updatedAt && (
-                             <div className="text-[10px] text-slate-400 mt-1 text-right">
-                                 Last Update: {new Date((selectedItem.data as Ticket).updatedAt).toLocaleTimeString()}
-                             </div>
-                         )}
-                     </div>
-
-                     {/* Assigned Resource */}
-                     <div>
-                         <label className="text-[10px] font-bold text-slate-400 uppercase">Assigned To</label>
-                         <div className="flex items-center gap-2 mt-1">
-                             <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
-                                 <Users size={12}/>
-                             </div>
-                             <span className="text-xs font-medium text-slate-700">
-                                 {selectedItem.type === 'activity' ? 
-                                    (technicians.find(t => t.id === (selectedItem.data as Activity).leadTechId)?.name || 'Unassigned') : 
-                                    (technicians.find(t => t.id === (selectedItem.data as Ticket).assignedTechId)?.name || 'Unassigned')}
-                             </span>
-                         </div>
-                     </div>
-
-                     {/* Description */}
-                     <div>
-                         <label className="text-[10px] font-bold text-slate-400 uppercase">Description</label>
-                         <p className="text-xs text-slate-600 mt-1 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 whitespace-pre-wrap">
-                             {selectedItem.type === 'activity' ? (selectedItem.data as Activity).description : ((selectedItem.data as any).messages?.find((m: any) => m.sender === "CLIENT")?.content || (selectedItem.data as any).ai_summary || (selectedItem.data as any).category || "No description")}
-                         </p>
-                     </div>
-                 </div>
-
-                 {/* Drawer Footer Actions */}
-                 <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
-                     <button 
-                        onClick={() => setSelectedItem(null)}
-                        className="flex-1 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded transition-colors"
-                     >
-                         Close
-                     </button>
-                     <button 
-                        onClick={() => {
-                            if (!selectedItem) {
-                                alert("No item selected");
-                                return;
-                            }
-                            if (onNavigate) {
-                                onNavigate(selectedItem.type, selectedItem.data.id);
-                                setSelectedItem(null);
-                            } else {
-                                console.warn("Navigation handler missing");
-                            }
-                        }}
-                        className="flex-1 py-2 bg-slate-900 text-white rounded text-xs font-bold hover:bg-slate-800 shadow-sm"
-                     >
-                         Open Full View
-                     </button>
-                 </div>
              </div>
-        )}
+             <h4 className="font-bold text-slate-800 text-sm mb-1">{act.type}</h4>
+             {act.serviceCategory && <p className="text-[10px] text-indigo-600 mb-1">{act.serviceCategory}</p>}
+             <p className="text-xs text-slate-500 mb-3 line-clamp-2">{act.description}</p>
+             
+             <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                   <User size={12} className="text-slate-400" />
+                   <span className="truncate font-medium">{customer?.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                   <MapPin size={12} className="text-slate-400" />
+                   <span className="truncate">{getDisplayLocation(act)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                   <Clock size={12} className="text-slate-400" />
+                   <span>{new Date(act.plannedDate).toLocaleDateString()}</span>
+                </div>
+             </div>
+          </div>
+        );
+  };
+
+  // --- View Components ---
+
+  const ListView = () => {
+  const [listFilter, setListFilter] = React.useState<string>('ALL');
+  const statusFilters = ['ALL', 'PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
+  const filteredActs = listFilter === 'ALL'
+    ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
+    : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50/80 overflow-x-auto">
+        {statusFilters.map(f => (
+          <button key={f} onClick={() => setListFilter(f)}
+            className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${listFilter === f ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+            {f.replace('_',' ')} ({f === 'ALL' ? activities.length : activities.filter(a => a.status === f).length})
+          </button>
+        ))}
+      </div>
+      <table className="w-full text-sm text-left">
+        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
+          <tr>
+            <th className="px-6 py-4">Ref</th>
+            <th className="px-6 py-4">Type</th>
+            <th className="px-6 py-4">Customer / Location</th>
+            <th className="px-6 py-4">Priority</th>
+            <th className="px-6 py-4">Status</th>
+            <th className="px-6 py-4">Planned</th>
+            <th className="px-6 py-4">Resources</th>
+            <th className="px-6 py-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {filteredActs.map(act => {
+            const customer = customers.find(c => c.id === act.customerId);
+            const lead = technicians.find(t => t.id === act.leadTechId);
+            const salesLead = technicians.find(t => t.id === act.salesLeadId);
+            const helpersCount = act.assistantTechIds?.length || 0;
+            const isDelayed = (act.escalationLevel || 0) > 0;
+
+            return (
+              <tr key={act.id} className={`hover:bg-slate-50 group ${isDelayed ? 'bg-red-50/30' : ''}`}>
+                <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                    <div className="flex items-center gap-2">
+                        {act.reference}
+                        {isDelayed && <AlertCircle size={12} className="text-red-500" />}
+                    </div>
+                    {act.odooLink && (
+                        <a href={act.odooLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] text-purple-600 hover:underline mt-1">
+                            <LinkIcon size={10} /> Odoo
+                        </a>
+                    )}
+                </td>
+                <td className="px-6 py-4 font-medium text-slate-800">
+                    {act.type}
+                    {act.serviceCategory && <div className="text-[10px] text-slate-500 font-normal">{act.serviceCategory}</div>}
+                </td>
+                <td className="px-6 py-4">
+                  <div className="font-medium text-slate-900">{customer?.name || 'Unknown'}</div>
+                  <div className="text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin size={10} /> {getDisplayLocation(act)}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                    act.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
+                    act.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                    'bg-slate-50 text-slate-600 border-slate-200'
+                  }`}>{act.priority}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                    act.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                    act.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                    act.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>{act.status}</span>
+                </td>
+                <td className="px-6 py-4 text-slate-600">
+                  <div className="flex items-center gap-1">
+                      <Calendar size={12} /> {new Date(act.plannedDate).toLocaleDateString()}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-slate-400 mt-1">
+                      <Clock size={12} /> {new Date(act.plannedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                     <div className="flex flex-col gap-1">
+                       {lead ? (
+                         <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"/>
+                              <span className="font-medium">{lead.name}</span>
+                         </div>
+                       ) : <span className="text-slate-400 italic text-[10px]">No Eng.</span>}
+                       
+                       {salesLead && (
+                         <div className="flex items-center gap-2 text-xs text-indigo-600">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500"/>
+                            <span>{salesLead.name.split(' ')[0]} (Sales)</span>
+                         </div>
+                       )}
+
+                       {helpersCount > 0 && <span className="text-[10px] text-slate-500 pl-4">+ {helpersCount} Assts.</span>}
+                     </div>
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <button onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} className="text-slate-400 hover:text-emerald-600 font-medium text-xs">Edit</button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 };
 
-export default OperationsDashboard;
+  const KanbanView = () => {
+    const columns: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
+    
+    return (
+      <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-14rem)]">
+        {columns.map(status => (
+          <div key={status} className="flex-1 min-w-[300px] flex flex-col bg-slate-100/50 rounded-xl border border-slate-200/60">
+            <div className={`p-4 border-b border-slate-200 flex justify-between items-center ${
+              status === 'PLANNED' ? 'bg-amber-50/50' : 
+              status === 'IN_PROGRESS' ? 'bg-blue-50/50' : 
+              status === 'DONE' ? 'bg-emerald-50/50' : 'bg-slate-50'
+            }`}>
+              <h3 className="font-bold text-slate-700 text-sm">{getActivityStatusLabel(status)}</h3>
+              <span className="bg-white px-2 py-0.5 rounded text-xs font-bold text-slate-400 border border-slate-200">
+                {activities.filter(a => a.status === status).length}
+              </span>
+            </div>
+            
+            <div className="p-3 flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+              {activities.filter(a => a.status === status).map(act => (
+                  <ActivityCard key={act.id} act={act} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // --- Mobile Tab View ---
+  const MobileTabView = () => {
+      const tabs: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
+      const filteredActs = activities.filter(a => a.status === mobileTab);
+
+      return (
+          <div className="flex flex-col h-full">
+              {/* Segmented Control */}
+              <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mb-4 shrink-0 overflow-x-auto">
+                  {tabs.map(t => (
+                      <button 
+                        key={t}
+                        onClick={() => setMobileTab(t)}
+                        className={`flex-1 py-2 px-3 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all ${
+                            mobileTab === t ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
+                        }`}
+                      >
+                          {getActivityStatusLabel(t)} ({activities.filter(a => a.status === t).length})
+                      </button>
+                  ))}
+              </div>
+
+              {/* Card List */}
+              <div className="flex-1 overflow-y-auto min-h-0 pb-20">
+                  {filteredActs.length === 0 ? (
+                      <div className="text-center py-10 text-slate-400 text-xs">No {getActivityStatusLabel(mobileTab)} activities</div>
+                  ) : (
+                      filteredActs.map(act => <ActivityCard key={act.id} act={act} isMobileCard={true} />)
+                  )}
+              </div>
+          </div>
+      );
+  };
+
+  const CalendarView = () => {
+    // Mock Week Days
+    const days = Array.from({length: 7}, (_, i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - d.getDay() + i + 1); // Start Monday
+        return d;
+    });
+
+    // Use Team Leads for rows in Calendar View (since they manage schedules usually)
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+        {/* Header Grid */}
+        <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-50">
+           <div className="p-4 border-r border-slate-200 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center justify-center">
+             Engineer / Lead
+           </div>
+           {days.map(d => (
+             <div key={d.toString()} className="p-3 text-center border-r border-slate-200 last:border-0">
+               <div className="text-xs font-bold text-slate-700 uppercase">{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+               <div className={`text-sm font-bold mt-1 ${d.toDateString() === new Date().toDateString() ? 'text-emerald-600 bg-emerald-50 w-8 h-8 rounded-full flex items-center justify-center mx-auto' : 'text-slate-500'}`}>
+                 {d.getDate()}
+               </div>
+             </div>
+           ))}
+        </div>
+        
+        {/* Body Grid */}
+        <div className="overflow-y-auto flex-1 custom-scrollbar">
+           {teamLeads.map(lead => (
+             <div key={lead.id} className="grid grid-cols-8 border-b border-slate-100 min-h-[100px]">
+               <div className="p-4 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center">
+                 <h4 className="font-bold text-slate-800 text-sm">{lead.name}</h4>
+                 <div className="text-[10px] text-slate-500 mt-1">{lead.role}</div>
+               </div>
+               {days.map(d => {
+                 const dayActs = activities.filter(a => {
+                    if (!a.plannedDate) return false;
+                    if (new Date(a.plannedDate).toDateString() !== d.toDateString()) return false;
+                    return a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                 });
+                 
+                 return (
+                   <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-slate-50/50 transition-colors">
+                      {dayActs.map(act => (
+                        <div 
+                          key={act.id} 
+                          onClick={() => { setEditingActivity(act); setIsModalOpen(true); }}
+                          className={`mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all ${
+                            (act.escalationLevel || 0) > 0 ? 'bg-red-50 border-red-400 border-l-4' :
+                            act.status === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
+                            act.priority === 'URGENT' ? 'bg-red-50 border-red-200 border-l-4 border-l-red-500' : 
+                            'bg-white border-slate-200 border-l-4 border-l-blue-400'
+                          }`}
+                        >
+                          <div className="font-bold truncate text-slate-700 flex items-center justify-between">
+                              {act.type}
+                              {(act.escalationLevel || 0) > 0 && <AlertCircle size={10} className="text-red-500"/>}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate mt-0.5">{getDisplayLocation(act)}</div>
+                        </div>
+                      ))}
+                   </div>
+                 );
+               })}
+             </div>
+           ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className={isMobile ? "p-4 h-full flex flex-col bg-slate-50" : "p-6 h-full flex flex-col"}>
+      {/* Header Toolbar - Hidden on Mobile to save space if needed, or simplified */}
+      {!isMobile && (
+          <div className="flex justify-between items-center mb-6 shrink-0">
+            <div>
+               <h1 className="text-2xl font-bold text-slate-900">Activity Planner</h1>
+               <p className="text-slate-500 text-sm">Schedule and manage field operations</p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+               <div className="bg-white border border-slate-200 rounded-lg p-1 flex">
+                  <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <List size={20} />
+                  </button>
+                  <button onClick={() => setViewMode('kanban')} className={`p-2 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <Layout size={20} />
+                  </button>
+                  <button onClick={() => setViewMode('calendar')} className={`p-2 rounded-md transition-colors ${viewMode === 'calendar' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <Calendar size={20} />
+                  </button>
+               </div>
+               
+               <button 
+                 onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
+                 className="bg-slate-900 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all"
+               >
+                 <Plus size={18} />
+                 <span>Plan Activity</span>
+               </button>
+            </div>
+          </div>
+      )}
+
+      {isMobile && (
+          <div className="flex justify-between items-center mb-4 shrink-0">
+              <h2 className="font-bold text-slate-800 text-lg">My Planner</h2>
+              <button 
+                 onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
+                 className="bg-slate-900 text-white p-2 rounded-lg shadow-sm"
+               >
+                 <Plus size={20} />
+               </button>
+          </div>
+      )}
+
+      {/* Main View Area */}
+      <div className="flex-1 overflow-hidden">
+         {isMobile ? (
+             <MobileTabView />
+         ) : (
+             <>
+                 {viewMode === 'list' && <ListView />}
+                 {viewMode === 'kanban' && <KanbanView />}
+                 {viewMode === 'calendar' && <CalendarView />}
+             </>
+         )}
+      </div>
+
+      {/* Add/Edit Modal */}
+      {isModalOpen && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-2xl max-h-[90vh] rounded-2xl'} overflow-hidden flex flex-col`}>
+               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                  <h3 className="font-bold text-lg text-slate-900">
+                      {editingActivity ? `Edit Activity` : 'Plan New Activity'}
+                  </h3>
+                  <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+               </div>
+               
+               <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!selectedCustomerId) {
+                      alert('Please select a customer.');
+                      return;
+                  }
+
+                  const formData = new FormData(e.currentTarget);
+                  const data = Object.fromEntries(formData.entries()) as any;
+                  
+                  // Construct ISO Date from datetime-local input
+                  const plannedDateIso = plannedDatetime
+                      ? new Date(plannedDatetime).toISOString()
+                      : new Date().toISOString();
+
+                  const activityPayload: any = {
+                      type: data.type,
+                      serviceCategory: data.serviceCategory, // New Field
+                      customerId: selectedCustomerId, // New Link
+                      priority: data.priority,
+                      status: data.status || 'PLANNED',
+                      plannedDate: plannedDateIso,
+                      durationHours: Number(durationState.val),
+                      durationUnit: durationState.unit,
+                      description: data.description,
+                      
+                      odooLink: data.odooLink,
+                      locationUrl: data.locationUrl,
+                      houseNumber: data.houseNumber,
+                      
+                      salesLeadId: data.salesLeadId || undefined,
+                      leadTechId: data.leadTechId || undefined,
+                      assistantTechIds: formData.getAll('assistantTechIds') as string[]
+                  };
+
+                  if (editingActivity) {
+                      onUpdateActivity({
+                          ...editingActivity,
+                          ...activityPayload,
+                          updatedAt: new Date().toISOString()
+                      });
+                  } else {
+                      onAddActivity(activityPayload);
+                  }
+                  setIsModalOpen(false);
+               }} className="flex-1 overflow-y-auto p-6 space-y-4">
+                  
+                  {/* Customer Selector */}
+                  <div className="space-y-1">
+                      <CustomerSelector 
+                        customers={customers}
+                        selectedCustomerId={selectedCustomerId}
+                        onSelect={(c) => setSelectedCustomerId(c.id)}
+                        onCreateNew={handleNewCustomer}
+                      />
+                  </div>
+
+                  {/* Top Row: Type & Priority */}
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Activity Type</label>
+                          <select name="type" defaultValue={editingActivity?.type || 'Installation'} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                             {['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'].map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Priority</label>
+                          <select name="priority" defaultValue={editingActivity?.priority || 'MEDIUM'} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                             {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                      </div>
+                  </div>
+
+                  {/* Service Category */}
+                  <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
+                      <select 
+                        name="serviceCategory" 
+                        required 
+                        defaultValue={editingActivity?.serviceCategory || 'ELV Systems'} 
+                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm"
+                      >
+                         <option value="ELV Systems">ELV Systems</option>
+                         <option value="Home Automation">Home Automation</option>
+                      </select>
+                  </div>
+                  
+                  {/* Location Details */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                          <MapPin size={16} /> Location Details
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-500 uppercase">Location URL <span className="text-red-500">*</span></label>
+                              <input type="url" name="locationUrl" required defaultValue={editingActivity?.locationUrl} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-500 uppercase">Home Number <span className="text-red-500">*</span></label>
+                              <input type="text" name="houseNumber" required defaultValue={editingActivity?.houseNumber} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          </div>
+                      </div>
+                  </div>
+                  
+                  {/* Date & Time Selection (Grouped) */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                          <Calendar size={16} /> Planned Date & Time
+                      </h4>
+                      
+                      {/* Date & Time — single datetime-local picker */}
+                      <div>
+                          <input
+                              type="datetime-local"
+                              value={plannedDatetime}
+                              onChange={e => setPlannedDatetime(e.target.value)}
+                              required
+                              min={new Date().toISOString().slice(0,16)}
+                              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          />
+                      </div>
+                  </div>
+
+                  {/* Estimated Duration */}
+                  <div className="space-y-1 pt-2">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Estimated Duration</label>
+                      <div className="flex items-stretch shadow-sm rounded-lg overflow-hidden border border-slate-300">
+                          <input 
+                              type="number" 
+                              value={durationState.val}
+                              onChange={e => setDurationState({...durationState, val: e.target.value})}
+                              min="0.5" 
+                              step="0.5" 
+                              required
+                              className="w-1/3 bg-white p-2.5 text-sm outline-none text-center font-medium focus:bg-slate-50" 
+                           />
+                           <div className="w-px bg-slate-200"></div>
+                           <select 
+                              value={durationState.unit}
+                              onChange={e => setDurationState({...durationState, unit: e.target.value as 'HOURS' | 'DAYS'})}
+                              className="flex-1 bg-slate-50 p-2.5 text-sm font-medium outline-none cursor-pointer hover:bg-slate-100"
+                           >
+                               <option value="HOURS">Hours</option>
+                               <option value="DAYS">Days</option>
+                           </select>
+                      </div>
+                  </div>
+
+                  {/* Odoo Reference */}
+                  <div className="space-y-1">
+                       <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+                           <LinkIcon size={12} /> Odoo Reference (CRM Link) <span className="text-red-500">*</span>
+                       </label>
+                       <input 
+                        type="url" 
+                        name="odooLink" 
+                        required 
+                        defaultValue={editingActivity?.odooLink} 
+                        placeholder="https://odoo.crm..." 
+                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
+                       />
+                  </div>
+                  
+                  {/* Resource Allocation Section */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                          <User size={16}/> Resource Allocation
+                      </h4>
+                      <div className="space-y-4">
+                          <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-500 uppercase">Sales Lead</label>
+                              <select name="salesLeadId" defaultValue={editingActivity?.salesLeadId || ''} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
+                                  <option value="" disabled hidden>{salesTeam.length === 0 ? 'No Sales Lead available' : 'Select Sales Lead'}</option>
+                                  {salesTeam.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                              {salesTeam.length === 0 && (
+                                <div className="mt-1 text-xs text-slate-400">No Sales Lead available. Add a Sales member in Team Management.</div>
+                              )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase">Field Engineer</label>
+                                    <select
+                                      name="leadTechId"
+                                      defaultValue={editingActivity?.leadTechId || ""}
+                                      disabled={(teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign}
+                                      className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${
+                                        (teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign
+                                          ? "bg-slate-50 text-slate-400 cursor-not-allowed"
+                                          : ""
+                                      }`}
+                                    >
+                                      {/* Placeholder: show when empty, NOT selectable, NOT listed */}
+                                      <option value="" disabled hidden>
+                                        Unassigned
+                                      </option>
+
+                                      {/* Team Leads */}
+                                      {(canSelfAssign || teamLeads.length > 0) && (
+                                        <optgroup label="Team Leads">
+                                          {canSelfAssign && currentUser && (
+                                            <option value={currentUser.id} className="font-bold text-blue-700 bg-blue-50">
+                                              (Self) {currentUser.name}
+                                            </option>
+                                          )}
+
+                                          {teamLeads
+                                            .filter(t => !(canSelfAssign && currentUser && t.id === currentUser.id))
+                                            .map(t => (
+                                              <option key={t.id} value={t.id}>
+                                                {t.name}
+                                              </option>
+                                            ))}
+                                        </optgroup>
+                                      )}
+
+                                      {/* Field Engineers */}
+                                      {fieldEngineers.length > 0 && (
+                                        <optgroup label="Field Engineers">
+                                          {fieldEngineers.map(t => (
+                                            <option key={t.id} value={t.id}>
+                                              {t.name}
+                                            </option>
+                                          ))}
+                                        </optgroup>
+                                      )}
+                                    </select>
+                                    {((teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign) && (
+                                      <div className="mt-1 text-xs text-slate-400">No Team Leads / Field Engineers available.</div>
+                                    )}
+
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase">Technical Associates</label>
+                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                        {availableAssociates.length > 0 ? availableAssociates.map(t => (
+                                            <div key={t.id} className="flex items-center gap-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    name="assistantTechIds" 
+                                                    value={t.id} 
+                                                    defaultChecked={editingActivity?.assistantTechIds?.includes(t.id)}
+                                                    id={`helper_${t.id}`}
+                                                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                />
+                                                <label htmlFor={`helper_${t.id}`} className="text-sm text-slate-700 cursor-pointer select-none">
+                                                    {t.name}
+                                                </label>
+                                            </div>
+                                        )) : (
+                                            <div className="text-xs text-slate-400 italic">No available associates for this date.</div>
+                                        )}
+                                    </div>
+                                </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  {editingActivity && (
+                        <div className="space-y-1">
+                           <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
+                           <select name="status" defaultValue={editingActivity?.status} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                              {(['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'] as ActivityStatus[])
+                                .map(s => <option key={s} value={s}>{getActivityStatusLabel(s)}</option>)
+                              }
+                           </select>
+                        </div>
+                  )}
+
+                  <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Description / Scope of Work</label>
+                      <textarea name="description" rows={3} defaultValue={editingActivity?.description} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></textarea>
+                  </div>
+
+                  {editingActivity && (
+                     <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                        <button type="button" onClick={() => { if(confirm('Delete this activity?')) { onDeleteActivity(editingActivity.id); setIsModalOpen(false); } }} className="text-red-500 text-sm hover:text-red-700 flex items-center gap-1">
+                            <X size={16} /> Delete Activity
+                        </button>
+                     </div>
+                  )}
+
+                  <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
+                        <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+                        <button type="submit" className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all flex items-center gap-2">
+                            <Save size={18} /> {editingActivity ? 'Update Activity' : 'Plan Activity'}
+                        </button>
+                  </div>
+               </form>
+            </div>
+         </div>
+      )}
+    </div>
+  );
+};
+
+export default PlanningModule;
