@@ -808,7 +808,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                      <div>
                          <label className="text-[10px] font-bold text-slate-400 uppercase">Description</label>
                          <p className="text-xs text-slate-600 mt-1 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 whitespace-pre-wrap">
-                             {selectedItem.type === 'activity' ? (selectedItem.data as Activity).description : (selectedItem.data as Ticket).((t as any).messages?.find((m: any) => m.sender === "CLIENT")?.content || (t as any).ai_summary || (t as any).category || "No description")}
+                             {selectedItem.type === 'activity' ? (selectedItem.data as Activity).description : ((selectedItem.data as any).messages?.find((m: any) => m.sender === "CLIENT")?.content || (selectedItem.data as any).ai_summary || (selectedItem.data as any).category || "No description")}
                          </p>
                      </div>
                  </div>
