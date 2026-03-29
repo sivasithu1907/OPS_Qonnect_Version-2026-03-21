@@ -183,12 +183,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   const completedJobs = useMemo(() => {
       if (!currentUserId) return [];
-      return tickets
+      const doneTickets = tickets
           .filter(t =>
               t.assignedTechId === currentUserId &&
               (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED)
           )
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+          .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || t.createdAt }));
+      const doneActivities = (activities || [])
+          .filter(a => a.leadTechId === currentUserId && (a.status === 'DONE' || a.status === 'CANCELLED'))
+          .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.updatedAt || a.createdAt }));
+      return [...doneTickets, ...doneActivities]
+          .sort((a, b) => new Date(b.sortDate || 0).getTime() - new Date(a.sortDate || 0).getTime())
           .slice(0, 50); // last 50 completed
   }, [tickets, currentUserId]);
 
@@ -840,19 +845,33 @@ const TeamView = () => {
                       {showJobHistory && completedJobs.length === 0 && (
                           <p className="text-center text-slate-400 text-sm py-8">No completed jobs yet</p>
                       )}
-                      {showJobHistory && completedJobs.map(ticket => (
-                          <div key={ticket.id} onClick={() => setViewTicket(ticket)}
-                              className="bg-white rounded-xl border border-slate-200 p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
-                              <div className="flex justify-between items-start mb-1">
-                                  <span className="font-bold text-slate-800">{ticket.customerName}</span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${ticket.status === TicketStatus.RESOLVED ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
-                                      {ticket.status.replace('_',' ')}
-                                  </span>
+                      {showJobHistory && completedJobs.map(item => {
+                          const isAct = item.kind === 'activity';
+                          const job = item.data as any;
+                          const label     = isAct ? (job.type || 'Activity') : (job.customerName || job.id);
+                          const sub       = isAct ? (job.serviceCategory || job.description?.substring(0,40) || '') : (job.category || '');
+                          const statusVal = job.status || '';
+                          const dt        = new Date(item.sortDate || job.updatedAt || job.createdAt);
+                          return (
+                              <div key={job.id}
+                                  onClick={() => isAct
+                                      ? setViewJob({ type: 'activity', data: job })
+                                      : setViewTicket(job)}
+                                  className="bg-white rounded-xl border border-slate-200 p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
+                                  <div className="flex justify-between items-start mb-1">
+                                      <div>
+                                          <div className="text-[10px] font-bold text-slate-400 mb-0.5">{job.reference || job.id}</div>
+                                          <span className="font-bold text-slate-800">{label}</span>
+                                      </div>
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${statusVal === 'RESOLVED' || statusVal === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                          {statusVal.replace(/_/g,' ')}
+                                      </span>
+                                  </div>
+                                  {sub && <div className="text-xs text-slate-500 mb-1">{sub}</div>}
+                                  <div className="text-xs text-slate-400">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
                               </div>
-                              <div className="text-xs text-slate-500 mb-1">{ticket.id} · {ticket.category}</div>
-                              <div className="text-xs text-slate-400">{new Date(ticket.updatedAt).toLocaleDateString()} {new Date(ticket.updatedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-                          </div>
-                      ))}
+                          );
+                      })}
                   </div>
               )}
 
@@ -1175,63 +1194,209 @@ const TeamView = () => {
                     >
                        {viewJob ? (
                             <>
+                                {/* Header */}
                                 <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-                                    <button 
+                                    <button
                                         onClick={() => setViewJob(null)}
                                         className="text-sm font-bold text-slate-500 flex items-center gap-1 hover:text-slate-800"
                                     >
                                         <ChevronLeft size={20} /> Back
                                     </button>
                                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Job Details</span>
-                                    <div className="w-6" /> {/* Spacer */}
+                                    <div className="w-6" />
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+                                {/* Progress bar */}
+                                <div className="h-1 bg-slate-100 shrink-0">
+                                    <div className={`h-1 transition-all duration-500 ${
+                                        viewJob.data.status === 'RESOLVED' || viewJob.data.status === 'DONE' ? 'bg-emerald-500 w-full' :
+                                        viewJob.data.status === 'IN_PROGRESS' ? 'bg-amber-400 w-3/4' :
+                                        viewJob.data.status === 'ARRIVED' ? 'bg-indigo-400 w-2/4' :
+                                        viewJob.data.status === 'ON_MY_WAY' ? 'bg-cyan-400 w-1/4' :
+                                        'bg-purple-400 w-1/6'
+                                    }`}/>
+                                </div>
+
+                                {/* Scrollable body */}
+                                <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50">
+
+                                    {/* Status + Reference */}
+                                    <div className="flex items-center gap-2">
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${getStatusColor(viewJob.data.status)}`}>
+                                            {viewJob.data.status.replace(/_/g, ' ')}
+                                        </span>
+                                        <span className="text-xs font-mono text-slate-400">
+                                            {viewJob.type === 'ticket' ? `#${viewJob.data.id}` : (viewJob.data.reference || viewJob.data.id)}
+                                        </span>
+                                    </div>
+
+                                    {/* Title + subtitle */}
                                     <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusColor(viewJob.data.status)}`}>
-                                                {viewJob.data.status.replace('_', ' ')}
-                                            </span>
-                                            <span className="text-xs font-mono text-slate-400">
-                                                {viewJob.type === 'ticket' ? `#${viewJob.data.id}` : viewJob.data.reference}
-                                            </span>
-                                        </div>
-                                        <h2 className="text-xl font-bold text-slate-900 leading-tight mb-1">
+                                        <h2 className="text-xl font-bold text-slate-900 leading-tight">
                                             {viewJob.type === 'ticket' ? viewJob.data.category : viewJob.data.type}
                                         </h2>
-                                        <p className="text-sm text-slate-500">
-                                            {viewJob.type === 'ticket' 
+                                        {viewJob.type === 'ticket' && viewJob.data.customerName && (
+                                            <p className="text-sm text-slate-500 mt-0.5">{viewJob.data.customerName}</p>
+                                        )}
+                                        {viewJob.type === 'activity' && (() => {
+                                            const ac = viewJob.data;
+                                            const acCustomer = customers?.find((cu: any) => cu.id === ac.customerId);
+                                            return acCustomer ? <p className="text-sm text-slate-500 mt-0.5">{acCustomer.name}</p> : null;
+                                        })()}
+                                    </div>
+
+                                    {/* Description */}
+                                    <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+                                            {viewJob.type === 'ticket' ? 'Issue Description' : 'Scope of Work'}
+                                        </div>
+                                        <p className="text-sm text-slate-700 leading-relaxed">
+                                            {viewJob.type === 'ticket'
                                                 ? (viewJob.data.messages?.find((m: any) => m.sender === 'CLIENT')?.content || viewJob.data.notes || viewJob.data.ai_summary || `${viewJob.data.category} — No description provided`)
                                                 : (viewJob.data.description || 'No description provided')}
                                         </p>
                                     </div>
-                                </div>
 
-                                    {/* Work Actions for TL's own assigned ticket */}
-                                    {viewJob.type === 'ticket' && viewJob.data.assignedTechId === currentUserId && (
-                                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mx-6 mb-2">
-                                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Your Work Actions</h4>
-                                            <div className="space-y-2">
-                                                {(viewJob.data.status === 'OPEN' || viewJob.data.status === 'ASSIGNED') && (
-                                                    <button onClick={() => { handleStartWork(viewJob.data); setViewJob(null); }}
-                                                        className="w-full bg-amber-400 text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
-                                                        ▶ Start Work
-                                                    </button>
-                                                )}
-                                                {viewJob.data.status === 'IN_PROGRESS' && (
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <button onClick={() => { handleOpenJobAction('job_carry', viewJob.data); setViewJob(null); }}
-                                                            className="py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl text-xs active:scale-[0.98]">
-                                                            Carry Forward
-                                                        </button>
-                                                        <button onClick={() => { handleOpenJobAction('job_done', viewJob.data); setViewJob(null); }}
-                                                            className="py-3 bg-emerald-500 text-white font-bold rounded-xl text-xs active:scale-[0.98]">
-                                                            Complete ✓
-                                                        </button>
-                                                    </div>
-                                                )}
+                                    {/* Details grid */}
+                                    <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
+                                        {/* Priority */}
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-400 font-medium">Priority</span>
+                                            <span className={`font-bold ${
+                                                viewJob.data.priority === 'URGENT' ? 'text-red-600' :
+                                                viewJob.data.priority === 'HIGH'   ? 'text-orange-500' :
+                                                'text-slate-700'
+                                            }`}>{viewJob.data.priority || '—'}</span>
+                                        </div>
+
+                                        {/* Category (ticket) / Service category (activity) */}
+                                        {viewJob.type === 'ticket' && (
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-slate-400 font-medium">Category</span>
+                                                <span className="font-semibold text-slate-700">{viewJob.data.category || '—'}</span>
                                             </div>
+                                        )}
+                                        {viewJob.type === 'activity' && viewJob.data.serviceCategory && (
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-slate-400 font-medium">Category</span>
+                                                <span className="font-semibold text-slate-700">{viewJob.data.serviceCategory}</span>
+                                            </div>
+                                        )}
+
+                                        {/* Location */}
+                                        {(viewJob.data.houseNumber || viewJob.data.locationUrl) && (
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-slate-400 font-medium">Location</span>
+                                                <span className="font-semibold text-slate-700 text-right max-w-[55%] truncate">
+                                                    {viewJob.data.houseNumber || viewJob.data.locationUrl}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {/* Assigned engineer (ticket) */}
+                                        {viewJob.type === 'ticket' && (() => {
+                                            const eng = technicians?.find((t: any) => t.id === viewJob.data.assignedTechId);
+                                            return eng ? (
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-slate-400 font-medium">Engineer</span>
+                                                    <span className="font-semibold text-slate-700">{eng.name}</span>
+                                                </div>
+                                            ) : null;
+                                        })()}
+
+                                        {/* Planned date (activity) */}
+                                        {viewJob.type === 'activity' && viewJob.data.plannedDate && (
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-slate-400 font-medium">Planned</span>
+                                                <span className="font-semibold text-slate-700">
+                                                    {new Date(viewJob.data.plannedDate).toLocaleDateString()} {new Date(viewJob.data.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Step progress — ticket */}
+                                    {viewJob.type === 'ticket' && (() => {
+                                        const steps = [
+                                            { key: 'ASSIGNED',    label: 'Assigned'  },
+                                            { key: 'ON_MY_WAY',   label: 'On Way'    },
+                                            { key: 'ARRIVED',     label: 'Arrived'   },
+                                            { key: 'IN_PROGRESS', label: 'Working'   },
+                                            { key: 'RESOLVED',    label: 'Done'      },
+                                        ];
+                                        const cur = steps.findIndex(s => s.key === viewJob.data.status);
+                                        return (
+                                            <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
+                                                {steps.map((step, i) => (
+                                                    <React.Fragment key={step.key}>
+                                                        <div className="flex flex-col items-center">
+                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border-2 ${
+                                                                i < cur  ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                                i === cur? 'bg-slate-900 border-slate-900 text-white' :
+                                                                'bg-white border-slate-200 text-slate-400'
+                                                            }`}>{i < cur ? '✓' : i + 1}</div>
+                                                            <span className={`text-[8px] mt-1 font-medium ${i === cur ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
+                                                        </div>
+                                                        {i < steps.length - 1 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i < cur ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Step progress — activity */}
+                                    {viewJob.type === 'activity' && (() => {
+                                        const steps = [
+                                            { key: 'PLANNED',     label: 'Assigned' },
+                                            { key: 'IN_PROGRESS', label: 'Working'  },
+                                            { key: 'DONE',        label: 'Done'     },
+                                        ];
+                                        const cur = steps.findIndex(s => s.key === viewJob.data.status);
+                                        return (
+                                            <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
+                                                {steps.map((step, i) => (
+                                                    <React.Fragment key={step.key}>
+                                                        <div className="flex flex-col items-center">
+                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border-2 ${
+                                                                i < cur  ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                                i === cur? 'bg-slate-900 border-slate-900 text-white' :
+                                                                'bg-white border-slate-200 text-slate-400'
+                                                            }`}>{i < cur ? '✓' : i + 1}</div>
+                                                            <span className={`text-[8px] mt-1 font-medium ${i === cur ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
+                                                        </div>
+                                                        {i < steps.length - 1 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i < cur ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Work Actions — TL's own assigned ticket */}
+                                    {viewJob.type === 'ticket' && viewJob.data.assignedTechId === currentUserId && (
+                                        <div className="space-y-2 pb-4">
+                                            {(viewJob.data.status === 'OPEN' || viewJob.data.status === 'ASSIGNED') && (
+                                                <button onClick={() => { handleStartWork(viewJob.data); setViewJob(null); }}
+                                                    className="w-full bg-amber-400 text-slate-900 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+                                                    ▶ Start Work
+                                                </button>
+                                            )}
+                                            {viewJob.data.status === 'IN_PROGRESS' && (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button onClick={() => { handleOpenJobAction('job_carry', viewJob.data); setViewJob(null); }}
+                                                        className="py-3.5 bg-white border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
+                                                        Carry Forward
+                                                    </button>
+                                                    <button onClick={() => { handleOpenJobAction('job_done', viewJob.data); setViewJob(null); }}
+                                                        className="py-3.5 bg-emerald-500 text-white font-bold rounded-2xl text-xs active:scale-[0.98]">
+                                                        Complete ✓
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
+                                </div>
+
+                                {/* Footer */}
                                 <div className="p-4 border-t border-slate-100 flex gap-3 bg-white shrink-0 pb-safe">
                                     <button onClick={() => setViewJob(null)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">Back</button>
                                 </div>
