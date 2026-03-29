@@ -194,10 +194,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   // --- Data Derivation ---
 
   const operationsStaff = useMemo(() => {
-      // level comes from systemRole since the API doesn't return level directly
+      // Only Team Leads and Field Engineers appear in the schedule — not Admins or others
       const isOpsRole = (t: any) =>
-          t.systemRole === 'TEAM_LEAD' || t.systemRole === 'FIELD_ENGINEER' ||
-          t.level === 'TEAM_LEAD'      || t.level === 'FIELD_ENGINEER';
+          (t.systemRole === 'TEAM_LEAD' || t.systemRole === 'FIELD_ENGINEER') &&
+          t.systemRole !== 'ADMIN';
       return technicians.filter(t =>
           isOpsRole(t) &&
           t.isActive !== false &&
