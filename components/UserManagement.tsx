@@ -90,7 +90,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         name: data.name,
         email: data.email,
         phone: normalizedPhone,
-        role: data.position, // UI Label: Position
+        role: data.jobRole || data.position || '', // Job Role (job title, not system role)
         systemRole: data.systemRole as Role,
         isActive: data.isActive === 'true',
         teamId: editingUser?.teamId, 
@@ -140,7 +140,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                 <tr>
                     <th className="px-6 py-4 w-1/3">User Profile</th>
                     <th className="px-6 py-4">System Role</th>
-                    <th className="px-6 py-4">Position</th>
+                    <th className="px-6 py-4">Job Role</th>
                     <th className="px-6 py-4">Status</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
@@ -321,8 +321,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                 </select>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500 uppercase">Position</label>
-                                <input name="position" defaultValue={editingUser?.role} placeholder="e.g. Senior Electrician" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" />
+                                <label className="text-xs font-semibold text-slate-500 uppercase">Job Role</label>
+                                <input name="jobRole" defaultValue={(editingUser as any)?.jobRole || editingUser?.role} placeholder="e.g. Senior Electrician" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" />
                             </div>
                         </div>
 
