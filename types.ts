@@ -212,6 +212,8 @@ export interface Activity {
   remarks?: string;
   createdAt: string;
   updatedAt: string;
+  startedAt?: string;   // Set when status first transitions to IN_PROGRESS
+  completedAt?: string; // Set when status transitions to DONE
   
   // Duration
   durationHours: number;
