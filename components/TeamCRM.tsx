@@ -21,8 +21,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
   const [currentLevel, setCurrentLevel] = useState<string>('FIELD_ENGINEER');
   const [formSystemRole, setFormSystemRole] = useState<string>('');
   const [saveToast, setSaveToast] = useState(false);
-  const [saveToast, setSaveToast] = useState(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const teamLeads = technicians.filter(t => t.systemRole === Role.TEAM_LEAD);
@@ -156,11 +155,9 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in zoom-in duration-300">
-      {/* Success toast */}
       {saveToast && (
-        <div className="fixed top-5 right-5 z-[300] bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in duration-200">
-          <span className="text-lg">✓</span>
-          <span className="font-semibold text-sm">Member saved successfully</span>
+        <div className="fixed top-5 right-5 z-[300] bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-xl flex items-center gap-2 font-semibold text-sm">
+          ✓ Changes saved successfully
         </div>
       )}
         
@@ -257,13 +254,12 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                             ...rawData,
                             phone: fullPhone,
                             systemRole: finalSystemRole,
-                            // jobRole is the text job title (e.g. "Senior Electrician")
-                            // rawData.jobRole contains the Job Role text input
+                            // jobRole = job title text (e.g. "Senior Technician"), separate from systemRole
                             jobRole: rawData.jobRole || '',
-                            // level is the department/team assignment (name="level" select)
-                            level: rawData.level || currentLevel,
-                            // systemRole is the login permission role
+                            // role = systemRole for DB (login permission), NOT job title
                             role: finalSystemRole || undefined,
+                            // level = department/team e.g. "SALES", "FIELD_ENGINEER"
+                            level: rawData.level || currentLevel,
                         };
 
                         // Derive isActive from the status field in the form
@@ -283,8 +279,6 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         setSaveToast(true);
                         setTimeout(() => setSaveToast(false), 2500);
                         closeModal();
-                        setSaveToast(true);
-                        setTimeout(() => setSaveToast(false), 3000);
                     }} className="p-6 space-y-4 bg-white">
                         
                         <div className="flex flex-col items-center mb-4">
@@ -352,7 +346,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Job Role</label>
-                                <input name="jobRole" defaultValue={(activeTech as any)?.jobRole || activeTech?.role || ''} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Sales Associate"/>
+                                <input name="jobRole" defaultValue={(activeTech as any)?.jobRole || activeTech?.role || ''} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Senior Technician"/>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Department / Level</label>
