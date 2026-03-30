@@ -258,6 +258,10 @@ async function initDb() {
       -- Add columns if upgrading existing DB
       ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS level TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS level TEXT;
     `);
 // 5. Teams Table
     await pool.query(`
@@ -1045,7 +1049,7 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
 
 app.get("/api/users", authenticate, async (req, res) => {
     try {
-        const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status, phone, avatar FROM users");
+        const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status, phone, avatar, job_role, level FROM users");
         res.json(result.rows.map(r => ({
             id: r.id,
             name: r.name,
@@ -1054,6 +1058,8 @@ app.get("/api/users", authenticate, async (req, res) => {
             status: r.status,
             isActive: r.status === 'ACTIVE',
             phone: r.phone || '',
+            jobRole: r.job_role || '',
+            level:   r.level   || '',
             avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'U')}&background=random&color=fff&bold=true&size=128`
         })));
     } catch (e) {
@@ -1064,17 +1070,17 @@ app.get("/api/users", authenticate, async (req, res) => {
 // POST User (Create)
 app.post("/api/users", authenticate, async (req, res) => {
     try {
-        const { id, name, email, password, role, status, phone } = req.body;
+        const { id, name, email, password, role, status, phone, job_role, level } = req.body;
         if (!name || !email || !password || !role) {
             return res.status(400).json({ error: "name, email, password, and role are required" });
         }
         const hashedPass = await bcrypt.hash(password, 10);
         const userId = id || `u-${Date.now()}`;
         const { rows } = await pool.query(
-            `INSERT INTO users (id, name, email, password, role, status, phone)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING id, name, email, role as "systemRole", status, phone`,
-            [userId, name.trim(), email.trim(), hashedPass, role, status || "ACTIVE", phone || null]
+            `INSERT INTO users (id, name, email, password, role, status, phone, job_role, level)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             RETURNING id, name, email, role as "systemRole", status, phone, job_role, level`,
+            [userId, name.trim(), email.trim(), hashedPass, role, status || "ACTIVE", phone || null, job_role || null, level || null]
         );
         res.status(201).json(rows[0]);
     } catch (e) {
@@ -1087,7 +1093,7 @@ app.post("/api/users", authenticate, async (req, res) => {
 // PUT User (Update)
 app.put("/api/users/:id", authenticate, async (req, res) => {
     try {
-        const { name, email, password, role, status, phone, avatar } = req.body;
+        const { name, email, password, role, status, phone, avatar, job_role, level } = req.body;
         const id = req.params.id;
         let hashedPass = null;
         if (password) {
@@ -1095,15 +1101,17 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
         }
         const { rows } = await pool.query(
             `UPDATE users SET
-                name = COALESCE($1, name),
-                email = COALESCE($2, email),
+                name     = COALESCE($1, name),
+                email    = COALESCE($2, email),
                 password = COALESCE($3, password),
-                role = COALESCE($4, role),
-                status = COALESCE($5, status),
-                phone = COALESCE($6, phone),
-                avatar = COALESCE($7, avatar)
+                role     = COALESCE($4, role),
+                status   = COALESCE($5, status),
+                phone    = COALESCE($6, phone),
+                avatar   = COALESCE($7, avatar),
+                job_role = COALESCE($9, job_role),
+                level    = COALESCE($10, level)
              WHERE id = $8
-             RETURNING id, name, email, role as "systemRole", status, phone, avatar`,
+             RETURNING id, name, email, role as "systemRole", status, phone, avatar, job_role, level`,
             [
                 name ? name.trim() : null,
                 email ? email.trim() : null,
@@ -1112,7 +1120,9 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
                 status || null,
                 phone || null,
                 avatar || null,
-                id
+                id,
+                job_role || null,
+                level    || null
             ]
         );
         if (!rows[0]) return res.status(404).json({ error: "User not found" });
