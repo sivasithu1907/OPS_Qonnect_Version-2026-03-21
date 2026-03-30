@@ -58,6 +58,10 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const [carryForwardDatetime, setCarryForwardDatetime] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [photoJobId, setPhotoJobId] = useState<string | null>(null);
+  const [photoJobType, setPhotoJobType] = useState<'ticket' | 'activity'>('activity');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
 
   // Combine Tickets and Activities into a single "Job" concept for display
   // Prioritize Delayed Jobs
@@ -102,6 +106,47 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   const activeJobItem = myJobs.find(j => j.data.id === selectedJobId);
   const activeJob = activeJobItem?.data;
+
+  // ── Photo upload handler ──
+  const handlePhotoClick = (jobId: string, jobType: 'ticket' | 'activity') => {
+      setPhotoJobId(jobId);
+      setPhotoJobType(jobType);
+      photoInputRef.current?.click();
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !photoJobId) return;
+      setPhotoUploading(true);
+      try {
+          // Convert to base64 for storage in JSONB details column
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+              const base64 = (reader.result as string);
+              const photoEntry = { url: base64, takenAt: new Date().toISOString(), name: file.name };
+              if (photoJobType === 'activity') {
+                  const act = activities.find(a => a.id === photoJobId);
+                  if (act && onUpdateActivity) {
+                      const existing = (act as any).photos || [];
+                      onUpdateActivity({ ...act, photos: [...existing, photoEntry] } as any);
+                  }
+              } else {
+                  const ticket = tickets.find(t => t.id === photoJobId);
+                  if (ticket) {
+                      onUpdateTicket?.({ ...ticket, photos: [...((ticket as any).photos || []), photoEntry] } as any);
+                  }
+              }
+              setPhotoUploading(false);
+              setPhotoJobId(null);
+              // Reset file input so same file can be picked again
+              if (photoInputRef.current) photoInputRef.current.value = '';
+          };
+          reader.readAsDataURL(file);
+      } catch (err) {
+          console.error('Photo upload failed:', err);
+          setPhotoUploading(false);
+      }
+  };
 
   const handleBack = () => {
       if (completionStep) setCompletionStep(false);
@@ -517,9 +562,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                         <span className="text-xs font-semibold">Navigate</span>
                                     </div>
                                 )}
-                                <button className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50">
+                                <button
+                                    onClick={() => handlePhotoClick(act.id, 'activity')}
+                                    disabled={photoUploading}
+                                    className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform disabled:opacity-50">
                                     <Camera size={22} className="mb-1"/>
-                                    <span className="text-xs font-semibold">Photos</span>
+                                    <span className="text-xs font-semibold">{photoUploading && photoJobId === act.id ? 'Saving...' : 'Photos'}</span>
                                 </button>
                             </div>
                             {/* Workflow action buttons */}
@@ -564,12 +612,16 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                  <textarea className={INPUT_STYLES} placeholder="What did you fix?" rows={4} value={completionNotes} onChange={(e) => setCompletionNotes(e.target.value)} />
                              </div>
                              
-                             <div className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl bg-slate-50">
+                             <button
+                                 onClick={() => activeJob && handlePhotoClick((activeJob as any).id, activeJobItem?.type === 'activity' ? 'activity' : 'ticket')}
+                                 className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl bg-slate-50 w-full active:bg-slate-100 transition-colors">
                                  <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
                                      <Camera size={20} className="text-slate-500" />
                                  </div>
-                                 <span className="text-sm font-medium text-slate-600">Add Proof of Work</span>
-                             </div>
+                                 <span className="text-sm font-medium text-slate-600">
+                                     {photoUploading ? 'Saving photo...' : 'Add Proof of Work (tap to photo)'}
+                                 </span>
+                             </button>
                          </div>
 
                          <div className="flex gap-3">
@@ -673,6 +725,16 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
             </div>
         </div>
     </div>
+
+      {/* Hidden photo file input */}
+      <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handlePhotoUpload}
+      />
 
       {/* Change Password Modal */}
       {showChangePwd && (
