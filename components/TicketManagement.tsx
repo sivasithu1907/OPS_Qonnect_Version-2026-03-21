@@ -8,6 +8,22 @@ import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phon
 import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2 } from 'lucide-react';
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
 
+// Converts a UTC ISO string → datetime-local input value in LOCAL timezone
+const toLocalDatetimeInput = (isoString: string): string => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// Converts a datetime-local input value (local time) → UTC ISO string for storage
+const fromLocalDatetimeInput = (localStr: string): string => {
+  if (!localStr) return '';
+  const d = new Date(localStr); // browser treats "YYYY-MM-DDTHH:mm" as local time ✓
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+};
+
 interface TicketManagementProps {
   tickets: Ticket[];
   technicians: Technician[];
@@ -1130,10 +1146,10 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Appointment</label>
                     <input
                         type="datetime-local"
-                        value={editForm.appointmentTime ? new Date(editForm.appointmentTime).toISOString().slice(0,16) : ''}
-                        onChange={e => updateField('appointmentTime', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                        value={toLocalDatetimeInput(editForm.appointmentTime)}
+                        onChange={e => updateField('appointmentTime', fromLocalDatetimeInput(e.target.value))}
                         className={INPUT_STYLES}
-                        min={new Date().toISOString().slice(0,16)}
+                        min={toLocalDatetimeInput(new Date().toISOString())}
                     />
                 </div>
                 <div className="pt-2 border-t border-slate-200">
