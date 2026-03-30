@@ -303,8 +303,11 @@ const handleLogout = () => {
                   appointmentTime: updated.appointmentTime || null,
               })
           });
+          // Reload from DB to keep state fresh (mirrors handleUpdateActivity)
+          await loadTickets();
       } catch (e) {
           console.error("Failed to update ticket:", e);
+          // Keep optimistic update on failure
       }
   };
 
@@ -723,7 +726,7 @@ useEffect(() => {
     let isRefreshing = false;
     const interval = setInterval(async () => {
       if (isRefreshing) return;
-      if (activeView === 'lead_portal' || activeView === 'tech_portal') return;
+      if (activeView === 'lead_portal') return; // tech_portal refreshes every 8s
       isRefreshing = true;
       try {
         await Promise.all([loadTickets(), loadActivities()]);
