@@ -549,8 +549,8 @@ const handleDeleteCustomer = async (id: string) => {
                       name: u.name,
                       email: u.email,
                       role: u.systemRole || null,
-                      job_role: (u as any).jobRole || (u as any).job_role || u.role || null,
-                      level: (u as any).level || null,
+                      job_role: (u as any).jobRole || null,
+                      level: u.level || null,
                       status: u.isActive === false ? 'INACTIVE' : (u.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'),
                       phone: u.phone || null,
                       avatar: u.avatar || null,
@@ -568,11 +568,9 @@ const handleDeleteCustomer = async (id: string) => {
                       name: u.name,
                       email: u.email,
                       password: u.password || "Qonnect@123",
-                      job_role: (u as any).jobRole || u.role || null,
+                      job_role: (u as any).jobRole || null,
                       level: u.level || null,
-                      role: u.systemRole || null,
-                      job_role: (u as any).jobRole || (u as any).job_role || u.role || null,
-                      level: (u as any).level || null,
+                      role: u.systemRole || u.role,
                       status: u.status || "ACTIVE",
                       phone: u.phone || null,
                       avatar: u.avatar || null
@@ -638,14 +636,14 @@ const loadUsers = async () => {
         // Derive 'level' from systemRole since it's not stored in DB
         const withLevel = data.map((u: any) => ({
             ...u,
-            // Prefer DB-stored level; fall back to deriving from systemRole only if blank
+            // Prefer stored level from DB; only fall back to systemRole-derived value if blank
             level: u.level || (
                 u.systemRole === 'TEAM_LEAD'      ? 'TEAM_LEAD' :
                 u.systemRole === 'FIELD_ENGINEER'  ? 'FIELD_ENGINEER' :
                 u.systemRole === 'ADMIN'            ? 'ADMIN' : 'TECHNICAL_ASSOCIATE'
             ),
-            // jobRole is the human job title (e.g. "Senior Electrician"), separate from systemRole
-            jobRole: u.jobRole || u.job_role || u.role || '',
+            // jobRole is the human job title; preserve from API
+            jobRole: u.jobRole || u.job_role || ''
         }));
         setTechnicians(withLevel);
     }
