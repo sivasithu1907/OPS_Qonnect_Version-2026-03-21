@@ -589,8 +589,31 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 type: 'activity',
                                 status: normalizeStatus(a.status),
                                 priority: a.priority,
-                                plannedDate: a.plannedDate || a.createdAt || new Date().toISOString(),
-                                durationHours: a.durationHours || 2,
+                                // Timeline start:
+                                //   IN_PROGRESS + startedAt exists → use actual start time
+                                //   IN_PROGRESS + no startedAt    → use updatedAt (best proxy)
+                                //   Not started                   → use plannedDate
+                                plannedDate: (() => {
+                                    const s = normalizeStatus(a.status);
+                                    if (s === 'IN_PROGRESS' && (a as any).startedAt) return (a as any).startedAt;
+                                    if (s === 'IN_PROGRESS' && a.updatedAt) return a.updatedAt;
+                                    return a.plannedDate || a.createdAt || new Date().toISOString();
+                                })(),
+                                // Duration:
+                                //   DONE with both timestamps → actual duration
+                                //   IN_PROGRESS               → elapsed so far (live)
+                                //   Otherwise                 → planned duration
+                                durationHours: (() => {
+                                    const s = normalizeStatus(a.status);
+                                    const start = (a as any).startedAt || a.updatedAt;
+                                    if (s === 'DONE' && (a as any).completedAt && start) {
+                                        return Math.max(0.25, (new Date((a as any).completedAt).getTime() - new Date(start).getTime()) / 3600000);
+                                    }
+                                    if (s === 'IN_PROGRESS' && start) {
+                                        return Math.max(0.25, (Date.now() - new Date(start).getTime()) / 3600000);
+                                    }
+                                    return a.durationHours || 2;
+                                })(),
                                 description: a.description || a.type,
                                 escalationLevel: a.escalationLevel || 0
                             }));
