@@ -583,7 +583,7 @@ app.put("/api/tickets/:id", authenticate, async (req, res) => {
     try {
         const id = req.params.id;
         const { category, priority, type, customerId, customerName,
-                assignedTechId, appointmentTime, locationUrl, houseNumber, odooLink, notes } = req.body;
+                assignedTechId, appointmentTime, locationUrl, houseNumber, odooLink, notes, photos } = req.body;
         await pool.query(
             `UPDATE tickets SET
                 category         = COALESCE($1,  category),
@@ -596,6 +596,9 @@ app.put("/api/tickets/:id", authenticate, async (req, res) => {
                 notes            = COALESCE($8,  notes),
                 customer_id      = COALESCE($9,  customer_id),
                 customer_name    = COALESCE($10, customer_name),
+                messages         = CASE WHEN $12::text IS NOT NULL
+                                        THEN COALESCE(messages,'[]'::jsonb) || $12::jsonb
+                                        ELSE messages END,
                 updated_at       = NOW()
              WHERE id = $11`,
             [
@@ -604,7 +607,8 @@ app.put("/api/tickets/:id", authenticate, async (req, res) => {
                 assignedTechId || null, appointmentTime || null,
                 odooLink || null, notes || null,
                 customerId || null, customerName || null,
-                id
+                id,
+                photos ? JSON.stringify(photos) : null
             ]
         );
         res.json({ ok: true });
