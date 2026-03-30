@@ -301,8 +301,12 @@ async function initDb() {
         duration_hours NUMERIC,
         details JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT now(),
-        updated_at TIMESTAMPTZ DEFAULT now()
+        updated_at TIMESTAMPTZ DEFAULT now(),
+        started_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ
       );
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
     `);
     
 // 8. WhatsApp Logs Table
@@ -1274,7 +1278,9 @@ app.get("/api/activities", authenticate, async (req, res) => {
         status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
         siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
         durationHours: Number(r.duration_hours), ...r.details,
-        createdAt: r.created_at, updatedAt: r.updated_at
+        createdAt: r.created_at, updatedAt: r.updated_at,
+        startedAt:   r.started_at   || null,   // actual start time (when engineer clicked Start Work)
+        completedAt: r.completed_at || null,   // actual completion time
     })));
   } catch (e) { res.status(500).json({error: "Failed to load activities"}); }
 });
@@ -1296,8 +1302,31 @@ app.post("/api/activities", authenticate, async (req, res) => {
 app.put("/api/activities/:id", authenticate, async (req, res) => {
     try {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
+
+        // Fetch current status to detect transitions
+        const current = await pool.query("SELECT status, started_at FROM activities WHERE id=$1", [req.params.id]);
+        const prevStatus = current.rows[0]?.status;
+        const alreadyStarted = current.rows[0]?.started_at;
+
+        // Determine started_at / completed_at based on status transition
+        let startedAtClause = "";
+        let completedAtClause = "";
+
+        if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
+            // First time entering IN_PROGRESS — record real start time
+            startedAtClause = ", started_at = NOW()";
+        }
+        if (status === 'DONE' && prevStatus !== 'DONE') {
+            completedAtClause = ", completed_at = NOW()";
+        }
+        if (status === 'PLANNED' || status === 'CANCELLED') {
+            // Reset timestamps if re-planned or cancelled
+            startedAtClause  = ", started_at = NULL";
+            completedAtClause = ", completed_at = NULL";
+        }
+
         await pool.query(
-            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=$5, site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW() WHERE id=$11`,
+            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=$5, site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause} WHERE id=$11`,
             [type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(details), req.params.id]
         );
         res.json({ok: true});
@@ -1836,68 +1865,51 @@ async function handleIncomingMessage(phone, text) {
 	// 3. AI ANALYSIS (State-Machine Prompt)
 
 	// ══════════════════════════════════════════════════════════════
-	// ══════════════════════════════════════════════════════════
-	// 3. DETERMINISTIC BACKEND-CONTROLLED CONVERSATION ENGINE
-	// ══════════════════════════════════════════════════════════
-	// Architecture:
-	//   AI = entity extractor ONLY (returns structured JSON, no replies)
-	//   Backend = decides every question, every transition, every ticket
-	// ══════════════════════════════════════════════════════════
+	// 3. STRUCTURED FIELD-COMPLETION ENGINE
+	// Backend owns all flow decisions. AI is only used for:
+	//   - entity extraction (name, location, category, fields)
+	//   - natural language reply generation for the chosen question
+	// ══════════════════════════════════════════════════════════════
 
-	// ── 3a. ENTITY EXTRACTION (AI as data extractor only) ──
-	const extractionPrompt = `You are a structured data extractor for a field operations support bot in Qatar.
-Extract facts from the customer message. Return STRICT JSON ONLY — no markdown, no explanation, no extra keys.
+	// ── 3a. Extract fields from this message using AI ──
+	const extractionPrompt = `You are an entity extractor for a home automation/CCTV/networking support bot in Qatar.
 
-Required JSON schema (use null for any field not found in the message):
+Extract ANY of the following fields from the customer message below.
+Return STRICT JSON ONLY — no markdown, no explanation.
+
+Fields to extract (return null for any you cannot determine):
 {
-  "name": null,
-  "issue_category": null,
-  "technician_requested": false,
-  "villa_number": null,
-  "area": null,
-  "location_pin_received": false,
-  "affected_scope": null,
-  "affected_camera_location": null,
-  "other_cameras_working": null,
-  "restart_done": null,
-  "all_devices_affected": null,
-  "device_type": null,
-  "issue_description": null,
-  "issue_resolved": false,
-  "photo_not_possible": false,
-  "wifi_speed_issue": null
+  "name": "customer's first name or full name if mentioned",
+  "issue_category": "one of: cctv | wifi_network | internet_down | slow_internet | intercom | access_control | home_automation | audio_speaker | tv_streaming | power_issue | general_elv | unknown — or null",
+  "technician_requested": "true if customer asks for technician/site visit/someone to come — else false",
+  "villa_number": "villa number, building number, flat number, unit number — or null",
+  "area": "area name, street, zone, city district — or null",
+  "location_pin_received": "true if this message IS a location pin share — else false",
+  "affected_scope": "one of: single_camera | multiple_cameras | all_cameras | single_device | multiple_devices | all_devices | single_area | all_areas | unknown — or null",
+  "affected_camera_location": "which camera/location is affected e.g. front entrance, back garden, parking — or null",
+  "other_cameras_working": "true if customer says other cameras are working — false if all down — null if unknown",
+  "restart_done": "true if customer already tried restarting — false if not — null if unknown",
+  "issue_resolved": "true if customer says issue is now fixed — else false",
+  "photo_shared": "true if customer is sharing a photo of the issue — else false",
+  "photo_not_possible": "true if customer says they cannot share a photo — else false",
+  "issue_description": "brief description of the problem in the customer's words — or null"
 }
 
-Extraction rules (apply strictly):
-- name: first name or full name if stated. null otherwise.
-- issue_category: one of cctv|wifi_network|internet_down|slow_internet|intercom|access_control|home_automation|audio_speaker|tv_streaming|power_issue|general_elv. null if unclear.
-- technician_requested: true ONLY if customer explicitly asks for visit/technician/site attendance/someone to come. "not possible" alone = true.
-- villa_number: villa/building/flat/unit number as string. null if not given.
-- area: neighbourhood/street/zone. null if not given.
-- location_pin_received: true ONLY if this message IS a WhatsApp location pin.
-- affected_scope: single_camera|multiple_cameras|all_cameras|single_device|multiple_devices|all_devices|single_area|all_areas. null if unclear.
-- affected_camera_location: specific camera spot e.g. "front entrance", "parking", "back garden". null if not given.
-- other_cameras_working: true="yes other cameras fine", false="all cameras down", null=unknown.
-- restart_done: true="already restarted", false="not tried", null=unknown.
-- all_devices_affected: true=all devices, false=one device, null=unknown.
-- device_type: e.g. "lights", "curtains", "AC", "router". null if not given.
-- issue_description: brief problem summary in customer words. null if nothing useful.
-- issue_resolved: true ONLY if customer says issue is fixed/resolved/working now.
-- photo_not_possible: true ONLY if customer says cannot share photo.
-- wifi_speed_issue: true=slow internet, false=no internet, null=unknown.
+Rules:
+- "one", "only one", "just one" for cameras => affected_scope = single_camera
+- "front one", "main entrance", "entrance" => affected_camera_location
+- "yes" after asking if other cameras work => other_cameras_working = true
+- "no" after asking if other cameras work => other_cameras_working = false
+- Location/map pin message => location_pin_received = true
+- "not possible", "cannot", "can't" for photo => photo_not_possible = true
+- Any form of "send technician", "need someone", "arrange visit", "come and check", "fix it on site" => technician_requested = true
+- Do not invent values. If not mentioned, return null.
 
-Short-reply normalisation:
-- "one" / "only one" / "just one" => affected_scope=single_camera
-- "all" / "all of them" => affected_scope=all_cameras
-- "yes" (after camera question) => other_cameras_working=true
-- "no" (after camera question) => other_cameras_working=false
-- "yes" (after restart question) => restart_done=true
-- "done" / "tried" => restart_done=true
-- "front" / "entrance" / "main gate" => affected_camera_location=front entrance
-- map/location pin => location_pin_received=true
+CUSTOMER MESSAGE:
+"${text}"
 
-CUSTOMER MESSAGE: "${text}"
-LAST BOT QUESTION (for context only): "${session?.last_bot_question || 'none'}"
+PREVIOUS BOT QUESTION (for context):
+"${session?.last_bot_question || 'none'}"
 `;
 
 	let extracted = {};
@@ -1910,183 +1922,163 @@ LAST BOT QUESTION (for context only): "${session?.last_bot_question || 'none'}"
 		const raw = extractResult.response.text().replace(/```json|```/g, "").trim();
 		extracted = JSON.parse(raw);
 	} catch (e) {
-		console.error("[BOT] Extraction failed:", e.message);
+		console.error("Extraction failed:", e.message);
 		extracted = {};
 	}
 
-	// ── 3b. MERGE INTO SESSION STATE (non-destructive) ──
+	// ── 3b. Merge extracted fields into session state ──
+	// Build the new troubleshooting_state by merging old + new
 	const prev = session?.troubleshooting_state || {};
 
-	// Boolean fields: once true, always true (sticky flags)
-	const mergeBool = (extracted_val, prev_val) =>
-		extracted_val === true ? true : (prev_val === true ? true : (extracted_val === false ? false : (prev_val ?? null)));
-
 	const newState = {
-		// CCTV fields
-		affected_scope:           extracted.affected_scope           ?? prev.affected_scope           ?? null,
-		affected_camera_location: extracted.affected_camera_location ?? prev.affected_camera_location ?? null,
-		other_cameras_working:    mergeBool(extracted.other_cameras_working, prev.other_cameras_working),
-		// WiFi fields
-		restart_done:             mergeBool(extracted.restart_done, prev.restart_done),
-		all_devices_affected:     extracted.all_devices_affected     ?? prev.all_devices_affected     ?? null,
-		wifi_speed_issue:         extracted.wifi_speed_issue         ?? prev.wifi_speed_issue         ?? null,
-		// Home automation
-		device_type:              extracted.device_type              ?? prev.device_type              ?? null,
-		// Shared
-		area:                     extracted.area                     ?? prev.area                     ?? null,
-		technician_requested:     mergeBool(extracted.technician_requested, prev.technician_requested),
-		photo_not_possible:       mergeBool(extracted.photo_not_possible,   prev.photo_not_possible),
-		issue_resolved:           mergeBool(extracted.issue_resolved,        prev.issue_resolved),
-		location_pin_received:    mergeBool(extracted.location_pin_received, prev.location_pin_received),
-		// Flow control
-		last_question_key:        prev.last_question_key ?? null,
-		troubleshoot_step:        prev.troubleshoot_step ?? 0,
+		// Preserve everything from prev, override only with non-null new values
+		affected_scope:            extracted.affected_scope           ?? prev.affected_scope           ?? null,
+		affected_camera_location:  extracted.affected_camera_location ?? prev.affected_camera_location ?? null,
+		other_cameras_working:     extracted.other_cameras_working    ?? prev.other_cameras_working    ?? null,
+		restart_done:              extracted.restart_done             ?? prev.restart_done             ?? null,
+		area:                      extracted.area                     ?? prev.area                     ?? null,
+		location_pin_received:     extracted.location_pin_received === true ? true : (prev.location_pin_received ?? false),
+		technician_requested:      extracted.technician_requested === true  ? true : (prev.technician_requested  ?? false),
+		photo_not_possible:        extracted.photo_not_possible === true     ? true : (prev.photo_not_possible    ?? false),
+		photo_shared:              extracted.photo_shared === true           ? true : (prev.photo_shared          ?? false),
+		issue_resolved:            extracted.issue_resolved === true         ? true : (prev.issue_resolved        ?? false),
+		last_question_key:         prev.last_question_key ?? null,
 	};
 
-	// Top-level session fields (never overwrite with null)
-	const newName      = (extracted.name && extracted.name.trim())
-		? extracted.name.trim() : (session?.customer_name || null);
-	const newCategory  = (extracted.issue_category && extracted.issue_category !== 'unknown')
-		? extracted.issue_category : (session?.issue_category || null);
-	const newIssueDesc = (extracted.issue_description && extracted.issue_description.trim())
-		? extracted.issue_description.trim() : (session?.issue_details || null);
-	const newVilla     = (extracted.villa_number && extracted.villa_number.trim())
-		? extracted.villa_number.trim() : (session?.house_number || null);
-	const newLocationUrl = session?.location_url || null;
+	// Merge top-level session fields
+	const newName         = (extracted.name           && extracted.name.trim())          ? extracted.name.trim()           : session?.customer_name  || null;
+	const newCategory     = (extracted.issue_category && extracted.issue_category !== 'unknown') ? extracted.issue_category : session?.issue_category || null;
+	const newIssueDesc    = (extracted.issue_description && extracted.issue_description.trim()) ? extracted.issue_description.trim() : session?.issue_details  || null;
+	const newVilla        = (extracted.villa_number   && extracted.villa_number.trim())  ? extracted.villa_number.trim()   : session?.house_number   || null;
+	const newLocationUrl  = session?.location_url || null; // already set via location handler
+	const locationKnown   = !!(newLocationUrl || newState.location_pin_received || newState.area);
+	const villaKnown      = !!newVilla;
 
-	// Derived convenience flags
-	const locationKnown = !!(newLocationUrl || newState.location_pin_received || newState.area);
-	const villaKnown    = !!newVilla;
+	// ── 3c. Determine what action to take ──
 
-	// ── 3c. HANDLE IMMEDIATE CASES ──
-
-	// Issue already resolved before ticket
+	// IMMEDIATE: customer resolved issue
 	if (newState.issue_resolved && !session?.ticket_id) {
 		await pool.query(
 			`UPDATE sessions SET step='RESOLVED', customer_name=COALESCE($1,customer_name),
 			 issue_category=COALESCE($2,issue_category), issue_details=COALESCE($3,issue_details),
 			 house_number=COALESCE($4,house_number),
 			 troubleshooting_state=COALESCE(troubleshooting_state,'{}'::jsonb)||$5::jsonb,
-			 last_bot_question='Issue resolved', last_interaction=NOW() WHERE phone=$6`,
+			 last_interaction=NOW() WHERE phone=$6`,
 			[newName, newCategory, newIssueDesc, newVilla, JSON.stringify(newState), phone]
 		);
-		const finalReply = `Glad to hear that${newName ? ', ' + newName : ''}! Issue resolved. Feel free to message us if it happens again.`;
+		const finalReply = `Glad to hear that, ${newName || ""}! Issue resolved. If it happens again, feel free to message us here.`.trim();
 		await sendWhatsAppText(phone, finalReply);
 
+
+	// ── 3d. STRUCTURED FIELD-COMPLETION FLOW ──
+	// Backend decides the EXACT next question based on what's missing.
+	// AI only generates the natural language reply for a pre-decided question key.
+
 	} else {
-	// ── 3d. DETERMINISTIC NEXT-QUESTION ENGINE ──
-	// Backend selects the EXACT next question key. AI generates text only.
 
-	// ── Per-category required fields ──
-	const REQUIRED_FOR_TICKET = {
-		cctv: ['name', 'issue_category', 'cctv_scope', 'villa_number', 'location'],
-		wifi_network:  ['name', 'issue_category', 'wifi_devices', 'restart_done_q', 'villa_number', 'location'],
-		internet_down: ['name', 'issue_category', 'wifi_devices', 'restart_done_q', 'villa_number', 'location'],
-		slow_internet: ['name', 'issue_category', 'wifi_devices', 'restart_done_q', 'villa_number', 'location'],
-		intercom:      ['name', 'issue_category', 'intercom_type', 'villa_number', 'location'],
-		access_control:['name', 'issue_category', 'access_scope', 'villa_number', 'location'],
-		home_automation:['name', 'issue_category', 'device_type_q', 'villa_number', 'location'],
-		default:       ['name', 'issue_category', 'issue_description', 'villa_number', 'location'],
-	};
+	// STEP 1 — We need a name first
+	const needsName     = !newName;
+	// STEP 2 — We need to know the issue category
+	const needsCategory = !newCategory && !!newName;
+	// STEP 3 — Technician requested OR issue category known → decide flow
+	const isTechnicianFlow = newState.technician_requested;
 
-	// ── Field readiness map ──
-	const fieldReady = {
-		name:            !!newName,
-		issue_category:  !!newCategory,
-		issue_description: !!newIssueDesc,
-		// CCTV
-		cctv_scope:      !!newState.affected_scope,
-		camera_location: newState.affected_scope !== 'all_cameras' ? !!newState.affected_camera_location : true,
-		// WiFi
-		wifi_devices:    newState.all_devices_affected !== null,
-		restart_done_q:  newState.restart_done !== null,
-		// Intercom
-		intercom_type:   !!(newIssueDesc && newIssueDesc.length > 3),
-		// Access control
-		access_scope:    !!newState.affected_scope,
-		// Home automation
-		device_type_q:   !!newState.device_type,
-		// Location
-		villa_number:    villaKnown,
-		location:        locationKnown,
-	};
+	// ── What is the next missing TICKET FIELD? ──
+	// For site visit ticket we need: name, category, affected_scope (CCTV), affected_camera_location (CCTV), villa, location
+	const missingFields = [];
+	if (!newName)                                                                   missingFields.push("name");
+	if (!newCategory)                                                               missingFields.push("issue_category");
+	if (!newIssueDesc && !isTechnicianFlow)                                         missingFields.push("issue_description");
+	if (newCategory === 'cctv' && !newState.affected_scope)                         missingFields.push("cctv_scope");
+	if (newCategory === 'cctv' && newState.affected_scope && newState.affected_scope !== 'all_cameras' && !newState.affected_camera_location) missingFields.push("camera_location");
+	if (!villaKnown)                                                                missingFields.push("villa_number");
+	if (!locationKnown)                                                             missingFields.push("location");
 
-	// Build ordered list of missing fields for this category
-	const categoryFields = REQUIRED_FOR_TICKET[newCategory] || REQUIRED_FOR_TICKET.default;
-	// Add camera_location after cctv_scope if single/multiple camera
-	const expandedFields = [];
-	for (const f of categoryFields) {
-		expandedFields.push(f);
-		if (f === 'cctv_scope' && newCategory === 'cctv' &&
-			newState.affected_scope && newState.affected_scope !== 'all_cameras') {
-			expandedFields.push('camera_location');
-		}
-	}
-	const missingFields = expandedFields.filter(f => !fieldReady[f]);
-	const prevQuestionKey = newState.last_question_key;
+	const nextMissingField = missingFields[0] || null;
+	const prevQuestionKey  = newState.last_question_key;
 
-	// ── TICKET READINESS ──
-	// Site visit: technician explicitly requested + all fields complete
-	// Remote/troubleshoot: enough info to diagnose, no technician request
-	const allFieldsComplete = missingFields.length === 0;
-	const isTechnicianFlow  = newState.technician_requested;
-	const ticketReady       = allFieldsComplete && (isTechnicianFlow || !newCategory);
+	// ── TICKET READINESS CHECK ──
+	// For CCTV site visit: name + category + scope + camera_location + villa + location
+	// For others: name + category + issue + villa + location
+	const cctv = newCategory === 'cctv';
+	const ticketReady = isTechnicianFlow && newName && newCategory && villaKnown && locationKnown &&
+		(!cctv || (newState.affected_scope && newState.affected_camera_location));
 
-	// Determine action
-	let questionKey           = null;
-	let shouldCreateTicket    = false;
-	let shouldTroubleshoot    = false;
-	let troubleshootCategory  = newCategory;
+	// ── TROUBLESHOOTING READINESS ──
+	// Only do troubleshooting if technician NOT yet requested and enough info exists
+	const readyToTroubleshoot = newName && newCategory && newIssueDesc && !isTechnicianFlow;
 
-	if (ticketReady && isTechnicianFlow) {
+	// Determine what to ask / do
+	let questionKey  = null;   // the structured field we are asking for
+	let shouldCreateTicket   = false;
+	let shouldDoTroubleshooting = false;
+
+	if (ticketReady) {
 		shouldCreateTicket = true;
-	} else if (allFieldsComplete && !isTechnicianFlow && newCategory) {
-		shouldTroubleshoot = true;
+	} else if (isTechnicianFlow) {
+		// In technician flow — ask only for missing ticket fields
+		questionKey = nextMissingField;
+	} else if (needsName) {
+		questionKey = "name";
+	} else if (needsCategory) {
+		questionKey = "issue_category";
+	} else if (!newIssueDesc) {
+		questionKey = "issue_description";
+	} else if (readyToTroubleshoot) {
+		shouldDoTroubleshooting = true;
 	} else {
-		questionKey = missingFields[0] || null;
+		questionKey = nextMissingField;
 	}
 
 	// ── DUPLICATE QUESTION GUARD ──
-	const isRepeat = (questionKey && questionKey === prevQuestionKey);
-	newState.last_question_key = questionKey || (shouldTroubleshoot ? `ts_${newState.troubleshoot_step}` : null);
-	if (shouldTroubleshoot) newState.troubleshoot_step = (newState.troubleshoot_step || 0) + 1;
+	// Never ask the same question key twice in a row
+	if (questionKey && questionKey === prevQuestionKey) {
+		// Customer didn't answer — be patient, try rephrasing
+		// (still ask, but mark as repeat so AI knows to rephrase)
+		newState._repeat_question = true;
+	} else {
+		newState._repeat_question = false;
+	}
+	newState.last_question_key = shouldCreateTicket ? null : (questionKey || (shouldDoTroubleshooting ? "troubleshoot" : null));
 
-	// ── SAVE MERGED SESSION ──
+	// ── SAVE MERGED SESSION STATE ──
 	await pool.query(
 		`UPDATE sessions SET
-		 customer_name = COALESCE($1, customer_name),
-		 house_number  = COALESCE($2, house_number),
-		 issue_details = COALESCE($3, issue_details),
-		 issue_category= COALESCE($4, issue_category),
+		 customer_name      = COALESCE($1, customer_name),
+		 house_number       = COALESCE($2, house_number),
+		 issue_details      = COALESCE($3, issue_details),
+		 issue_category     = COALESCE($4, issue_category),
 		 troubleshooting_state = COALESCE(troubleshooting_state,'{}'::jsonb) || $5::jsonb,
-		 last_interaction = NOW()
+		 last_interaction   = NOW()
 		 WHERE phone = $6`,
 		[newName, newVilla, newIssueDesc, newCategory, JSON.stringify(newState), phone]
 	);
 
-	// ── 3e. ACT ──
+
+	// ── 3e. GENERATE REPLY ──
+	// AI generates natural language for the pre-decided question.
+	// If creating ticket, AI generates confirmation reply.
 	let finalReply = "";
-	const customerName = newName || "";
+	const customerName = newName || "there";
 
 	if (shouldCreateTicket) {
-		// ── CREATE TICKET ──
-		const ticketId   = makeTicketId();
-		const priority   = "HIGH";
-		const customerId = await upsertWhatsAppCustomer(phone, newName || "WhatsApp Customer");
+		// Generate ticket and confirmation
+		const ticketId = makeTicketId();
+		const priority = "HIGH";
 
+		// Build tech summary
 		const summaryParts = [
 			newCategory ? newCategory.toUpperCase() : "Support",
 			newState.affected_camera_location ? `– ${newState.affected_camera_location}` : "",
 			newState.affected_scope ? `(${newState.affected_scope.replace(/_/g,' ')})` : "",
-			newState.device_type ? `– ${newState.device_type}` : "",
 			"– Site visit required.",
-			newVilla ? `Villa: ${newVilla}` : "",
-			newState.area ? `Area: ${newState.area}` : "",
+			`Villa: ${newVilla || "TBD"}`,
 		].filter(Boolean).join(" ");
 
+		const customerId = await upsertWhatsAppCustomer(phone, newName || "WhatsApp Customer");
+
 		await pool.query(
-			`INSERT INTO tickets
-			 (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
+			`INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
 			 VALUES ($1,$2,$3,$4,$5,'NEW',$6,$7,$8,$9,NOW(),NOW())`,
 			[
 				ticketId, customerId, newName || "WhatsApp Customer",
@@ -2094,22 +2086,22 @@ LAST BOT QUESTION (for context only): "${session?.last_bot_question || 'none'}"
 				newLocationUrl || null, newVilla || null,
 				summaryParts,
 				JSON.stringify([
-					{ sender: "CLIENT",  content: newIssueDesc || "Site visit requested", at: new Date().toISOString() },
-					{ sender: "SYSTEM",  content: summaryParts,                           at: new Date().toISOString() }
+					{ sender: "CLIENT", content: newIssueDesc || "Site visit requested", at: new Date().toISOString() },
+					{ sender: "SYSTEM", content: summaryParts, at: new Date().toISOString() }
 				])
 			]
 		);
 
 		await pool.query(
 			`UPDATE sessions SET ticket_id=$1, step='OPEN_TICKET', last_action='site_visit',
-			 last_bot_question='Ticket created', last_interaction=NOW() WHERE phone=$2`,
+			 last_bot_question='Ticket created for site visit', last_interaction=NOW() WHERE phone=$2`,
 			[ticketId, phone]
 		);
 
 		// Notify team leads
 		await notifyTeamLeads(
-			`*New Ticket: ${ticketId}*\nCustomer: ${newName || "Unknown"}\nCategory: ${newCategory || "Unknown"}\nPriority: HIGH\nAction: Site Visit Required\nLocation: ${newVilla || "TBD"}${newState.area ? ", " + newState.area : ""}\nIssue: ${newIssueDesc || "Site visit requested"}`
-		).catch(e => console.error("[BOT] Notify error:", e.message));
+			`*New Ticket: ${ticketId}*\nCustomer: ${newName || "Unknown"}\nCategory: ${newCategory || "Unknown"}\nPriority: HIGH\nAction: Site Visit Required\nLocation: ${newVilla || ""}${newState.area ? ", " + newState.area : ""}\nIssue: ${newIssueDesc || "Site visit requested"}`
+		).catch(e => console.error("Notify error:", e.message));
 
 		// n8n webhook
 		if (process.env.N8N_WEBHOOK_URL) {
@@ -2117,206 +2109,150 @@ LAST BOT QUESTION (for context only): "${session?.last_bot_question || 'none'}"
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ ticketId, customerName: newName, phone, issueCategory: newCategory, priority, action: "site_visit", location: newVilla || newState.area || "Not provided", summary: newIssueDesc })
-			}).catch(e => console.error("[BOT] n8n error:", e.message));
+			}).catch(e => console.error("n8n error:", e.message));
 		}
 
-		finalReply = `Thank you${customerName ? " " + customerName : ""}. We have created a site visit ticket *${ticketId}*. Our team will follow up shortly to schedule the appointment.`;
+		finalReply = `Thank you ${newName}. We have created a site visit ticket for your request. Your Ticket ID is *${ticketId}*. Our team will follow up shortly to schedule your appointment. You will receive the details here once confirmed.`;
 
-	} else if (shouldTroubleshoot) {
-		// ── DETERMINISTIC TROUBLESHOOTING TREE ──
-		// Backend selects the next troubleshooting question based on category + known state.
-		// AI is NOT used for this decision — only for text generation.
-		let tsQuestionKey = null;
-		let tsRecommendTicket = false;
-		let tsTicketType = null;
+	} else if (shouldDoTroubleshooting) {
+		// Let AI do one troubleshooting step — but with strict context
+		const tsPrompt = `You are the Qonnect WhatsApp support assistant. You are doing structured troubleshooting.
 
-		if (newCategory === 'cctv') {
-			if (!newState.affected_scope) {
-				tsQuestionKey = "ts_cctv_scope";
-			} else if (newState.affected_scope !== 'all_cameras' && !newState.affected_camera_location) {
-				tsQuestionKey = "ts_cctv_camera_location";
-			} else if (newState.other_cameras_working === null) {
-				tsQuestionKey = "ts_cctv_others_working";
-			} else if (newState.other_cameras_working === true) {
-				// Single camera, others fine → site visit
-				tsRecommendTicket = true; tsTicketType = "site_visit";
-			} else {
-				// All cameras down → remote support first
-				if (!newState.restart_done) {
-					tsQuestionKey = "ts_restart";
-				} else {
-					tsRecommendTicket = true; tsTicketType = "remote_support";
-				}
-			}
-		} else if (['wifi_network','internet_down','slow_internet'].includes(newCategory)) {
-			if (newState.all_devices_affected === null) {
-				tsQuestionKey = "ts_wifi_all_devices";
-			} else if (newState.restart_done === null) {
-				tsQuestionKey = "ts_restart";
-			} else if (newState.restart_done === false) {
-				tsQuestionKey = "ts_do_restart";
-			} else {
-				// restart done, still not working → remote support
-				tsRecommendTicket = true; tsTicketType = "remote_support";
-			}
-		} else if (newCategory === 'intercom') {
-			if (!newIssueDesc || newState.troubleshoot_step < 1) {
-				tsQuestionKey = "ts_intercom_screen";
-			} else {
-				tsRecommendTicket = true; tsTicketType = "site_visit";
-			}
-		} else if (newCategory === 'access_control') {
-			if (newState.affected_scope === null) {
-				tsQuestionKey = "ts_access_scope";
-			} else if (newState.affected_scope === 'single_device') {
-				tsRecommendTicket = true; tsTicketType = "remote_support";
-			} else {
-				tsRecommendTicket = true; tsTicketType = "site_visit";
-			}
-		} else if (newCategory === 'home_automation') {
-			if (!newState.device_type) {
-				tsQuestionKey = "ts_device_type";
-			} else if (newState.all_devices_affected === null) {
-				tsQuestionKey = "ts_ha_all_devices";
-			} else {
-				tsRecommendTicket = true; tsTicketType = newState.all_devices_affected ? "site_visit" : "remote_support";
-			}
-		} else {
-			// Unknown/generic — ask for description then escalate
-			if (!newIssueDesc) {
-				tsQuestionKey = "ts_describe";
-			} else {
-				tsRecommendTicket = true; tsTicketType = "remote_support";
-			}
+KNOWN SESSION STATE:
+- Customer name: ${newName}
+- Issue category: ${newCategory}
+- Issue description: ${newIssueDesc}
+- Affected scope: ${newState.affected_scope || "unknown"}
+- Affected camera location: ${newState.affected_camera_location || "not specified"}
+- Other cameras working: ${newState.other_cameras_working ?? "unknown"}
+- Restart done: ${newState.restart_done ?? "unknown"}
+- Last question asked: "${session?.last_bot_question || "none"}"
+- Technician requested: ${newState.technician_requested ? "YES" : "no"}
+
+RULES:
+1. Ask ONLY ONE short, simple question
+2. NEVER repeat the last question asked
+3. Do NOT ask for location, villa, or name — those are handled separately
+4. If technician was requested, do NOT troubleshoot — just confirm and say team will follow up
+5. For CCTV single-camera: do NOT ask about NVR power (other cameras are working = NVR is fine)
+6. Do NOT ask for photo if photo_not_possible is true
+7. If you have enough info for a recommendation (restart done, scope known), suggest remote_support or site_visit
+8. Keep reply under 2 sentences, WhatsApp style
+9. End with action: one of continue_troubleshooting | remote_support | site_visit | resolved_in_chat
+
+Return STRICT JSON: { "reply": "...", "action": "..." }
+Do not include markdown.
+
+Customer just said: "${text}"`;
+
+		let tsAction = "continue_troubleshooting";
+		try {
+			const tsModel = genAI.getGenerativeModel({
+				model: "gemini-2.5-flash",
+				generationConfig: { responseMimeType: "application/json" }
+			});
+			const tsResult = await tsModel.generateContent(tsPrompt);
+			const tsRaw = tsResult.response.text().replace(/```json|```/g, "").trim();
+			const tsData = JSON.parse(tsRaw);
+			finalReply = tsData.reply || `Could you tell me a bit more about the issue?`;
+			tsAction   = tsData.action || "continue_troubleshooting";
+		} catch (e) {
+			console.error("Troubleshoot AI error:", e.message);
+			finalReply = `Could you tell me a bit more about the issue?`;
 		}
 
-		// Duplicate guard for troubleshooting questions
-		if (tsQuestionKey && tsQuestionKey === prevQuestionKey && !tsRecommendTicket) {
-			// Same question twice — skip to escalation or next step
-			tsRecommendTicket = true; tsTicketType = "remote_support";
-		}
-
-		// Static troubleshooting question text (no AI needed for questions)
-		const TS_QUESTIONS = {
-			ts_cctv_scope:           "Are all your cameras affected, or just one or some cameras?",
-			ts_cctv_camera_location: "Which camera location is not working? (e.g. front entrance, parking, back garden)",
-			ts_cctv_others_working:  "Are the other cameras working normally?",
-			ts_restart:              "Could you please try restarting your router or recorder and wait 2 minutes? Let me know once done.",
-			ts_do_restart:           "Could you try restarting the device and let me know if the issue continues?",
-			ts_wifi_all_devices:     "Is the internet issue affecting all your devices, or just one specific device?",
-			ts_intercom_screen:      "Does the indoor monitor/screen turn on? What is the specific issue — calling, video, audio, or door release?",
-			ts_access_scope:         "Is this affecting all users/cards, or just one specific person or card?",
-			ts_device_type:          "Which device is affected — lights, curtains, AC, or something else?",
-			ts_ha_all_devices:       "Is only one device affected, or multiple devices in the same area?",
-			ts_describe:             "Could you briefly describe the issue you're experiencing?",
-		};
-
-		if (tsRecommendTicket && tsTicketType) {
-			// Create ticket from troubleshooting escalation
-			const ticketId   = makeTicketId();
-			const priority   = tsTicketType === "site_visit" ? "HIGH" : "MEDIUM";
+		// If AI recommends escalation, create remote support ticket
+		if (tsAction === "remote_support" || tsAction === "site_visit") {
+			const ticketId = makeTicketId();
 			const customerId = await upsertWhatsAppCustomer(phone, newName || "WhatsApp Customer");
-			const tsSummary  = [
-				newCategory ? newCategory.toUpperCase() : "Support",
-				newState.affected_camera_location ? `– ${newState.affected_camera_location}` : "",
-				newState.affected_scope ? `(${newState.affected_scope.replace(/_/g,' ')})` : "",
-				tsTicketType === "site_visit" ? "– Site visit required." : "– Remote support needed.",
-			].filter(Boolean).join(" ");
+			const priority = tsAction === "site_visit" ? "HIGH" : "MEDIUM";
 
-			// Only create if we have minimum required: name + category
-			if (newName && newCategory) {
-				await pool.query(
-					`INSERT INTO tickets
-					 (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
-					 VALUES ($1,$2,$3,$4,$5,'NEW',$6,$7,$8,$9,NOW(),NOW())`,
-					[
-						ticketId, customerId, newName,
-						newCategory, priority,
-						newLocationUrl || null, newVilla || null,
-						tsSummary,
-						JSON.stringify([{ sender: "CLIENT", content: newIssueDesc || "Reported via WhatsApp", at: new Date().toISOString() }])
-					]
-				);
-
-				await pool.query(
-					`UPDATE sessions SET ticket_id=$1, step='OPEN_TICKET', last_action=$2,
-					 last_bot_question='Ticket created via troubleshooting', last_interaction=NOW() WHERE phone=$3`,
-					[ticketId, tsTicketType, phone]
-				);
-
-				await notifyTeamLeads(
-					`*New Ticket: ${ticketId}*\nCustomer: ${newName}\nCategory: ${newCategory}\nPriority: ${priority}\nAction: ${tsTicketType === "site_visit" ? "Site Visit Required" : "Remote Support"}\nIssue: ${newIssueDesc || "Reported via WhatsApp"}`
-				).catch(e => console.error("[BOT] Notify error:", e.message));
-
-				finalReply = `Thank you ${newName}. We have raised a support ticket *${ticketId}*. Our team will follow up shortly.`;
-			} else {
-				// Can't create ticket yet — ask for name or category
-				finalReply = !newName
-					? "Could I get your name please?"
-					: "Which system are you having an issue with — Wi-Fi, CCTV, intercom, access control, or home automation?";
-				await pool.query(
-					`UPDATE sessions SET last_bot_question=$1, last_interaction=NOW() WHERE phone=$2`,
-					[finalReply.substring(0,200), phone]
-				);
-			}
-		} else if (tsQuestionKey) {
-			finalReply = TS_QUESTIONS[tsQuestionKey] || "Could you give me a bit more detail about the issue?";
-			newState.last_question_key = tsQuestionKey;
 			await pool.query(
-				`UPDATE sessions SET
-				 last_bot_question=$1, last_action='troubleshoot',
-				 troubleshooting_state=COALESCE(troubleshooting_state,'{}'::jsonb)||$2::jsonb,
-				 last_interaction=NOW() WHERE phone=$3`,
-				[finalReply.substring(0,200), JSON.stringify(newState), phone]
+				`INSERT INTO tickets (id, customer_id, customer_name, category, priority, status, location_url, house_number, ai_summary, messages, created_at, updated_at)
+				 VALUES ($1,$2,$3,$4,$5,'NEW',$6,$7,$8,$9,NOW(),NOW())`,
+				[
+					ticketId, customerId, newName || "WhatsApp Customer",
+					newCategory || "SUPPORT", priority,
+					newLocationUrl || null, newVilla || null,
+					`${newCategory?.toUpperCase() || "Support"} – ${newIssueDesc || "Issue reported"}. ${tsAction === "site_visit" ? "Site visit required." : "Remote support needed."}`,
+					JSON.stringify([
+						{ sender: "CLIENT", content: newIssueDesc || text, at: new Date().toISOString() }
+					])
+				]
 			);
+
+			await pool.query(
+				`UPDATE sessions SET ticket_id=$1, step='OPEN_TICKET', last_action=$2,
+				 last_bot_question=$3, last_interaction=NOW() WHERE phone=$4`,
+				[ticketId, tsAction, finalReply.substring(0,100), phone]
+			);
+
+			await notifyTeamLeads(
+				`*New Ticket: ${ticketId}*\nCustomer: ${newName || "Unknown"}\nCategory: ${newCategory || "Unknown"}\nPriority: ${priority}\nAction: ${tsAction === "site_visit" ? "Site Visit Required" : "Remote Support"}\nIssue: ${newIssueDesc || "Reported via WhatsApp"}`
+			).catch(e => console.error("Notify error:", e.message));
+
+			finalReply = `Thank you ${newName}. We have created a support ticket *${ticketId}*. Our team will follow up shortly.`;
 		} else {
-			finalReply = "Could you give me a bit more detail about the issue?";
+			// Update session with last question
+			await pool.query(
+				`UPDATE sessions SET last_bot_question=$1, last_action='continue_troubleshooting', last_interaction=NOW() WHERE phone=$2`,
+				[finalReply.substring(0, 200), phone]
+			);
 		}
 
-	} else if (questionKey) {
-		// ── ASK FOR MISSING TICKET FIELD ──
-		// Static question text — no AI needed
-		const FIELD_QUESTIONS = {
-			name:              "Could I get your name please?",
-			issue_category:    "Which system are you having an issue with — Wi-Fi, CCTV, intercom, access control, home automation, or something else?",
-			issue_description: "Could you briefly describe the issue you're facing?",
-			cctv_scope:        "Are all cameras affected, or just one or some cameras?",
-			camera_location:   "Which camera location is affected? (e.g. front entrance, parking, back garden)",
-			wifi_devices:      "Is the internet issue affecting all your devices, or just one specific device?",
-			restart_done_q:    "Have you already tried restarting your router or modem?",
-			intercom_type:     "What is the issue — calling, video, audio, or door release not working?",
-			access_scope:      "Is this affecting all users/cards, or just one specific user?",
-			device_type_q:     "Which device is affected — lights, curtains, AC, or something else?",
-			villa_number:      "Could you share your villa or building number?",
-			location:          locationKnown
-				? null  // already known, shouldn't be asked
-				: "Could you share your location pin or let us know your area so we can schedule the visit?",
+	} else {
+		// Generate a natural language reply for the pre-decided questionKey
+		const questionPrompts = {
+			"name":              `Ask the customer politely for their name. Keep it short and WhatsApp-friendly. One sentence.`,
+			"issue_category":    `Ask the customer what system they are having an issue with (Wi-Fi, CCTV, intercom, access control, home automation, speakers, or something else). One sentence.`,
+			"issue_description": `Ask the customer to briefly describe the issue they are facing. One sentence.`,
+			"cctv_scope":        `Ask whether all cameras are affected or only one/some cameras. One sentence.`,
+			"camera_location":   `Ask which camera location is affected (e.g. front entrance, back garden, parking, etc.). One sentence.`,
+			"villa_number":      `Ask for the villa or building number. One sentence. Do not ask for location pin here, just the number.`,
+			"location":          `Ask the customer to share their location pin or mention their area so the team can schedule the visit. One sentence.`,
 		};
 
-		const questionText = FIELD_QUESTIONS[questionKey];
-		if (questionText) {
-			finalReply = isRepeat
-				? questionText + " (please let us know so we can help you faster)"
-				: questionText;
-		} else {
-			finalReply = "Could you provide a bit more detail?";
+		const promptForKey = questionPrompts[questionKey] || `Ask for any remaining details needed to assist the customer. One sentence.`;
+		const repeatNote   = newState._repeat_question ? " Note: the customer did not answer last time, so rephrase slightly." : "";
+
+		const replyPrompt = `You are a WhatsApp support assistant for Qonnect (home automation company in Qatar).
+Customer name: ${newName || "unknown"}.
+${promptForKey}${repeatNote}
+Reply in the same language as the customer's last message: "${text}"
+Return ONLY the reply text, no JSON, no markdown.`;
+
+		try {
+			const replyModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+			const replyResult = await replyModel.generateContent(replyPrompt);
+			finalReply = replyResult.response.text().trim();
+		} catch (e) {
+			console.error("Reply gen error:", e.message);
+			// Fallback replies
+			const fallbacks = {
+				"name":              "Could I get your name please?",
+				"issue_category":    "Which system are you having an issue with — Wi-Fi, CCTV, intercom, automation, or something else?",
+				"issue_description": "Could you briefly describe the issue you're facing?",
+				"cctv_scope":        "Are all cameras affected or just one camera?",
+				"camera_location":   "Which camera location is affected? (e.g. front entrance, back, parking)",
+				"villa_number":      "Could you share your villa or building number?",
+				"location":          "Could you share your location pin or let us know your area so we can schedule the visit?",
+			};
+			finalReply = fallbacks[questionKey] || "Could you provide a bit more detail so I can assist you?";
 		}
 
+		// Save last_bot_question
 		await pool.query(
-			`UPDATE sessions SET
-			 last_bot_question=$1, last_action='ask_field',
-			 troubleshooting_state=COALESCE(troubleshooting_state,'{}'::jsonb)||$2::jsonb,
-			 last_interaction=NOW() WHERE phone=$3`,
-			[finalReply.substring(0,200), JSON.stringify(newState), phone]
+			`UPDATE sessions SET last_bot_question=$1, last_action=$2,
+			 troubleshooting_state=COALESCE(troubleshooting_state,'{}'::jsonb)||$3::jsonb,
+			 last_interaction=NOW() WHERE phone=$4`,
+			[finalReply.substring(0, 200), questionKey || "ask", JSON.stringify(newState), phone]
 		);
-	} else {
-		finalReply = "Thank you. Could you share a bit more about your issue?";
 	}
 
-	// ── 3f. SEND REPLY ──
+	// ── 3f. SEND FINAL REPLY ──
 	await sendWhatsAppText(phone, finalReply);
 
-	} // end main else block
+	} // end main else (not issue_resolved early exit)
 
 
         await pool.query(
