@@ -21,6 +21,8 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
     switch (ticket.status) {
+      case TicketStatus.NEW:
+      case TicketStatus.OPEN:
       case TicketStatus.ASSIGNED:    return onUpdateStatus(ticket.id, TicketStatus.ON_MY_WAY);
       case TicketStatus.ON_MY_WAY:   return onUpdateStatus(ticket.id, TicketStatus.ARRIVED);
       case TicketStatus.ARRIVED:     return onUpdateStatus(ticket.id, TicketStatus.IN_PROGRESS);
@@ -36,6 +38,8 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
 
   const getActionConfig = (): { label: string; icon: React.ReactNode; color: string } | null => {
     switch (ticket.status) {
+      case TicketStatus.NEW:
+      case TicketStatus.OPEN:
       case TicketStatus.ASSIGNED:
         return { label: 'On My Way', icon: <Car size={18}/>, color: 'bg-blue-600 text-white' };
       case TicketStatus.ON_MY_WAY:
@@ -58,7 +62,10 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
     { key: TicketStatus.IN_PROGRESS, label: 'Working'  },
     { key: TicketStatus.RESOLVED,    label: 'Done'     },
   ];
-  const currentStep = steps.findIndex(s => s.key === ticket.status);
+  // OPEN/NEW tickets are at the first step (same as ASSIGNED)
+  const normalizedStatus = (ticket.status === TicketStatus.OPEN || (ticket.status as string) === 'NEW')
+    ? TicketStatus.ASSIGNED : ticket.status;
+  const currentStep = steps.findIndex(s => s.key === normalizedStatus);
   const progress = isCompleted ? 100 : Math.max(5, ((currentStep + 1) / steps.length) * 100);
 
   const issueText = (ticket.messages as any[])?.find((m: any) => m.sender === 'CLIENT')?.content
