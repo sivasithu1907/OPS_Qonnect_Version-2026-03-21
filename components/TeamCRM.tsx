@@ -20,6 +20,8 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [currentLevel, setCurrentLevel] = useState<string>('FIELD_ENGINEER');
   const [formSystemRole, setFormSystemRole] = useState<string>('');
+  const [saveToast, setSaveToast] = useState(false);
+  const [saveToast, setSaveToast] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -154,6 +156,13 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in zoom-in duration-300">
+      {/* Success toast */}
+      {saveToast && (
+        <div className="fixed top-5 right-5 z-[300] bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in duration-200">
+          <span className="text-lg">✓</span>
+          <span className="font-semibold text-sm">Member saved successfully</span>
+        </div>
+      )}
         
         <div className="mb-6 flex justify-between items-center">
             <div>
@@ -247,7 +256,14 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         const data: any = {
                             ...rawData,
                             phone: fullPhone,
-                            systemRole: finalSystemRole
+                            systemRole: finalSystemRole,
+                            // jobRole is the text job title (e.g. "Senior Electrician")
+                            // rawData.jobRole contains the Job Role text input
+                            jobRole: rawData.jobRole || '',
+                            // level is the department/team assignment (name="level" select)
+                            level: rawData.level || currentLevel,
+                            // systemRole is the login permission role
+                            role: finalSystemRole || undefined,
                         };
 
                         // Derive isActive from the status field in the form
@@ -264,7 +280,11 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         }
 
                         onSaveTech(data as Technician);
+                        setSaveToast(true);
+                        setTimeout(() => setSaveToast(false), 2500);
                         closeModal();
+                        setSaveToast(true);
+                        setTimeout(() => setSaveToast(false), 3000);
                     }} className="p-6 space-y-4 bg-white">
                         
                         <div className="flex flex-col items-center mb-4">
@@ -332,7 +352,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Job Role</label>
-                                <input name="role" defaultValue={activeTech?.role} required className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Sales Associate"/>
+                                <input name="jobRole" defaultValue={(activeTech as any)?.jobRole || activeTech?.role || ''} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Sales Associate"/>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Department / Level</label>
@@ -360,7 +380,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                     onChange={(e) => setFormSystemRole(e.target.value)}
                                     className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
                                 >
-                                    <option value="">Select Role</option>
+                                    <option value="">{currentLevel === 'TECHNICAL_ASSOCIATE' || currentLevel === 'SALES' ? 'Not Required' : 'Select Role'}</option>
                                     <option value={Role.ADMIN}>Admin</option>
                                     <option value={Role.TEAM_LEAD}>Team Lead</option>
                                     <option value={Role.FIELD_ENGINEER}>Field Engineer</option>
