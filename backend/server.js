@@ -661,7 +661,7 @@ app.delete("/api/tickets/:id", authenticate, async (req, res) => {
 // 4. Update Ticket Status & Trigger Review Message
 app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
     try {
-        const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt } = req.body;
+        const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt, completionNote } = req.body;
         const ticketId = req.params.id;
 
         // Fetch current status to detect transitions for timestamp tracking
@@ -687,7 +687,7 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
             completedAtClause = ", completed_at = NULL";
         }
 
-        // 1. Update the database — status + assignment + appointment + timestamps
+        // 1. Update the database — status + assignment + appointment + notes + timestamps
         await pool.query(
             `UPDATE tickets SET 
                 status = $1,
@@ -695,10 +695,12 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
                 appointment_time = COALESCE($3, appointment_time),
                 carry_forward_note = COALESCE($4, carry_forward_note),
                 next_planned_at = COALESCE($5, next_planned_at),
+                completion_note = COALESCE($7, completion_note),
                 updated_at = NOW()${startedAtClause}${completedAtClause}
              WHERE id = $6`,
             [status, assignedTechId || null, appointmentTime || null,
-             carryForwardNote || null, nextPlannedAt || null, ticketId]
+             carryForwardNote || null, nextPlannedAt || null, ticketId,
+             completionNote || null]
         );
 
         // 2. Fetch customer + ticket info for notifications
@@ -883,7 +885,7 @@ app.post("/api/customers", authenticate, async (req, res) => {
 app.put("/api/customers/:id", authenticate, async (req, res) => {
   try {
     const id = req.params.id;
-    const { name, phone, email, address, notes, is_active } = req.body || {};
+    const { name, phone, email, address, buildingNumber, notes, is_active } = req.body || {};
 
     const { rows } = await pool.query(
       `
@@ -893,6 +895,7 @@ app.put("/api/customers/:id", authenticate, async (req, res) => {
         phone = COALESCE($3, phone),
         email = COALESCE($4, email),
         address = COALESCE($5, address),
+        building_number = COALESCE($8, building_number),
         notes = COALESCE($6, notes),
         is_active = COALESCE($7, is_active),
         updated_at = NOW()
@@ -907,6 +910,7 @@ app.put("/api/customers/:id", authenticate, async (req, res) => {
         address !== undefined ? (address ? String(address).trim() : null) : null,
         notes !== undefined ? (notes ? String(notes).trim() : null) : null,
         typeof is_active === "boolean" ? is_active : null,
+        buildingNumber !== undefined ? (buildingNumber ? String(buildingNumber).trim() : null) : null,
       ]
     );
 
