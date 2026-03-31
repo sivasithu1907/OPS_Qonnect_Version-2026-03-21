@@ -73,7 +73,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
             (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED))
         .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || (t as any).updated_at || t.createdAt })),
       ...activities
-        .filter(a => a.leadTechId === currentTechId && (a.status === 'DONE' || a.status === 'CANCELLED'))
+        .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) && (a.status === 'DONE' || a.status === 'CANCELLED'))
         .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.updatedAt || a.createdAt })),
   ].sort((a, b) => new Date(b.sortDate || 0).getTime() - new Date(a.sortDate || 0).getTime())
    .slice(0, 50);
@@ -89,7 +89,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           delayed: false
       })),
       ...activities
-        .filter(a => a.leadTechId === currentTechId && a.status !== 'DONE' && a.status !== 'CANCELLED')
+        .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) && a.status !== 'DONE' && a.status !== 'CANCELLED')
         .map(a => ({
           type: 'activity' as const, 
           data: a, 
