@@ -664,7 +664,30 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
         const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt } = req.body;
         const ticketId = req.params.id;
 
-        // 1. Update the database — status + assignment + appointment
+        // Fetch current status to detect transitions for timestamp tracking
+        const current = await pool.query("SELECT status, started_at FROM tickets WHERE id=$1", [ticketId]);
+        const prevStatus = current.rows[0]?.status;
+        const alreadyStarted = current.rows[0]?.started_at;
+
+        // Build timestamp clauses based on status transition
+        let startedAtClause = "";
+        let completedAtClause = "";
+
+        if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
+            // First time entering IN_PROGRESS — record actual start time
+            startedAtClause = ", started_at = NOW()";
+        }
+        if (status === 'RESOLVED' && prevStatus !== 'RESOLVED') {
+            // Engineer pressed Complete — record actual completion time
+            completedAtClause = ", completed_at = NOW()";
+        }
+        if (status === 'CANCELLED') {
+            // Reset both on cancellation
+            startedAtClause  = ", started_at = NULL";
+            completedAtClause = ", completed_at = NULL";
+        }
+
+        // 1. Update the database — status + assignment + appointment + timestamps
         await pool.query(
             `UPDATE tickets SET 
                 status = $1,
@@ -672,7 +695,7 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
                 appointment_time = COALESCE($3, appointment_time),
                 carry_forward_note = COALESCE($4, carry_forward_note),
                 next_planned_at = COALESCE($5, next_planned_at),
-                updated_at = NOW()
+                updated_at = NOW()${startedAtClause}${completedAtClause}
              WHERE id = $6`,
             [status, assignedTechId || null, appointmentTime || null,
              carryForwardNote || null, nextPlannedAt || null, ticketId]
@@ -1044,7 +1067,7 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
 
     res.json({ 
         token, 
-        user: { id: user.id, name: user.name, email: user.email, role: user.role } 
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, techId: user.id } 
     });
   } catch (error) {
     res.status(500).json({ error: "Login failed" });
