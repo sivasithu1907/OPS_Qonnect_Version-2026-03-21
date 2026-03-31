@@ -721,12 +721,11 @@ useEffect(() => {
     prepareLeadPortal();
 }, [activeView]);
 
-  // Auto-refresh every 8s — paused when user is in a portal (to avoid interrupting edits)
+  // Auto-refresh every 8s — runs for all views including lead_portal and tech_portal
   useEffect(() => {
     let isRefreshing = false;
     const interval = setInterval(async () => {
       if (isRefreshing) return;
-      if (activeView === 'lead_portal') return; // tech_portal refreshes every 8s
       isRefreshing = true;
       try {
         await Promise.all([loadTickets(), loadActivities()]);
