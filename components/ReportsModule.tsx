@@ -166,6 +166,14 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'status', label: 'Status', getValue: (t: Ticket) => t.status },
       { id: 'tech', label: 'Assigned Engineer', getValue: (t: Ticket) => technicians.find(tech => tech.id === t.assignedTechId)?.name || 'Unassigned' },
       { id: 'desc', label: 'Description', getValue: (t: Ticket) => (t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category || '') },
+      { id: 'started_at', label: 'Actual Start Time', getValue: (t: Ticket) => (t as any).startedAt ? new Date((t as any).startedAt).toLocaleString() : '' },
+      { id: 'completed_at', label: 'Actual Completion Time', getValue: (t: Ticket) => (t as any).completedAt ? new Date((t as any).completedAt).toLocaleString() : '' },
+      { id: 'actual_duration', label: 'Actual Duration (Hrs)', getValue: (t: Ticket) => {
+          const s = (t as any).startedAt; const e = (t as any).completedAt;
+          if (s && e) return ((new Date(e).getTime() - new Date(s).getTime()) / 3600000).toFixed(2);
+          return '';
+      }},
+      { id: 'completion_note', label: 'Completion Note', getValue: (t: Ticket) => (t as any).completionNote || '' },
       { id: 'location', label: 'Location URL', getValue: (t: Ticket) => t.locationUrl || '' },
       { id: 'house', label: 'House Number', getValue: (t: Ticket) => t.houseNumber || '' },
       { id: 'odoo', label: 'Odoo Ref', getValue: (t: Ticket) => t.odooLink || '' },
@@ -176,13 +184,21 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'ref', label: 'Reference', getValue: (a: Activity) => a.reference },
       { id: 'date', label: 'Planned Date', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleDateString() },
       { id: 'time', label: 'Planned Time', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleTimeString() },
+      { id: 'started_at', label: 'Actual Start Time', getValue: (a: Activity) => (a as any).startedAt ? new Date((a as any).startedAt).toLocaleString() : '' },
+      { id: 'completed_at', label: 'Actual Completion Time', getValue: (a: Activity) => (a as any).completedAt ? new Date((a as any).completedAt).toLocaleString() : '' },
+      { id: 'actual_duration', label: 'Actual Duration (Hrs)', getValue: (a: Activity) => {
+          const s = (a as any).startedAt; const e = (a as any).completedAt;
+          if (s && e) return ((new Date(e).getTime() - new Date(s).getTime()) / 3600000).toFixed(2);
+          return '';
+      }},
+      { id: 'planned_duration', label: 'Planned Duration (Hrs)', getValue: (a: Activity) => a.durationHours.toString() },
       { id: 'type', label: 'Activity Type', getValue: (a: Activity) => a.type },
-      { id: 'site', label: 'Site / Customer', getValue: (a: Activity) => sites.find(s => s.id === a.siteId)?.name || 'Unknown' },
+      { id: 'category', label: 'Service Category', getValue: (a: Activity) => (a as any).serviceCategory || '' },
+      { id: 'site', label: 'Site / Customer', getValue: (a: Activity) => sites.find(s => s.id === a.siteId)?.name || (a as any).houseNumber || 'Unknown' },
       { id: 'status', label: 'Status', getValue: (a: Activity) => a.status },
       { id: 'priority', label: 'Priority', getValue: (a: Activity) => a.priority },
       { id: 'lead', label: 'Lead Engineer', getValue: (a: Activity) => technicians.find(t => t.id === a.leadTechId)?.name || 'Unassigned' },
-      { id: 'sales', label: 'Sales Lead', getValue: (a: Activity) => technicians.find(t => t.id === a.salesLeadId)?.name || 'Unassigned' },
-      { id: 'duration', label: 'Duration (Hrs)', getValue: (a: Activity) => a.durationHours.toString() },
+      { id: 'sales', label: 'Sales Lead', getValue: (a: Activity) => technicians.find(t => t.id === (a as any).salesLeadId)?.name || '' },
       { id: 'desc', label: 'Description', getValue: (a: Activity) => a.description },
       { id: 'escalation', label: 'Escalation Level', getValue: (a: Activity) => a.escalationLevel ? `L${a.escalationLevel}` : 'Normal' },
       { id: 'delay', label: 'Delay Reason', getValue: (a: Activity) => a.delayReason || '' },
@@ -255,7 +271,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       end.setHours(23,59,59,999);
 
       return tickets.filter(t => {
-          const tDate = new Date(t.createdAt).getTime();
+          // For RESOLVED tickets, filter by actual completion date so they appear in the correct reporting period
+          const dateField = (t.status === 'RESOLVED' && (t as any).completedAt) ? (t as any).completedAt : t.createdAt;
+          const tDate = new Date(dateField).getTime();
           return tDate >= start.getTime() && tDate <= end.getTime();
       });
   }, [tickets, startDate, endDate]);
@@ -268,7 +286,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       end.setHours(23,59,59,999);
 
       return activities.filter(a => {
-          const aDate = new Date(a.plannedDate).getTime();
+          // For DONE activities, filter by actual completion date; otherwise use plannedDate
+          const dateField = (a.status === 'DONE' && (a as any).completedAt) ? (a as any).completedAt : a.plannedDate;
+          const aDate = new Date(dateField).getTime();
           return aDate >= start.getTime() && aDate <= end.getTime();
       });
   }, [activities, startDate, endDate]);
