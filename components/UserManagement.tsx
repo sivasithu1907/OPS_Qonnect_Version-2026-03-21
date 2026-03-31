@@ -85,12 +85,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
     // Construct User Object
     const phoneRaw = (data.phone || '').replace(/\D/g, '').replace(/^974/, '');
     const normalizedPhone = phoneRaw ? `+974${phoneRaw}` : '';
-    const newUser: Technician = {
+    const jobTitle = data.jobRole || data.position || '';
+    const newUser: any = {
         id: editingUser ? editingUser.id : generateTechId(),
         name: data.name,
         email: data.email,
         phone: normalizedPhone,
-        role: data.jobRole || data.position || '', // Job Role (job title, not system role)
+        role: data.systemRole as Role,    // system role (ADMIN/TEAM_LEAD/FIELD_ENGINEER)
+        jobRole: jobTitle,                // job title sent to backend as job_role
         systemRole: data.systemRole as Role,
         isActive: data.isActive === 'true',
         teamId: editingUser?.teamId, 
