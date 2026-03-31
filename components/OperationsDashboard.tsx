@@ -255,7 +255,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     );
     const crewsOnSite = operationsStaff.filter(t => activeTechIds.has(t.id)).length;
     const plannedToday = activities.filter(a => new Date(a.plannedDate).toDateString() === new Date().toDateString()).length;
-    const completedToday = activities.filter(a => a.status === 'DONE' && new Date(a.updatedAt).toDateString() === new Date().toDateString()).length;
+    const completedToday = (
+        activities.filter(a => a.status === 'DONE' && new Date((a as any).completedAt || a.updatedAt).toDateString() === todayDate).length +
+        tickets.filter(t => normalizeStatus(t.status) === 'RESOLVED' && new Date((t as any).completedAt || t.updatedAt).toDateString() === todayDate).length
+    );
     const alertsCount = activities.filter(a => (a.escalationLevel || 0) > 0 && a.status !== 'DONE' && a.status !== 'CANCELLED').length;
     const utilization = Math.round((activeJobs / (operationsStaff.length || 1)) * 100);
 
@@ -581,6 +584,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 if (a.leadTechId !== tech.id) return false;
                                 // IN_PROGRESS jobs always appear regardless of planned date
                                 if (a.status === 'IN_PROGRESS') return true;
+                                // DONE jobs: check by completedAt (actual end) or plannedDate
+                                if (a.status === 'DONE') {
+                                    const d = new Date((a as any).completedAt || a.plannedDate || a.createdAt);
+                                    return d.toDateString() === new Date().toDateString();
+                                }
                                 const d = new Date(a.plannedDate || a.createdAt);
                                 return d.toDateString() === new Date().toDateString();
                             }).map(a => ({
@@ -623,25 +631,49 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 .filter(t => {
                                 if (t.assignedTechId !== tech.id) return false;
                                 const activeStatuses = ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'];
-                                if (!activeStatuses.includes(normalizeStatus(t.status))) return false;
-                                return true; // always show active tickets regardless of appointment date
+                                if (activeStatuses.includes(normalizeStatus(t.status))) return true; // always show active tickets
+                                // Also show RESOLVED tickets completed today
+                                if (normalizeStatus(t.status) === 'RESOLVED') {
+                                    const d = new Date((t as any).completedAt || t.updatedAt || t.createdAt);
+                                    return d.toDateString() === new Date().toDateString();
+                                }
+                                return false;
                             })
-                                .map(t => ({
-                                    id: t.id,
-                                    reference: t.id,
-                                    type: 'ticket',
-                                    status: normalizeStatus(t.status),
-                                    priority: t.priority,
-                                    plannedDate: t.appointmentTime || (() => {
-                                        // No appointment set — place at current time so it's visible on timeline
+                                .map(t => {
+                                    const tStatus = normalizeStatus(t.status);
+                                    const tStarted = (t as any).startedAt;
+                                    const tCompleted = (t as any).completedAt;
+                                    // Timeline start: actual startedAt → appointmentTime → current hour
+                                    const tPlannedDate = tStarted || t.appointmentTime || (() => {
                                         const d = new Date();
                                         d.setMinutes(0, 0, 0);
                                         return d.toISOString();
-                                    })(),
-                                    durationHours: 2, // Default duration for tickets if untracked
-                                    description: t.customerName + ' - ' + t.category,
-                                    escalationLevel: 0
-                                }));
+                                    })();
+                                    // Duration: RESOLVED → actual window; IN_PROGRESS → live elapsed; else → 2h default
+                                    const tDuration = (() => {
+                                        const start = tStarted || t.appointmentTime;
+                                        if (tStatus === 'RESOLVED' && tCompleted && start) {
+                                            return Math.max(0.25, (new Date(tCompleted).getTime() - new Date(start).getTime()) / 3600000);
+                                        }
+                                        if (tStatus === 'IN_PROGRESS' && start) {
+                                            return Math.max(0.25, (Date.now() - new Date(start).getTime()) / 3600000);
+                                        }
+                                        return 2;
+                                    })();
+                                    return {
+                                        id: t.id,
+                                        reference: t.id,
+                                        type: 'ticket',
+                                        status: tStatus,
+                                        priority: t.priority,
+                                        plannedDate: tPlannedDate,
+                                        durationHours: tDuration,
+                                        description: t.customerName + ' - ' + t.category,
+                                        escalationLevel: 0,
+                                        startedAt: tStarted,
+                                        completedAt: tCompleted,
+                                    };
+                                });
 
                             const timelineItems = [...techActivities, ...techTickets];
 
@@ -655,13 +687,15 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             <div 
                                                 key={item.id}
                                                 className={`absolute top-3 bottom-3 rounded border shadow-sm p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-md hover:ring-2 ring-opacity-50 transition-all z-20 overflow-hidden ${
+                                                    isTicket && item.status === 'RESOLVED'    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
                                                     isTicket && item.status === 'IN_PROGRESS'  ? 'bg-amber-50 border-amber-300 text-amber-900 ring-amber-400' :
                                                     isTicket && item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-300 text-cyan-900 ring-cyan-400' :
                                                     isTicket && item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-300 text-indigo-900 ring-indigo-400' :
-                                                    isTicket                                  ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
-                                                    item.status === 'DONE'      ? 'bg-slate-100 border-slate-200 text-slate-500 grayscale' :
+                                                    isTicket && item.status === 'ASSIGNED'    ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
+                                                    isTicket                                  ? 'bg-slate-50 border-slate-200 text-slate-600' :
+                                                    item.status === 'DONE'        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
                                                     item.status === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-900 ring-blue-400' :
-                                                    item.escalationLevel > 0   ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
+                                                    item.escalationLevel > 0      ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
                                                     'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                                                 }`}
                                                 style={style}
@@ -793,21 +827,42 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                          <label className="text-[10px] font-bold text-slate-400 uppercase">Timing</label>
                          <div className="flex items-center gap-2 text-xs font-mono text-slate-700 mt-1 bg-slate-50 p-2 rounded border border-slate-100">
                              <Clock size={12} className="text-slate-400" />
-                             {selectedItem.type === 'activity' ? (
-                                 <>
-                                    {new Date((selectedItem.data as Activity).plannedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                    <ArrowRight size={10} className="text-slate-300"/>
-                                    {new Date(new Date((selectedItem.data as Activity).plannedDate).getTime() + (selectedItem.data as Activity).durationHours*3600000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                 </>
-                             ) : (
-                                 <span>Created: {new Date((selectedItem.data as Ticket).createdAt).toLocaleString()}</span>
+                             {(() => {
+                                 const d = selectedItem.data as any;
+                                 const startTime = d.startedAt || (selectedItem.type === 'activity' ? (d as Activity).plannedDate : d.appointmentTime);
+                                 const endTime = d.completedAt;
+                                 const status = selectedItem.type === 'activity' ? (d as Activity).status : normalizeStatus(d.status);
+                                 const isDone = status === 'DONE' || status === 'RESOLVED';
+                                 const isActive = status === 'IN_PROGRESS';
+                                 if (startTime) {
+                                     return (
+                                         <>
+                                             <span className="text-emerald-700 font-semibold">{new Date(startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                             <ArrowRight size={10} className="text-slate-300"/>
+                                             {isDone && endTime ? (
+                                                 <span className="text-slate-600 font-semibold">{new Date(endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                             ) : isActive ? (
+                                                 <span className="text-amber-600 font-semibold animate-pulse">Now ({Math.round((Date.now() - new Date(startTime).getTime()) / 60000)}m)</span>
+                                             ) : (
+                                                 <span className="text-slate-400">In progress</span>
+                                             )}
+                                         </>
+                                     );
+                                 }
+                                 return <span className="text-slate-400">{selectedItem.type === 'ticket' ? `Appt: ${d.appointmentTime ? new Date(d.appointmentTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : 'Not set'}` : `Planned: ${new Date((d as Activity).plannedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`}</span>;
+                             })()}
+                         </div>
+                         <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
+                             {(selectedItem.data as any).startedAt && (
+                                 <span>Started: {new Date((selectedItem.data as any).startedAt).toLocaleTimeString()}</span>
+                             )}
+                             {(selectedItem.data as any).completedAt && (
+                                 <span>Completed: {new Date((selectedItem.data as any).completedAt).toLocaleTimeString()}</span>
+                             )}
+                             {!(selectedItem.data as any).startedAt && selectedItem.type === 'ticket' && (selectedItem.data as Ticket).updatedAt && (
+                                 <span className="ml-auto">Last Update: {new Date((selectedItem.data as Ticket).updatedAt).toLocaleTimeString()}</span>
                              )}
                          </div>
-                         {selectedItem.type === 'ticket' && (selectedItem.data as Ticket).updatedAt && (
-                             <div className="text-[10px] text-slate-400 mt-1 text-right">
-                                 Last Update: {new Date((selectedItem.data as Ticket).updatedAt).toLocaleTimeString()}
-                             </div>
-                         )}
                      </div>
 
                      {/* Assigned Resource */}
