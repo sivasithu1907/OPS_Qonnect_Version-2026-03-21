@@ -171,8 +171,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   const handleComplete = () => {
       if (activeJobItem?.type === 'ticket') {
-          // Keep existing behavior for tickets
-          onUpdateStatus(activeJobItem.data.id, TicketStatus.RESOLVED);
+          // Route through handleStatusUpdate so completionNote is preserved
+          handleStatusUpdate(activeJobItem.data.id, TicketStatus.RESOLVED, completionNotes.trim() || undefined);
       } else if (activeJobItem?.type === 'activity' && onUpdateActivity) {
           const a = activeJobItem.data as Activity;
           const note = completionNotes.trim();
@@ -190,8 +190,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   const handleStart = () => {
       if (activeJobItem?.type === 'ticket') {
-          onUpdateStatus(activeJobItem.data.id, TicketStatus.IN_PROGRESS);
-          // In a fuller implementation, we would also set startedAt here via an enhanced update handler
+          // Route through handleStatusUpdate so the status change hits handleUpdateTicket → /api/tickets/:id/status
+          // which now sets started_at = NOW() on the backend
+          handleStatusUpdate(activeJobItem.data.id, TicketStatus.IN_PROGRESS);
       } else if (activeJobItem?.type === 'activity' && onUpdateActivity) {
           onUpdateActivity({ ...activeJobItem.data as Activity, status: 'IN_PROGRESS' });
       }
