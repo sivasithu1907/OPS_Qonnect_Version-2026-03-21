@@ -274,7 +274,7 @@ const handleLogout = () => {
       // Optimistic UI update immediately
       setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
       try {
-          // Save status + assignment + appointment to DB
+          // Save status + assignment + appointment + completion note to DB
           await fetch(`/api/tickets/${updated.id}/status`, {
               method: "PUT",
               headers: getAuthHeaders(),
@@ -284,6 +284,7 @@ const handleLogout = () => {
                   appointmentTime: updated.appointmentTime || null,
                   carryForwardNote: updated.carryForwardNote || null,
                   nextPlannedAt: updated.nextPlannedAt || null,
+                  completionNote: updated.completionNote || null,
               })
           });
           // Also persist full ticket fields (category, type, priority, location etc.)
@@ -615,7 +616,7 @@ const handleDeleteCustomer = async (id: string) => {
       if (data.tickets) setTickets(data.tickets);
       if (data.activities) setActivities(data.activities);
       if (data.technicians) setTechnicians(data.technicians);
-   // if (data.customers) setCustomers(data.customers);
+      if (data.customers) setCustomers(data.customers);
       if (data.teams) setTeams(data.teams);
       if (data.sites) setSites(data.sites);
   };
@@ -817,9 +818,13 @@ useEffect(() => {
           activities={activities}
           customers={customers}
           currentTechId={currentUser.techId || ''}
-          onUpdateStatus={(tId, status) => {
+          onUpdateStatus={(tId, status, note) => {
             const t = tickets.find(x => x.id === tId);
-            if (t) handleUpdateTicket({...t, status});
+            if (t) handleUpdateTicket({
+              ...t, 
+              status,
+              ...(status === 'RESOLVED' && note ? { completionNote: note } : {})
+            });
           }}
           onUpdateActivity={handleUpdateActivity}
           onUpdateTicket={handleUpdateTicket}
@@ -1254,9 +1259,13 @@ useEffect(() => {
                         tickets={tickets}
                         activities={activities}
                         currentTechId={currentUser.techId || ''}
-                        onUpdateStatus={(tId, status) => {
+                        onUpdateStatus={(tId, status, note) => {
                             const t = tickets.find(x => x.id === tId);
-                            if (t) handleUpdateTicket({...t, status});
+                            if (t) handleUpdateTicket({
+                              ...t, 
+                              status,
+                              ...(status === 'RESOLVED' && note ? { completionNote: note } : {})
+                            });
                         }}
                         onUpdateActivity={handleUpdateActivity}
                         isStandalone={false}
