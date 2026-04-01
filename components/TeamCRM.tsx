@@ -262,9 +262,10 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                             level: rawData.level || currentLevel,
                         };
 
-                        // Derive isActive from the status field in the form
-                        const statusVal = rawData.status || 'AVAILABLE';
-                        data.isActive = activeTech ? (activeTech.isActive ?? true) : true;
+                        // Normalise status: AVAILABLE → ACTIVE for DB consistency
+                        const rawStatus = rawData.status || 'AVAILABLE';
+                        const statusVal = (rawStatus === 'AVAILABLE') ? 'ACTIVE' : rawStatus;
+                        data.isActive = statusVal === 'ACTIVE';
                         data.status = statusVal;
                         
                         if (modalType === 'add') {
