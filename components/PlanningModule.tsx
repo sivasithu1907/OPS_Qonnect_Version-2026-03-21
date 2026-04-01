@@ -146,9 +146,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   }, [technicalAssociates, activities, selectedDateString, editingActivity]);
 
   // --- Handlers ---
-  const handleNewCustomer = (cust: Customer) => {
-      onAddCustomer(cust);
-      setSelectedCustomerId(cust.id);
+  const handleNewCustomer = async (cust: Customer) => {
+      // onAddCustomer now returns the DB-created customer with the real server ID
+      const dbCustomer = await (onAddCustomer as any)(cust);
+      // Use DB customer ID if available; fall back to temp ID so form stays usable
+      setSelectedCustomerId(dbCustomer?.id || cust.id);
   };
 
   // --- Shared Activity Card (Mobile/Kanban) ---
