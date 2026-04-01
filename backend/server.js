@@ -1087,7 +1087,9 @@ app.get("/api/users", authenticate, async (req, res) => {
             email: r.email,
             systemRole: r.systemRole,
             status: r.status,
-            isActive: r.status === 'ACTIVE',
+            // Treat AVAILABLE same as ACTIVE — legacy rows may have AVAILABLE status
+            isActive: r.status === 'ACTIVE' || r.status === 'AVAILABLE',
+            status: (r.status === 'AVAILABLE') ? 'ACTIVE' : (r.status || 'ACTIVE'), // normalise on read
             phone: r.phone || '',
             jobRole: r.job_role || '',
             level:   r.level   || '',
@@ -1111,7 +1113,7 @@ app.post("/api/users", authenticate, async (req, res) => {
             `INSERT INTO users (id, name, email, password, role, status, phone, job_role, level)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING id, name, email, role as "systemRole", status, phone, job_role, level`,
-            [userId, name.trim(), email.trim(), hashedPass, role, status || "ACTIVE", phone || null, job_role || null, level || null]
+            [userId, name.trim(), email.trim(), hashedPass, role, (status === 'AVAILABLE' ? 'ACTIVE' : (status || 'ACTIVE')), phone || null, job_role || null, level || null]
         );
         res.status(201).json(rows[0]);
     } catch (e) {
@@ -1148,7 +1150,7 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
                 email ? email.trim() : null,
                 hashedPass,
                 role || null,
-                status || null,
+                status ? (status === 'AVAILABLE' ? 'ACTIVE' : status) : null,
                 phone || null,
                 avatar || null,
                 id,
