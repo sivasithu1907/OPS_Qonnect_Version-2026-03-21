@@ -457,7 +457,7 @@ const loadTickets = async () => {
   };
   
 // Customer Handlers (API-first)
-const handleAddCustomer = async (c: Customer) => {
+const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
   try {
     const res = await fetch("/api/customers", {
       method: "POST",
@@ -477,10 +477,14 @@ const handleAddCustomer = async (c: Customer) => {
       throw new Error(err?.error || "Failed to create customer");
     }
 
+    // Return the DB-created customer (with real server-assigned ID)
+    const created = await res.json();
     await loadCustomers();
+    return created as Customer;
   } catch (e) {
     console.error(e);
     alert("Failed to create customer");
+    return null;
   }
 };
 
@@ -575,7 +579,7 @@ const handleDeleteCustomer = async (id: string) => {
                       job_role: (u as any).jobRole || null,
                       level: u.level || null,
                       role: u.systemRole || u.role,
-                      status: u.status || "ACTIVE",
+                      status: (u.status === 'AVAILABLE' || u.status === 'ACTIVE') ? 'ACTIVE' : (u.isActive === false ? 'INACTIVE' : 'ACTIVE'),
                       phone: u.phone || null,
                       avatar: u.avatar || null
                   })
@@ -640,11 +644,12 @@ const loadUsers = async () => {
         // Derive 'level' from systemRole since it's not stored in DB
         const withLevel = data.map((u: any) => ({
             ...u,
-            // Prefer stored level from DB; only fall back to systemRole-derived value if blank
+            // Prefer stored level from DB; fall back to systemRole-derived value only for known system roles
+            // IMPORTANT: never default to TECHNICAL_ASSOCIATE — SALES users with blank level would be misclassified
             level: u.level || (
                 u.systemRole === 'TEAM_LEAD'      ? 'TEAM_LEAD' :
                 u.systemRole === 'FIELD_ENGINEER'  ? 'FIELD_ENGINEER' :
-                u.systemRole === 'ADMIN'            ? 'ADMIN' : 'TECHNICAL_ASSOCIATE'
+                u.systemRole === 'ADMIN'           ? 'ADMIN' : ''
             ),
             // jobRole is the human job title; preserve from API
             jobRole: u.jobRole || u.job_role || ''
