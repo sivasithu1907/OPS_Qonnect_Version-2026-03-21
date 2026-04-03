@@ -311,6 +311,21 @@ async function initDb() {
       );
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+      -- Permanent fix: normalise any users whose level is blank or whose systemRole
+      -- was stored as a human-readable label instead of the enum value.
+      -- This runs on every restart and is idempotent (no harm if already correct).
+      UPDATE users
+        SET level = 'TECHNICAL_ASSOCIATE',
+            role  = COALESCE(NULLIF(role, 'Technical Associate'), 'FIELD_ENGINEER')
+        WHERE (level IS NULL OR level = '')
+          AND (role ILIKE '%associate%' OR role ILIKE '%technical%');
+
+      UPDATE users
+        SET level = 'SALES',
+            role  = COALESCE(NULLIF(role, 'Sales Lead'), 'FIELD_ENGINEER')
+        WHERE (level IS NULL OR level = '')
+          AND (role ILIKE '%sales%');
     `);
     
 // 8. WhatsApp Logs Table
@@ -874,7 +889,19 @@ app.post("/api/customers", authenticate, async (req, res) => {
       ]
     );
 
-    res.status(201).json(rows[0]);
+    const r = rows[0];
+    // Return same shape as GET /api/customers so frontend can use immediately
+    res.status(201).json({
+      id: r.id,
+      name: r.name,
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      buildingNumber: r.building_number || '',
+      avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
+      isActive: r.is_active !== false,
+      notes: r.notes || ''
+    });
   } catch (e) {
     console.error("customers create error:", e);
     res.status(500).json({ error: "Failed to create customer" });
