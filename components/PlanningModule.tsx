@@ -146,11 +146,22 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   }, [technicalAssociates, activities, selectedDateString, editingActivity]);
 
   // --- Handlers ---
-  const handleNewCustomer = async (cust: Customer) => {
-      // onAddCustomer now returns the DB-created customer with the real server ID
-      const dbCustomer = await (onAddCustomer as any)(cust);
-      // Use DB customer ID if available; fall back to temp ID so form stays usable
-      setSelectedCustomerId(dbCustomer?.id || cust.id);
+  const handleNewCustomer = async (cust: Customer): Promise<Customer | null> => {
+      try {
+          // onAddCustomer returns the DB-created customer with the real server-assigned ID
+          const dbCustomer = await (onAddCustomer as (c: Customer) => Promise<Customer | null>)(cust);
+          if (dbCustomer?.id) {
+              setSelectedCustomerId(dbCustomer.id);
+              return dbCustomer;
+          }
+          // Fallback: use temp ID if DB didn't return a customer (should not happen)
+          setSelectedCustomerId(cust.id);
+          return cust;
+      } catch (err) {
+          console.error('handleNewCustomer error:', err);
+          // Propagate error so CustomerSelector can show it (modal stays open)
+          throw err;
+      }
   };
 
   // --- Shared Activity Card (Mobile/Kanban) ---
