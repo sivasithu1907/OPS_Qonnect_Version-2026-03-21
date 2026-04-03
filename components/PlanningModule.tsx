@@ -286,10 +286,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 </td>
                 <td className="px-6 py-4 text-slate-600">
                   <div className="flex items-center gap-1">
-                      <Calendar size={12} /> {new Date(act.plannedDate).toLocaleDateString()}
+                      <Calendar size={12} /> {new Date(act.plannedDate).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}
                   </div>
                   <div className="flex items-center gap-1 text-xs text-slate-400 mt-1">
-                      <Clock size={12} /> {new Date(act.plannedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                      <Clock size={12} /> {new Date(act.plannedDate).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
                   </div>
                 </td>
                 <td className="px-6 py-4">
@@ -414,11 +414,14 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         
         {/* Body Grid */}
         <div className="overflow-y-auto flex-1 custom-scrollbar">
-           {teamLeads.map(lead => (
+           {assignableLeads.map(lead => (
              <div key={lead.id} className="grid grid-cols-8 border-b border-slate-100 min-h-[100px]">
                <div className="p-4 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center">
                  <h4 className="font-bold text-slate-800 text-sm">{lead.name}</h4>
-                 <div className="text-[10px] text-slate-500 mt-1">{lead.role}</div>
+                 <div className="text-[10px] text-slate-500 mt-1">{(lead as any).jobRole || lead.role || lead.systemRole}</div>
+                 <div className={`text-[9px] font-bold mt-0.5 ${lead.systemRole === 'TEAM_LEAD' ? 'text-purple-500' : 'text-blue-500'}`}>
+                   {lead.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}
+                 </div>
                </div>
                {days.map(d => {
                  const dayActs = activities.filter(a => {
@@ -445,6 +448,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               {(act.escalationLevel || 0) > 0 && <AlertCircle size={10} className="text-red-500"/>}
                           </div>
                           <div className="text-[10px] text-slate-500 truncate mt-0.5">{getDisplayLocation(act)}</div>
+                          <div className="text-[9px] text-slate-400 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}</div>
                         </div>
                       ))}
                    </div>
