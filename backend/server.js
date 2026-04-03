@@ -326,6 +326,16 @@ async function initDb() {
             role  = COALESCE(NULLIF(role, 'Sales Lead'), 'FIELD_ENGINEER')
         WHERE (level IS NULL OR level = '')
           AND (role ILIKE '%sales%');
+
+      UPDATE users
+        SET level = 'FIELD_ENGINEER'
+        WHERE (level IS NULL OR level = '')
+          AND role = 'FIELD_ENGINEER';
+
+      UPDATE users
+        SET level = 'TEAM_LEAD'
+        WHERE (level IS NULL OR level = '')
+          AND role = 'TEAM_LEAD';
     `);
     
 // 8. WhatsApp Logs Table
