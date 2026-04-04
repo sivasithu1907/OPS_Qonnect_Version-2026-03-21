@@ -101,49 +101,72 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                     <Icon size={20} />
                 </div>
                 <h3 className="font-bold text-lg text-slate-800">{title}</h3>
+                <span className="ml-2 text-xs font-semibold text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full">{techs.length}</span>
             </div>
         </div>
         <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
+            <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
                 <tr>
-                    <th className="px-6 py-3">Name</th>
-                    <th className="px-6 py-3">Phone</th>
-                    <th className="px-6 py-3">Status</th>
-                    <th className="px-6 py-3">Role</th>
-                    <th className="px-6 py-3 text-right">Actions</th>
+                    <th className="px-6 py-3 w-[35%]">Name</th>
+                    <th className="px-6 py-3 w-[25%]">Phone</th>
+                    <th className="px-6 py-3 w-[15%]">Status</th>
+                    <th className="px-6 py-3 w-[15%]">Role / Level</th>
+                    <th className="px-6 py-3 w-[10%] text-right">Actions</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
                 {techs.length === 0 ? (
-                    <tr><td colSpan={5} className="p-4 text-center text-slate-400 italic">No records found</td></tr>
+                    <tr><td colSpan={5} className="p-6 text-center text-slate-400 italic text-sm">No records found</td></tr>
                 ) : techs.map(tech => (
-                    <tr key={tech.id} className="hover:bg-slate-50 group">
-                        <td className="px-6 py-4 flex items-center gap-3">
-                            <img src={tech.avatar} className="w-8 h-8 rounded-full bg-slate-200 object-cover" alt="" />
-                            <span className="font-medium text-slate-800">{tech.name}</span>
-                        </td>
-                        <td className="px-6 py-4 text-slate-600 font-mono">
-                            {tech.phone}
-                        </td>
+                    <tr key={tech.id} className="hover:bg-slate-50/80 group transition-colors">
+                        {/* Name */}
                         <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                tech.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-700' :
-                                tech.status === 'BUSY' ? 'bg-amber-100 text-amber-700' : 
-                                tech.status === 'LEAVE' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'
+                            <div className="flex items-center gap-3">
+                                <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 object-cover shrink-0 border border-slate-100" alt="" />
+                                <div>
+                                    <div className="font-semibold text-slate-800">{tech.name}</div>
+                                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">{tech.id}</div>
+                                </div>
+                            </div>
+                        </td>
+                        {/* Phone */}
+                        <td className="px-6 py-4">
+                            <span className="text-slate-700 font-mono text-sm">{tech.phone || <span className="text-slate-300 italic">—</span>}</span>
+                        </td>
+                        {/* Status */}
+                        <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                                tech.status === 'AVAILABLE' || tech.status === 'ACTIVE'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                tech.status === 'BUSY'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                tech.status === 'LEAVE'
+                                    ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                                    'bg-slate-100 text-slate-500 border border-slate-200'
                             }`}>
-                                {tech.status === 'AVAILABLE' ? 'Active' : 
-                                 tech.status === 'LEAVE' ? 'On Leave' : 
-                                 tech.status.charAt(0) + tech.status.slice(1).toLowerCase()}
+                                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                                    tech.status === 'AVAILABLE' || tech.status === 'ACTIVE' ? 'bg-emerald-500' :
+                                    tech.status === 'BUSY' ? 'bg-amber-500' :
+                                    tech.status === 'LEAVE' ? 'bg-rose-500' : 'bg-slate-400'
+                                }`}/>
+                                {tech.status === 'AVAILABLE' || tech.status === 'ACTIVE' ? 'Active' :
+                                 tech.status === 'LEAVE' ? 'On Leave' :
+                                 tech.status === 'BUSY' ? 'Busy' :
+                                 tech.status?.charAt(0) + (tech.status?.slice(1) || '').toLowerCase()}
                             </span>
                         </td>
-                        <td className="px-6 py-4 text-slate-600 font-medium">
-                            {tech.role}
+                        {/* Role */}
+                        <td className="px-6 py-4">
+                            <span className="text-slate-700 text-sm font-medium">
+                                {tech.jobRole || tech.role || <span className="text-slate-300 italic">—</span>}
+                            </span>
                         </td>
+                        {/* Actions */}
                         <td className="px-6 py-4 text-right">
-                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button type="button" onClick={() => openModal('view', tech)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Eye size={16} className="pointer-events-none" /></button>
-                                <button type="button" onClick={() => openModal('edit', tech)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded"><Edit size={16} className="pointer-events-none" /></button>
-                                <button type="button" onClick={(e) => handleDelete(tech.id, e)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={16} className="pointer-events-none" /></button>
+                            <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button type="button" onClick={() => openModal('view', tech)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View"><Eye size={15} className="pointer-events-none" /></button>
+                                <button type="button" onClick={() => openModal('edit', tech)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Edit"><Edit size={15} className="pointer-events-none" /></button>
+                                <button type="button" onClick={(e) => handleDelete(tech.id, e)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete"><Trash2 size={15} className="pointer-events-none" /></button>
                             </div>
                         </td>
                     </tr>
