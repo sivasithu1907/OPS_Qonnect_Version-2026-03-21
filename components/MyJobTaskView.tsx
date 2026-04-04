@@ -76,7 +76,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
     ticket.status === TicketStatus.RESOLVED    ? 'bg-emerald-100 text-emerald-700' :
     'bg-slate-100 text-slate-600';
 
-  // ── COMPACT LIST CARD (used in job list) ──
+  // ── COMPACT LIST CARD (used in job list) — matches activity card style exactly ──
   if (!isDetailView) {
     return (
       <>
@@ -84,13 +84,13 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
           className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden active:scale-[0.99] transition-transform"
           onClick={() => onSelect?.(ticket)}
         >
-          {/* Progress bar */}
+          {/* Progress bar — same as activity card */}
           <div className="h-1 bg-slate-100">
             <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }}/>
           </div>
 
           <div className="p-5">
-            {/* Header */}
+            {/* Header — customer name bold, category as subtitle */}
             <div className="flex justify-between items-start mb-3">
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{ticket.id}</div>
@@ -106,7 +106,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
               </span>
             </div>
 
-            {/* Location */}
+            {/* Location — same as activity card */}
             <div className="flex items-center gap-2 text-sm text-slate-600 mb-3">
               <MapPin size={14} className="text-slate-400 shrink-0"/>
               <span className="truncate flex-1">{ticket.houseNumber || ticket.locationUrl || 'No location set'}</span>
@@ -118,56 +118,28 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
               )}
             </div>
 
-            {/* Issue */}
+            {/* Issue description — same as activity card */}
             {issueText && (
               <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-700 leading-relaxed line-clamp-2">
                 {issueText}
               </div>
             )}
 
-            {/* Call */}
-            {ticket.phoneNumber && (
+            {/* Call customer — same as activity card */}
+            {ticket.phoneNumber ? (
               <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
-                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
                 <Phone size={14}/> Call Customer
               </a>
-            )}
-
-            {/* Step dots */}
-            {!isCompleted && (
-              <div className="flex items-center justify-between mb-4 px-1">
-                {steps.slice(0,4).map((step, i) => (
-                  <React.Fragment key={step.key}>
-                    <div className="flex flex-col items-center">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
-                        i < currentStep  ? 'bg-emerald-500 border-emerald-500 text-white' :
-                        i === currentStep? 'bg-slate-900 border-slate-900 text-white' :
-                        'bg-white border-slate-200 text-slate-400'
-                      }`}>{i < currentStep ? '✓' : i+1}</div>
-                      <span className={`text-[9px] mt-0.5 font-medium ${i===currentStep?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
-                    </div>
-                    {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i<currentStep?'bg-emerald-500':'bg-slate-200'}`}/>}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-
-            {/* Action */}
-            {actionConfig && !isCompleted && (
-              <button onClick={handleAction}
-                className={`w-full py-3.5 rounded-2xl font-bold text-sm shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${actionConfig.color}`}>
-                {actionConfig.icon} {actionConfig.label}
-              </button>
-            )}
-            {isCompleted && (
-              <div className="flex items-center justify-center gap-2 py-3 bg-emerald-50 rounded-xl text-emerald-700 font-bold text-sm">
-                <CheckCircle2 size={18}/> Job Completed
+            ) : (
+              <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs">
+                <Phone size={14}/> No phone number
               </div>
             )}
           </div>
         </div>
 
-        {/* Complete modal */}
+        {/* Complete modal — only needed if user completes from list (edge case) */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={()=>setIsModalOpen(false)}>
             <div className="bg-white w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
