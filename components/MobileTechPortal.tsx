@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone } from 'lucide-react';
+import { ChevronLeft, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -190,10 +190,26 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   const handleStart = () => {
       if (activeJobItem?.type === 'ticket') {
-          // Route through handleStatusUpdate so the status change hits handleUpdateTicket → /api/tickets/:id/status
-          // which now sets started_at = NOW() on the backend
           handleStatusUpdate(activeJobItem.data.id, TicketStatus.IN_PROGRESS);
       } else if (activeJobItem?.type === 'activity' && onUpdateActivity) {
+          onUpdateActivity({ ...activeJobItem.data as Activity, status: 'IN_PROGRESS' });
+      }
+  };
+
+  const handleActivityOnMyWay = () => {
+      if (activeJobItem?.type === 'activity' && onUpdateActivity) {
+          onUpdateActivity({ ...activeJobItem.data as Activity, status: 'ON_MY_WAY' as any });
+      }
+  };
+
+  const handleActivityArrived = () => {
+      if (activeJobItem?.type === 'activity' && onUpdateActivity) {
+          onUpdateActivity({ ...activeJobItem.data as Activity, status: 'ARRIVED' as any });
+      }
+  };
+
+  const handleActivityStartWork = () => {
+      if (activeJobItem?.type === 'activity' && onUpdateActivity) {
           onUpdateActivity({ ...activeJobItem.data as Activity, status: 'IN_PROGRESS' });
       }
   };
@@ -366,7 +382,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 const actCust = customers?.find((cu: any) => cu.id === job.customerId);
                                 // Unified 5-step flow: Assigned → On the Way → Arrived → Working → Done
                                 const actSteps5 = ['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE'];
-                                const actStepIdx = actSteps5.indexOf(job.status) === -1 ? 0 : actSteps5.indexOf(job.status);
+                                const actRawIdx = actSteps5.indexOf(job.status);
+                                const actStepIdx = actRawIdx === -1 ? 0 : actRawIdx;
                                 const actProgress = job.status === 'DONE' ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps5.length) * 100);
 
                                 return (
@@ -553,10 +570,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     {actCustomer && <div className="text-sm text-slate-500 mt-0.5">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>}
                                 </div>
                                 <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
-                                    actStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
-                                    actStatus === 'DONE'        ? 'bg-emerald-100 text-emerald-700' :
+                                    (actStatus as any) === 'ON_MY_WAY'  ? 'bg-cyan-100 text-cyan-700' :
+                                    (actStatus as any) === 'ARRIVED'    ? 'bg-indigo-100 text-indigo-700' :
+                                    actStatus === 'IN_PROGRESS'         ? 'bg-amber-100 text-amber-700' :
+                                    actStatus === 'DONE'                ? 'bg-emerald-100 text-emerald-700' :
                                     'bg-purple-100 text-purple-700'
-                                }`}>{actStatus.replace('_',' ')}</span>
+                                }`}>{actStatus.replace(/_/g,' ')}</span>
                             </div>
                             {/* Call customer */}
                             {actCustomer?.phone && (
@@ -637,10 +656,22 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     <span className="text-xs font-semibold">{photoUploading && photoJobId === act.id ? 'Saving...' : 'Photos'}</span>
                                 </button>
                             </div>
-                            {/* Workflow action buttons */}
+                            {/* Workflow action buttons — full 5-step flow matching tickets */}
                             <div className="space-y-3 pb-6">
-                                {actStatus === 'PLANNED' && (
-                                    <button onClick={handleStart}
+                                {(actStatus === 'PLANNED') && (
+                                    <button onClick={handleActivityOnMyWay}
+                                        className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
+                                        <Car size={20}/> On My Way
+                                    </button>
+                                )}
+                                {(actStatus as any) === 'ON_MY_WAY' && (
+                                    <button onClick={handleActivityArrived}
+                                        className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
+                                        <Home size={20}/> Arrived at Site
+                                    </button>
+                                )}
+                                {(actStatus as any) === 'ARRIVED' && (
+                                    <button onClick={handleActivityStartWork}
                                         className="w-full py-4 rounded-2xl bg-amber-500 text-white font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
                                         <Play size={20} className="fill-current"/> Start Work
                                     </button>
