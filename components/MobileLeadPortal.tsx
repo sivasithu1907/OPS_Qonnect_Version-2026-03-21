@@ -492,68 +492,190 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   };
 
   const JobCard: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
-      const locationDisplay = ticket.houseNumber 
-        ? ticket.houseNumber 
-        : (ticket.locationUrl ? "Map Location Available" : "Location not set");
+      const isCompleted = ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.CANCELLED;
+      const isWarranty   = ticket.type === TicketType.WARRANTY;
+      const isChargeable = ticket.type === TicketType.CHARGEABLE;
+      const ticketSteps = [
+          { key: 'ASSIGNED',    label: 'Assigned'   },
+          { key: 'ON_MY_WAY',   label: 'On the Way' },
+          { key: 'ARRIVED',     label: 'Arrived'    },
+          { key: 'IN_PROGRESS', label: 'Working'    },
+      ];
+      const normalizedStatus = (ticket.status === TicketStatus.OPEN || (ticket.status as string) === 'NEW') ? 'ASSIGNED' : ticket.status;
+      const currentStep = ticketSteps.findIndex(s => s.key === normalizedStatus);
+      const progress = isCompleted ? 100 : Math.max(5, ((currentStep + 1) / ticketSteps.length) * 100);
+      const statusColor =
+          ticket.status === TicketStatus.ASSIGNED    ? 'bg-purple-100 text-purple-700' :
+          ticket.status === TicketStatus.ON_MY_WAY   ? 'bg-cyan-100 text-cyan-700' :
+          ticket.status === TicketStatus.ARRIVED     ? 'bg-indigo-100 text-indigo-700' :
+          ticket.status === TicketStatus.IN_PROGRESS ? 'bg-amber-100 text-amber-700' :
+          ticket.status === TicketStatus.RESOLVED    ? 'bg-emerald-100 text-emerald-700' :
+          'bg-slate-100 text-slate-600';
 
       return (
-          <div 
+          <div
             onClick={() => handleTicketCardTap(ticket)}
-            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-3 active:scale-[0.98] transition-transform relative overflow-hidden group"
+            className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-3 overflow-hidden active:scale-[0.99] transition-transform"
           >
-              <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(ticket.status)}`}>
-                          {ticket.status.replace('_', ' ')}
+              {/* Progress bar */}
+              <div className="h-1 bg-slate-100">
+                  <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }}/>
+              </div>
+              <div className="p-5">
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-3">
+                      <div>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{ticket.id}</div>
+                          <h3 className="text-base font-bold text-slate-900">{ticket.customerName}</h3>
+                          <div className="text-sm text-slate-500 mt-0.5">
+                              {ticket.category}
+                              {isWarranty   && <span className="ml-2 text-emerald-600 font-bold text-[10px]">✓ Warranty</span>}
+                              {isChargeable && <span className="ml-2 text-amber-600 font-bold text-[10px]">QAR 199</span>}
+                          </div>
+                      </div>
+                      <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${statusColor}`}>
+                          {ticket.status.replace(/_/g,' ')}
                       </span>
-                      <span className="text-xs font-mono text-slate-400">#{ticket.id}</span>
                   </div>
-              </div>
-
-              <h4 className="font-bold text-slate-800 text-sm mb-1">{ticket.customerName}</h4>
-              
-              <div className="flex items-center gap-1 text-xs text-slate-500">
-                  <MapPin size={12} />
-                  <span className="truncate max-w-[200px]">{locationDisplay}</span>
-              </div>
-
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-200">
-                  <ChevronRight size={20} />
+                  {/* Location */}
+                  <div className="flex items-center gap-2 text-sm text-slate-600 mb-3">
+                      <MapPin size={13} className="text-slate-400 shrink-0"/>
+                      <span className="truncate flex-1">{ticket.houseNumber || ticket.locationUrl || 'No location set'}</span>
+                      {ticket.locationUrl && (
+                          <a href={ticket.locationUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                              className="shrink-0 flex items-center gap-1 text-[10px] text-blue-600 font-bold px-2 py-1 bg-blue-50 rounded-lg">
+                              Map
+                          </a>
+                      )}
+                  </div>
+                  {/* Call */}
+                  {ticket.phoneNumber ? (
+                      <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
+                          className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                          <Phone size={13}/> Call Customer
+                      </a>
+                  ) : (
+                      <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
+                          <Phone size={13}/> No phone number
+                      </div>
+                  )}
+                  {/* 5-step progress */}
+                  {!isCompleted ? (
+                      <div className="flex items-center justify-between px-1">
+                          {ticketSteps.map((step, i) => (
+                              <React.Fragment key={step.key}>
+                                  <div className="flex flex-col items-center">
+                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                          i < currentStep  ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                          i === currentStep? 'bg-slate-900 border-slate-900 text-white' :
+                                          'bg-white border-slate-200 text-slate-400'
+                                      }`}>{i < currentStep ? '✓' : i+1}</div>
+                                      <span className={`text-[9px] mt-0.5 font-medium ${i===currentStep?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
+                                  </div>
+                                  {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i<currentStep?'bg-emerald-500':'bg-slate-200'}`}/>}
+                              </React.Fragment>
+                          ))}
+                      </div>
+                  ) : (
+                      <div className="flex items-center justify-center gap-2 py-2 bg-emerald-50 rounded-xl text-emerald-700 font-bold text-xs">
+                          ✓ Completed
+                      </div>
+                  )}
               </div>
           </div>
       );
   };
 
 const ActivityJobCard: React.FC<{ activity: Activity }> = ({ activity }) => {
-    const locationDisplay = (activity as any).houseNumber
-      ? (activity as any).houseNumber
-      : ((activity as any).locationUrl ? "Map Location Available" : "Location not set");
-
-    const statusLabel = (activity as any).status === 'IN_PROGRESS' ? 'IN PROGRESS' : (activity as any).status;
+    const act = activity as any;
+    const actStatus = act.status || 'PLANNED';
+    const actCustomer = customers?.find((c: any) => c.id === act.customerId);
+    const isCompleted = actStatus === 'DONE' || actStatus === 'CANCELLED';
+    const actSteps5 = ['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE'];
+    const actStepIdx = Math.max(0, actSteps5.indexOf(actStatus));
+    const actProgress = isCompleted ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps5.length) * 100);
+    const actStepLabels = [
+        { key: 'PLANNED',     label: 'Assigned'   },
+        { key: 'ON_MY_WAY',   label: 'On the Way' },
+        { key: 'ARRIVED',     label: 'Arrived'    },
+        { key: 'IN_PROGRESS', label: 'Working'    },
+    ];
+    const actStatusColor =
+        actStatus === 'ON_MY_WAY'  ? 'bg-cyan-100 text-cyan-700' :
+        actStatus === 'ARRIVED'    ? 'bg-indigo-100 text-indigo-700' :
+        actStatus === 'IN_PROGRESS'? 'bg-amber-100 text-amber-700' :
+        actStatus === 'DONE'       ? 'bg-emerald-100 text-emerald-700' :
+        'bg-purple-100 text-purple-700';
 
     return (
         <div
           onClick={() => setViewActivity(activity)}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-3 active:scale-[0.98] transition-transform relative overflow-hidden"
+          className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-3 overflow-hidden active:scale-[0.99] transition-transform"
         >
-            <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        ACTIVITY • {statusLabel}
+            {/* Progress bar */}
+            <div className="h-1 bg-slate-100">
+                <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgress}%` }}/>
+            </div>
+            <div className="p-5">
+                {/* Header */}
+                <div className="flex justify-between items-start mb-3">
+                    <div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{act.reference || act.id}</div>
+                        <h3 className="text-base font-bold text-slate-900">{actCustomer?.name || act.type || 'Activity'}</h3>
+                        <div className="text-sm text-slate-500 mt-0.5">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>
+                    </div>
+                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${actStatusColor}`}>
+                        {actStatus.replace(/_/g,' ')}
                     </span>
-                    <span className="text-xs font-mono text-slate-400">#{(activity as any).reference || (activity as any).id}</span>
                 </div>
-            </div>
-
-            <h4 className="font-bold text-slate-800 text-sm mb-1">{(activity as any).type || "Activity"}</h4>
-
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-                <MapPin size={12} />
-                <span className="truncate max-w-[200px]">{locationDisplay}</span>
-            </div>
-
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-200">
-                <ChevronRight size={20} />
+                {/* Location */}
+                <div className="flex items-center gap-2 text-sm text-slate-600 mb-3">
+                    <MapPin size={13} className="text-slate-400 shrink-0"/>
+                    <span className="truncate flex-1">{act.houseNumber || act.locationUrl || 'No location set'}</span>
+                    {act.locationUrl && (
+                        <a href={act.locationUrl} target="_blank" rel="noopener noreferrer" onClick={(e:any)=>e.stopPropagation()}
+                            className="shrink-0 flex items-center gap-1 text-[10px] text-blue-600 font-bold px-2 py-1 bg-blue-50 rounded-lg">
+                            Map
+                        </a>
+                    )}
+                </div>
+                {/* Description */}
+                {act.description && (
+                    <div className="bg-slate-50 rounded-xl p-3 mb-3 text-xs text-slate-700 line-clamp-2">{act.description}</div>
+                )}
+                {/* Call */}
+                {actCustomer?.phone ? (
+                    <a href={`tel:${actCustomer.phone}`} onClick={(e:any)=>e.stopPropagation()}
+                        className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                        <Phone size={13}/> Call Customer
+                    </a>
+                ) : (
+                    <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
+                        <Phone size={13}/> No phone number
+                    </div>
+                )}
+                {/* 5-step progress */}
+                {!isCompleted ? (
+                    <div className="flex items-center justify-between px-1">
+                        {actStepLabels.map((step, i) => (
+                            <React.Fragment key={step.key}>
+                                <div className="flex flex-col items-center">
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                        i < actStepIdx  ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                        i === actStepIdx? 'bg-slate-900 border-slate-900 text-white' :
+                                        'bg-white border-slate-200 text-slate-400'
+                                    }`}>{i < actStepIdx ? '✓' : i+1}</div>
+                                    <span className={`text-[9px] mt-0.5 font-medium ${i===actStepIdx?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
+                                </div>
+                                {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i<actStepIdx?'bg-emerald-500':'bg-slate-200'}`}/>}
+                            </React.Fragment>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center gap-2 py-2 bg-emerald-50 rounded-xl text-emerald-700 font-bold text-xs">
+                        ✓ Completed
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -1318,11 +1440,11 @@ const TeamView = () => {
                                     {/* Step progress — ticket */}
                                     {viewJob.type === 'ticket' && (() => {
                                         const steps = [
-                                            { key: 'ASSIGNED',    label: 'Assigned'  },
-                                            { key: 'ON_MY_WAY',   label: 'On Way'    },
-                                            { key: 'ARRIVED',     label: 'Arrived'   },
-                                            { key: 'IN_PROGRESS', label: 'Working'   },
-                                            { key: 'RESOLVED',    label: 'Done'      },
+                                            { key: 'ASSIGNED',    label: 'Assigned'   },
+                                            { key: 'ON_MY_WAY',   label: 'On the Way' },
+                                            { key: 'ARRIVED',     label: 'Arrived'    },
+                                            { key: 'IN_PROGRESS', label: 'Working'    },
+                                            { key: 'RESOLVED',    label: 'Done'       },
                                         ];
                                         const cur = steps.findIndex(s => s.key === viewJob.data.status);
                                         return (
@@ -1344,12 +1466,14 @@ const TeamView = () => {
                                         );
                                     })()}
 
-                                    {/* Step progress — activity */}
+                                    {/* Step progress — activity — 5-step unified flow */}
                                     {viewJob.type === 'activity' && (() => {
                                         const steps = [
-                                            { key: 'PLANNED',     label: 'Assigned' },
-                                            { key: 'IN_PROGRESS', label: 'Working'  },
-                                            { key: 'DONE',        label: 'Done'     },
+                                            { key: 'PLANNED',     label: 'Assigned'   },
+                                            { key: 'ON_MY_WAY',   label: 'On the Way' },
+                                            { key: 'ARRIVED',     label: 'Arrived'    },
+                                            { key: 'IN_PROGRESS', label: 'Working'    },
+                                            { key: 'DONE',        label: 'Done'       },
                                         ];
                                         const cur = steps.findIndex(s => s.key === viewJob.data.status);
                                         return (
@@ -1371,12 +1495,59 @@ const TeamView = () => {
                                         );
                                     })()}
 
-                                    {/* Work Actions — TL's own assigned ticket */}
+                                    {/* Work Actions */}
                                     {viewJob.type === 'ticket' && viewJob.data.assignedTechId === currentUserId && (
                                         <div className="space-y-2 pb-4">
-                                            {(viewJob.data.status === 'OPEN' || viewJob.data.status === 'ASSIGNED') && (
+                                            {(viewJob.data.status === 'OPEN' || viewJob.data.status === 'ASSIGNED' || viewJob.data.status === 'NEW') && (
                                                 <button onClick={() => { handleStartWork(viewJob.data); setViewJob(null); }}
-                                                    className="w-full bg-amber-400 text-slate-900 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+                                                    className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+                                                    🚗 On My Way
+                                                </button>
+                                            )}
+                                            {viewJob.data.status === 'ON_MY_WAY' && (
+                                                <button onClick={() => { onUpdateTicket?.({...viewJob.data, status: TicketStatus.ARRIVED}); setViewJob(null); }}
+                                                    className="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+                                                    🏠 Arrived at Site
+                                                </button>
+                                            )}
+                                            {viewJob.data.status === 'ARRIVED' && (
+                                                <button onClick={() => { handleStartWork(viewJob.data); setViewJob(null); }}
+                                                    className="w-full bg-amber-500 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+                                                    ▶ Start Work
+                                                </button>
+                                            )}
+                                            {viewJob.data.status === 'IN_PROGRESS' && (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button onClick={() => { handleOpenJobAction('job_carry', viewJob.data); setViewJob(null); }}
+                                                        className="py-3.5 bg-white border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
+                                                        Carry Forward
+                                                    </button>
+                                                    <button onClick={() => { handleOpenJobAction('job_done', viewJob.data); setViewJob(null); }}
+                                                        className="py-3.5 bg-emerald-500 text-white font-bold rounded-2xl text-xs active:scale-[0.98]">
+                                                        Complete ✓
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {/* Activity Work Actions — full 5-step flow */}
+                                    {viewJob.type === 'activity' && viewJob.data.leadTechId === currentUserId && (
+                                        <div className="space-y-2 pb-4">
+                                            {(viewJob.data.status === 'PLANNED') && (
+                                                <button onClick={() => { onUpdateActivity?.({...viewJob.data, status: 'ON_MY_WAY' as any}); setViewJob(null); }}
+                                                    className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+                                                    🚗 On My Way
+                                                </button>
+                                            )}
+                                            {(viewJob.data.status as any) === 'ON_MY_WAY' && (
+                                                <button onClick={() => { onUpdateActivity?.({...viewJob.data, status: 'ARRIVED' as any}); setViewJob(null); }}
+                                                    className="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+                                                    🏠 Arrived at Site
+                                                </button>
+                                            )}
+                                            {(viewJob.data.status as any) === 'ARRIVED' && (
+                                                <button onClick={() => { onUpdateActivity?.({...viewJob.data, status: 'IN_PROGRESS'}); setViewJob(null); }}
+                                                    className="w-full bg-amber-500 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
                                                     ▶ Start Work
                                                 </button>
                                             )}
