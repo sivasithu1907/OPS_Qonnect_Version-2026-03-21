@@ -129,72 +129,80 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
   const renderUserGroup = (groupUsers: Technician[], title: string, Icon: any, colorClass: string) => (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center bg-slate-50">
+        <div className="p-5 border-b border-slate-100 flex items-center bg-slate-50">
             <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${colorClass}`}>
-                    <Icon size={20} />
+                    <Icon size={18} />
                 </div>
-                <h3 className="font-bold text-lg text-slate-800">{title}</h3>
+                <h3 className="font-bold text-base text-slate-800">{title}</h3>
+                <span className="ml-1 text-xs font-semibold text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full">{groupUsers.length}</span>
             </div>
         </div>
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left table-fixed">
             <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
                 <tr>
-                    <th className="px-6 py-4 w-1/3">User Profile</th>
-                    <th className="px-6 py-4">System Role</th>
-                    <th className="px-6 py-4">Job Role</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
+                    <th className="px-6 py-3 w-[32%]">User Profile</th>
+                    <th className="px-6 py-3 w-[18%]">System Role</th>
+                    <th className="px-6 py-3 w-[22%]">Job Role</th>
+                    <th className="px-6 py-3 w-[16%]">Status</th>
+                    <th className="px-6 py-3 w-[12%] text-right">Actions</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
                 {groupUsers.length === 0 ? (
                     <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">
+                        <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic text-sm">
                             No records found
                         </td>
                     </tr>
                 ) : (
                     groupUsers.map(user => (
-                        <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
+                            {/* User Profile */}
                             <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                                    <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden shrink-0 border border-slate-100">
                                         <img src={getAvatar(user)} alt={user.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6366f1&color=fff&bold=true&size=128`; }} />
                                     </div>
-                                    <div>
-                                        <div className="font-bold text-slate-900">{user.name}</div>
-                                        <div className="text-xs text-slate-500">{user.email}</div>
+                                    <div className="min-w-0">
+                                        <div className="font-semibold text-slate-900 truncate">{user.name}</div>
+                                        <div className="text-xs text-slate-400 truncate">{user.email}</div>
                                     </div>
                                 </div>
                             </td>
+                            {/* System Role */}
                             <td className="px-6 py-4">
                                 {getRoleBadge(user.systemRole)}
                             </td>
-                            <td className="px-6 py-4 text-slate-600 font-medium">
-                                {user.role || <span className="text-slate-400 italic">Not Specified</span>}
+                            {/* Job Role */}
+                            <td className="px-6 py-4">
+                                <span className="text-slate-700 text-sm font-medium">
+                                    {(user as any).jobRole || user.role || <span className="text-slate-300">—</span>}
+                                </span>
                             </td>
+                            {/* Status */}
                             <td className="px-6 py-4">
                                 {user.isActive ? (
-                                    <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold bg-emerald-50 px-2 py-1 rounded-full">
-                                        <CheckCircle2 size={12} /> Active
+                                    <span className="inline-flex items-center gap-1.5 text-emerald-700 text-xs font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/> Active
                                     </span>
                                 ) : (
-                                    <span className="inline-flex items-center gap-1 text-slate-400 text-xs font-bold bg-slate-100 px-2 py-1 rounded-full">
-                                        <XCircle size={12} /> Inactive
+                                    <span className="inline-flex items-center gap-1.5 text-slate-500 text-xs font-bold bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"/> Inactive
                                     </span>
                                 )}
                             </td>
+                            {/* Actions — hover only */}
                             <td className="px-6 py-4 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                    <button onClick={() => { setChangePwdModal(user); setChangePwdForm({ current: '', next: '', confirm: '' }); setChangePwdError(''); setChangePwdSuccess(false); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Change Password">
-                                        <KeyRound size={16} />
+                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => { setChangePwdModal(user); setChangePwdForm({ current: '', next: '', confirm: '' }); setChangePwdError(''); setChangePwdSuccess(false); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Change Password">
+                                        <KeyRound size={15} />
                                     </button>
-                                    <button onClick={() => handleEdit(user)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                                        <Edit size={16} />
+                                    <button onClick={() => handleEdit(user)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Edit">
+                                        <Edit size={15} />
                                     </button>
-                                    <button onClick={() => { if(confirm('Delete user?')) onDeleteUser(user.id) }} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                                        <Trash2 size={16} />
+                                    <button onClick={() => { if(confirm('Delete user?')) onDeleteUser(user.id) }} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                                        <Trash2 size={15} />
                                     </button>
                                 </div>
                             </td>
