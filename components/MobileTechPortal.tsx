@@ -364,9 +364,10 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 const delayed = item.delayed;
                                 const isStarted = job.status === 'IN_PROGRESS';
                                 const actCust = customers?.find((cu: any) => cu.id === job.customerId);
-                                const actSteps = ['PLANNED','IN_PROGRESS','DONE'];
-                                const actStepIdx = actSteps.indexOf(job.status);
-                                const actProgress = job.status === 'DONE' ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps.length) * 100);
+                                // Unified 5-step flow: Assigned → On the Way → Arrived → Working → Done
+                                const actSteps5 = ['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE'];
+                                const actStepIdx = actSteps5.indexOf(job.status) === -1 ? 0 : actSteps5.indexOf(job.status);
+                                const actProgress = job.status === 'DONE' ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps5.length) * 100);
 
                                 return (
                                     <div 
@@ -420,11 +421,43 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             )}
 
                                             {/* Call customer if available */}
-                                            {actCust?.phone && (
+                                            {actCust?.phone ? (
                                                 <a href={`tel:${actCust.phone}`} onClick={e => e.stopPropagation()}
                                                     className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
                                                     <Phone size={14}/> Call Customer
                                                 </a>
+                                            ) : (
+                                                <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
+                                                    <Phone size={14}/> No phone number
+                                                </div>
+                                            )}
+
+                                            {/* 5-step progress — same as ticket */}
+                                            {job.status !== 'DONE' && job.status !== 'CANCELLED' ? (
+                                                <div className="flex items-center justify-between px-1">
+                                                    {[
+                                                        { key: 'PLANNED',     label: 'Assigned' },
+                                                        { key: 'ON_MY_WAY',  label: 'On the Way' },
+                                                        { key: 'ARRIVED',    label: 'Arrived' },
+                                                        { key: 'IN_PROGRESS',label: 'Working' },
+                                                    ].map((step, i) => (
+                                                        <React.Fragment key={step.key}>
+                                                            <div className="flex flex-col items-center">
+                                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                                                    i < actStepIdx  ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                                    i === actStepIdx? 'bg-slate-900 border-slate-900 text-white' :
+                                                                    'bg-white border-slate-200 text-slate-400'
+                                                                }`}>{i < actStepIdx ? '✓' : i+1}</div>
+                                                                <span className={`text-[9px] mt-0.5 font-medium ${i===actStepIdx?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
+                                                            </div>
+                                                            {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i<actStepIdx?'bg-emerald-500':'bg-slate-200'}`}/>}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-center gap-2 py-2 bg-emerald-50 rounded-xl text-emerald-700 font-bold text-xs">
+                                                    <CheckCircle2 size={14}/> Completed
+                                                </div>
                                             )}
 
                                             {/* Report Delay Button */}
@@ -495,12 +528,15 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                     const act = activeJob as Activity;
                     const actCustomer = (customers as any[]).find((cu: any) => cu.id === act.customerId);
                     const actStatus = act.status;
+                    // Unified 5-step flow matching tickets
                     const actSteps = [
-                        { key: 'PLANNED',     label: 'Assigned' },
-                        { key: 'IN_PROGRESS', label: 'Working'  },
-                        { key: 'DONE',        label: 'Done'     },
+                        { key: 'PLANNED',     label: 'Assigned'   },
+                        { key: 'ON_MY_WAY',   label: 'On the Way' },
+                        { key: 'ARRIVED',     label: 'Arrived'    },
+                        { key: 'IN_PROGRESS', label: 'Working'    },
+                        { key: 'DONE',        label: 'Done'       },
                     ];
-                    const actStep    = actSteps.findIndex(s => s.key === actStatus);
+                    const actStep    = actSteps.findIndex(s => s.key === actStatus) === -1 ? 0 : actSteps.findIndex(s => s.key === actStatus);
                     const actProgress = actStatus === 'DONE' ? 100 : Math.max(5, ((actStep + 1) / actSteps.length) * 100);
                     return (
                     <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
@@ -561,10 +597,10 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     </div>
                                 )}
                             </div>
-                            {/* Step progress indicators */}
+                            {/* Step progress indicators — 5-step unified flow */}
                             {actStatus !== 'DONE' && (
                                 <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
-                                    {actSteps.map((step, i) => (
+                                    {actSteps.slice(0,4).map((step, i) => (
                                         <React.Fragment key={step.key}>
                                             <div className="flex flex-col items-center">
                                                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
@@ -574,7 +610,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                 }`}>{i < actStep ? '✓' : i + 1}</div>
                                                 <span className={`text-[9px] mt-1 font-medium ${i === actStep ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
                                             </div>
-                                            {i < actSteps.length - 1 && <div className={`flex-1 h-0.5 mx-2 mb-3 ${i < actStep ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
+                                            {i < 3 && <div className={`flex-1 h-0.5 mx-2 mb-3 ${i < actStep ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
                                         </React.Fragment>
                                     ))}
                                 </div>
