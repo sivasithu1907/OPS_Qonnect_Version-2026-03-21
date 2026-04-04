@@ -51,11 +51,11 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
   const actionConfig = getActionConfig();
 
   const steps = [
-    { key: TicketStatus.ASSIGNED,    label: 'Assigned' },
-    { key: TicketStatus.ON_MY_WAY,   label: 'On Way'   },
-    { key: TicketStatus.ARRIVED,     label: 'Arrived'  },
-    { key: TicketStatus.IN_PROGRESS, label: 'Working'  },
-    { key: TicketStatus.RESOLVED,    label: 'Done'     },
+    { key: TicketStatus.ASSIGNED,    label: 'Assigned'   },
+    { key: TicketStatus.ON_MY_WAY,   label: 'On the Way' },
+    { key: TicketStatus.ARRIVED,     label: 'Arrived'    },
+    { key: TicketStatus.IN_PROGRESS, label: 'Working'    },
+    { key: TicketStatus.RESOLVED,    label: 'Done'       },
   ];
 
   const normalizedStatus = (ticket.status === TicketStatus.OPEN || (ticket.status as string) === 'NEW')
@@ -125,15 +125,39 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
               </div>
             )}
 
-            {/* Call customer — same as activity card */}
+            {/* Call customer */}
             {ticket.phoneNumber ? (
               <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
-                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
                 <Phone size={14}/> Call Customer
               </a>
             ) : (
-              <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs">
+              <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
                 <Phone size={14}/> No phone number
+              </div>
+            )}
+
+            {/* 5-step progress — same for both ticket and activity */}
+            {!isCompleted && (
+              <div className="flex items-center justify-between px-1">
+                {steps.slice(0,4).map((step, i) => (
+                  <React.Fragment key={step.key}>
+                    <div className="flex flex-col items-center">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                        i < currentStep  ? 'bg-emerald-500 border-emerald-500 text-white' :
+                        i === currentStep? 'bg-slate-900 border-slate-900 text-white' :
+                        'bg-white border-slate-200 text-slate-400'
+                      }`}>{i < currentStep ? '✓' : i+1}</div>
+                      <span className={`text-[9px] mt-0.5 font-medium ${i===currentStep?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
+                    </div>
+                    {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i<currentStep?'bg-emerald-500':'bg-slate-200'}`}/>}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+            {isCompleted && (
+              <div className="flex items-center justify-center gap-2 py-2 bg-emerald-50 rounded-xl text-emerald-700 font-bold text-xs">
+                <CheckCircle2 size={14}/> Completed
               </div>
             )}
           </div>
