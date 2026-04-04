@@ -603,8 +603,12 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 //   Not started                   → use plannedDate
                                 plannedDate: (() => {
                                     const s = normalizeStatus(a.status);
-                                    if (s === 'IN_PROGRESS' && (a as any).startedAt) return (a as any).startedAt;
+                                    const actualStart = (a as any).startedAt;
+                                    // DONE or IN_PROGRESS with real startedAt → use actual start
+                                    if (actualStart && (s === 'DONE' || s === 'IN_PROGRESS')) return actualStart;
+                                    // IN_PROGRESS no startedAt → use updatedAt as proxy
                                     if (s === 'IN_PROGRESS' && a.updatedAt) return a.updatedAt;
+                                    // Fallback to plannedDate (not yet started)
                                     return a.plannedDate || a.createdAt || new Date().toISOString();
                                 })(),
                                 // Duration:
@@ -613,13 +617,17 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 //   Otherwise                 → planned duration
                                 durationHours: (() => {
                                     const s = normalizeStatus(a.status);
-                                    const start = (a as any).startedAt || a.updatedAt;
-                                    if (s === 'DONE' && (a as any).completedAt && start) {
-                                        return Math.max(0.25, (new Date((a as any).completedAt).getTime() - new Date(start).getTime()) / 3600000);
+                                    const actualStart = (a as any).startedAt;
+                                    const actualEnd = (a as any).completedAt;
+                                    // DONE with real timestamps → actual duration
+                                    if (s === 'DONE' && actualStart && actualEnd) {
+                                        return Math.max(0.25, (new Date(actualEnd).getTime() - new Date(actualStart).getTime()) / 3600000);
                                     }
-                                    if (s === 'IN_PROGRESS' && start) {
-                                        return Math.max(0.25, (Date.now() - new Date(start).getTime()) / 3600000);
+                                    // IN_PROGRESS with real startedAt → live elapsed
+                                    if (s === 'IN_PROGRESS' && actualStart) {
+                                        return Math.max(0.25, (Date.now() - new Date(actualStart).getTime()) / 3600000);
                                     }
+                                    // Not yet started → planned duration
                                     return a.durationHours || 2;
                                 })(),
                                 description: a.description || a.type,
@@ -643,20 +651,20 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     const tStatus = normalizeStatus(t.status);
                                     const tStarted = (t as any).startedAt;
                                     const tCompleted = (t as any).completedAt;
-                                    // Timeline start: actual startedAt → appointmentTime → current hour
+                                    // Timeline position: use actual startedAt if available, else appointmentTime, else current hour
                                     const tPlannedDate = tStarted || t.appointmentTime || (() => {
                                         const d = new Date();
                                         d.setMinutes(0, 0, 0);
                                         return d.toISOString();
                                     })();
-                                    // Duration: RESOLVED → actual window; IN_PROGRESS → live elapsed; else → 2h default
+                                    // Duration: RESOLVED with real startedAt → actual window; IN_PROGRESS → live elapsed; else → 2h default
                                     const tDuration = (() => {
-                                        const start = tStarted || t.appointmentTime;
-                                        if (tStatus === 'RESOLVED' && tCompleted && start) {
-                                            return Math.max(0.25, (new Date(tCompleted).getTime() - new Date(start).getTime()) / 3600000);
+                                        if (tStatus === 'RESOLVED' && tCompleted && tStarted) {
+                                            // Only use REAL startedAt for duration — not appointmentTime
+                                            return Math.max(0.25, (new Date(tCompleted).getTime() - new Date(tStarted).getTime()) / 3600000);
                                         }
-                                        if (tStatus === 'IN_PROGRESS' && start) {
-                                            return Math.max(0.25, (Date.now() - new Date(start).getTime()) / 3600000);
+                                        if (tStatus === 'IN_PROGRESS' && tStarted) {
+                                            return Math.max(0.25, (Date.now() - new Date(tStarted).getTime()) / 3600000);
                                         }
                                         return 2;
                                     })();
@@ -829,38 +837,50 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                              <Clock size={12} className="text-slate-400" />
                              {(() => {
                                  const d = selectedItem.data as any;
-                                 const startTime = d.startedAt || (selectedItem.type === 'activity' ? (d as Activity).plannedDate : d.appointmentTime);
-                                 const endTime = d.completedAt;
+                                 // Use ONLY real timestamps — never fall back to planned/appointment time
+                                 const startTime = d.startedAt || null;
+                                 const endTime = d.completedAt || null;
                                  const status = selectedItem.type === 'activity' ? (d as Activity).status : normalizeStatus(d.status);
                                  const isDone = status === 'DONE' || status === 'RESOLVED';
                                  const isActive = status === 'IN_PROGRESS';
                                  if (startTime) {
                                      return (
                                          <>
-                                             <span className="text-emerald-700 font-semibold">{new Date(startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                             <span className="text-emerald-700 font-semibold">{new Date(startTime).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</span>
                                              <ArrowRight size={10} className="text-slate-300"/>
                                              {isDone && endTime ? (
-                                                 <span className="text-slate-600 font-semibold">{new Date(endTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                                 <span className="text-slate-600 font-semibold">{new Date(endTime).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</span>
                                              ) : isActive ? (
-                                                 <span className="text-amber-600 font-semibold animate-pulse">Now ({Math.round((Date.now() - new Date(startTime).getTime()) / 60000)}m)</span>
+                                                 <span className="text-amber-600 font-semibold animate-pulse">Live ({Math.round((Date.now() - new Date(startTime).getTime()) / 60000)}m)</span>
                                              ) : (
-                                                 <span className="text-slate-400">In progress</span>
+                                                 <span className="text-slate-400">—</span>
                                              )}
                                          </>
                                      );
                                  }
-                                 return <span className="text-slate-400">{selectedItem.type === 'ticket' ? `Appt: ${d.appointmentTime ? new Date(d.appointmentTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : 'Not set'}` : `Planned: ${new Date((d as Activity).plannedDate).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`}</span>;
+                                 // No real startedAt — show planned/appointment info clearly labelled
+                                 return (
+                                     <span className="text-slate-400">
+                                         {selectedItem.type === 'ticket'
+                                             ? d.appointmentTime
+                                                 ? `Appt: ${new Date(d.appointmentTime).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}`
+                                                 : 'Not started'
+                                             : d.plannedDate
+                                                 ? `Planned: ${new Date((d as Activity).plannedDate).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}`
+                                                 : 'Not started'}
+                                     </span>
+                                 );
                              })()}
                          </div>
                          <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
                              {(selectedItem.data as any).startedAt && (
-                                 <span>Started: {new Date((selectedItem.data as any).startedAt).toLocaleTimeString()}</span>
+                                 <span>Started: {new Date((selectedItem.data as any).startedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>
                              )}
                              {(selectedItem.data as any).completedAt && (
-                                 <span>Completed: {new Date((selectedItem.data as any).completedAt).toLocaleTimeString()}</span>
+                                 <span>Completed: {new Date((selectedItem.data as any).completedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>
                              )}
                              {!(selectedItem.data as any).startedAt && selectedItem.type === 'ticket' && (selectedItem.data as Ticket).updatedAt && (
-                                 <span className="ml-auto">Last Update: {new Date((selectedItem.data as Ticket).updatedAt).toLocaleTimeString()}</span>
+                                 <span className="ml-auto">Last Update: {new Date((selectedItem.data as Ticket).updatedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>
                              )}
                          </div>
                      </div>
