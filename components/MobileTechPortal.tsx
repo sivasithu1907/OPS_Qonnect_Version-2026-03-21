@@ -483,12 +483,11 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
                 {/* Ticket Detail — full screen when ticket tapped */}
                 {activeJob && activeJobItem?.type !== 'activity' && !completionStep && (
-                    <div className="flex flex-col h-full overflow-y-auto p-4 pt-6">
-                        <MyJobTaskView
-                            ticket={activeJob as any}
-                            onUpdateStatus={handleStatusUpdate}
-                        />
-                    </div>
+                    <MyJobTaskView
+                        ticket={activeJob as any}
+                        onUpdateStatus={handleStatusUpdate}
+                        isDetailView={true}
+                    />
                 )}
 
                 {/* Activity Detail — rich job view matching ticket layout */}
