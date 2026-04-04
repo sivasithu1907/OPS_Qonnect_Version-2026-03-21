@@ -1396,6 +1396,10 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
             // First time entering IN_PROGRESS — record real start time
             startedAtClause = ", started_at = NOW()";
         }
+        if (status === 'ON_MY_WAY' && prevStatus === 'PLANNED') {
+            // Engineer started travelling — record as started_at
+            startedAtClause = ", started_at = NOW()";
+        }
         if (status === 'DONE' && prevStatus !== 'DONE') {
             completedAtClause = ", completed_at = NOW()";
         }
