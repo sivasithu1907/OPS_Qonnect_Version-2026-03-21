@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound } from 'lucide-react';
+import { ChevronLeft, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -363,56 +363,80 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
                                 const delayed = item.delayed;
                                 const isStarted = job.status === 'IN_PROGRESS';
+                                const actCust = customers?.find((cu: any) => cu.id === job.customerId);
+                                const actSteps = ['PLANNED','IN_PROGRESS','DONE'];
+                                const actStepIdx = actSteps.indexOf(job.status);
+                                const actProgress = job.status === 'DONE' ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps.length) * 100);
 
                                 return (
                                     <div 
                                         key={job.id} 
-                                        className={`bg-white p-4 rounded-2xl shadow-sm border active:scale-95 transition-transform relative overflow-hidden ${
+                                        className={`bg-white rounded-2xl shadow-sm border overflow-hidden active:scale-[0.99] transition-transform relative ${
                                             delayed ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-100'
                                         }`}
                                         onClick={() => setSelectedJobId(job.id)}
                                     >
-                                        {/* Delay Badge */}
-                                        {delayed && (
-                                            <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm z-10">
-                                                DELAYED
-                                            </div>
-                                        )}
-                                        
-                                        {/* In Progress Badge */}
-                                        {isStarted && (
-                                            <div className="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl shadow-sm z-10">
-                                                STARTED
-                                            </div>
-                                        )}
-
-                                        <div className="flex justify-between mb-2">
-                                            <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-1 rounded-full">
-                                                {new Date(item.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                            </span>
-                                            <span className="text-xs font-bold text-slate-400 mr-12">{job.reference}</span>
-                                        </div>
-                                        
-                                        <div>
-                                            <h3 className="font-bold text-slate-800 text-lg mb-1">{job.type}</h3>
-                                            <div className="flex items-center gap-1 text-slate-500 text-sm mb-3">
-                                                <MapPin size={14} />
-                                                <span>{job.houseNumber || 'Location URL'}</span>
-                                            </div>
-                                            <div className="bg-slate-50 p-2 rounded-lg text-xs text-slate-600 line-clamp-2">
-                                                {job.description}
-                                            </div>
+                                        {/* Progress bar */}
+                                        <div className="h-1 bg-slate-100">
+                                            <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgress}%` }}/>
                                         </div>
 
-                                        {/* Report Delay Button (For Activities) */}
-                                        {delayed && (
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); setReportingDelayActivity(job as Activity); }}
-                                                className="mt-3 w-full py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center gap-1"
-                                            >
-                                                <AlertTriangle size={12} /> Report Reason
-                                            </button>
-                                        )}
+                                        <div className="p-5">
+                                            {/* Header */}
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{job.reference || job.id}</div>
+                                                    <h3 className="text-lg font-bold text-slate-900">{actCust?.name || job.type}</h3>
+                                                    {actCust && <div className="text-sm text-slate-500 mt-0.5">{job.type} · {job.serviceCategory || 'ELV Systems'}</div>}
+                                                </div>
+                                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+                                                    delayed             ? 'bg-red-100 text-red-700' :
+                                                    isStarted           ? 'bg-amber-100 text-amber-700' :
+                                                    job.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                                                    'bg-purple-100 text-purple-700'
+                                                }`}>
+                                                    {delayed ? 'DELAYED' : job.status.replace('_',' ')}
+                                                </span>
+                                            </div>
+
+                                            {/* Location */}
+                                            <div className="flex items-center gap-2 text-sm text-slate-600 mb-3">
+                                                <MapPin size={14} className="text-slate-400 shrink-0"/>
+                                                <span className="truncate flex-1">{job.houseNumber || job.locationUrl || 'No location set'}</span>
+                                                {job.locationUrl && (
+                                                    <a href={job.locationUrl} target="_blank" rel="noopener noreferrer"
+                                                        onClick={e => e.stopPropagation()}
+                                                        className="shrink-0 flex items-center gap-1 text-[10px] text-blue-600 font-bold px-2 py-1 bg-blue-50 rounded-lg">
+                                                        <Navigation size={10}/> Map
+                                                    </a>
+                                                )}
+                                            </div>
+
+                                            {/* Description */}
+                                            {job.description && (
+                                                <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-700 leading-relaxed line-clamp-2">
+                                                    {job.description}
+                                                </div>
+                                            )}
+
+                                            {/* Call customer if available */}
+                                            {actCust?.phone && (
+                                                <a href={`tel:${actCust.phone}`} onClick={e => e.stopPropagation()}
+                                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                                                    <Phone size={14}/> Call Customer
+                                                </a>
+                                            )}
+
+                                            {/* Report Delay Button */}
+                                            {delayed && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setReportingDelayActivity(job as Activity); }}
+                                                    className="w-full py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center gap-1"
+                                                >
+                                                    <AlertTriangle size={12} /> Report Reason
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })
@@ -490,8 +514,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             <div className="flex justify-between items-start">
                                 <div>
                                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{act.reference || act.id}</div>
-                                    <h2 className="text-xl font-bold text-slate-900">{act.type}</h2>
-                                    {actCustomer && <div className="text-sm text-slate-500 mt-0.5">{actCustomer.name}</div>}
+                                    <h2 className="text-xl font-bold text-slate-900">{actCustomer?.name || act.type}</h2>
+                                    {actCustomer && <div className="text-sm text-slate-500 mt-0.5">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>}
                                 </div>
                                 <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
                                     actStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
@@ -499,6 +523,13 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     'bg-purple-100 text-purple-700'
                                 }`}>{actStatus.replace('_',' ')}</span>
                             </div>
+                            {/* Call customer */}
+                            {actCustomer?.phone && (
+                                <a href={`tel:${actCustomer.phone}`}
+                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
+                                    <Phone size={14}/> Call Customer — {actCustomer.phone}
+                                </a>
+                            )}
                             {/* Scope of work */}
                             {act.description && (
                                 <div className="bg-white rounded-xl p-4 border border-slate-100">
