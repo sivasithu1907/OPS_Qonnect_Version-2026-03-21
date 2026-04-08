@@ -411,6 +411,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       setSelectedTechId('');
       setNextDate('');
       setShowDatePicker(false);
+      setDispatchPrimaryId('');
+      setDispatchSupportIds([]);
   };
 
   const getStatusColor = (s: string) => {
