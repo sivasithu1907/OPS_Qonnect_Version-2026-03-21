@@ -336,6 +336,17 @@ async function initDb() {
         SET level = 'TEAM_LEAD'
         WHERE (level IS NULL OR level = '')
           AND role = 'TEAM_LEAD';
+
+      -- ADMINs belong in the Team Lead section
+      UPDATE users
+        SET level = 'TEAM_LEAD'
+        WHERE (level IS NULL OR level = '' OR level = 'ADMIN')
+          AND role = 'ADMIN';
+
+      -- Catch-all: any user still missing a level gets FIELD_ENGINEER
+      UPDATE users
+        SET level = 'FIELD_ENGINEER'
+        WHERE level IS NULL OR level = '' OR level = 'ADMIN';
     `);
     
 // 8. WhatsApp Logs Table
