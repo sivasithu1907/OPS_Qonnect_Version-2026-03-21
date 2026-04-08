@@ -677,15 +677,22 @@ const loadUsers = async () => {
     return () => document.removeEventListener('mousedown', handler);
   }, [isNotifOpen]);
 
-// --- Persistent Auth Check ---
+// --- Persistent Auth Check — validates token with server on every startup ---
   useEffect(() => {
     const savedToken = localStorage.getItem('qonnect_token');
-    // We fetch user details from localStorage to restore the session
-    const savedUser = localStorage.getItem('qonnect_user');
-    
-    if (savedToken && savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
+    if (!savedToken) return; // no token → show login
+
+    // Verify token is still valid with the server
+    fetch('/api/me', {
+      headers: { 'Authorization': `Bearer ${savedToken}` }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Token invalid');
+        return res.json();
+      })
+      .then(user => {
+        // Token is valid — restore session
+        localStorage.setItem('qonnect_user', JSON.stringify(user));
         setCurrentUser(user);
         // Auto-route based on role and device
         if (user.role === Role.FIELD_ENGINEER) {
@@ -693,12 +700,13 @@ const loadUsers = async () => {
         } else if (user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
           setActiveView('lead_portal');
         }
-      } catch (e) {
-        console.error("Failed to restore session", e);
+      })
+      .catch(() => {
+        // Token expired or invalid — clear and show login
         localStorage.removeItem('qonnect_token');
         localStorage.removeItem('qonnect_user');
-      }
-    }
+        setCurrentUser(null);
+      });
   }, []);
   
 useEffect(() => {
