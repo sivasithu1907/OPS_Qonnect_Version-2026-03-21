@@ -583,7 +583,7 @@ const handleDeleteCustomer = async (id: string) => {
                       password: u.password || "Qonnect@123",
                       job_role: (u as any).jobRole || null,
                       level: u.level || null,
-                      role: u.systemRole || u.role,
+                      role: u.systemRole || u.role || null,
                       status: (u.status === 'AVAILABLE' || u.status === 'ACTIVE') ? 'ACTIVE' : (u.isActive === false ? 'INACTIVE' : 'ACTIVE'),
                       phone: u.phone || null,
                       avatar: u.avatar || null
