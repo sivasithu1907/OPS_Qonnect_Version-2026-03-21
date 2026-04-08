@@ -107,7 +107,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals State
-  const [modalType, setModalType] = useState<'dispatch' | 'cancel' | 'carry' | 'job_carry' | 'job_complete' | 'activity_job_carry' | 'activity_job_complete' | null>(null);
+  const [modalType, setModalType] = useState<'dispatch' | 'cancel' | 'carry' | 'job_carry' | 'job_complete' | 'activity_job_carry' | 'activity_job_complete' | 'activity_dispatch' | null>(null);
   const [modalTicket, setModalTicket] = useState<Ticket | null>(null);
   const [modalActivity, setModalActivity] = useState<Activity | null>(null);
   
@@ -121,6 +121,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [actionNote, setActionNote] = useState('');
   const [selectedTechId, setSelectedTechId] = useState('');
   const [assignedTeamLead, setAssignedTeamLead] = useState('');
+
+  // Activity Dispatch State (Team Lead picks the execution crew)
+  const [dispatchPrimaryId, setDispatchPrimaryId] = useState('');
+  const [dispatchSupportIds, setDispatchSupportIds] = useState<string[]>([]);
   
   // Date Picker State
   const [nextDate, setNextDate] = useState('');
@@ -1254,9 +1258,25 @@ const TeamView = () => {
                 </div>
 
                 {/* Workflow Actions */}
-                {(viewActivity as any).leadTechId === currentUserId && onUpdateActivity && (
+                {onUpdateActivity && (
                     <div className="space-y-3">
                         {(viewActivity as any).status === 'PLANNED' && (
+                            <button
+                                onClick={() => {
+                                    const a = viewActivity as any;
+                                    setModalActivity(a);
+                                    setDispatchPrimaryId(a.leadTechId || '');
+                                    setDispatchSupportIds(a.assistantTechIds || []);
+                                    setModalType('activity_dispatch');
+                                    setViewActivity(null);
+                                }}
+                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-700"
+                            >
+                                <Users size={18} /> Dispatch Team
+                            </button>
+                        )}
+
+                        {['ON_MY_WAY','ARRIVED'].includes((viewActivity as any).status) && (
                             <button
                                 onClick={() => {
                                     onUpdateActivity({
@@ -1531,12 +1551,19 @@ const TeamView = () => {
                                         </div>
                                     )}
                                     {/* Activity Work Actions — full 5-step flow */}
-                                    {viewJob.type === 'activity' && viewJob.data.leadTechId === currentUserId && (
+                                    {viewJob.type === 'activity' && (
                                         <div className="space-y-2 pb-4">
                                             {(viewJob.data.status === 'PLANNED') && (
-                                                <button onClick={() => { onUpdateActivity?.({...viewJob.data, status: 'ON_MY_WAY' as any}); setViewJob(null); }}
+                                                <button onClick={() => {
+                                                    const a = viewJob.data;
+                                                    setModalActivity(a);
+                                                    setDispatchPrimaryId(a.leadTechId || '');
+                                                    setDispatchSupportIds(a.assistantTechIds || []);
+                                                    setModalType('activity_dispatch');
+                                                    setViewJob(null);
+                                                }}
                                                     className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
-                                                    🚗 On My Way
+                                                    <Users size={18} /> Dispatch Team
                                                 </button>
                                             )}
                                             {(viewJob.data.status as any) === 'ON_MY_WAY' && (
@@ -1553,11 +1580,11 @@ const TeamView = () => {
                                             )}
                                             {viewJob.data.status === 'IN_PROGRESS' && (
                                                 <div className="grid grid-cols-2 gap-2">
-                                                    <button onClick={() => { handleOpenJobAction('job_carry', viewJob.data); setViewJob(null); }}
+                                                    <button onClick={() => { setModalActivity(viewJob.data); setModalType('activity_job_carry'); setActionNote(''); setNextDate(''); setViewJob(null); }}
                                                         className="py-3.5 bg-white border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
                                                         Carry Forward
                                                     </button>
-                                                    <button onClick={() => { handleOpenJobAction('job_done', viewJob.data); setViewJob(null); }}
+                                                    <button onClick={() => { setModalActivity(viewJob.data); setModalType('activity_job_complete'); setActionNote(''); setViewJob(null); }}
                                                         className="py-3.5 bg-emerald-500 text-white font-bold rounded-2xl text-xs active:scale-[0.98]">
                                                         Complete ✓
                                                     </button>
@@ -1952,8 +1979,189 @@ const TeamView = () => {
     </div>
 )}
 
+{/* Activity Dispatch Team Modal — Team Lead picks primary engineer + supporting crew */}
+{modalType === 'activity_dispatch' && modalActivity && (
+    <div 
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        onClick={closeModal}
+    >
+        <div 
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+        >
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                <div>
+                    <h3 className="font-bold text-lg text-slate-900">Dispatch Team</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">{(modalActivity as any).reference} • {(modalActivity as any).type}</p>
+                </div>
+                <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
+            </div>
 
-            {/* Custom Date Time Picker Bottom Sheet */}
+            <div className="p-5 space-y-5 overflow-y-auto flex-1">
+                
+                {/* Primary Engineer */}
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Primary Engineer <span className="text-red-500">*</span></label>
+                    <select
+                        value={dispatchPrimaryId}
+                        onChange={(e) => setDispatchPrimaryId(e.target.value)}
+                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                    >
+                        <option value="" disabled>Select primary engineer</option>
+                        <optgroup label="Team Leads">
+                            {technicians
+                                .filter(t => t.level === 'TEAM_LEAD' && t.status !== 'LEAVE' && t.isActive !== false)
+                                .map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                        </optgroup>
+                        <optgroup label="Field Engineers">
+                            {technicians
+                                .filter(t => t.level === 'FIELD_ENGINEER' && t.status !== 'LEAVE' && t.isActive !== false)
+                                .map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                        </optgroup>
+                    </select>
+                </div>
+
+                {/* Supporting Team (checkboxes) */}
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Supporting Team</label>
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/50">
+                        {/* Technical Associates */}
+                        {technicians.filter(t => t.level === 'TECHNICAL_ASSOCIATE' && t.status !== 'LEAVE' && t.isActive !== false).length > 0 && (
+                            <div className="px-3 pt-2 pb-1">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Technical Associates</span>
+                            </div>
+                        )}
+                        {technicians
+                            .filter(t => t.level === 'TECHNICAL_ASSOCIATE' && t.status !== 'LEAVE' && t.isActive !== false)
+                            .map(t => (
+                                <label key={t.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-slate-50'
+                                }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={dispatchSupportIds.includes(t.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setDispatchSupportIds(prev => [...prev, t.id]);
+                                            } else {
+                                                setDispatchSupportIds(prev => prev.filter(id => id !== t.id));
+                                            }
+                                        }}
+                                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <img src={t.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt="" />
+                                        <div>
+                                            <span className="text-sm font-medium text-slate-800">{t.name}</span>
+                                            <span className="text-[10px] text-slate-400 ml-1.5">{(t as any).jobRole || 'Technical Associate'}</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            ))
+                        }
+
+                        {/* Field Engineers (exclude the primary) */}
+                        {technicians.filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false).length > 0 && (
+                            <div className="px-3 pt-3 pb-1 border-t border-slate-100">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Field Engineers / Leads</span>
+                            </div>
+                        )}
+                        {technicians
+                            .filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false)
+                            .map(t => (
+                                <label key={t.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
+                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-slate-50'
+                                }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={dispatchSupportIds.includes(t.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setDispatchSupportIds(prev => [...prev, t.id]);
+                                            } else {
+                                                setDispatchSupportIds(prev => prev.filter(id => id !== t.id));
+                                            }
+                                        }}
+                                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <div className="flex items-center gap-2 flex-1">
+                                        <img src={t.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt="" />
+                                        <div>
+                                            <span className="text-sm font-medium text-slate-800">{t.name}</span>
+                                            <span className="text-[10px] text-slate-400 ml-1.5">{t.level === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</span>
+                                        </div>
+                                    </div>
+                                </label>
+                            ))
+                        }
+                    </div>
+                    {dispatchSupportIds.length > 0 && (
+                        <div className="mt-2 flex items-center gap-1">
+                            <Users size={12} className="text-blue-500"/>
+                            <span className="text-xs text-blue-600 font-medium">{dispatchSupportIds.length} supporting member{dispatchSupportIds.length > 1 ? 's' : ''} selected</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Entire Team Shortcut */}
+                <button
+                    type="button"
+                    onClick={() => {
+                        const allTechAssociates = technicians
+                            .filter(t => t.level === 'TECHNICAL_ASSOCIATE' && t.status !== 'LEAVE' && t.isActive !== false)
+                            .map(t => t.id);
+                        setDispatchSupportIds(allTechAssociates);
+                    }}
+                    className="w-full py-2 text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                    Select All Technical Associates
+                </button>
+
+                {/* Summary */}
+                {dispatchPrimaryId && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 space-y-1">
+                        <div className="text-[10px] font-bold text-blue-800 uppercase">Dispatch Summary</div>
+                        <div className="text-xs text-blue-700">
+                            <span className="font-bold">Primary:</span> {technicians.find(t => t.id === dispatchPrimaryId)?.name || '—'}
+                        </div>
+                        {dispatchSupportIds.length > 0 && (
+                            <div className="text-xs text-blue-700">
+                                <span className="font-bold">Team:</span> {dispatchSupportIds.map(id => technicians.find(t => t.id === id)?.name?.split(' ')[0]).filter(Boolean).join(', ')}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Confirm Button */}
+                <button
+                    onClick={() => {
+                        if (!modalActivity || !onUpdateActivity || !dispatchPrimaryId) return;
+                        const a = modalActivity as any;
+                        onUpdateActivity({
+                            ...a,
+                            status: 'ON_MY_WAY',
+                            primaryEngineerId: dispatchPrimaryId,
+                            supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
+                            leadTechId: a.leadTechId || dispatchPrimaryId,
+                            updatedAt: new Date().toISOString()
+                        });
+                        closeModal();
+                        setViewActivity(null);
+                        setViewJob(null);
+                    }}
+                    disabled={!dispatchPrimaryId}
+                    className="w-full py-3.5 bg-blue-600 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold rounded-xl shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                >
+                    <Users size={18} /> Confirm Dispatch
+                </button>
+            </div>
+        </div>
+    </div>
+)}
             {showDatePicker && (
                 <div className="fixed inset-0 z-[70] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDatePicker(false)} />
