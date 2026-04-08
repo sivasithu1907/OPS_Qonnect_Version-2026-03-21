@@ -1417,12 +1417,24 @@ app.post("/api/activities", authenticate, async (req, res) => {
 // PUT Activity (Update)
 app.put("/api/activities/:id", authenticate, async (req, res) => {
     try {
-        const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
+        const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
 
-        // Fetch current status to detect transitions
-        const current = await pool.query("SELECT status, started_at FROM activities WHERE id=$1", [req.params.id]);
+        // Fetch current row to detect transitions and merge details
+        const current = await pool.query("SELECT status, started_at, details FROM activities WHERE id=$1", [req.params.id]);
+        if (!current.rows[0]) return res.status(404).json({ error: "Activity not found" });
         const prevStatus = current.rows[0]?.status;
         const alreadyStarted = current.rows[0]?.started_at;
+        const existingDetails = current.rows[0]?.details || {};
+
+        // Merge execution fields into details JSONB
+        const mergedDetails = { ...existingDetails, ...details };
+        // Capture who actually started the work (only set once, on first IN_PROGRESS)
+        if (primaryEngineerId) {
+            mergedDetails.primaryEngineerId = primaryEngineerId;
+        }
+        if (supportingEngineerIds !== undefined) {
+            mergedDetails.supportingEngineerIds = supportingEngineerIds;
+        }
 
         // Determine started_at / completed_at based on status transition
         let startedAtClause = "";
@@ -1440,14 +1452,16 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
             completedAtClause = ", completed_at = NOW()";
         }
         if (status === 'PLANNED' || status === 'CANCELLED') {
-            // Reset timestamps if re-planned or cancelled
+            // Reset timestamps and execution fields if re-planned or cancelled
             startedAtClause  = ", started_at = NULL";
             completedAtClause = ", completed_at = NULL";
+            delete mergedDetails.primaryEngineerId;
+            delete mergedDetails.supportingEngineerIds;
         }
 
         await pool.query(
             `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=$5, site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause} WHERE id=$11`,
-            [type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(details), req.params.id]
+            [type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), req.params.id]
         );
         res.json({ok: true});
     } catch(e) { console.error(e); res.status(500).json({error: "Failed to update activity"}); }
