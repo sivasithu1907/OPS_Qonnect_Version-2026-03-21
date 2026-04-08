@@ -202,22 +202,26 @@ function App() {
   }, [tickets, currentUser]);
 
   // --- Auth Handlers ---
+const [loginError, setLoginError] = React.useState<string>('');
+
 const handleLogin = async (email: string, pass: string) => {
+      setLoginError('');
       try {
           const res = await fetch("/api/login", {
               method: "POST",
               headers: getAuthHeaders(),
               body: JSON.stringify({ email, password: pass })
           });
-          
+
           if (!res.ok) {
-              alert('Invalid credentials');
+              const errData = await res.json().catch(() => ({}));
+              setLoginError(errData.error || 'Invalid credentials. Please try again.');
               return;
           }
 
           const data = await res.json();
-          
-          // Store both token and user object securely
+
+          // Store token and user
           localStorage.setItem('qonnect_token', data.token);
           localStorage.setItem('qonnect_user', JSON.stringify({
               id: data.user.id,
@@ -226,7 +230,7 @@ const handleLogin = async (email: string, pass: string) => {
               role: data.user.role,
               techId: data.user.id
           }));
-          
+
           setCurrentUser({
               id: data.user.id,
               email: data.user.email,
@@ -234,6 +238,7 @@ const handleLogin = async (email: string, pass: string) => {
               role: data.user.role,
               techId: data.user.id
           });
+          setLoginError('');
           if (data.user.role === Role.FIELD_ENGINEER) {
               setActiveView('tech_portal');
           } else if (data.user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
@@ -244,7 +249,7 @@ const handleLogin = async (email: string, pass: string) => {
 
       } catch (error) {
           console.error("Login Error:", error);
-          alert("Failed to connect to server.");
+          setLoginError('Unable to connect to server. Please try again.');
       }
   };
 
@@ -768,7 +773,7 @@ useEffect(() => {
   // --- Render ---
 
   if (!currentUser) {
-      return <Login onLogin={handleLogin} />;
+      return <Login onLogin={handleLogin} error={loginError} />;
   }
 
   // ── Fullscreen Portal Mode ─────────────────────────────────────────────
