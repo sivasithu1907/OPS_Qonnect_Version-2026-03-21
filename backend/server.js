@@ -362,19 +362,22 @@ await pool.query(`
   );
 `);
 
-// Create a default admin if none exists
-    const adminCheck = await pool.query("SELECT * FROM users WHERE email = 'admin@qonnect.qa'");
+// ── Ensure default admin always exists with correct bcrypt password ──
+    const hashedAdminPass = await bcrypt.hash("admin123", 10);
+    const adminCheck = await pool.query("SELECT id FROM users WHERE email = 'admin@qonnect.qa'");
     if (adminCheck.rows.length === 0) {
-        const hashedPass = await bcrypt.hash("admin123", 10);
         await pool.query(
-            "INSERT INTO users (id, name, email, password, role) VALUES ($1, $2, $3, $4, $5)",
-            ["u-admin", "System Admin", "admin@qonnect.qa", hashedPass, "ADMIN"]
+            "INSERT INTO users (id, name, email, password, role, status) VALUES ($1, $2, $3, $4, $5, $6)",
+            ["u-admin", "System Admin", "admin@qonnect.qa", hashedAdminPass, "ADMIN", "ACTIVE"]
         );
-        console.log("✅ Default Admin User Created");
+        console.log("✅ Default admin created: admin@qonnect.qa / admin123");
     } else {
-        // This line automatically fixes the broken user currently stuck in your live database!
-        await pool.query("UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER'");
+        // Always sync password so a DB wipe + restart always works
+        await pool.query("UPDATE users SET password = $1, role = 'ADMIN', status = 'ACTIVE' WHERE email = 'admin@qonnect.qa'", [hashedAdminPass]);
+        console.log("✅ Default admin password synced");
     }
+    // Fix any legacy role values
+    await pool.query("UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER'");
     
     // WhatsApp Sessions Table
     await pool.query(`
@@ -1092,25 +1095,32 @@ app.post('/api/chat', authenticate, async (req, res) => {
 app.post("/api/login", loginRateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;
-    const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    
+    if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
+
+    const { rows } = await pool.query("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email.trim()]);
     if (rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
-    
+
     const user = rows[0];
+    if (!user.password) return res.status(401).json({ error: "Account not configured. Contact admin." });
+
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) return res.status(401).json({ error: "Invalid credentials" });
 
+    // Block inactive users
+    if (user.status === 'INACTIVE') return res.status(403).json({ error: "Account is inactive. Contact admin." });
+
     const token = jwt.sign(
-        { id: user.id, role: user.role, email: user.email }, 
+        { id: user.id, role: user.role, email: user.email },
         process.env.JWT_SECRET,
         { expiresIn: '12h' }
     );
 
-    res.json({ 
-        token, 
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, techId: user.id } 
+    res.json({
+        token,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, techId: user.id }
     });
   } catch (error) {
+    console.error("Login error:", error);
     res.status(500).json({ error: "Login failed" });
   }
 });
