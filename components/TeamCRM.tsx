@@ -271,6 +271,10 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         const fullPhone = phoneRaw ? `+974${phoneRaw}` : '';
                         
                         // Handle potential empty system role
+                        // SALES and TECHNICAL_ASSOCIATE have the system role dropdown disabled,
+                        // so rawData.systemRole will be absent (disabled fields aren't in FormData).
+                        // The backend needs a role value — use level-based default when empty.
+                        const levelVal = rawData.level || currentLevel;
                         const finalSystemRole = rawData.systemRole || undefined;
 
                         const data: any = {
@@ -280,9 +284,10 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                             // jobRole = job title text (e.g. "Senior Technician"), separate from systemRole
                             jobRole: rawData.jobRole || '',
                             // role = systemRole for DB (login permission), NOT job title
+                            // For SALES/TECHNICAL_ASSOCIATE, role will be null — backend defaults to 'NONE'
                             role: finalSystemRole || undefined,
                             // level = department/team e.g. "SALES", "FIELD_ENGINEER"
-                            level: rawData.level || currentLevel,
+                            level: levelVal,
                         };
 
                         // Normalise status: AVAILABLE → ACTIVE for DB consistency
