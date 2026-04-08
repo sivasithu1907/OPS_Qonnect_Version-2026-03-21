@@ -215,6 +215,10 @@ export interface Activity {
   startedAt?: string;   // Set when status first transitions to IN_PROGRESS
   completedAt?: string; // Set when status transitions to DONE
   
+  // Execution Fields (set at runtime, not during planning)
+  primaryEngineerId?: string;      // Who actually pressed "Start Work"
+  supportingEngineerIds?: string[]; // Team members working on this activity
+  
   // Duration
   durationHours: number;
   durationUnit?: 'HOURS' | 'DAYS';
