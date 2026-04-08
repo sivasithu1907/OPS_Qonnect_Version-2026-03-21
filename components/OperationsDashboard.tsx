@@ -423,19 +423,32 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         const capacity = 8;
                         const utilization = Math.min(100, Math.round((workload/capacity)*100));
                         
-                        // Dynamically find Associates assigned to this Lead's jobs today
-                        const todayActs = activities.filter(a => 
-                            a.leadTechId === tech.id && 
-                            new Date(a.plannedDate).toDateString() === new Date().toDateString() &&
-                            a.status !== 'CANCELLED'
-                        );
+                        // Find activities where this tech is the ACTUAL primary engineer (execution)
+                        // or the PLANNED lead tech (for activities not yet started)
+                        const todayActs = activities.filter(a => {
+                            const isToday = new Date(a.plannedDate).toDateString() === new Date().toDateString();
+                            if (a.status === 'CANCELLED') return false;
+                            // Execution: this tech is the primary (actual) engineer
+                            if ((a as any).primaryEngineerId === tech.id) return true;
+                            // Planning: this tech is the planned lead and activity not yet started
+                            if (a.leadTechId === tech.id && isToday && !['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status)) return true;
+                            // IN_PROGRESS/DONE without primaryEngineerId (legacy): fall back to leadTechId
+                            if (a.leadTechId === tech.id && !(a as any).primaryEngineerId && ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status)) return true;
+                            return false;
+                        });
                         
-                        // Extract unique associate IDs from all of today's jobs
-                        const uniqueAssocIds = Array.from(new Set(todayActs.flatMap(a => a.assistantTechIds || [])));
+                        // Extract supporting engineers from ACTUAL execution data
+                        const activeActs = todayActs.filter(a => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status));
+                        const uniqueSupportIds = Array.from(new Set(
+                            activeActs.flatMap(a => (a as any).supportingEngineerIds || a.assistantTechIds || [])
+                        ));
                         
-                        const associates = uniqueAssocIds
+                        const supportingMembers = uniqueSupportIds
                             .map(mId => technicians.find(t => t.id === mId))
                             .filter(Boolean);
+
+                        // Check if this tech is currently working on something
+                        const isActiveNow = activeActs.length > 0;
 
                         return (
                             <div key={tech.id} className="h-24 border-b border-slate-200 p-3 flex flex-col justify-center">
@@ -443,7 +456,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     <div className="relative">
                                         <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 border border-slate-100 object-cover" alt=""/>
                                         <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                                            tech.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-blue-500'
+                                            isActiveNow ? 'bg-blue-500 animate-pulse' : tech.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-slate-300'
                                         }`} />
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -451,7 +464,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             <span className="font-bold text-slate-800 text-xs truncate">
                                                 {`Team ${tech.name.split(' ')[0]}`}
                                             </span>
-                                            {tech.status === 'BUSY' && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" title="On Site"/>}
+                                            {isActiveNow && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">LIVE</span>}
                                         </div>
                                         <div className="text-[10px] text-slate-500 flex items-center gap-1">
                                             <span className={utilization > 100 ? 'text-red-500 font-bold' : 'text-slate-400'}>
@@ -462,19 +475,19 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         </div>
                                     </div>
                                 </div>
-                                {/* Associates Chip List (Show for ALL rows) */}
+                                {/* Supporting Team (actual execution) */}
                                 <div className="flex flex-wrap gap-1 mb-1">
-                                {associates.length > 0 ? (
-                                    associates.map((assoc: any) => (
+                                {supportingMembers.length > 0 ? (
+                                    supportingMembers.map((assoc: any) => (
                                     <span
                                         key={assoc.id}
-                                        className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-medium text-slate-600 rounded flex items-center gap-1"
+                                        className="px-1.5 py-0.5 bg-blue-50 text-[9px] font-medium text-blue-700 rounded flex items-center gap-1"
                                     >
-                                        <Users size={8} className="text-slate-400" /> {assoc.name.split(' ')[0]}
+                                        <Users size={8} className="text-blue-400" /> {assoc.name.split(' ')[0]}
                                     </span>
                                     ))
                                 ) : (
-                                    <span className="text-[9px] text-slate-300 italic">No associates assigned</span>
+                                    <span className="text-[9px] text-slate-300 italic">Solo</span>
                                 )}
                                 </div>
 
@@ -579,68 +592,73 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         {/* Rows */}
                         {operationsStaff.map(tech => {
                             // Unified timeline items (both Activities and Tickets)
-                            // 1. Normalize Activities
+                            // 1. Normalize Activities — use primaryEngineerId for execution, leadTechId for planning
                             const techActivities = activities.filter(a => {
-                                if (a.leadTechId !== tech.id) return false;
-                                // IN_PROGRESS jobs always appear regardless of planned date
-                                if (a.status === 'IN_PROGRESS') return true;
-                                // DONE jobs: check by completedAt (actual end) or plannedDate
-                                if (a.status === 'DONE') {
-                                    const d = new Date((a as any).completedAt || a.plannedDate || a.createdAt);
+                                const isExecutionPhase = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status);
+                                const hasPrimaryEngineer = !!(a as any).primaryEngineerId;
+
+                                if (isExecutionPhase) {
+                                    // EXECUTION: show under the actual primary engineer
+                                    if (hasPrimaryEngineer) {
+                                        if ((a as any).primaryEngineerId !== tech.id) return false;
+                                    } else {
+                                        // Legacy activities without primaryEngineerId — fall back to leadTechId
+                                        if (a.leadTechId !== tech.id) return false;
+                                    }
+                                    // IN_PROGRESS/ON_MY_WAY/ARRIVED always show regardless of date
+                                    if (a.status !== 'DONE') return true;
+                                    // DONE: show if completed today
+                                    const d = new Date((a as any).completedAt || a.updatedAt || a.createdAt);
+                                    return d.toDateString() === new Date().toDateString();
+                                } else {
+                                    // PLANNING: show under leadTechId (planned assignment)
+                                    if (a.leadTechId !== tech.id) return false;
+                                    if (a.status === 'CANCELLED') return false;
+                                    const d = new Date(a.plannedDate || a.createdAt);
                                     return d.toDateString() === new Date().toDateString();
                                 }
-                                const d = new Date(a.plannedDate || a.createdAt);
-                                return d.toDateString() === new Date().toDateString();
-                            }).map(a => ({
-                                id: a.id,
-                                reference: a.reference,
-                                type: 'activity',
-                                status: normalizeStatus(a.status),
-                                priority: a.priority,
-                                // Timeline start:
-                                //   IN_PROGRESS + startedAt exists → use actual start time
-                                //   IN_PROGRESS + no startedAt    → use updatedAt (best proxy)
-                                //   Not started                   → use plannedDate
-                                plannedDate: (() => {
-                                    const s = normalizeStatus(a.status);
-                                    const actualStart = (a as any).startedAt;
-                                    // DONE or IN_PROGRESS with real startedAt → use actual start
-                                    if (actualStart && (s === 'DONE' || s === 'IN_PROGRESS')) return actualStart;
-                                    // IN_PROGRESS no startedAt → use updatedAt as proxy
-                                    if (s === 'IN_PROGRESS' && a.updatedAt) return a.updatedAt;
-                                    // Fallback to plannedDate (not yet started)
-                                    return a.plannedDate || a.createdAt || new Date().toISOString();
-                                })(),
-                                // Duration:
-                                //   DONE with both timestamps → actual duration
-                                //   IN_PROGRESS               → elapsed so far (live)
-                                //   Otherwise                 → planned duration
-                                durationHours: (() => {
-                                    const s = normalizeStatus(a.status);
-                                    const actualStart = (a as any).startedAt;
-                                    const actualEnd = (a as any).completedAt;
-                                    // DONE with real timestamps → actual duration
-                                    if (s === 'DONE' && actualStart && actualEnd) {
-                                        return Math.max(0.25, (new Date(actualEnd).getTime() - new Date(actualStart).getTime()) / 3600000);
-                                    }
-                                    // IN_PROGRESS with real startedAt → live elapsed
-                                    if (s === 'IN_PROGRESS' && actualStart) {
-                                        return Math.max(0.25, (Date.now() - new Date(actualStart).getTime()) / 3600000);
-                                    }
-                                    // Not yet started → planned duration
-                                    return a.durationHours || 2;
-                                })(),
-                                description: a.description || a.type,
-                                escalationLevel: a.escalationLevel || 0
-                            }));
+                            }).map(a => {
+                                const s = normalizeStatus(a.status);
+                                const isExecution = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status);
+                                const actualStart = (a as any).startedAt;
+                                const actualEnd = (a as any).completedAt;
+                                const supportCount = ((a as any).supportingEngineerIds || []).length;
+
+                                return {
+                                    id: a.id,
+                                    reference: a.reference,
+                                    type: 'activity',
+                                    status: s,
+                                    priority: a.priority,
+                                    isPlanned: !isExecution, // Used for styling (faded for planned)
+                                    supportCount,
+                                    // Timeline start position
+                                    plannedDate: (() => {
+                                        if (actualStart && (s === 'DONE' || s === 'IN_PROGRESS' || s === 'ON_MY_WAY' || s === 'ARRIVED')) return actualStart;
+                                        if (s === 'IN_PROGRESS' && a.updatedAt) return a.updatedAt;
+                                        return a.plannedDate || a.createdAt || new Date().toISOString();
+                                    })(),
+                                    // Duration
+                                    durationHours: (() => {
+                                        if (s === 'DONE' && actualStart && actualEnd) {
+                                            return Math.max(0.25, (new Date(actualEnd).getTime() - new Date(actualStart).getTime()) / 3600000);
+                                        }
+                                        if ((s === 'IN_PROGRESS' || s === 'ON_MY_WAY' || s === 'ARRIVED') && actualStart) {
+                                            return Math.max(0.25, (Date.now() - new Date(actualStart).getTime()) / 3600000);
+                                        }
+                                        return a.durationHours || 2;
+                                    })(),
+                                    description: a.description || a.type,
+                                    escalationLevel: a.escalationLevel || 0
+                                };
+                            });
 
                             // 2. Normalize Tickets (only if assigned and IN_PROGRESS/OPEN)
                             const techTickets = tickets
                                 .filter(t => {
                                 if (t.assignedTechId !== tech.id) return false;
                                 const activeStatuses = ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'];
-                                if (activeStatuses.includes(normalizeStatus(t.status))) return true; // always show active tickets
-                                // Also show RESOLVED tickets completed today
+                                if (activeStatuses.includes(normalizeStatus(t.status))) return true;
                                 if (normalizeStatus(t.status) === 'RESOLVED') {
                                     const d = new Date((t as any).completedAt || t.updatedAt || t.createdAt);
                                     return d.toDateString() === new Date().toDateString();
@@ -651,16 +669,13 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     const tStatus = normalizeStatus(t.status);
                                     const tStarted = (t as any).startedAt;
                                     const tCompleted = (t as any).completedAt;
-                                    // Timeline position: use actual startedAt if available, else appointmentTime, else current hour
                                     const tPlannedDate = tStarted || t.appointmentTime || (() => {
                                         const d = new Date();
                                         d.setMinutes(0, 0, 0);
                                         return d.toISOString();
                                     })();
-                                    // Duration: RESOLVED with real startedAt → actual window; IN_PROGRESS → live elapsed; else → 2h default
                                     const tDuration = (() => {
                                         if (tStatus === 'RESOLVED' && tCompleted && tStarted) {
-                                            // Only use REAL startedAt for duration — not appointmentTime
                                             return Math.max(0.25, (new Date(tCompleted).getTime() - new Date(tStarted).getTime()) / 3600000);
                                         }
                                         if (tStatus === 'IN_PROGRESS' && tStarted) {
@@ -674,6 +689,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         type: 'ticket',
                                         status: tStatus,
                                         priority: t.priority,
+                                        isPlanned: false,
+                                        supportCount: 0,
                                         plannedDate: tPlannedDate,
                                         durationHours: tDuration,
                                         description: t.customerName + ' - ' + t.category,
@@ -690,6 +707,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     {timelineItems.map((item: any) => {
                                         const style = getPositionStyle(item.plannedDate, item.durationHours);
                                         const isTicket = item.type === 'ticket';
+                                        const isPlanned = item.isPlanned;
                                         
                                         return (
                                             <div 
@@ -703,7 +721,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                     isTicket                                  ? 'bg-slate-50 border-slate-200 text-slate-600' :
                                                     item.status === 'DONE'        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
                                                     item.status === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-900 ring-blue-400' :
+                                                    item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-200 text-cyan-800 ring-cyan-400' :
+                                                    item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-200 text-indigo-800 ring-indigo-400' :
                                                     item.escalationLevel > 0      ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
+                                                    isPlanned                     ? 'bg-slate-50 border-dashed border-slate-300 text-slate-400 opacity-60' :
                                                     'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                                                 }`}
                                                 style={style}
@@ -713,11 +734,17 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                 <div className="flex items-center gap-1 font-bold text-[10px] leading-tight truncate">
                                                     {isTicket && <TicketIcon size={10} />}
                                                     {item.reference}
+                                                    {item.supportCount > 0 && (
+                                                        <span className="ml-auto text-[8px] font-bold bg-blue-100 text-blue-600 px-1 rounded shrink-0">+{item.supportCount}</span>
+                                                    )}
+                                                    {isPlanned && (
+                                                        <span className="ml-auto text-[8px] font-medium text-slate-400 italic shrink-0">planned</span>
+                                                    )}
                                                 </div>
                                                 <div className="text-[9px] truncate opacity-80 leading-tight">
                                                     {item.description}
                                                 </div>
-                                                {item.status === 'IN_PROGRESS' && (
+                                                {(item.status === 'IN_PROGRESS' || item.status === 'ON_MY_WAY' || item.status === 'ARRIVED') && !isPlanned && (
                                                     <div className="mt-1 h-0.5 w-full bg-blue-200 rounded-full overflow-hidden">
                                                         <div className="h-full bg-blue-500 animate-pulse w-2/3"></div>
                                                     </div>
@@ -892,12 +919,31 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
                                  <Users size={12}/>
                              </div>
-                             <span className="text-xs font-medium text-slate-700">
-                                 {selectedItem.type === 'activity' ? 
-                                    (technicians.find(t => t.id === (selectedItem.data as Activity).leadTechId)?.name || 'Unassigned') : 
-                                    (technicians.find(t => t.id === (selectedItem.data as Ticket).assignedTechId)?.name || 'Unassigned')}
-                             </span>
+                             <div className="flex flex-col">
+                                 <span className="text-xs font-medium text-slate-700">
+                                     {selectedItem.type === 'activity' ? 
+                                        (technicians.find(t => t.id === ((selectedItem.data as any).primaryEngineerId || (selectedItem.data as Activity).leadTechId))?.name || 'Unassigned') : 
+                                        (technicians.find(t => t.id === (selectedItem.data as Ticket).assignedTechId)?.name || 'Unassigned')}
+                                 </span>
+                                 {selectedItem.type === 'activity' && (selectedItem.data as any).primaryEngineerId && (selectedItem.data as any).primaryEngineerId !== (selectedItem.data as Activity).leadTechId && (
+                                     <span className="text-[9px] text-slate-400">Planned: {technicians.find(t => t.id === (selectedItem.data as Activity).leadTechId)?.name || '—'}</span>
+                                 )}
+                             </div>
                          </div>
+                         {/* Supporting team members */}
+                         {selectedItem.type === 'activity' && ((selectedItem.data as any).supportingEngineerIds?.length > 0) && (
+                             <div className="mt-2 flex flex-wrap gap-1">
+                                 <span className="text-[9px] text-slate-400 mr-1">Team:</span>
+                                 {((selectedItem.data as any).supportingEngineerIds || []).map((sid: string) => {
+                                     const member = technicians.find(t => t.id === sid);
+                                     return member ? (
+                                         <span key={sid} className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-medium">
+                                             {member.name.split(' ')[0]}
+                                         </span>
+                                     ) : null;
+                                 })}
+                             </div>
+                         )}
                      </div>
 
                      {/* Description */}
