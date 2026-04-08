@@ -1164,16 +1164,18 @@ app.get("/api/users", authenticate, async (req, res) => {
 app.post("/api/users", authenticate, async (req, res) => {
     try {
         const { id, name, email, password, role, status, phone, job_role, level } = req.body;
-        if (!name || !email || !password || !role) {
-            return res.status(400).json({ error: "name, email, password, and role are required" });
+        if (!name || !email || !password) {
+            return res.status(400).json({ error: "name, email, and password are required" });
         }
+        // SALES and TECHNICAL_ASSOCIATE don't need a system role — default to 'NONE'
+        const finalRole = role || 'NONE';
         const hashedPass = await bcrypt.hash(password, 10);
         const userId = id || `u-${Date.now()}`;
         const { rows } = await pool.query(
             `INSERT INTO users (id, name, email, password, role, status, phone, job_role, level)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING id, name, email, role as "systemRole", status, phone, job_role, level`,
-            [userId, name.trim(), email.trim(), hashedPass, role, (status === 'AVAILABLE' ? 'ACTIVE' : (status || 'ACTIVE')), phone || null, job_role || null, level || null]
+            [userId, name.trim(), email.trim(), hashedPass, finalRole, (status === 'AVAILABLE' ? 'ACTIVE' : (status || 'ACTIVE')), phone || null, job_role || null, level || null]
         );
         res.status(201).json(rows[0]);
     } catch (e) {
