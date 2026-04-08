@@ -649,19 +649,24 @@ const loadUsers = async () => {
     if (res.status === 401) { handleLogout(); return; }
     const data = await res.json();
     if (Array.isArray(data)) {
-        // Derive 'level' from systemRole since it's not stored in DB
-        const withLevel = data.map((u: any) => ({
-            ...u,
-            // Prefer stored level from DB; fall back to systemRole-derived value only for known system roles
-            // IMPORTANT: never default to TECHNICAL_ASSOCIATE — SALES users with blank level would be misclassified
-            level: u.level || (
-                u.systemRole === 'TEAM_LEAD'      ? 'TEAM_LEAD' :
-                u.systemRole === 'FIELD_ENGINEER'  ? 'FIELD_ENGINEER' :
-                u.systemRole === 'ADMIN'           ? 'ADMIN' : ''
-            ),
-            // jobRole is the human job title; preserve from API
-            jobRole: u.jobRole || u.job_role || ''
-        }));
+        // Derive 'level' from systemRole when not stored in DB
+        const withLevel = data.map((u: any) => {
+            // Prefer stored level from DB
+            let level = u.level || '';
+            // If level is blank, derive from systemRole
+            if (!level || level === 'ADMIN') {
+                if (u.systemRole === 'TEAM_LEAD')      level = 'TEAM_LEAD';
+                else if (u.systemRole === 'ADMIN')      level = 'TEAM_LEAD'; // Admins appear with Team Leads
+                else if (u.systemRole === 'FIELD_ENGINEER') level = 'FIELD_ENGINEER';
+                else if (u.systemRole === 'NONE')       level = ''; // SALES/TA — should have level set in DB
+                else                                     level = 'FIELD_ENGINEER'; // safe default
+            }
+            return {
+                ...u,
+                level,
+                jobRole: u.jobRole || u.job_role || ''
+            };
+        });
         setTechnicians(withLevel);
     }
   } catch (e) {
