@@ -192,13 +192,26 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       if (activeJobItem?.type === 'ticket') {
           handleStatusUpdate(activeJobItem.data.id, TicketStatus.IN_PROGRESS);
       } else if (activeJobItem?.type === 'activity' && onUpdateActivity) {
-          onUpdateActivity({ ...activeJobItem.data as Activity, status: 'IN_PROGRESS' });
+          const a = activeJobItem.data as Activity;
+          onUpdateActivity({
+              ...a,
+              status: 'IN_PROGRESS',
+              primaryEngineerId: currentTechId,
+              supportingEngineerIds: (a.assistantTechIds || []).filter(id => id !== currentTechId),
+          });
       }
   };
 
   const handleActivityOnMyWay = () => {
       if (activeJobItem?.type === 'activity' && onUpdateActivity) {
-          onUpdateActivity({ ...activeJobItem.data as Activity, status: 'ON_MY_WAY' as any });
+          const a = activeJobItem.data as Activity;
+          onUpdateActivity({
+              ...a,
+              status: 'ON_MY_WAY' as any,
+              // Capture who is actually executing this activity
+              primaryEngineerId: currentTechId,
+              supportingEngineerIds: (a.assistantTechIds || []).filter(id => id !== currentTechId),
+          });
       }
   };
 
@@ -210,7 +223,14 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   const handleActivityStartWork = () => {
       if (activeJobItem?.type === 'activity' && onUpdateActivity) {
-          onUpdateActivity({ ...activeJobItem.data as Activity, status: 'IN_PROGRESS' });
+          const a = activeJobItem.data as Activity;
+          onUpdateActivity({
+              ...a,
+              status: 'IN_PROGRESS',
+              // Record who is actually doing this work
+              primaryEngineerId: a.primaryEngineerId || currentTechId,
+              supportingEngineerIds: a.supportingEngineerIds || (a.assistantTechIds || []).filter(id => id !== currentTechId),
+          });
       }
   };
 
