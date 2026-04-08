@@ -1123,6 +1123,19 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
     console.error("Login error:", error);
     res.status(500).json({ error: "Login failed" });
   }
+
+// ── /api/me — verify token and return current user (used on app startup) ──
+app.get("/api/me", authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT id, name, email, role, status FROM users WHERE id = $1", [req.user.id]);
+    if (rows.length === 0) return res.status(404).json({ error: "User not found" });
+    const u = rows[0];
+    if (u.status === 'INACTIVE') return res.status(403).json({ error: "Account inactive" });
+    res.json({ id: u.id, name: u.name, email: u.email, role: u.role, techId: u.id });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to verify session" });
+  }
+});
 });
 
 app.get("/api/users", authenticate, async (req, res) => {
