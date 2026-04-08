@@ -555,13 +555,16 @@ const handleDeleteCustomer = async (id: string) => {
           const exists = technicians.find(x => x.id === u.id);
           if (exists) {
               // Update existing user
+              // When level is SALES or TECHNICAL_ASSOCIATE, clear systemRole to NONE
+              const isNonLoginLevel = u.level === 'SALES' || u.level === 'TECHNICAL_ASSOCIATE';
+              const effectiveRole = isNonLoginLevel ? 'NONE' : (u.systemRole || null);
               const res = await fetch(`/api/users/${u.id}`, {
                   method: "PUT",
                   headers: getAuthHeaders(),
                   body: JSON.stringify({
                       name: u.name,
                       email: u.email,
-                      role: u.systemRole || null,
+                      role: effectiveRole,
                       job_role: (u as any).jobRole || null,
                       level: u.level || null,
                       status: u.isActive === false ? 'INACTIVE' : (u.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'),
