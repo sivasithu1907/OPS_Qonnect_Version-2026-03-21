@@ -24,8 +24,8 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const teamLeads = technicians.filter(t => t.systemRole === Role.TEAM_LEAD);
-  const fieldEngineers = technicians.filter(t => t.systemRole === Role.FIELD_ENGINEER);
+  const teamLeads = technicians.filter(t => t.level === 'TEAM_LEAD');
+  const fieldEngineers = technicians.filter(t => t.level === 'FIELD_ENGINEER');
   const salesTeam = technicians.filter(t => t.level === 'SALES');
   const technicalAssociates = technicians.filter(t => t.level === 'TECHNICAL_ASSOCIATE');
 
