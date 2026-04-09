@@ -2012,14 +2012,14 @@ const TeamView = () => {
                         <option value="" disabled>Select primary engineer</option>
                         <optgroup label="Team Leads">
                             {technicians
-                                .filter(t => t.level === 'TEAM_LEAD' && t.status !== 'LEAVE' && t.isActive !== false)
+                                .filter(t => t.level === 'TEAM_LEAD' && t.systemRole !== 'ADMIN' && t.status !== 'LEAVE' && t.isActive !== false)
                                 .map(t => (
                                     <option key={t.id} value={t.id}>{t.name}</option>
                                 ))}
                         </optgroup>
                         <optgroup label="Field Engineers">
                             {technicians
-                                .filter(t => t.level === 'FIELD_ENGINEER' && t.status !== 'LEAVE' && t.isActive !== false)
+                                .filter(t => t.level === 'FIELD_ENGINEER' && t.systemRole !== 'ADMIN' && t.status !== 'LEAVE' && t.isActive !== false)
                                 .map(t => (
                                     <option key={t.id} value={t.id}>{t.name}</option>
                                 ))}
@@ -2066,14 +2066,14 @@ const TeamView = () => {
                             ))
                         }
 
-                        {/* Field Engineers (exclude the primary) */}
-                        {technicians.filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false).length > 0 && (
+                        {/* Field Engineers (exclude the primary and admins) */}
+                        {technicians.filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.systemRole !== 'ADMIN' && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false).length > 0 && (
                             <div className="px-3 pt-3 pb-1 border-t border-slate-100">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase">Field Engineers / Leads</span>
                             </div>
                         )}
                         {technicians
-                            .filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false)
+                            .filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.systemRole !== 'ADMIN' && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false)
                             .map(t => (
                                 <label key={t.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
                                     dispatchSupportIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-slate-50'
