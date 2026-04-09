@@ -1,8 +1,165 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Technician, Role } from '../types';
-import { Edit, Trash2, Eye, Plus, X, Mail, Phone, Briefcase, Camera, Upload, Shield, Wrench, BriefcaseBusiness, Users } from 'lucide-react';
+import { Edit, Trash2, Eye, Plus, X, Mail, Phone, Briefcase, Camera, Upload, Shield, Wrench, BriefcaseBusiness, Users, ZoomIn, ZoomOut, Move } from 'lucide-react';
 import { generateTechId } from '../utils/idUtils';
+
+// ── Avatar Cropper Component ──
+const AvatarCropper: React.FC<{
+  imageSrc: string;
+  onCrop: (croppedDataUrl: string) => void;
+  onCancel: () => void;
+}> = ({ imageSrc, onCrop, onCancel }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  const SIZE = 240; // preview size
+
+  useEffect(() => {
+    const image = new Image();
+    image.onload = () => {
+      setImg(image);
+      // Fit image to cover the circle
+      const minScale = SIZE / Math.min(image.width, image.height);
+      setScale(minScale);
+      setOffset({
+        x: (SIZE - image.width * minScale) / 2,
+        y: (SIZE - image.height * minScale) / 2
+      });
+    };
+    image.src = imageSrc;
+  }, [imageSrc]);
+
+  useEffect(() => {
+    if (!img || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, offset.x, offset.y, img.width * scale, img.height * scale);
+    ctx.restore();
+  }, [img, scale, offset]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setDragging(true);
+    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+  };
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging) return;
+    setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  }, [dragging, dragStart]);
+
+  const handleMouseUp = () => setDragging(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    setDragging(true);
+    setDragStart({ x: t.clientX - offset.x, y: t.clientY - offset.y });
+  };
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    setOffset({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y });
+  }, [dragging, dragStart]);
+
+  const handleCrop = () => {
+    if (!canvasRef.current) return;
+    // Render final 256x256 output
+    const out = document.createElement('canvas');
+    out.width = 256;
+    out.height = 256;
+    const ctx = out.getContext('2d');
+    if (!ctx || !img) return;
+    const ratio = 256 / SIZE;
+    ctx.beginPath();
+    ctx.arc(128, 128, 128, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, offset.x * ratio, offset.y * ratio, img.width * scale * ratio, img.height * scale * ratio);
+    onCrop(out.toDataURL('image/jpeg', 0.85));
+  };
+
+  const adjustZoom = (delta: number) => {
+    if (!img) return;
+    const minScale = SIZE / Math.max(img.width, img.height) * 0.5;
+    const maxScale = SIZE / Math.min(img.width, img.height) * 3;
+    const newScale = Math.max(minScale, Math.min(maxScale, scale + delta));
+    // Zoom toward center
+    const cx = SIZE / 2;
+    const cy = SIZE / 2;
+    const factor = newScale / scale;
+    setOffset({
+      x: cx - (cx - offset.x) * factor,
+      y: cy - (cy - offset.y) * factor
+    });
+    setScale(newScale);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+          <h3 className="font-bold text-slate-900">Adjust Photo</h3>
+          <button onClick={onCancel}><X size={20} className="text-slate-400" /></button>
+        </div>
+        <div className="p-6 flex flex-col items-center gap-4">
+          <p className="text-xs text-slate-400 flex items-center gap-1"><Move size={12} /> Drag to reposition</p>
+          <div
+            className="relative rounded-full overflow-hidden border-4 border-slate-200 shadow-inner cursor-grab active:cursor-grabbing"
+            style={{ width: SIZE, height: SIZE, touchAction: 'none' }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={() => setDragging(false)}
+          >
+            <canvas ref={canvasRef} width={SIZE} height={SIZE} className="w-full h-full" />
+          </div>
+          {/* Zoom controls */}
+          <div className="flex items-center gap-3 w-full max-w-[240px]">
+            <button type="button" onClick={() => adjustZoom(-0.02)} className="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+              <ZoomOut size={16} className="text-slate-600" />
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={img ? ((scale - SIZE / Math.max(img.width, img.height) * 0.5) / (SIZE / Math.min(img.width, img.height) * 3 - SIZE / Math.max(img.width, img.height) * 0.5) * 100) : 50}
+              onChange={(e) => {
+                if (!img) return;
+                const minS = SIZE / Math.max(img.width, img.height) * 0.5;
+                const maxS = SIZE / Math.min(img.width, img.height) * 3;
+                const newScale = minS + (Number(e.target.value) / 100) * (maxS - minS);
+                const cx = SIZE / 2;
+                const cy = SIZE / 2;
+                const factor = newScale / scale;
+                setOffset({ x: cx - (cx - offset.x) * factor, y: cy - (cy - offset.y) * factor });
+                setScale(newScale);
+              }}
+              className="flex-1 accent-emerald-600"
+            />
+            <button type="button" onClick={() => adjustZoom(0.02)} className="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+              <ZoomIn size={16} className="text-slate-600" />
+            </button>
+          </div>
+        </div>
+        <div className="p-4 border-t border-slate-100 flex gap-3">
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">Cancel</button>
+          <button type="button" onClick={handleCrop} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-colors">Save</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface TeamCRMProps {
   technicians: Technician[];
@@ -21,6 +178,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
   const [currentLevel, setCurrentLevel] = useState<string>('FIELD_ENGINEER');
   const [formSystemRole, setFormSystemRole] = useState<string>('');
   const [saveToast, setSaveToast] = useState(false);
+  const [cropperImage, setCropperImage] = useState<string | null>(null); // Raw image for cropper
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,6 +208,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
       setModalType(null);
       setActiveTech(null);
       setAvatarPreview(null);
+      setCropperImage(null);
   };
 
   const handleDelete = (id: string, e?: React.MouseEvent) => {
@@ -69,9 +228,11 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
       if (file) {
           const reader = new FileReader();
           reader.onloadend = () => {
-              setAvatarPreview(reader.result as string);
+              setCropperImage(reader.result as string); // Open cropper with raw image
           };
           reader.readAsDataURL(file);
+          // Reset input so same file can be re-selected
+          if (fileInputRef.current) fileInputRef.current.value = '';
       }
   };
 
@@ -435,6 +596,18 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                     </form>
                  </div>
             </div>
+        )}
+
+        {/* Avatar Cropper Modal */}
+        {cropperImage && (
+            <AvatarCropper
+                imageSrc={cropperImage}
+                onCrop={(croppedUrl) => {
+                    setAvatarPreview(croppedUrl);
+                    setCropperImage(null);
+                }}
+                onCancel={() => setCropperImage(null)}
+            />
         )}
     </div>
   );
