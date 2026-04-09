@@ -1,12 +1,122 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Technician, Role, Team } from '../types';
 import { 
   Plus, Search, Edit, Trash2, Shield, Briefcase, 
   CheckCircle2, XCircle, Mail, Phone, Lock, UserCog,
-  Eye, EyeOff, KeyRound, Wrench
+  Eye, EyeOff, KeyRound, Wrench, X, ZoomIn, ZoomOut, Move, Camera
 } from 'lucide-react';
 import { generateTechId } from '../utils/idUtils';
+
+// ── Avatar Cropper Component (shared) ──
+const AvatarCropperUM: React.FC<{
+  imageSrc: string;
+  onCrop: (croppedDataUrl: string) => void;
+  onCancel: () => void;
+}> = ({ imageSrc, onCrop, onCancel }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  const SIZE = 240;
+
+  useEffect(() => {
+    const image = new Image();
+    image.onload = () => {
+      setImg(image);
+      const minScale = SIZE / Math.min(image.width, image.height);
+      setScale(minScale);
+      setOffset({ x: (SIZE - image.width * minScale) / 2, y: (SIZE - image.height * minScale) / 2 });
+    };
+    image.src = imageSrc;
+  }, [imageSrc]);
+
+  useEffect(() => {
+    if (!img || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, offset.x, offset.y, img.width * scale, img.height * scale);
+    ctx.restore();
+  }, [img, scale, offset]);
+
+  const handleMouseDown = (e: React.MouseEvent) => { setDragging(true); setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y }); };
+  const handleMouseMove = useCallback((e: React.MouseEvent) => { if (!dragging) return; setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); }, [dragging, dragStart]);
+  const handleMouseUp = () => setDragging(false);
+  const handleTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; setDragging(true); setDragStart({ x: t.clientX - offset.x, y: t.clientY - offset.y }); };
+  const handleTouchMove = useCallback((e: React.TouchEvent) => { if (!dragging) return; const t = e.touches[0]; setOffset({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y }); }, [dragging, dragStart]);
+
+  const handleCrop = () => {
+    const out = document.createElement('canvas'); out.width = 256; out.height = 256;
+    const ctx = out.getContext('2d');
+    if (!ctx || !img) return;
+    const ratio = 256 / SIZE;
+    ctx.beginPath(); ctx.arc(128, 128, 128, 0, Math.PI * 2); ctx.clip();
+    ctx.drawImage(img, offset.x * ratio, offset.y * ratio, img.width * scale * ratio, img.height * scale * ratio);
+    onCrop(out.toDataURL('image/jpeg', 0.85));
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+          <h3 className="font-bold text-slate-900">Adjust Photo</h3>
+          <button onClick={onCancel}><X size={20} className="text-slate-400" /></button>
+        </div>
+        <div className="p-6 flex flex-col items-center gap-4">
+          <p className="text-xs text-slate-400 flex items-center gap-1"><Move size={12} /> Drag to reposition</p>
+          <div
+            className="relative rounded-full overflow-hidden border-4 border-slate-200 shadow-inner cursor-grab active:cursor-grabbing"
+            style={{ width: SIZE, height: SIZE, touchAction: 'none' }}
+            onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={() => setDragging(false)}
+          >
+            <canvas ref={canvasRef} width={SIZE} height={SIZE} className="w-full h-full" />
+          </div>
+          <div className="flex items-center gap-3 w-full max-w-[240px]">
+            <button type="button" onClick={() => {
+              if (!img) return;
+              const minS = SIZE / Math.max(img.width, img.height) * 0.5;
+              const maxS = SIZE / Math.min(img.width, img.height) * 3;
+              const ns = Math.max(minS, scale - 0.02);
+              const cx = SIZE/2; const cy = SIZE/2; const f = ns/scale;
+              setOffset({ x: cx-(cx-offset.x)*f, y: cy-(cy-offset.y)*f }); setScale(ns);
+            }} className="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200"><ZoomOut size={16} className="text-slate-600"/></button>
+            <input type="range" min="0" max="100"
+              value={img ? ((scale - SIZE / Math.max(img.width, img.height) * 0.5) / (SIZE / Math.min(img.width, img.height) * 3 - SIZE / Math.max(img.width, img.height) * 0.5) * 100) : 50}
+              onChange={(e) => {
+                if (!img) return;
+                const minS = SIZE / Math.max(img.width, img.height) * 0.5;
+                const maxS = SIZE / Math.min(img.width, img.height) * 3;
+                const ns = minS + (Number(e.target.value) / 100) * (maxS - minS);
+                const cx = SIZE/2; const cy = SIZE/2; const f = ns/scale;
+                setOffset({ x: cx-(cx-offset.x)*f, y: cy-(cy-offset.y)*f }); setScale(ns);
+              }}
+              className="flex-1 accent-emerald-600"
+            />
+            <button type="button" onClick={() => {
+              if (!img) return;
+              const maxS = SIZE / Math.min(img.width, img.height) * 3;
+              const ns = Math.min(maxS, scale + 0.02);
+              const cx = SIZE/2; const cy = SIZE/2; const f = ns/scale;
+              setOffset({ x: cx-(cx-offset.x)*f, y: cy-(cy-offset.y)*f }); setScale(ns);
+            }} className="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200"><ZoomIn size={16} className="text-slate-600"/></button>
+          </div>
+        </div>
+        <div className="p-4 border-t border-slate-100 flex gap-3">
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+          <button type="button" onClick={handleCrop} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800">Save</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface UserManagementProps {
   users: Technician[];
@@ -27,6 +137,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [cropperImage, setCropperImage] = useState<string | null>(null);
   const [changePwdModal, setChangePwdModal] = useState<Technician | null>(null);
   const [changePwdForm, setChangePwdForm] = useState({ current: '', next: '', confirm: '' });
   const [changePwdError, setChangePwdError] = useState('');
@@ -42,8 +153,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => setAvatarPreview(reader.result as string);
+    reader.onloadend = () => setCropperImage(reader.result as string);
     reader.readAsDataURL(file);
+    if (fileRef.current) fileRef.current.value = '';
   };
 
   const handleEdit = (user: Technician) => {
@@ -448,6 +560,18 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     </div>
                 </div>
             </div>
+        )}
+
+        {/* Avatar Cropper Modal */}
+        {cropperImage && (
+            <AvatarCropperUM
+                imageSrc={cropperImage}
+                onCrop={(croppedUrl) => {
+                    setAvatarPreview(croppedUrl);
+                    setCropperImage(null);
+                }}
+                onCancel={() => setCropperImage(null)}
+            />
         )}
     </div>
   );
