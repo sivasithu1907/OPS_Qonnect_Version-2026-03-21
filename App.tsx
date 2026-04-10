@@ -1251,6 +1251,7 @@ useEffect(() => {
                         activities={activities}
                         technicians={technicians}
                         sites={sites}
+                        customers={customers}
                     />
                 )}
                 {activeView === 'users' && (
