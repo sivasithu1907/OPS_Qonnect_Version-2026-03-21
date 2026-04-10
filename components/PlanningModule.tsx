@@ -47,6 +47,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   // Customer Selector State
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
 
+  // Freelancers State (activity-level, no user record)
+  const [freelancers, setFreelancers] = useState<{ name: string; role: string; phone: string }[]>([]);
+
   // Filter Active Staff Only
   const teamLeads = technicians.filter(t => t.systemRole === Role.TEAM_LEAD && t.status !== 'LEAVE' && t.isActive !== false);
   const fieldEngineers = technicians.filter(t => t.systemRole === Role.FIELD_ENGINEER && t.status !== 'LEAVE' && t.isActive !== false);
@@ -93,6 +96,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 unit: editingActivity.durationUnit || 'HOURS'
             });
             setSelectedCustomerId(editingActivity.customerId || '');
+            setFreelancers((editingActivity as any).freelancers || []);
         } else {
             const now = new Date();
             now.setDate(now.getDate() + 1);
@@ -100,6 +104,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             setPlannedDatetime(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T09:00`);
             setDurationState({ val: '2', unit: 'HOURS' });
             setSelectedCustomerId('');
+            setFreelancers([]);
         }
     }
   }, [isModalOpen, editingActivity]);
@@ -563,7 +568,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       
                       salesLeadId: data.salesLeadId || undefined,
                       leadTechId: data.leadTechId || undefined,
-                      assistantTechIds: formData.getAll('assistantTechIds') as string[]
+                      assistantTechIds: formData.getAll('assistantTechIds') as string[],
+                      freelancers: freelancers.filter(f => f.name.trim())
                   };
 
                   if (editingActivity) {
@@ -785,6 +791,81 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                             <div className="text-xs text-slate-400 italic">No available associates for this date.</div>
                                         )}
                                     </div>
+                                </div>
+
+                                {/* Freelancers (Optional) — activity-level, no user record */}
+                                <div className="space-y-2 pt-2 border-t border-slate-100 mt-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Freelancers (Optional)</label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFreelancers(prev => [...prev, { name: '', role: 'TECHNICAL_ASSOCIATE', phone: '' }])}
+                                            className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                                        >
+                                            + Add Freelancer
+                                        </button>
+                                    </div>
+                                    {freelancers.length === 0 && (
+                                        <p className="text-[10px] text-slate-400 italic">No freelancers added. Click "+ Add Freelancer" to attach temporary resources.</p>
+                                    )}
+                                    {freelancers.map((fl, idx) => (
+                                        <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFreelancers(prev => prev.filter((_, i) => i !== idx))}
+                                                className="absolute top-2 right-2 text-slate-400 hover:text-red-500 transition-colors"
+                                                title="Remove"
+                                            >
+                                                ✕
+                                            </button>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 uppercase font-bold">Name *</label>
+                                                    <input
+                                                        type="text"
+                                                        value={fl.name}
+                                                        onChange={(e) => {
+                                                            const updated = [...freelancers];
+                                                            updated[idx] = { ...updated[idx], name: e.target.value };
+                                                            setFreelancers(updated);
+                                                        }}
+                                                        placeholder="e.g. Ahmed (Freelancer)"
+                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 uppercase font-bold">Role</label>
+                                                    <select
+                                                        value={fl.role}
+                                                        onChange={(e) => {
+                                                            const updated = [...freelancers];
+                                                            updated[idx] = { ...updated[idx], role: e.target.value };
+                                                            setFreelancers(updated);
+                                                        }}
+                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                    >
+                                                        <option value="TECHNICAL_ASSOCIATE">Technical Associate</option>
+                                                        <option value="FIELD_ENGINEER">Field Engineer</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-slate-400 uppercase font-bold">Phone (Optional)</label>
+                                                <input
+                                                    type="tel"
+                                                    value={fl.phone}
+                                                    onChange={(e) => {
+                                                        const updated = [...freelancers];
+                                                        updated[idx] = { ...updated[idx], phone: e.target.value };
+                                                        setFreelancers(updated);
+                                                    }}
+                                                    placeholder="+974 XXXX XXXX"
+                                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                           </div>
                       </div>
