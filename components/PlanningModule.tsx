@@ -36,6 +36,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>('kanban');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
   
   // Mobile Tab State
   const [mobileTab, setMobileTab] = useState<ActivityStatus>('PLANNED');
@@ -230,7 +231,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           </button>
         ))}
       </div>
-      <table className="w-full text-sm text-left">
+      <div className="overflow-x-auto">
+      <table className="w-full text-sm text-left min-w-[900px]">
         <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
           <tr>
             <th className="px-6 py-4">Ref</th>
@@ -314,16 +316,31 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                        )}
 
                        {helpersCount > 0 && <span className="text-[10px] text-slate-500 pl-4">+ {helpersCount} Assts.</span>}
+
+                       {((act as any).freelancers || []).length > 0 && (
+                         <div className="flex flex-wrap gap-1 mt-0.5">
+                           {(act as any).freelancers.map((fl: any, i: number) => (
+                             <span key={i} className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200 font-medium">
+                               {fl.name} <span className="text-[7px] opacity-60">FL</span>
+                             </span>
+                           ))}
+                         </div>
+                       )}
                      </div>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <button onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} className="text-slate-400 hover:text-emerald-600 font-medium text-xs">Edit</button>
+                  <div className="flex items-center justify-end gap-2">
+                    <button onClick={() => setViewingActivity(act)} className="text-slate-400 hover:text-blue-600 font-medium text-xs">View</button>
+                    <span className="text-slate-200">|</span>
+                    <button onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} className="text-slate-400 hover:text-emerald-600 font-medium text-xs">Edit</button>
+                  </div>
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 };
@@ -400,6 +417,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     });
 
     // Use Team Leads for rows in Calendar View (since they manage schedules usually)
+    // Also add a "Freelancer / Unassigned" row for activities without an internal lead
+    const hasUnassignedActs = activities.some(a => !a.leadTechId && ((a as any).freelancers || []).length > 0);
+    
     return (
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
         {/* Header Grid */}
@@ -437,7 +457,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  
                  return (
                    <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-slate-50/50 transition-colors">
-                      {dayActs.map(act => (
+                      {dayActs.map(act => {
+                        const actFreelancers = (act as any).freelancers || [];
+                        return (
                         <div 
                           key={act.id} 
                           onClick={() => { setEditingActivity(act); setIsModalOpen(true); }}
@@ -454,13 +476,60 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           </div>
                           <div className="text-[10px] text-slate-500 truncate mt-0.5">{getDisplayLocation(act)}</div>
                           <div className="text-[9px] text-slate-400 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}</div>
+                          {actFreelancers.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-1">
+                              {actFreelancers.map((fl: any, i: number) => (
+                                <span key={i} className="text-[8px] px-1 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200">{fl.name.split(' ')[0]} FL</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      )})}
                    </div>
                  );
                })}
              </div>
            ))}
+
+           {/* Freelancer / Unassigned Row */}
+           {hasUnassignedActs && (
+             <div className="grid grid-cols-8 border-b border-slate-100 min-h-[100px] bg-amber-50/20">
+               <div className="p-4 border-r border-slate-200 bg-amber-50/30 flex flex-col justify-center">
+                 <h4 className="font-bold text-amber-800 text-sm">Freelancer Jobs</h4>
+                 <div className="text-[10px] text-amber-600 mt-1">No internal engineer</div>
+               </div>
+               {days.map(d => {
+                 const dayActs = activities.filter(a => {
+                    if (!a.plannedDate) return false;
+                    if (new Date(a.plannedDate).toDateString() !== d.toDateString()) return false;
+                    return !a.leadTechId && ((a as any).freelancers || []).length > 0;
+                 });
+                 return (
+                   <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-amber-50/30 transition-colors">
+                      {dayActs.map(act => {
+                        const actFreelancers = (act as any).freelancers || [];
+                        return (
+                          <div 
+                            key={act.id} 
+                            onClick={() => { setEditingActivity(act); setIsModalOpen(true); }}
+                            className="mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all bg-amber-50 border-amber-200 border-l-4 border-l-amber-400"
+                          >
+                            <div className="font-bold truncate text-amber-800">{act.type}</div>
+                            <div className="text-[10px] text-amber-600 truncate mt-0.5">{getDisplayLocation(act)}</div>
+                            <div className="text-[9px] text-amber-500 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}</div>
+                            <div className="flex flex-wrap gap-0.5 mt-1">
+                              {actFreelancers.map((fl: any, i: number) => (
+                                <span key={i} className="text-[8px] px-1 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-300 font-bold">{fl.name.split(' ')[0]} FL</span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                   </div>
+                 );
+               })}
+             </div>
+           )}
         </div>
       </div>
     );
@@ -905,6 +974,75 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             </div>
          </div>
       )}
+
+      {/* View Activity Detail Panel (read-only) */}
+      {viewingActivity && (() => {
+        const va = viewingActivity as any;
+        const customer = customers.find(c => c.id === va.customerId);
+        const lead = technicians.find(t => t.id === va.leadTechId);
+        const salesLd = technicians.find(t => t.id === va.salesLeadId);
+        const assistants = (va.assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
+        const fls = va.freelancers || [];
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewingActivity(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div>
+                  <div className="text-xs font-mono text-slate-400">{va.reference}</div>
+                  <h3 className="font-bold text-lg text-slate-900">{va.type}</h3>
+                  {va.serviceCategory && <div className="text-xs text-slate-500">{va.serviceCategory}</div>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                    va.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                    va.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                    va.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>{va.status}</span>
+                  <button onClick={() => setViewingActivity(null)} className="p-1 hover:bg-slate-200 rounded-lg">
+                    <X size={18} className="text-slate-400"/>
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {/* Customer & Location */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Customer</span>
+                    <span className="font-semibold text-slate-800">{customer?.name || 'Unknown'}</span>
+                  </div>
+                  {va.houseNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">Location</span><span className="text-slate-700">{va.houseNumber}</span></div>}
+                  {va.locationUrl && <div className="flex justify-between text-sm"><span className="text-slate-400">Map</span><a href={va.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[60%]">{va.locationUrl}</a></div>}
+                </div>
+                {/* Timing */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                  <div className="flex justify-between text-sm"><span className="text-slate-400">Planned</span><span className="font-semibold text-slate-700">{new Date(va.plannedDate).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-400">Duration</span><span className="text-slate-700">{va.durationHours}h</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-400">Priority</span><span className={`font-bold ${va.priority === 'URGENT' ? 'text-red-600' : va.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{va.priority}</span></div>
+                  {va.startedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Started</span><span className="text-emerald-600 font-medium">{new Date(va.startedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit', minute:'2-digit' })}</span></div>}
+                  {va.completedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Completed</span><span className="text-emerald-600 font-medium">{new Date(va.completedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit', minute:'2-digit' })}</span></div>}
+                </div>
+                {/* Description */}
+                {va.description && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-xs font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 leading-relaxed">{va.description}</p></div>}
+                {/* Resources */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                  <div className="text-xs font-bold text-slate-400 uppercase mb-2">Assigned Resources</div>
+                  {lead && <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-purple-500"/><span className="font-medium text-slate-800">{lead.name}</span><span className="text-[10px] text-slate-400">Lead Engineer</span></div>}
+                  {salesLd && <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLd.name}</span><span className="text-[10px] text-slate-400">Sales Lead</span></div>}
+                  {assistants.map((a: any) => <div key={a.id} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-teal-500"/><span className="text-slate-700">{a.name}</span><span className="text-[10px] text-slate-400">Technical Associate</span></div>)}
+                  {fls.map((fl: any, i: number) => <div key={`fl-${i}`} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-amber-800 font-medium">{fl.name}</span><span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-200">Freelancer · {fl.role === 'FIELD_ENGINEER' ? 'FE' : 'TA'}</span>{fl.phone && <span className="text-[10px] text-slate-400 ml-auto">{fl.phone}</span>}</div>)}
+                  {!lead && !salesLd && assistants.length === 0 && fls.length === 0 && <p className="text-xs text-slate-400 italic">No resources assigned</p>}
+                </div>
+                {va.odooLink && <div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Odoo:</span><a href={va.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">{va.odooLink}</a></div>}
+              </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+                <button onClick={() => setViewingActivity(null)} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-200 rounded-xl">Close</button>
+                <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Edit Activity</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
