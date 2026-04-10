@@ -447,8 +447,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             .map(mId => technicians.find(t => t.id === mId))
                             .filter(Boolean);
 
-                        // Extract freelancers from active activities
-                        const activeFreelancers = activeActs.flatMap(a => (a as any).freelancers || []);
+                        // Extract freelancers from ALL today's activities (show even for PLANNED)
+                        const allFreelancers = todayActs.flatMap(a => (a as any).freelancers || []);
 
                         // Check if this tech is currently working on something
                         const isActiveNow = activeActs.length > 0;
@@ -490,8 +490,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     </span>
                                     ))
                                 )}
-                                {activeFreelancers.length > 0 && (
-                                    activeFreelancers.map((fl: any, i: number) => (
+                                {allFreelancers.length > 0 && (
+                                    allFreelancers.map((fl: any, i: number) => (
                                     <span
                                         key={`fl-${i}`}
                                         className="px-1.5 py-0.5 bg-amber-50 text-[9px] font-medium text-amber-700 rounded flex items-center gap-1 border border-amber-200"
@@ -500,7 +500,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     </span>
                                     ))
                                 )}
-                                {supportingMembers.length === 0 && activeFreelancers.length === 0 && (
+                                {supportingMembers.length === 0 && allFreelancers.length === 0 && (
                                     <span className="text-[9px] text-slate-300 italic">Solo</span>
                                 )}
                                 </div>
