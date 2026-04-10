@@ -1435,6 +1435,16 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
         if (supportingEngineerIds !== undefined) {
             mergedDetails.supportingEngineerIds = supportingEngineerIds;
         }
+        // Validate freelancers array if present (activity-level, no user record)
+        if (mergedDetails.freelancers && Array.isArray(mergedDetails.freelancers)) {
+            mergedDetails.freelancers = mergedDetails.freelancers
+                .filter(f => f && typeof f.name === 'string' && f.name.trim())
+                .map(f => ({
+                    name: f.name.trim(),
+                    role: ['FIELD_ENGINEER','TECHNICAL_ASSOCIATE'].includes(f.role) ? f.role : 'TECHNICAL_ASSOCIATE',
+                    phone: f.phone ? String(f.phone).trim() : ''
+                }));
+        }
 
         // Determine started_at / completed_at based on status transition
         let startedAtClause = "";
