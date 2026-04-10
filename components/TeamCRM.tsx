@@ -42,6 +42,9 @@ const AvatarCropper: React.FC<{
     ctx.beginPath();
     ctx.arc(SIZE / 2, SIZE / 2, SIZE / 2, 0, Math.PI * 2);
     ctx.clip();
+    // Fill with white first to handle PNG transparency (JPEG has no alpha)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, SIZE, SIZE);
     ctx.drawImage(img, offset.x, offset.y, img.width * scale, img.height * scale);
     ctx.restore();
   }, [img, scale, offset]);
@@ -82,6 +85,9 @@ const AvatarCropper: React.FC<{
     ctx.beginPath();
     ctx.arc(128, 128, 128, 0, Math.PI * 2);
     ctx.clip();
+    // Fill white background first (PNG transparency → black without this)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, 256, 256);
     ctx.drawImage(img, offset.x * ratio, offset.y * ratio, img.width * scale * ratio, img.height * scale * ratio);
     onCrop(out.toDataURL('image/jpeg', 0.85));
   };
