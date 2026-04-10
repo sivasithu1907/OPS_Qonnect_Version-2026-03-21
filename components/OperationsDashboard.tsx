@@ -210,6 +210,23 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
       });
   }, [technicians]);
 
+  // Activities with freelancers but no internal engineer assigned — need their own row
+  const unassignedFreelancerActs = useMemo(() => {
+      const today = new Date().toDateString();
+      return activities.filter(a => {
+          if (a.status === 'CANCELLED') return false;
+          // Must have freelancers
+          if (!(a as any).freelancers || (a as any).freelancers.length === 0) return false;
+          // Must NOT have an internal engineer (no leadTechId and no primaryEngineerId)
+          const hasInternalLead = a.leadTechId || (a as any).primaryEngineerId;
+          if (hasInternalLead) return false;
+          // Today's activities only
+          const d = new Date(a.plannedDate || a.createdAt);
+          if (a.status === 'IN_PROGRESS' || a.status === 'ON_MY_WAY' || a.status === 'ARRIVED') return true; // always show active
+          return d.toDateString() === today;
+      });
+  }, [activities]);
+
   const liveFeed = useMemo(() => {
       const today = new Date().toDateString();
       const feedItems = [
@@ -515,6 +532,31 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             </div>
                         );
                     })}
+                    {/* Freelancer-only Jobs Row (no internal engineer assigned) */}
+                    {unassignedFreelancerActs.length > 0 && (
+                        <div className="h-24 border-b border-slate-200 p-3 flex flex-col justify-center bg-amber-50/30">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-9 h-9 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 text-[10px] font-bold">FL</div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-amber-800 text-xs">Freelancer Jobs</span>
+                                        <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">{unassignedFreelancerActs.length}</span>
+                                    </div>
+                                    <div className="text-[10px] text-amber-600">No internal engineer assigned</div>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1 mb-1">
+                                {unassignedFreelancerActs.flatMap(a => (a as any).freelancers || []).map((fl: any, i: number) => (
+                                    <span key={`ufl-${i}`} className="px-1.5 py-0.5 bg-amber-100 text-[9px] font-medium text-amber-700 rounded flex items-center gap-1 border border-amber-200">
+                                        {fl.name.split(' ')[0]} <span className="text-[7px] opacity-60">FL</span>
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="h-1 w-full bg-amber-100 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full bg-amber-400" style={{ width: '100%' }} />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -769,6 +811,59 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 </div>
                             );
                         })}
+                        {/* Freelancer-only timeline row */}
+                        {unassignedFreelancerActs.length > 0 && (
+                            <div className="h-24 border-b border-slate-200 relative w-full bg-amber-50/20">
+                                {unassignedFreelancerActs.map(a => {
+                                    const s = normalizeStatus(a.status);
+                                    const actualStart = (a as any).startedAt;
+                                    const actualEnd = (a as any).completedAt;
+                                    const flCount = ((a as any).freelancers || []).length;
+                                    
+                                    const startTime = (() => {
+                                        if (actualStart && ['DONE','IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status)) return actualStart;
+                                        if (s === 'IN_PROGRESS' && a.updatedAt) return a.updatedAt;
+                                        return a.plannedDate || a.createdAt || new Date().toISOString();
+                                    })();
+                                    const duration = (() => {
+                                        if (s === 'DONE' && actualStart && actualEnd) return Math.max(0.25, (new Date(actualEnd).getTime() - new Date(actualStart).getTime()) / 3600000);
+                                        if (['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status) && actualStart) return Math.max(0.25, (Date.now() - new Date(actualStart).getTime()) / 3600000);
+                                        return a.durationHours || 2;
+                                    })();
+                                    
+                                    const style = getPositionStyle(startTime, duration);
+                                    return (
+                                        <div
+                                            key={a.id}
+                                            className={`absolute top-3 bottom-3 rounded border shadow-sm p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-md hover:ring-2 ring-opacity-50 transition-all z-20 overflow-hidden ${
+                                                s === 'DONE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
+                                                s === 'IN_PROGRESS' ? 'bg-amber-50 border-amber-300 text-amber-900 ring-amber-400' :
+                                                s === 'ON_MY_WAY' ? 'bg-cyan-50 border-cyan-200 text-cyan-800 ring-cyan-400' :
+                                                'bg-amber-50 border-dashed border-amber-300 text-amber-700 opacity-70'
+                                            }`}
+                                            style={style}
+                                            onClick={() => handleItemClick('activity', a.id)}
+                                            title={`${a.description} — Freelancer: ${((a as any).freelancers || []).map((f: any) => f.name).join(', ')}`}
+                                        >
+                                            <div className="flex items-center gap-1 font-bold text-[10px] leading-tight truncate">
+                                                {a.reference}
+                                                {flCount > 0 && (
+                                                    <span className="ml-auto text-[8px] font-bold bg-amber-200 text-amber-700 px-1 rounded shrink-0">FL +{flCount}</span>
+                                                )}
+                                            </div>
+                                            <div className="text-[9px] truncate opacity-80 leading-tight">
+                                                {a.description || a.type}
+                                            </div>
+                                            {(s === 'IN_PROGRESS' || s === 'ON_MY_WAY') && (
+                                                <div className="mt-1 h-0.5 w-full bg-amber-200 rounded-full overflow-hidden">
+                                                    <div className="h-full bg-amber-500 animate-pulse w-2/3"></div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
