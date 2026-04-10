@@ -447,6 +447,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             .map(mId => technicians.find(t => t.id === mId))
                             .filter(Boolean);
 
+                        // Extract freelancers from active activities
+                        const activeFreelancers = activeActs.flatMap(a => (a as any).freelancers || []);
+
                         // Check if this tech is currently working on something
                         const isActiveNow = activeActs.length > 0;
 
@@ -475,9 +478,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         </div>
                                     </div>
                                 </div>
-                                {/* Supporting Team (actual execution) */}
+                                {/* Supporting Team (internal + freelancers) */}
                                 <div className="flex flex-wrap gap-1 mb-1">
-                                {supportingMembers.length > 0 ? (
+                                {supportingMembers.length > 0 && (
                                     supportingMembers.map((assoc: any) => (
                                     <span
                                         key={assoc.id}
@@ -486,7 +489,18 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         <Users size={8} className="text-blue-400" /> {assoc.name.split(' ')[0]}
                                     </span>
                                     ))
-                                ) : (
+                                )}
+                                {activeFreelancers.length > 0 && (
+                                    activeFreelancers.map((fl: any, i: number) => (
+                                    <span
+                                        key={`fl-${i}`}
+                                        className="px-1.5 py-0.5 bg-amber-50 text-[9px] font-medium text-amber-700 rounded flex items-center gap-1 border border-amber-200"
+                                    >
+                                        {fl.name.split(' ')[0]} <span className="text-[7px] opacity-60">FL</span>
+                                    </span>
+                                    ))
+                                )}
+                                {supportingMembers.length === 0 && activeFreelancers.length === 0 && (
                                     <span className="text-[9px] text-slate-300 italic">Solo</span>
                                 )}
                                 </div>
@@ -622,7 +636,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 const isExecution = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status);
                                 const actualStart = (a as any).startedAt;
                                 const actualEnd = (a as any).completedAt;
-                                const supportCount = ((a as any).supportingEngineerIds || []).length;
+                                const supportCount = ((a as any).supportingEngineerIds || []).length + ((a as any).freelancers || []).length;
 
                                 return {
                                     id: a.id,
@@ -931,7 +945,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                              </div>
                          </div>
                          {/* Supporting team members */}
-                         {selectedItem.type === 'activity' && ((selectedItem.data as any).supportingEngineerIds?.length > 0) && (
+                         {selectedItem.type === 'activity' && ((selectedItem.data as any).supportingEngineerIds?.length > 0 || (selectedItem.data as any).freelancers?.length > 0) && (
                              <div className="mt-2 flex flex-wrap gap-1">
                                  <span className="text-[9px] text-slate-400 mr-1">Team:</span>
                                  {((selectedItem.data as any).supportingEngineerIds || []).map((sid: string) => {
@@ -942,6 +956,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                          </span>
                                      ) : null;
                                  })}
+                                 {((selectedItem.data as any).freelancers || []).map((fl: any, i: number) => (
+                                     <span key={`fl-${i}`} className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium border border-amber-200">
+                                         {fl.name.split(' ')[0]} <span className="text-[7px] opacity-60">FL</span>
+                                     </span>
+                                 ))}
                              </div>
                          )}
                      </div>
