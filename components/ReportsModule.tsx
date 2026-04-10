@@ -18,6 +18,7 @@ interface ReportsModuleProps {
   activities: Activity[];
   technicians: Technician[];
   sites: Site[];
+  customers?: any[];
 }
 
 // --- Date Helpers ---
@@ -117,7 +118,7 @@ interface ReportTemplate {
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#64748b', '#8b5cf6'];
 
-const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, technicians, sites }) => {
+const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, technicians, sites, customers = [] }) => {
   const [reportType, setReportType] = useState<'tickets' | 'operations'>('tickets');
   
   // Date Range State - Default: This Month (MTD)
@@ -156,8 +157,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
   // --- Field Definitions ---
   const ticketFields: ReportField[] = useMemo(() => [
       { id: 'id', label: 'Ticket ID', getValue: (t: Ticket) => t.id },
-      { id: 'date', label: 'Created Date', getValue: (t: Ticket) => new Date(t.createdAt).toLocaleDateString() },
-      { id: 'time', label: 'Created Time', getValue: (t: Ticket) => new Date(t.createdAt).toLocaleTimeString() },
+      { id: 'date', label: 'Created Date', getValue: (t: Ticket) => new Date(t.createdAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' }) },
+      { id: 'time', label: 'Created Time', getValue: (t: Ticket) => new Date(t.createdAt).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) },
       { id: 'customer', label: 'Customer Name', getValue: (t: Ticket) => t.customerName },
       { id: 'phone', label: 'Phone Number', getValue: (t: Ticket) => t.phoneNumber },
       { id: 'category', label: 'Category', getValue: (t: Ticket) => t.category },
@@ -166,8 +167,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'status', label: 'Status', getValue: (t: Ticket) => t.status },
       { id: 'tech', label: 'Assigned Engineer', getValue: (t: Ticket) => technicians.find(tech => tech.id === t.assignedTechId)?.name || 'Unassigned' },
       { id: 'desc', label: 'Description', getValue: (t: Ticket) => (t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category || '') },
-      { id: 'started_at', label: 'Actual Start Time', getValue: (t: Ticket) => (t as any).startedAt ? new Date((t as any).startedAt).toLocaleString() : '' },
-      { id: 'completed_at', label: 'Actual Completion Time', getValue: (t: Ticket) => (t as any).completedAt ? new Date((t as any).completedAt).toLocaleString() : '' },
+      { id: 'started_at', label: 'Actual Start Time', getValue: (t: Ticket) => (t as any).startedAt ? new Date((t as any).startedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
+      { id: 'completed_at', label: 'Actual Completion Time', getValue: (t: Ticket) => (t as any).completedAt ? new Date((t as any).completedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
       { id: 'actual_duration', label: 'Actual Duration (Hrs)', getValue: (t: Ticket) => {
           const s = (t as any).startedAt; const e = (t as any).completedAt;
           if (s && e) return ((new Date(e).getTime() - new Date(s).getTime()) / 3600000).toFixed(2);
@@ -177,15 +178,15 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'location', label: 'Location URL', getValue: (t: Ticket) => t.locationUrl || '' },
       { id: 'house', label: 'House Number', getValue: (t: Ticket) => t.houseNumber || '' },
       { id: 'odoo', label: 'Odoo Ref', getValue: (t: Ticket) => t.odooLink || '' },
-      { id: 'updated', label: 'Last Updated', getValue: (t: Ticket) => new Date(t.updatedAt).toLocaleDateString() },
+      { id: 'updated', label: 'Last Updated', getValue: (t: Ticket) => new Date(t.updatedAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' }) },
   ], [technicians]);
 
   const activityFields: ReportField[] = useMemo(() => [
       { id: 'ref', label: 'Reference', getValue: (a: Activity) => a.reference },
-      { id: 'date', label: 'Planned Date', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleDateString() },
-      { id: 'time', label: 'Planned Time', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleTimeString() },
-      { id: 'started_at', label: 'Actual Start Time', getValue: (a: Activity) => (a as any).startedAt ? new Date((a as any).startedAt).toLocaleString() : '' },
-      { id: 'completed_at', label: 'Actual Completion Time', getValue: (a: Activity) => (a as any).completedAt ? new Date((a as any).completedAt).toLocaleString() : '' },
+      { id: 'date', label: 'Planned Date', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' }) },
+      { id: 'time', label: 'Planned Time', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) },
+      { id: 'started_at', label: 'Actual Start Time', getValue: (a: Activity) => (a as any).startedAt ? new Date((a as any).startedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
+      { id: 'completed_at', label: 'Actual Completion Time', getValue: (a: Activity) => (a as any).completedAt ? new Date((a as any).completedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
       { id: 'actual_duration', label: 'Actual Duration (Hrs)', getValue: (a: Activity) => {
           const s = (a as any).startedAt; const e = (a as any).completedAt;
           if (s && e) return ((new Date(e).getTime() - new Date(s).getTime()) / 3600000).toFixed(2);
@@ -194,7 +195,13 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'planned_duration', label: 'Planned Duration (Hrs)', getValue: (a: Activity) => a.durationHours.toString() },
       { id: 'type', label: 'Activity Type', getValue: (a: Activity) => a.type },
       { id: 'category', label: 'Service Category', getValue: (a: Activity) => (a as any).serviceCategory || '' },
-      { id: 'site', label: 'Site / Customer', getValue: (a: Activity) => sites.find(s => s.id === a.siteId)?.name || (a as any).houseNumber || 'Unknown' },
+      { id: 'site', label: 'Site / Customer', getValue: (a: Activity) => {
+          const customer = customers.find((c: any) => c.id === (a as any).customerId);
+          if (customer) return customer.name;
+          const site = sites.find(s => s.id === a.siteId);
+          if (site) return site.name;
+          return (a as any).houseNumber || 'Unknown';
+      }},
       { id: 'status', label: 'Status', getValue: (a: Activity) => a.status },
       { id: 'priority', label: 'Priority', getValue: (a: Activity) => a.priority },
       { id: 'lead', label: 'Lead Engineer', getValue: (a: Activity) => technicians.find(t => t.id === a.leadTechId)?.name || 'Unassigned' },
@@ -203,7 +210,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'escalation', label: 'Escalation Level', getValue: (a: Activity) => a.escalationLevel ? `L${a.escalationLevel}` : 'Normal' },
       { id: 'delay', label: 'Delay Reason', getValue: (a: Activity) => a.delayReason || '' },
       { id: 'odoo', label: 'Odoo Ref', getValue: (a: Activity) => a.odooLink || '' },
-  ], [technicians, sites]);
+  ], [technicians, sites, customers]);
 
   const availableFields = reportType === 'tickets' ? ticketFields : activityFields;
 
@@ -319,7 +326,12 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       const buckets: Record<number, { name: string, count: number }> = {};
 
       filteredData.forEach((item: any) => {
-          const dateObj = new Date(item.createdAt || item.plannedDate);
+          // For tickets use createdAt; for activities use plannedDate
+          const dateObj = new Date(
+            reportType === 'tickets' 
+              ? (item.createdAt || item.plannedDate) 
+              : (item.plannedDate || item.createdAt)
+          );
           let bucketTime = 0;
           let label = '';
 
@@ -364,7 +376,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
         .map(Number)
         .sort((a, b) => a - b)
         .map(time => ({ date: buckets[time].name, count: buckets[time].count }));
-  }, [filteredData, startDate, endDate]);
+  }, [filteredData, startDate, endDate, reportType]);
 
   // --- Modal Logic ---
 
@@ -600,19 +612,52 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                 </div>
                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                     <p className="text-xs font-bold text-slate-500 uppercase">Status Breakdown</p>
-                    <div className="flex gap-1 mt-3 h-2 w-full rounded-full overflow-hidden">
-                        {statusData.map((d, i) => (
-                            <div key={i} style={{ width: `${(d.value / filteredData.length) * 100}%`, backgroundColor: d.color }} />
-                        ))}
-                    </div>
-                    <div className="flex gap-3 mt-2 text-[10px] text-slate-500">
-                        {statusData.slice(0, 3).map((d, i) => (
-                             <div key={i} className="flex items-center gap-1">
-                                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                                 <span>{d.name} ({Math.round((d.value/filteredData.length)*100)}%)</span>
-                             </div>
-                        ))}
-                    </div>
+                    {filteredData.length > 0 ? (
+                      <>
+                        <div className="flex gap-1 mt-3 h-2 w-full rounded-full overflow-hidden">
+                            {statusData.map((d, i) => (
+                                <div key={i} style={{ width: `${(d.value / (filteredData.length || 1)) * 100}%`, backgroundColor: d.color }} />
+                            ))}
+                        </div>
+                        <div className="flex gap-3 mt-2 text-[10px] text-slate-500">
+                            {statusData.slice(0, 3).map((d, i) => (
+                                 <div key={i} className="flex items-center gap-1">
+                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
+                                     <span>{d.name} ({Math.round((d.value/(filteredData.length || 1))*100)}%)</span>
+                                 </div>
+                            ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-400 mt-3 italic">No data for selected period</p>
+                    )}
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-xs font-bold text-slate-500 uppercase">
+                        {reportType === 'tickets' ? 'Resolved' : 'Completed'}
+                    </p>
+                    <h3 className="text-3xl font-bold text-emerald-600 mt-2">
+                        {filteredData.filter((d: any) => d.status === 'RESOLVED' || d.status === 'DONE').length}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                        {filteredData.length > 0 ? `${Math.round((filteredData.filter((d: any) => d.status === 'RESOLVED' || d.status === 'DONE').length / filteredData.length) * 100)}% completion rate` : '—'}
+                    </p>
+                </div>
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-xs font-bold text-slate-500 uppercase">
+                        {reportType === 'tickets' ? 'Avg Resolution' : 'Avg Duration'}
+                    </p>
+                    <h3 className="text-3xl font-bold text-slate-900 mt-2">
+                        {(() => {
+                            const completed = filteredData.filter((d: any) => (d.startedAt && d.completedAt));
+                            if (completed.length === 0) return '—';
+                            const avg = completed.reduce((sum: number, d: any) => {
+                                return sum + (new Date(d.completedAt).getTime() - new Date(d.startedAt).getTime()) / 3600000;
+                            }, 0) / completed.length;
+                            return avg < 1 ? `${Math.round(avg * 60)}m` : `${avg.toFixed(1)}h`;
+                        })()}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-1">Based on actual timestamps</p>
                 </div>
             </div>
 
