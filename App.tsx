@@ -402,6 +402,8 @@ const handleLogout = () => {
               body: JSON.stringify(payload)
           });
           if (res.ok) await loadActivities(); // Refresh from DB
+          // Sync location/building to customer if provided
+          syncActivityLocationToCustomer(act);
       } catch (e) { console.error("Failed to add activity", e); }
   };
 
@@ -413,7 +415,35 @@ const handleLogout = () => {
               body: JSON.stringify(updated)
           });
           if (res.ok) await loadActivities(); // Refresh from DB
+          // Sync location/building to customer if provided
+          syncActivityLocationToCustomer(updated);
       } catch (e) { console.error("Failed to update activity", e); }
+  };
+
+  // When an activity has a customer + location/building, update the customer record if its fields are empty
+  const syncActivityLocationToCustomer = async (act: any) => {
+      try {
+          const custId = act.customerId;
+          if (!custId) return;
+          const cust = customers.find(c => c.id === custId);
+          if (!cust) return;
+          const locationUrl = act.locationUrl || '';
+          const houseNumber = act.houseNumber || '';
+          if (!locationUrl && !houseNumber) return;
+          // Only update if the customer's fields are empty
+          const needsAddress = !cust.address && locationUrl;
+          const needsBuilding = !(cust as any).buildingNumber && houseNumber;
+          if (!needsAddress && !needsBuilding) return;
+          await fetch(`/api/customers/${encodeURIComponent(custId)}`, {
+              method: "PUT",
+              headers: getAuthHeaders(),
+              body: JSON.stringify({
+                  ...(needsAddress ? { address: locationUrl } : {}),
+                  ...(needsBuilding ? { buildingNumber: houseNumber } : {})
+              })
+          });
+          await loadCustomers();
+      } catch (e) { /* silent — non-critical sync */ }
   };
 
   const handleDeleteActivity = async (id: string) => {
