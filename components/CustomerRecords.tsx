@@ -277,7 +277,11 @@ onSaveCustomer(data as Customer);
                                 </div>
                                 <div className="flex items-start gap-2 text-xs text-slate-500 mb-2">
                                     <MapPin size={12} className="mt-0.5 shrink-0"/>
-                                    <span className="truncate">{cust.address || 'No location set'}</span>
+                                    <span className="truncate">
+                                        {cust.buildingNumber && cust.buildingNumber !== 'N/A' ? cust.buildingNumber : ''}
+                                        {cust.buildingNumber && cust.address && cust.address.startsWith('http') ? ' · ' : ''}
+                                        {cust.address && cust.address.startsWith('http') ? 'Map linked' : (cust.address || 'No location set')}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700">
@@ -336,9 +340,21 @@ onSaveCustomer(data as Customer);
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-slate-600 max-w-xs">
-                                            <div className="truncate">{cust.address || '-'}</div>
-                                            {cust.buildingNumber && <div className="text-xs text-slate-400 mt-0.5">Bldg: {cust.buildingNumber}</div>}
+                                        <td className="px-6 py-4 text-slate-600">
+                                            <div>
+                                                {cust.buildingNumber && cust.buildingNumber !== 'N/A' ? (
+                                                    <div className="font-medium text-slate-800">{cust.buildingNumber}</div>
+                                                ) : (
+                                                    <div className="text-slate-400 text-xs italic">No building</div>
+                                                )}
+                                                {cust.address && cust.address.startsWith('http') ? (
+                                                    <a href={cust.address} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
+                                                        <MapPin size={10} /> View Map
+                                                    </a>
+                                                ) : cust.address && cust.address !== cust.buildingNumber ? (
+                                                    <div className="text-xs text-slate-500 truncate max-w-[200px] mt-0.5">{cust.address}</div>
+                                                ) : null}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
