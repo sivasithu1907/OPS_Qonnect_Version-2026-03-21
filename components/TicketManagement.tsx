@@ -29,7 +29,7 @@ interface TicketManagementProps {
   technicians: Technician[];
   // Pass full customer list and creation handler
   customers?: Customer[]; 
-  onAddCustomer?: (customer: Customer) => void;
+  onAddCustomer?: (customer: Customer) => Promise<Customer | null> | void;
   
   onUpdateTicket: (ticket: Ticket) => void;
   onOpenTicket?: (ticket: Ticket) => void;
@@ -488,7 +488,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   };
 
   // --- Inline Client Creation Helper ---
-  const handleInlineCreateClient = () => {
+  const handleInlineCreateClient = async () => {
       if (!editForm) return;
       if (!newClientName.trim()) {
           alert('Client Name is required');
@@ -498,17 +498,22 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       const newCustomer: Customer = {
           id: `c${Date.now()}`,
           name: newClientName.trim(),
-          phone: editForm.phoneNumber, // Use phone from ticket
+          phone: editForm.phoneNumber || '', // Use phone from ticket
           address: '',
           email: '',
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(newClientName.trim())}&background=random`
       };
 
-      onAddCustomer(newCustomer);
+      // Await the API call to get the DB-generated customer (with proper QNC-CUST-XXXX ID)
+      const created = await onAddCustomer(newCustomer);
+      
+      // Use the DB-created customer ID, fall back to local ID if API failed
+      const finalId = created?.id || newCustomer.id;
+      const finalName = created?.name || newCustomer.name;
       
       // Update form to link to new customer
-      updateField('customerId', newCustomer.id);
-      updateField('customerName', newCustomer.name);
+      updateField('customerId', finalId);
+      updateField('customerName', finalName);
       
       setClientLinkMode('view');
       setNewClientName('');
@@ -580,7 +585,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       }
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       
       if (!createForm.category || !createForm.type || !createForm.priority || !createForm.description || !createForm.locationUrl || !createForm.houseNumber) {
@@ -615,11 +620,14 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               buildingNumber: createForm.houseNumber
           };
 
-          onAddCustomer(newCustomer);
+          // Await API to get the DB-generated customer ID (QNC-CUST-XXXX)
+          const created = await onAddCustomer(newCustomer);
+          const finalCustomerId = created?.id || newCustomer.id;
+          const finalCustomerName = created?.name || newCustomer.name;
 
           onCreateTicket({
-              customerId: newCustomer.id,
-              customerName: newCustomer.name,
+              customerId: finalCustomerId,
+              customerName: finalCustomerName,
               phoneNumber: newCustomer.phone,
               category: createForm.category,
               type: createForm.type as TicketType,
