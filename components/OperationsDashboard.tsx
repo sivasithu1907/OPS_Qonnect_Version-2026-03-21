@@ -247,14 +247,14 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                   id: a.id,
                   type: 'activity' as const,
                   refLine: a.reference,
-                  clientLine: sites.find(s=>s.id===a.siteId)?.clientName || 'Client Site',
+                  clientLine: customers.find(c=>c.id===a.customerId)?.name || sites.find(s=>s.id===a.siteId)?.name || a.houseNumber || 'Unknown Client',
                   descLine: a.description || a.type,
                   time: new Date(a.updatedAt || a.createdAt),
                   status: a.status
               }))
       ];
       return feedItems.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 20);
-  }, [tickets, activities, sites]);
+  }, [tickets, activities, sites, customers]);
 
   const metrics = useMemo(() => {
     const todayDate = new Date().toDateString();
@@ -956,7 +956,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                          </h4>
                          <div className="text-xs text-slate-700 font-medium">
                             {selectedItem.type === 'activity' ? 
-                                (sites.find(s=>s.id===(selectedItem.data as Activity).siteId)?.name || (selectedItem.data as Activity).houseNumber || 'Client Site') : 
+                                (customers.find(c=>c.id===(selectedItem.data as Activity).customerId)?.name || sites.find(s=>s.id===(selectedItem.data as Activity).siteId)?.name || (selectedItem.data as Activity).houseNumber || 'Unknown Client') : 
                                 ((selectedItem.data as Ticket).houseNumber || 'Location Provided')}
                          </div>
                          {selectedItem.data.locationUrl && (
