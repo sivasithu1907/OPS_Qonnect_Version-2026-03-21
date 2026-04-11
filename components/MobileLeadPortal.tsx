@@ -26,9 +26,10 @@ interface MobileLeadPortalProps {
   onUpdateActivity?: (activity: Activity) => void;
   onAddActivity?: (activity: any) => void;
   onDeleteActivity?: (id: string) => void;
-  onAddCustomer?: (customer: Customer) => void;
+  onAddCustomer?: (customer: Customer) => Promise<Customer | null> | void;
   onSaveCustomer?: (customer: Customer) => void;
   onDeleteCustomer?: (id: string) => void;
+  onCreateTicket?: (data: any) => void;
   
   isStandalone?: boolean;
   onLogout?: () => void;
@@ -84,7 +85,7 @@ const engineerTeamMap: Record<string, string> = {
 // --- MAIN COMPONENT ---
 export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({ 
     tickets, technicians, activities = [], teams = [], sites = [], customers = [],
-    onUpdateTicket, onUpdateActivity, onAddActivity, onDeleteActivity, onAddCustomer, onSaveCustomer, onDeleteCustomer,
+    onUpdateTicket, onUpdateActivity, onAddActivity, onDeleteActivity, onAddCustomer, onSaveCustomer, onDeleteCustomer, onCreateTicket,
     isStandalone = false, onLogout, onChangePassword, focusedTicketId, currentUserId
 }) => {
   // --- Responsive Check ---
@@ -110,6 +111,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [modalType, setModalType] = useState<'dispatch' | 'cancel' | 'carry' | 'job_carry' | 'job_complete' | 'activity_job_carry' | 'activity_job_complete' | 'activity_dispatch' | null>(null);
   const [modalTicket, setModalTicket] = useState<Ticket | null>(null);
   const [modalActivity, setModalActivity] = useState<Activity | null>(null);
+  
+  // Create Ticket State
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [createTicketForm, setCreateTicketForm] = useState({
+    customerName: '', phone: '', category: '', type: '', priority: 'MEDIUM',
+    description: '', locationUrl: '', houseNumber: ''
+  });
   
   // Detail Sheets State
   const [viewTech, setViewTech] = useState<Technician | null>(null);
@@ -920,14 +928,24 @@ const TeamView = () => {
           <div className="h-full overflow-y-auto custom-scrollbar pb-24">
               {activeTab === 'live' && (
                   <div className="p-4 space-y-6">
-                      <div className="relative">
-                          <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
-                          <input 
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              placeholder="Search tickets..."
-                              className={SEARCH_INPUT_STYLES}
-                          />
+                      <div className="flex gap-2">
+                          <div className="relative flex-1">
+                              <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                              <input 
+                                  value={searchTerm}
+                                  onChange={(e) => setSearchTerm(e.target.value)}
+                                  placeholder="Search tickets..."
+                                  className={SEARCH_INPUT_STYLES}
+                              />
+                          </div>
+                          {onCreateTicket && (
+                              <button 
+                                  onClick={() => setShowCreateTicket(true)}
+                                  className="bg-slate-900 text-white px-3 rounded-xl flex items-center gap-1 text-xs font-bold shrink-0"
+                              >
+                                  <Plus size={14} /> Ticket
+                              </button>
+                          )}
                       </div>
                       {newTickets.length > 0 && (
                           <div>
@@ -2241,6 +2259,114 @@ const TeamView = () => {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Ticket Modal */}
+      {showCreateTicket && onCreateTicket && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowCreateTicket(false)}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <h3 className="font-bold text-lg text-slate-900">Create Ticket</h3>
+              <button onClick={() => setShowCreateTicket(false)}><X size={20} className="text-slate-400" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Customer Name *</label>
+                <input value={createTicketForm.customerName} onChange={e => setCreateTicketForm(p => ({...p, customerName: e.target.value}))}
+                  placeholder="e.g. Ahmed Al Thani" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Phone *</label>
+                <input value={createTicketForm.phone} onChange={e => setCreateTicketForm(p => ({...p, phone: e.target.value}))}
+                  placeholder="+974 XXXX XXXX" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Category *</label>
+                  <select value={createTicketForm.category} onChange={e => setCreateTicketForm(p => ({...p, category: e.target.value}))}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
+                    <option value="">Select</option>
+                    <option value="ELV Systems">ELV Systems</option>
+                    <option value="Home Automation">Home Automation</option>
+                    <option value="IT Network">IT Network</option>
+                    <option value="CCTV">CCTV</option>
+                    <option value="Access Control">Access Control</option>
+                    <option value="Intercom">Intercom</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Type *</label>
+                  <select value={createTicketForm.type} onChange={e => setCreateTicketForm(p => ({...p, type: e.target.value}))}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
+                    <option value="">Select</option>
+                    <option value="SERVICE">Service</option>
+                    <option value="INSTALLATION">Installation</option>
+                    <option value="MAINTENANCE">Maintenance</option>
+                    <option value="COMPLAINT">Complaint</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Priority</label>
+                <div className="flex gap-2 mt-1">
+                  {['LOW','MEDIUM','HIGH','URGENT'].map(p => (
+                    <button key={p} type="button" onClick={() => setCreateTicketForm(prev => ({...prev, priority: p}))}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${createTicketForm.priority === p
+                        ? p === 'URGENT' ? 'bg-red-500 text-white' : p === 'HIGH' ? 'bg-orange-500 text-white' : p === 'MEDIUM' ? 'bg-slate-900 text-white' : 'bg-slate-600 text-white'
+                        : 'bg-slate-100 text-slate-500'}`}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Description *</label>
+                <textarea value={createTicketForm.description} onChange={e => setCreateTicketForm(p => ({...p, description: e.target.value}))}
+                  rows={3} placeholder="Describe the issue..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Location URL</label>
+                <input value={createTicketForm.locationUrl} onChange={e => setCreateTicketForm(p => ({...p, locationUrl: e.target.value}))}
+                  placeholder="Google Maps link" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">House / Building No.</label>
+                <input value={createTicketForm.houseNumber} onChange={e => setCreateTicketForm(p => ({...p, houseNumber: e.target.value}))}
+                  placeholder="e.g. Villa 42" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+              <button onClick={() => setShowCreateTicket(false)} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+              <button onClick={async () => {
+                if (!createTicketForm.customerName.trim() || !createTicketForm.phone.trim() || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
+                  alert('Please fill all required fields');
+                  return;
+                }
+                // Create customer first
+                const newCust: Customer = {
+                  id: `c${Date.now()}`, name: createTicketForm.customerName.trim(),
+                  phone: createTicketForm.phone.trim(), address: createTicketForm.houseNumber, email: '',
+                  avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(createTicketForm.customerName.trim())}&background=random`
+                };
+                const created = onAddCustomer ? await onAddCustomer(newCust) : null;
+                const custId = created?.id || newCust.id;
+                const custName = created?.name || newCust.name;
+
+                onCreateTicket({
+                  customerId: custId, customerName: custName,
+                  phoneNumber: createTicketForm.phone.trim(),
+                  category: createTicketForm.category, type: createTicketForm.type,
+                  priority: createTicketForm.priority,
+                  initialMessage: createTicketForm.description.trim(),
+                  locationUrl: createTicketForm.locationUrl, houseNumber: createTicketForm.houseNumber
+                });
+                setShowCreateTicket(false);
+                setCreateTicketForm({ customerName: '', phone: '', category: '', type: '', priority: 'MEDIUM', description: '', locationUrl: '', houseNumber: '' });
+              }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Create Ticket</button>
             </div>
           </div>
         </div>
