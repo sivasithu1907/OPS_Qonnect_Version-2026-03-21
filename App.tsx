@@ -826,6 +826,7 @@ useEffect(() => {
           onAddCustomer={handleAddCustomer}
           onSaveCustomer={handleUpdateCustomer}
           onDeleteCustomer={handleDeleteCustomer}
+          onCreateTicket={handleCreateTicket}
           isStandalone={true}
 	  onLogout={handleLogout}
           onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
