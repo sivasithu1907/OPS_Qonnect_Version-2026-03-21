@@ -54,6 +54,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const [cpForm, setCpForm] = useState({ current: '', next: '', confirm: '' });
   const [cpError, setCpError] = useState('');
   const [cpSuccess, setCpSuccess] = useState(false);
+  const [carryForwardIssue, setCarryForwardIssue] = useState('');
   const [carryForwardRemark, setCarryForwardRemark] = useState('');
   const [carryForwardDatetime, setCarryForwardDatetime] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -256,14 +257,16 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       const min = String(now.getMinutes()).padStart(2, '0');
 
       setCarryForwardDatetime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
+      setCarryForwardIssue('');
       setCarryForwardRemark('');
       setIsCarryForwardOpen(true);
   };
 
   const handleConfirmCarryForward = () => {
-      if (!carryForwardRemark.trim() || !carryForwardDatetime) return;
+      if (!carryForwardIssue.trim() || !carryForwardDatetime) return;
 
       const nextIso = new Date(carryForwardDatetime).toISOString();
+      const combinedNote = carryForwardIssue ? `Issue: ${carryForwardIssue}${carryForwardRemark ? '\nRemark: ' + carryForwardRemark : ''}` : carryForwardRemark;
 
       if (activeJobItem?.type === 'ticket') {
           const t = activeJobItem.data as Ticket;
@@ -271,7 +274,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
               onUpdateTicket({
                   ...t,
                   status: TicketStatus.CARRY_FORWARD,
-                  carryForwardNote: carryForwardRemark,
+                  carryForwardNote: combinedNote,
                   nextPlannedAt: nextIso,
                   updatedAt: new Date().toISOString()
               });
@@ -285,7 +288,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                   ...a,
                   status: 'PLANNED', // Re-queue
                   plannedDate: nextIso,
-                  remarks: carryForwardRemark ? (a.remarks ? a.remarks + '\n' + carryForwardRemark : carryForwardRemark) : a.remarks,
+                  remarks: combinedNote ? (a.remarks ? a.remarks + '\n---\n' + combinedNote : combinedNote) : a.remarks,
                   updatedAt: new Date().toISOString()
               });
           }
@@ -791,13 +794,24 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Reason / Remark <span className="text-red-500">*</span></label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Issue <span className="text-red-500">*</span></label>
+                                    <textarea 
+                                        value={carryForwardIssue}
+                                        onChange={e => setCarryForwardIssue(e.target.value)}
+                                        className={INPUT_STYLES}
+                                        rows={3}
+                                        placeholder="What is the issue?"
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Remark / Description</label>
                                     <textarea 
                                         value={carryForwardRemark}
                                         onChange={e => setCarryForwardRemark(e.target.value)}
                                         className={INPUT_STYLES}
                                         rows={3}
-                                        placeholder="Why is the job being carried forward?"
+                                        placeholder="Additional notes or remarks..."
                                     />
                                 </div>
                                 
@@ -821,7 +835,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     </button>
                                     <button 
                                         onClick={handleConfirmCarryForward}
-                                        disabled={!carryForwardRemark.trim() || !carryForwardDatetime}
+                                        disabled={!carryForwardIssue.trim() || !carryForwardDatetime}
                                         className="flex-[2] py-3.5 rounded-xl font-bold text-white bg-slate-900 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Confirm
