@@ -127,6 +127,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   // Action Form State
   const [actionNote, setActionNote] = useState('');
+  const [carryIssue, setCarryIssue] = useState(''); // Issue field for carry forward
   const [selectedTechId, setSelectedTechId] = useState('');
   const [assignedTeamLead, setAssignedTeamLead] = useState('');
 
@@ -342,10 +343,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       onUpdateTicket({
           ...modalTicket,
           status: TicketStatus.IN_PROGRESS, 
-          carryForwardNote: actionNote,
+          carryForwardNote: carryIssue ? `Issue: ${carryIssue}\nRemark: ${actionNote}` : actionNote,
           nextPlannedAt: nextDate, 
           updatedAt: new Date().toISOString()
-      });
+      } as any);
       closeModal();
       setViewTicket(null);
   };
@@ -391,9 +392,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             Math.abs(parseInt(curr) - mins) < Math.abs(parseInt(prev) - mins) ? curr : prev
           );
       }
-      // Init datetime-local to existing appointment or +1 hour from now
-      const initDt = existingDate && !isNaN(existingDate.getTime()) && existingDate > new Date()
-          ? existingDate
+      // Init datetime-local to existing selected date or default +1 hour from now
+      const existingParsed = nextDate ? new Date(nextDate) : null;
+      const initDt = existingParsed && !isNaN(existingParsed.getTime()) && existingParsed > new Date()
+          ? existingParsed
           : (() => { const d = new Date(); d.setHours(d.getHours()+1, 0, 0, 0); return d; })();
       const pad = (n: number) => String(n).padStart(2,'0');
       setTempDatetime(`${initDt.getFullYear()}-${pad(initDt.getMonth()+1)}-${pad(initDt.getDate())}T${pad(initDt.getHours())}:${pad(initDt.getMinutes())}`);
@@ -416,6 +418,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       setModalTicket(null);
       setModalActivity(null);
       setActionNote('');
+      setCarryIssue('');
       setSelectedTechId('');
       setNextDate('');
       setShowDatePicker(false);
@@ -600,7 +603,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       );
   };
 
-const ActivityJobCard: React.FC<{ activity: Activity }> = ({ activity }) => {
+  const ActivityJobCard: React.FC<{ activity: Activity }> = ({ activity }) => {
     const act = activity as any;
     const actStatus = act.status || 'PLANNED';
     const actCustomer = customers?.find((c: any) => c.id === act.customerId);
@@ -693,9 +696,9 @@ const ActivityJobCard: React.FC<{ activity: Activity }> = ({ activity }) => {
             </div>
         </div>
     );
-};
+  };
 
-const TeamView = () => {
+  const TeamView = () => {
       return (
           <div className="p-4 space-y-3 pb-24">
               <h3 className="font-bold text-slate-800 text-lg mb-4">Field Team Status</h3>
@@ -1885,14 +1888,24 @@ const TeamView = () => {
                         </div>
                         <div className="p-6 space-y-4 overflow-y-auto flex-1">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Remark <span className="text-red-500">*</span></label>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Issue <span className="text-red-500">*</span></label>
+                                <textarea 
+                                    value={carryIssue} 
+                                    onChange={e => setCarryIssue(e.target.value)}
+                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl text-[#111827] placeholder-[#9CA3AF] px-4 py-3.5 text-sm leading-[1.4] focus:outline-none focus:ring-0 focus:border-[#F5B301] transition-colors resize-none"
+                                    placeholder="What is the issue?"
+                                    rows={3}
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Remark / Description</label>
                                 <textarea 
                                     value={actionNote} 
                                     onChange={e => setActionNote(e.target.value)}
                                     className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl text-[#111827] placeholder-[#9CA3AF] px-4 py-3.5 text-sm leading-[1.4] focus:outline-none focus:ring-0 focus:border-[#F5B301] transition-colors resize-none"
-                                    placeholder="Reason for carry forward..."
-                                    rows={4}
-                                    autoFocus
+                                    placeholder="Additional notes or remarks..."
+                                    rows={3}
                                 />
                             </div>
                             
@@ -1909,7 +1922,7 @@ const TeamView = () => {
                                         <span className="text-[#94A3B8] text-sm">Select date & time...</span>
                                     )}
                                 </div>
-                                {(!nextDate && actionNote.trim()) && (
+                                {(!nextDate && carryIssue.trim()) && (
                                     <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
                                         <AlertTriangle size={10} /> Please select next visit date & time.
                                     </p>
@@ -1918,7 +1931,7 @@ const TeamView = () => {
 
                             <button 
                                 onClick={executeJobCarry}
-                                disabled={!actionNote.trim() || !nextDate}
+                                disabled={!carryIssue.trim() || !nextDate}
                                 className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed active:bg-emerald-600/20"
                             >
                                 Schedule Visit
@@ -1944,14 +1957,24 @@ const TeamView = () => {
             </div>
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Remark <span className="text-red-500">*</span></label>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Issue <span className="text-red-500">*</span></label>
+                    <textarea 
+                        value={carryIssue} 
+                        onChange={e => setCarryIssue(e.target.value)}
+                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl text-[#111827] placeholder-[#9CA3AF] px-4 py-3.5 text-sm leading-[1.4] focus:outline-none focus:ring-0 focus:border-[#F5B301] transition-colors resize-none"
+                        placeholder="What is the issue?"
+                        rows={3}
+                        autoFocus
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Remark / Description</label>
                     <textarea 
                         value={actionNote} 
                         onChange={e => setActionNote(e.target.value)}
                         className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl text-[#111827] placeholder-[#9CA3AF] px-4 py-3.5 text-sm leading-[1.4] focus:outline-none focus:ring-0 focus:border-[#F5B301] transition-colors resize-none"
-                        placeholder="Reason for carry forward..."
-                        rows={4}
-                        autoFocus
+                        placeholder="Additional notes or remarks..."
+                        rows={3}
                     />
                 </div>
 
@@ -1968,7 +1991,7 @@ const TeamView = () => {
                             <span className="text-[#94A3B8] text-sm">Select date & time...</span>
                         )}
                     </div>
-                    {(!nextDate && actionNote.trim()) && (
+                    {(!nextDate && carryIssue.trim()) && (
                         <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
                             <AlertTriangle size={10} /> Please select next visit date & time.
                         </p>
@@ -1983,13 +2006,13 @@ const TeamView = () => {
                             ...a,
                             status: 'PLANNED',
                             plannedDate: nextDate,
-                            remarks: actionNote ? (a.remarks ? a.remarks + '\n' + actionNote : actionNote) : a.remarks,
+                            remarks: carryIssue ? `Issue: ${carryIssue}${actionNote ? '\nRemark: ' + actionNote : ''}${a.remarks ? '\n---\n' + a.remarks : ''}` : a.remarks,
                             updatedAt: new Date().toISOString()
                         });
                         closeModal();
                         setViewActivity(null);
                     }}
-                    disabled={!actionNote.trim() || !nextDate}
+                    disabled={!carryIssue.trim() || !nextDate}
                     className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed active:bg-emerald-600/20"
                 >
                     Schedule Visit
