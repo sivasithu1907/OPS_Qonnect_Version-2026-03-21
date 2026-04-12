@@ -437,8 +437,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
   const isDetailValid = () => {
       if (!editForm) return false;
-      // Location and House Number are required for readiness
-      return editForm.locationUrl.trim() !== '' && editForm.houseNumber.trim() !== '';
+      // Location and House Number are optional — always valid
+      return true;
   };
 
   const handleSaveChanges = () => {
@@ -576,7 +576,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   // --- Create Form Logic ---
   const isCreateFormValid = () => {
       const { customerId, category, type, priority, description, locationUrl, houseNumber, customerName, phone } = createForm;
-      const baseValid = category !== '' && type !== '' && priority !== '' && description.trim() !== '' && locationUrl.trim() !== '' && houseNumber.trim() !== '';
+      const baseValid = category !== '' && type !== '' && priority !== '' && description.trim() !== '';
       
       if (isNewClientMode) {
           return baseValid && customerName.trim() !== '' && phone.trim() !== '' && !duplicateWarning;
@@ -588,7 +588,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const handleCreateSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       
-      if (!createForm.category || !createForm.type || !createForm.priority || !createForm.description || !createForm.locationUrl || !createForm.houseNumber) {
+      if (!createForm.category || !createForm.type || !createForm.priority || !createForm.description) {
           return; 
       }
 
@@ -1162,14 +1162,13 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 </div>
                 <div className="pt-2 border-t border-slate-200">
                     <h4 className="text-xs font-bold text-slate-800 uppercase mb-3 flex items-center gap-2">
-                        <MapPin size={12} /> Service Location <span className="text-red-500">*</span>
+                        <MapPin size={12} /> Service Location
                     </h4>
                     <div className="space-y-3">
                         <div>
                             <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Map URL</label>
                             <input 
                                 type="text" 
-                                required 
                                 value={getFormValue('locationUrl') as string} 
                                 onChange={(e) => updateField('locationUrl', e.target.value)} 
                                 className={INPUT_STYLES}
@@ -1180,7 +1179,6 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">House / Building No.</label>
                             <input 
                                 type="text" 
-                                required 
                                 value={getFormValue('houseNumber') as string} 
                                 onChange={(e) => updateField('houseNumber', e.target.value)} 
                                 className={INPUT_STYLES}
@@ -1348,21 +1346,19 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <h4 className="text-xs font-bold text-slate-700 uppercase mb-3">Location Details</h4>
                     <div className="grid grid-cols-1 gap-3">
                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold text-slate-500 uppercase">Location URL <span className="text-red-500">*</span></label>
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase">Location URL</label>
                             <input 
                                 value={createForm.locationUrl}
                                 onChange={(e) => setCreateForm({...createForm, locationUrl: e.target.value})}
-                                required 
                                 className={INPUT_STYLES}
                                 placeholder="Google Maps Link"
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold text-slate-500 uppercase">House Number <span className="text-red-500">*</span></label>
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase">House Number</label>
                             <input 
                                 value={createForm.houseNumber}
                                 onChange={(e) => setCreateForm({...createForm, houseNumber: e.target.value})}
-                                required 
                                 className={INPUT_STYLES}
                                 placeholder="Building/Villa No."
                             />
