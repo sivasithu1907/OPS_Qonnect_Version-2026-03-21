@@ -704,7 +704,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               <input type="url" name="locationUrl" defaultValue={editingActivity?.locationUrl} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                           <div className="space-y-1">
-                              <label className="text-xs font-semibold text-slate-500 uppercase">Home Number <span className="text-red-500">*</span></label>
+                              <label className="text-xs font-semibold text-slate-500 uppercase">House Number</label>
                               <input type="text" name="houseNumber" defaultValue={editingActivity?.houseNumber} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                       </div>
