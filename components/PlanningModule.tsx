@@ -18,7 +18,7 @@ interface PlanningModuleProps {
   onAddActivity: (activity: Omit<Activity, 'id' | 'reference' | 'createdAt' | 'updatedAt'>) => void;
   onUpdateActivity: (activity: Activity) => void;
   onDeleteActivity: (id: string) => void;
-  onAddCustomer?: (customer: Customer) => void;
+  onAddCustomer?: (customer: Customer) => Promise<Customer | null> | void;
   isMobile?: boolean; // New prop for mobile responsiveness
   initialActivityId?: string | null;
   onClearInitialActivity?: () => void;
@@ -700,12 +700,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       </h4>
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
-                              <label className="text-xs font-semibold text-slate-500 uppercase">Location URL <span className="text-red-500">*</span></label>
-                              <input type="url" name="locationUrl" required defaultValue={editingActivity?.locationUrl} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <label className="text-xs font-semibold text-slate-500 uppercase">Location URL</label>
+                              <input type="url" name="locationUrl" defaultValue={editingActivity?.locationUrl} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">Home Number <span className="text-red-500">*</span></label>
-                              <input type="text" name="houseNumber" required defaultValue={editingActivity?.houseNumber} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="text" name="houseNumber" defaultValue={editingActivity?.houseNumber} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                       </div>
                   </div>
@@ -757,7 +757,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {/* Odoo Reference */}
                   <div className="space-y-1">
                        <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
-                           <LinkIcon size={12} /> Odoo Reference (CRM Link) <span className="text-red-500">*</span>
+                           <LinkIcon size={12} /> Odoo Reference (CRM Link)
                        </label>
                        <input 
                         type="url" 
