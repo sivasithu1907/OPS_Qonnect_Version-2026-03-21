@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Ticket, TicketStatus, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
+import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { 
   ChevronLeft, Phone, MapPin, Search, Plus, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
