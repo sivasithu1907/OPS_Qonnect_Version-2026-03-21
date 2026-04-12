@@ -1194,12 +1194,6 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              </div>
              <div className="p-4 border-t border-slate-200 bg-white">
                  {hasUnsavedChanges() && <div className="mb-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200"><AlertCircle size={14} /> Unsaved changes</div>}
-                 
-                 {!isDetailValid() && (
-                     <div className="mb-3 flex items-center gap-2 text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
-                         <AlertCircle size={14} /> Location & House No. required
-                     </div>
-                 )}
 
                  <button 
                     onClick={handleSaveChanges} 
