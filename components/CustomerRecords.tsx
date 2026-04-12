@@ -128,19 +128,8 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       const formData = new FormData(e.target as HTMLFormElement);
       const rawData: any = Object.fromEntries(formData.entries());
       
-      // 1. Validate Building Number (Required)
-      if (!rawData.buildingNumber || rawData.buildingNumber.toString().trim() === "") {
-          setFormError("Building Number is required.");
-          return;
-      }
-
-      // 2. Validate Location (Required)
-      if (!rawData.address || rawData.address.toString().trim() === "") {
-          setFormError("Location is required.");
-          return;
-      }
-
-      // 3. Validate Phone
+      // Building Number and Location are optional
+      // Validate Phone
       const phoneValidation = validatePhone(rawData.phone);
       if (!phoneValidation.isValid) {
           setFormError(phoneValidation.error || 'Invalid phone number');
@@ -468,12 +457,11 @@ onSaveCustomer(data as Customer);
 
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">
-                                Location (URL) <span className="text-red-500">*</span>
+                                Location (URL)
                             </label>
                             <input 
                                 name="address" 
                                 defaultValue={activeItem?.address} 
-                                required
                                 disabled={readOnly}
                                 className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
                                 placeholder="https://maps.google.com..."
@@ -482,12 +470,11 @@ onSaveCustomer(data as Customer);
 
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">
-                                Building Number <span className="text-red-500">*</span>
+                                Building Number
                             </label>
                             <input 
                                 name="buildingNumber" 
                                 defaultValue={activeItem?.buildingNumber} 
-                                required
                                 disabled={readOnly}
                                 className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
                                 placeholder="e.g. Bldg 10, Zone 55"
