@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Ticket, TicketStatus, TicketType } from '../types';
-import { Phone, MapPin, ShieldCheck, CheckCircle2, Clock, X, Navigation, Play, Car, Home, Camera } from 'lucide-react';
+import { Phone, MapPin, ShieldCheck, CheckCircle2, Clock, X, Navigation, Play, Car, Home, Camera, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface MyJobTaskViewProps {
   ticket: Ticket;
@@ -120,8 +120,32 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
 
             {/* Issue description — same as activity card */}
             {issueText && (
-              <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-700 leading-relaxed line-clamp-2">
+              <div className="bg-slate-50 rounded-xl p-3 mb-3 text-xs text-slate-700 leading-relaxed line-clamp-2">
                 {issueText}
+              </div>
+            )}
+
+            {/* Carry Forward Banner — show reason visibly */}
+            {ticket.carryForwardNote && (
+              <div className="bg-amber-50 rounded-xl p-3 mb-3 border border-amber-200">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <RotateCcw size={11} className="text-amber-600"/>
+                  <span className="text-[10px] font-bold text-amber-700 uppercase">Carry Forward</span>
+                </div>
+                <p className="text-xs text-amber-800 whitespace-pre-wrap line-clamp-3">{ticket.carryForwardNote}</p>
+                {ticket.nextPlannedAt && (
+                  <div className="text-[10px] text-amber-600 mt-1 font-medium">
+                    Next: {new Date(ticket.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(ticket.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Completion note if resolved */}
+            {ticket.status === TicketStatus.RESOLVED && (ticket as any).completionNote && (
+              <div className="bg-emerald-50 rounded-xl p-3 mb-3 border border-emerald-200">
+                <div className="text-[10px] font-bold text-emerald-600 uppercase mb-0.5">Resolution</div>
+                <p className="text-xs text-emerald-800 whitespace-pre-wrap line-clamp-2">{(ticket as any).completionNote}</p>
               </div>
             )}
 
@@ -228,6 +252,39 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
             <div className="bg-white rounded-xl p-4 border border-slate-100">
               <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Issue / Scope of Work</div>
               <p className="text-sm text-slate-700 leading-relaxed">{issueText}</p>
+            </div>
+          )}
+
+          {/* Carry Forward Banner — full detail */}
+          {ticket.carryForwardNote && (
+            <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+              <div className="flex items-center gap-2 mb-2">
+                <RotateCcw size={14} className="text-amber-600"/>
+                <span className="text-xs font-bold text-amber-700 uppercase">Carry Forward — Previous Attempt</span>
+              </div>
+              <p className="text-sm text-amber-800 whitespace-pre-wrap leading-relaxed">{ticket.carryForwardNote}</p>
+              {ticket.nextPlannedAt && (
+                <div className="text-xs text-amber-600 mt-2 font-medium flex items-center gap-1">
+                  <Clock size={10}/>
+                  Re-scheduled: {new Date(ticket.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} at {new Date(ticket.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Completion / Resolution Note */}
+          {ticket.status === TicketStatus.RESOLVED && (ticket as any).completionNote && (
+            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+              <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Resolution Summary</div>
+              <p className="text-sm text-emerald-800 whitespace-pre-wrap leading-relaxed">{(ticket as any).completionNote}</p>
+            </div>
+          )}
+
+          {/* Assignment Note */}
+          {ticket.assignmentNote && (
+            <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-200">
+              <div className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Assignment Note</div>
+              <p className="text-sm text-indigo-800 whitespace-pre-wrap leading-relaxed">{ticket.assignmentNote}</p>
             </div>
           )}
 
