@@ -5,7 +5,8 @@ import {
   MapPin, Clock, Truck, ShieldAlert, 
   Activity as ActivityIcon, Calendar, ZoomIn, ZoomOut,
   CheckCircle2, AlertCircle, History, Ticket as TicketIcon, 
-  Zap, ArrowRight, X, ExternalLink, Users, ChevronRight, User, Phone
+  Zap, ArrowRight, X, ExternalLink, Users, ChevronRight, User, Phone,
+  FileText, MessageSquare, RotateCcw, Briefcase
 } from 'lucide-react';
 
 interface OperationsDashboardProps {
@@ -102,7 +103,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
 
   const handleLeftWheel = (e: React.WheelEvent) => {
       if (bodyScrollRef.current) {
+          // Forward both vertical and horizontal scroll to the body
           bodyScrollRef.current.scrollTop += e.deltaY;
+          if (e.deltaX !== 0) {
+              bodyScrollRef.current.scrollLeft += e.deltaX;
+          }
       }
   };
 
@@ -456,9 +461,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         
                         // Extract supporting engineers from ACTUAL execution data
                         const activeActs = todayActs.filter(a => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status));
-                        const uniqueSupportIds = Array.from(new Set(
-                            activeActs.flatMap(a => (a as any).supportingEngineerIds || a.assistantTechIds || [])
-                        ));
+                        const uniqueSupportIds = Array.from(new Set([
+                            ...activeActs.flatMap(a => (a as any).supportingEngineerIds || []),
+                            // Also include planned assistantTechIds (TAs) from all today's activities
+                            ...todayActs.flatMap(a => a.assistantTechIds || [])
+                        ].filter(Boolean)));
                         
                         const supportingMembers = uniqueSupportIds
                             .map(mId => technicians.find(t => t.id === mId))
@@ -498,14 +505,22 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 {/* Supporting Team (internal + freelancers) */}
                                 <div className="flex flex-wrap gap-1 mb-1">
                                 {supportingMembers.length > 0 && (
-                                    supportingMembers.map((assoc: any) => (
+                                    supportingMembers.map((assoc: any) => {
+                                    // Determine if this person is a TA (from assistantTechIds) or execution support
+                                    const isTA = todayActs.some(a => (a.assistantTechIds || []).includes(assoc.id));
+                                    const isExecSupport = activeActs.some(a => ((a as any).supportingEngineerIds || []).includes(assoc.id));
+                                    return (
                                     <span
                                         key={assoc.id}
-                                        className="px-1.5 py-0.5 bg-blue-50 text-[9px] font-medium text-blue-700 rounded flex items-center gap-1"
+                                        className={`px-1.5 py-0.5 text-[9px] font-medium rounded flex items-center gap-1 ${
+                                            isExecSupport ? 'bg-blue-50 text-blue-700' : 'bg-teal-50 text-teal-700 border border-teal-200'
+                                        }`}
                                     >
-                                        <Users size={8} className="text-blue-400" /> {assoc.name.split(' ')[0]}
+                                        <Users size={8} className={isExecSupport ? 'text-blue-400' : 'text-teal-400'} /> {assoc.name.split(' ')[0]}
+                                        {isTA && !isExecSupport && <span className="text-[7px] opacity-60">TA</span>}
                                     </span>
-                                    ))
+                                    );
+                                    })
                                 )}
                                 {allFreelancers.length > 0 && (
                                     allFreelancers.map((fl: any, i: number) => (
@@ -943,7 +958,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                  </div>
                                  <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
                                      <Phone size={10} /> 
-                                     {selectedItem.type === 'ticket' ? (selectedItem.data as Ticket).phoneNumber : 'Contact on file'}
+                                     {selectedItem.type === 'ticket' ? (selectedItem.data as Ticket).phoneNumber : 
+                                        (customers?.find(c => c.id === (selectedItem.data as Activity).customerId)?.phone || 'Contact on file')}
                                  </div>
                              </div>
                          </div>
@@ -955,9 +971,22 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                              <MapPin size={10} /> Location
                          </h4>
                          <div className="text-xs text-slate-700 font-medium">
-                            {selectedItem.type === 'activity' ? 
-                                (customers.find(c=>c.id===(selectedItem.data as Activity).customerId)?.name || sites.find(s=>s.id===(selectedItem.data as Activity).siteId)?.name || (selectedItem.data as Activity).houseNumber || 'Unknown Client') : 
-                                ((selectedItem.data as Ticket).houseNumber || 'Location Provided')}
+                            {(() => {
+                                const d = selectedItem.data as any;
+                                if (selectedItem.type === 'activity') {
+                                    const cust = customers.find(c=>c.id===d.customerId);
+                                    const parts: string[] = [];
+                                    if (d.houseNumber) parts.push(d.houseNumber);
+                                    if (cust?.buildingNumber) parts.push(`Bldg: ${cust.buildingNumber}`);
+                                    if (cust?.name) parts.push(cust.name);
+                                    if (parts.length === 0) {
+                                        const site = sites.find(s=>s.id===d.siteId);
+                                        parts.push(site?.name || 'Unknown Location');
+                                    }
+                                    return parts.join(' · ');
+                                }
+                                return d.houseNumber || 'Location Provided';
+                            })()}
                          </div>
                          {selectedItem.data.locationUrl && (
                              <a href={selectedItem.data.locationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline">
@@ -965,6 +994,66 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                              </a>
                          )}
                      </div>
+
+                     {/* Scope / Service Info */}
+                     {selectedItem.type === 'activity' && (
+                         <div className="p-3 bg-purple-50/50 rounded-lg border border-purple-100 space-y-2">
+                             <h4 className="text-[10px] font-bold text-purple-800 uppercase flex items-center gap-1">
+                                 <Briefcase size={10} /> Scope
+                             </h4>
+                             <div className="space-y-1.5">
+                                 <div className="flex justify-between text-xs">
+                                     <span className="text-slate-400">Type</span>
+                                     <span className="font-semibold text-slate-700">{(selectedItem.data as Activity).type}</span>
+                                 </div>
+                                 {(selectedItem.data as any).serviceCategory && (
+                                     <div className="flex justify-between text-xs">
+                                         <span className="text-slate-400">Service Category</span>
+                                         <span className="font-medium text-purple-700">{(selectedItem.data as any).serviceCategory}</span>
+                                     </div>
+                                 )}
+                                 <div className="flex justify-between text-xs">
+                                     <span className="text-slate-400">Priority</span>
+                                     <span className={`font-bold ${(selectedItem.data as Activity).priority === 'URGENT' ? 'text-red-600' : (selectedItem.data as Activity).priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>
+                                         {(selectedItem.data as Activity).priority}
+                                     </span>
+                                 </div>
+                                 <div className="flex justify-between text-xs">
+                                     <span className="text-slate-400">Planned Duration</span>
+                                     <span className="text-slate-700">{(selectedItem.data as Activity).durationHours}h</span>
+                                 </div>
+                                 {(selectedItem.data as any).odooLink && (
+                                     <div className="flex justify-between text-xs">
+                                         <span className="text-slate-400">Odoo Ref</span>
+                                         <a href={(selectedItem.data as any).odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate max-w-[60%]">{(selectedItem.data as any).odooLink}</a>
+                                     </div>
+                                 )}
+                             </div>
+                         </div>
+                     )}
+                     {selectedItem.type === 'ticket' && (
+                         <div className="p-3 bg-purple-50/50 rounded-lg border border-purple-100 space-y-2">
+                             <h4 className="text-[10px] font-bold text-purple-800 uppercase flex items-center gap-1">
+                                 <Briefcase size={10} /> Ticket Info
+                             </h4>
+                             <div className="space-y-1.5">
+                                 <div className="flex justify-between text-xs">
+                                     <span className="text-slate-400">Category</span>
+                                     <span className="font-semibold text-slate-700">{(selectedItem.data as Ticket).category}</span>
+                                 </div>
+                                 <div className="flex justify-between text-xs">
+                                     <span className="text-slate-400">Type</span>
+                                     <span className="font-medium text-slate-700">{(selectedItem.data as Ticket).type}</span>
+                                 </div>
+                                 <div className="flex justify-between text-xs">
+                                     <span className="text-slate-400">Priority</span>
+                                     <span className={`font-bold ${(selectedItem.data as Ticket).priority === 'URGENT' ? 'text-red-600' : (selectedItem.data as Ticket).priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>
+                                         {(selectedItem.data as Ticket).priority}
+                                     </span>
+                                 </div>
+                             </div>
+                         </div>
+                     )}
 
                      {/* Time & Schedule */}
                      <div>
@@ -1021,52 +1110,149 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                          </div>
                      </div>
 
-                     {/* Assigned Resource */}
+                     {/* Assigned Resources — Full Team */}
                      <div>
-                         <label className="text-[10px] font-bold text-slate-400 uppercase">Assigned To</label>
-                         <div className="flex items-center gap-2 mt-1">
-                             <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
-                                 <Users size={12}/>
-                             </div>
-                             <div className="flex flex-col">
-                                 <span className="text-xs font-medium text-slate-700">
-                                     {selectedItem.type === 'activity' ? 
-                                        (technicians.find(t => t.id === ((selectedItem.data as any).primaryEngineerId || (selectedItem.data as Activity).leadTechId))?.name || 'Unassigned') : 
-                                        (technicians.find(t => t.id === (selectedItem.data as Ticket).assignedTechId)?.name || 'Unassigned')}
-                                 </span>
-                                 {selectedItem.type === 'activity' && (selectedItem.data as any).primaryEngineerId && (selectedItem.data as any).primaryEngineerId !== (selectedItem.data as Activity).leadTechId && (
-                                     <span className="text-[9px] text-slate-400">Planned: {technicians.find(t => t.id === (selectedItem.data as Activity).leadTechId)?.name || '—'}</span>
-                                 )}
-                             </div>
-                         </div>
-                         {/* Supporting team members */}
-                         {selectedItem.type === 'activity' && ((selectedItem.data as any).supportingEngineerIds?.length > 0 || (selectedItem.data as any).freelancers?.length > 0) && (
-                             <div className="mt-2 flex flex-wrap gap-1">
-                                 <span className="text-[9px] text-slate-400 mr-1">Team:</span>
-                                 {((selectedItem.data as any).supportingEngineerIds || []).map((sid: string) => {
-                                     const member = technicians.find(t => t.id === sid);
-                                     return member ? (
-                                         <span key={sid} className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-medium">
-                                             {member.name.split(' ')[0]}
-                                         </span>
-                                     ) : null;
-                                 })}
-                                 {((selectedItem.data as any).freelancers || []).map((fl: any, i: number) => (
-                                     <span key={`fl-${i}`} className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded font-medium border border-amber-200">
-                                         {fl.name.split(' ')[0]} <span className="text-[7px] opacity-60">FL</span>
+                         <label className="text-[10px] font-bold text-slate-400 uppercase">Assigned Team</label>
+                         <div className="mt-2 space-y-2">
+                             {/* Primary / Assigned Tech */}
+                             <div className="flex items-center gap-2">
+                                 <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-[10px] font-bold text-purple-600">P</div>
+                                 <div className="flex flex-col">
+                                     <span className="text-xs font-medium text-slate-700">
+                                         {selectedItem.type === 'activity' ? 
+                                            (technicians.find(t => t.id === ((selectedItem.data as any).primaryEngineerId || (selectedItem.data as Activity).leadTechId))?.name || 'Unassigned') : 
+                                            (technicians.find(t => t.id === (selectedItem.data as Ticket).assignedTechId)?.name || 'Unassigned')}
                                      </span>
-                                 ))}
+                                     <span className="text-[9px] text-slate-400">
+                                         {selectedItem.type === 'activity' 
+                                             ? ((selectedItem.data as any).primaryEngineerId ? 'Primary Engineer' : 'Lead Engineer (Planned)')
+                                             : 'Assigned Technician'}
+                                     </span>
+                                 </div>
                              </div>
-                         )}
+                             {/* Show planned lead if different from primary */}
+                             {selectedItem.type === 'activity' && (selectedItem.data as any).primaryEngineerId && (selectedItem.data as any).primaryEngineerId !== (selectedItem.data as Activity).leadTechId && (
+                                 <div className="flex items-center gap-2">
+                                     <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">L</div>
+                                     <div className="flex flex-col">
+                                         <span className="text-xs font-medium text-slate-600">{technicians.find(t => t.id === (selectedItem.data as Activity).leadTechId)?.name || '—'}</span>
+                                         <span className="text-[9px] text-slate-400">Planned Lead</span>
+                                     </div>
+                                 </div>
+                             )}
+                             {/* Sales Lead */}
+                             {selectedItem.type === 'activity' && (selectedItem.data as any).salesLeadId && (
+                                 <div className="flex items-center gap-2">
+                                     <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">S</div>
+                                     <div className="flex flex-col">
+                                         <span className="text-xs font-medium text-indigo-700">{technicians.find(t => t.id === (selectedItem.data as any).salesLeadId)?.name || '—'}</span>
+                                         <span className="text-[9px] text-slate-400">Sales Lead</span>
+                                     </div>
+                                 </div>
+                             )}
+                             {/* Technical Associates / Supporting Engineers */}
+                             {selectedItem.type === 'activity' && (() => {
+                                 const d = selectedItem.data as any;
+                                 const taIds = d.assistantTechIds || [];
+                                 const supportIds = d.supportingEngineerIds || [];
+                                 const allIds = Array.from(new Set([...taIds, ...supportIds]));
+                                 if (allIds.length === 0) return null;
+                                 return allIds.map((sid: string) => {
+                                     const member = technicians.find(t => t.id === sid);
+                                     if (!member) return null;
+                                     const isExec = supportIds.includes(sid);
+                                     return (
+                                         <div key={sid} className="flex items-center gap-2">
+                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isExec ? 'bg-blue-100 text-blue-600' : 'bg-teal-100 text-teal-600'}`}>
+                                                 {isExec ? 'SE' : 'TA'}
+                                             </div>
+                                             <div className="flex flex-col">
+                                                 <span className="text-xs font-medium text-slate-700">{member.name}</span>
+                                                 <span className="text-[9px] text-slate-400">{isExec ? 'Supporting Engineer' : 'Technical Associate'}</span>
+                                             </div>
+                                         </div>
+                                     );
+                                 });
+                             })()}
+                             {/* Freelancers */}
+                             {selectedItem.type === 'activity' && ((selectedItem.data as any).freelancers || []).length > 0 && (
+                                 <>
+                                     {((selectedItem.data as any).freelancers || []).map((fl: any, i: number) => (
+                                         <div key={`fl-${i}`} className="flex items-center gap-2">
+                                             <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-[10px] font-bold text-amber-700">FL</div>
+                                             <div className="flex flex-col">
+                                                 <span className="text-xs font-medium text-amber-800">{fl.name}</span>
+                                                 <div className="flex items-center gap-2">
+                                                     <span className="text-[9px] text-amber-600">Freelancer{fl.role ? ` · ${fl.role === 'FIELD_ENGINEER' ? 'FE' : 'TA'}` : ''}</span>
+                                                     {fl.phone && <span className="text-[9px] text-slate-400">{fl.phone}</span>}
+                                                 </div>
+                                             </div>
+                                         </div>
+                                     ))}
+                                 </>
+                             )}
+                         </div>
                      </div>
 
                      {/* Description */}
                      <div>
-                         <label className="text-[10px] font-bold text-slate-400 uppercase">Description</label>
+                         <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> Description</label>
                          <p className="text-xs text-slate-600 mt-1 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 whitespace-pre-wrap">
                              {selectedItem.type === 'activity' ? (selectedItem.data as Activity).description : ((selectedItem.data as any).messages?.find((m: any) => m.sender === "CLIENT")?.content || (selectedItem.data as any).ai_summary || (selectedItem.data as any).category || "No description")}
                          </p>
                      </div>
+
+                     {/* Remarks / Notes */}
+                     {(() => {
+                         const d = selectedItem.data as any;
+                         const remarks = selectedItem.type === 'activity' ? d.remarks : d.notes;
+                         const completionNote = d.completionNote;
+                         const assignmentNote = d.assignmentNote;
+                         const carryForwardNote = d.carryForwardNote;
+                         const cancellationReason = d.cancellationReason;
+                         const hasAny = remarks || completionNote || assignmentNote || carryForwardNote || cancellationReason;
+                         if (!hasAny) return null;
+                         return (
+                             <div className="space-y-2">
+                                 <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><MessageSquare size={10}/> Notes & Remarks</label>
+                                 {remarks && (
+                                     <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                                         <div className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Remarks</div>
+                                         <p className="text-xs text-slate-600 whitespace-pre-wrap">{remarks}</p>
+                                     </div>
+                                 )}
+                                 {assignmentNote && (
+                                     <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
+                                         <div className="text-[9px] font-bold text-indigo-400 uppercase mb-0.5">Assignment Note</div>
+                                         <p className="text-xs text-indigo-700 whitespace-pre-wrap">{assignmentNote}</p>
+                                     </div>
+                                 )}
+                                 {completionNote && (
+                                     <div className="bg-emerald-50 p-2 rounded border border-emerald-100">
+                                         <div className="text-[9px] font-bold text-emerald-500 uppercase mb-0.5">Completion Note</div>
+                                         <p className="text-xs text-emerald-700 whitespace-pre-wrap">{completionNote}</p>
+                                     </div>
+                                 )}
+                                 {carryForwardNote && (
+                                     <div className="bg-amber-50 p-2 rounded border border-amber-100">
+                                         <div className="text-[9px] font-bold text-amber-500 uppercase mb-0.5 flex items-center gap-1"><RotateCcw size={8}/> Carry Forward</div>
+                                         <p className="text-xs text-amber-700 whitespace-pre-wrap">{carryForwardNote}</p>
+                                         {d.nextPlannedAt && (
+                                             <div className="text-[10px] text-amber-600 mt-1 font-medium">
+                                                 Next planned: {new Date(d.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(d.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                                             </div>
+                                         )}
+                                     </div>
+                                 )}
+                                 {cancellationReason && (
+                                     <div className="bg-red-50 p-2 rounded border border-red-100">
+                                         <div className="text-[9px] font-bold text-red-400 uppercase mb-0.5">Cancellation Reason</div>
+                                         <p className="text-xs text-red-700 whitespace-pre-wrap">{cancellationReason}</p>
+                                     </div>
+                                 )}
+                             </div>
+                         );
+                     })()}
                  </div>
 
                  {/* Drawer Footer Actions */}
