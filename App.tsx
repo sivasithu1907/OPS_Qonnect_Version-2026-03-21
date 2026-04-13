@@ -1270,6 +1270,7 @@ useEffect(() => {
                     <CustomerRecords 
                         customers={customers}
                         activities={activities}
+                        tickets={tickets}
                         technicians={technicians}
                         sites={sites}
                         onSaveCustomer={handleUpdateCustomer}
