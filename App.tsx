@@ -1284,6 +1284,7 @@ useEffect(() => {
                         technicians={technicians}
                         sites={sites}
                         customers={customers}
+                        onNavigate={handleGlobalNav}
                     />
                 )}
                 {activeView === 'users' && (
