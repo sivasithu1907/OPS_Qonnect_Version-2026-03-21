@@ -997,7 +997,7 @@ useEffect(() => {
         <main className="flex-1 flex flex-col min-w-0 bg-white relative transition-all duration-300">
             
             {/* Top Bar */}
-            <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-4 shrink-0 z-20 relative">
+            <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-4 shrink-0 z-40 relative">
                 <div className="flex items-center gap-3">
                     {/* Desktop Toggle (Minimizes Sidebar) */}
                     <button 
