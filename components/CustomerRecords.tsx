@@ -1,23 +1,25 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Customer, Activity, Technician, Site } from '../types';
+import { Customer, Activity, Technician, Site, Ticket } from '../types';
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
-import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home } from 'lucide-react';
+import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon } from 'lucide-react';
 
 interface CustomerRecordsProps {
   customers: Customer[];
   activities: Activity[];
+  tickets: Ticket[];
   technicians: Technician[];
   sites: Site[];
   onSaveCustomer: (customer: Customer) => void;
   onDeleteCustomer: (id: string) => void;
   readOnly?: boolean;
-  isMobile?: boolean; // New prop for mobile responsiveness
+  isMobile?: boolean;
 }
 
 const CustomerRecords: React.FC<CustomerRecordsProps> = ({ 
     customers,
     activities,
+    tickets,
     technicians,
     sites,
     onSaveCustomer,
@@ -172,11 +174,92 @@ onSaveCustomer(data as Customer);
       closeModal();
   };
 
-  // Activity History Logic
+  // Unified Client History — activities + tickets, sorted newest first
+  type TimelineItem = {
+      id: string;
+      kind: 'activity' | 'ticket';
+      ref: string;
+      title: string;
+      description: string;
+      status: string;
+      priority: string;
+      date: Date;
+      dateLabel: string;
+      techName?: string;
+      location?: string;
+      // Extra detail fields
+      startedAt?: string;
+      completedAt?: string;
+      remarks?: string;
+      completionNote?: string;
+      carryForwardNote?: string;
+      nextPlannedAt?: string;
+      cancellationReason?: string;
+      serviceCategory?: string;
+  };
+
+  const getCustomerTimeline = (customerId: string): TimelineItem[] => {
+      const items: TimelineItem[] = [];
+
+      // Activities for this customer
+      activities.filter(a => a.customerId === customerId).forEach(a => {
+          const tech = technicians.find(t => t.id === (a as any).primaryEngineerId || t.id === a.leadTechId);
+          const site = sites.find(s => s.id === a.siteId);
+          items.push({
+              id: a.id,
+              kind: 'activity',
+              ref: a.reference,
+              title: a.type,
+              description: a.description || '',
+              status: a.status,
+              priority: a.priority,
+              date: new Date(a.plannedDate || a.createdAt),
+              dateLabel: new Date(a.plannedDate || a.createdAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }),
+              techName: tech?.name,
+              location: a.houseNumber || site?.name,
+              startedAt: (a as any).startedAt,
+              completedAt: (a as any).completedAt,
+              remarks: (a as any).remarks,
+              completionNote: (a as any).completionNote,
+              carryForwardNote: (a as any).carryForwardNote,
+              nextPlannedAt: (a as any).nextPlannedAt,
+              cancellationReason: (a as any).cancellationReason,
+              serviceCategory: a.serviceCategory,
+          });
+      });
+
+      // Tickets for this customer (match by customerId or customerName)
+      const cust = customers.find(c => c.id === customerId);
+      tickets.filter(t => t.customerId === customerId || (cust && t.customerName === cust.name)).forEach(t => {
+          const tech = technicians.find(x => x.id === t.assignedTechId);
+          items.push({
+              id: t.id,
+              kind: 'ticket',
+              ref: t.id,
+              title: t.category,
+              description: t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category,
+              status: t.status,
+              priority: t.priority,
+              date: new Date(t.createdAt),
+              dateLabel: new Date(t.createdAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }),
+              techName: tech?.name,
+              location: t.houseNumber,
+              startedAt: (t as any).startedAt,
+              completedAt: (t as any).completedAt,
+              remarks: t.notes,
+              completionNote: (t as any).completionNote,
+              carryForwardNote: (t as any).carryForwardNote,
+              nextPlannedAt: (t as any).nextPlannedAt,
+              cancellationReason: (t as any).cancellationReason,
+          });
+      });
+
+      return items.sort((a, b) => b.date.getTime() - a.date.getTime());
+  };
+
+  // Legacy wrapper for count badges
   const getCustomerHistory = (customerId: string) => {
-      return activities
-          .filter(a => a.customerId === customerId)
-          .sort((a, b) => new Date(b.plannedDate).getTime() - new Date(a.plannedDate).getTime());
+      return getCustomerTimeline(customerId);
   };
 
   return (
@@ -567,61 +650,144 @@ onSaveCustomer(data as Customer);
 
                     {/* Right: History Panel */}
                     <div className="w-full md:w-2/3 p-8 flex flex-col bg-white overflow-hidden">
-                        <h3 className="font-bold text-xl text-slate-800 mb-6 flex items-center gap-2">
+                        <h3 className="font-bold text-xl text-slate-800 mb-4 flex items-center gap-2">
                             <Clock size={20} className="text-slate-400"/>
-                            After-Sales Activity History
+                            Client History
                         </h3>
+                        {/* Summary Chips */}
+                        {(() => {
+                            const timeline = getCustomerTimeline(activeItem.id);
+                            const actCount = timeline.filter(i => i.kind === 'activity').length;
+                            const ticketCount = timeline.filter(i => i.kind === 'ticket').length;
+                            const doneCount = timeline.filter(i => i.status === 'DONE' || i.status === 'RESOLVED').length;
+                            const cfCount = timeline.filter(i => i.status === 'CARRY_FORWARD' || i.carryForwardNote).length;
+                            return (
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{actCount} Activities</span>
+                                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">{ticketCount} Tickets</span>
+                                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{doneCount} Completed</span>
+                                    {cfCount > 0 && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{cfCount} Carry Forward</span>}
+                                </div>
+                            );
+                        })()}
                         
                         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                            {getCustomerHistory(activeItem.id).length === 0 ? (
+                            {getCustomerTimeline(activeItem.id).length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 opacity-60">
                                     <Calendar size={48} />
                                     <p>No service history found for this customer.</p>
                                 </div>
                             ) : (
-                                <div className="relative border-l-2 border-slate-100 ml-3 space-y-8 py-2">
-                                    {getCustomerHistory(activeItem.id).map((act, index) => {
-                                        const site = sites.find(s => s.id === act.siteId);
-                                        const tech = technicians.find(t => t.id === act.leadTechId);
+                                <div className="relative border-l-2 border-slate-100 ml-3 space-y-6 py-2">
+                                    {getCustomerTimeline(activeItem.id).map((item, index) => {
+                                        const isTicket = item.kind === 'ticket';
+                                        const statusColor = 
+                                            item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-500' :
+                                            item.status === 'IN_PROGRESS' ? 'bg-blue-500' :
+                                            item.status === 'CARRY_FORWARD' ? 'bg-amber-500' :
+                                            item.status === 'CANCELLED' ? 'bg-slate-300' :
+                                            item.status === 'ON_MY_WAY' || item.status === 'ARRIVED' ? 'bg-cyan-500' :
+                                            'bg-amber-400';
+                                        const statusBadge =
+                                            item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
+                                            item.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                                            item.status === 'CARRY_FORWARD' ? 'bg-amber-100 text-amber-700' :
+                                            item.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
+                                            item.status === 'ON_MY_WAY' || item.status === 'ARRIVED' ? 'bg-cyan-100 text-cyan-700' :
+                                            'bg-amber-100 text-amber-700';
                                         
                                         return (
-                                            <div key={act.id} className="relative pl-8">
+                                            <div key={`${item.kind}-${item.id}-${index}`} className="relative pl-8">
                                                 {/* Timeline Dot */}
-                                                <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
-                                                    act.status === 'DONE' ? 'bg-emerald-500' :
-                                                    act.status === 'IN_PROGRESS' ? 'bg-blue-500' : 
-                                                    act.status === 'CANCELLED' ? 'bg-slate-300' : 'bg-amber-400'
-                                                }`} />
+                                                <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white shadow-sm ${statusColor}`}>
+                                                    {isTicket && <TicketIcon size={8} className="text-white absolute top-0.5 left-0.5" />}
+                                                </div>
                                                 
-                                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-100 hover:shadow-md transition-shadow">
+                                                <div className={`rounded-lg p-4 border hover:shadow-md transition-shadow ${
+                                                    isTicket ? 'bg-purple-50/30 border-purple-100' : 'bg-slate-50 border-slate-100'
+                                                }`}>
+                                                    {/* Header Row */}
                                                     <div className="flex justify-between items-start mb-2">
-                                                        <div>
-                                                            <div className="font-bold text-slate-800 text-sm">{act.type}</div>
-                                                            <div className="text-xs text-slate-500 font-mono mt-0.5">{new Date(act.plannedDate).toLocaleDateString()} at {new Date(act.plannedDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 mb-0.5">
+                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                                    {isTicket ? 'TICKET' : 'ACTIVITY'}
+                                                                </span>
+                                                                <span className="text-[10px] font-mono text-slate-400">{item.ref}</span>
+                                                            </div>
+                                                            <div className="font-bold text-slate-800 text-sm">{item.title}</div>
+                                                            {item.serviceCategory && <div className="text-[10px] text-indigo-600">{item.serviceCategory}</div>}
+                                                            <div className="text-xs text-slate-500 font-mono mt-0.5">{item.dateLabel} at {item.date.toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</div>
                                                         </div>
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                             act.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
-                                                             act.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 
-                                                             act.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' : 'bg-amber-100 text-amber-700'
-                                                        }`}>
-                                                            {act.status.replace('_', ' ')}
-                                                        </span>
+                                                        <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusBadge}`}>
+                                                                {item.status.replace(/_/g, ' ')}
+                                                            </span>
+                                                            <span className={`text-[9px] font-bold ${
+                                                                item.priority === 'URGENT' ? 'text-red-600' : item.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'
+                                                            }`}>{item.priority}</span>
+                                                        </div>
                                                     </div>
                                                     
-                                                    <p className="text-sm text-slate-600 mb-3">{act.description}</p>
+                                                    {/* Description */}
+                                                    <p className="text-xs text-slate-600 mb-2 line-clamp-2">{item.description}</p>
                                                     
-                                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                                        <div className="flex items-center gap-1.5 text-slate-500">
-                                                            <MapPin size={12} />
-                                                            <span className="truncate">{site?.name || 'Unknown Site'}</span>
-                                                        </div>
-                                                        {tech && (
-                                                            <div className="flex items-center gap-1.5 text-slate-500">
-                                                                <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-[8px] font-bold">L</div>
-                                                                <span className="truncate">{tech.name}</span>
+                                                    {/* Meta Row */}
+                                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mb-2">
+                                                        {item.techName && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-[8px] font-bold">E</div>
+                                                                <span className="truncate">{item.techName}</span>
+                                                            </div>
+                                                        )}
+                                                        {item.location && (
+                                                            <div className="flex items-center gap-1">
+                                                                <MapPin size={10} className="text-slate-400"/>
+                                                                <span className="truncate">{item.location}</span>
+                                                            </div>
+                                                        )}
+                                                        {item.startedAt && item.completedAt && (
+                                                            <div className="flex items-center gap-1">
+                                                                <Clock size={10} className="text-slate-400"/>
+                                                                <span>{Math.round((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)}m actual</span>
                                                             </div>
                                                         )}
                                                     </div>
+
+                                                    {/* Notes Section — Remarks, Completion, Carry Forward */}
+                                                    {(item.remarks || item.completionNote || item.carryForwardNote || item.cancellationReason) && (
+                                                        <div className="space-y-1.5 mt-2 pt-2 border-t border-slate-100">
+                                                            {item.remarks && (
+                                                                <div className="flex items-start gap-1.5">
+                                                                    <MessageSquare size={10} className="text-slate-400 mt-0.5 shrink-0"/>
+                                                                    <p className="text-[11px] text-slate-600 whitespace-pre-wrap">{item.remarks}</p>
+                                                                </div>
+                                                            )}
+                                                            {item.completionNote && (
+                                                                <div className="bg-emerald-50 rounded p-2 border border-emerald-100">
+                                                                    <div className="text-[9px] font-bold text-emerald-500 uppercase mb-0.5">Completion Summary</div>
+                                                                    <p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{item.completionNote}</p>
+                                                                </div>
+                                                            )}
+                                                            {item.carryForwardNote && (
+                                                                <div className="bg-amber-50 rounded p-2 border border-amber-100">
+                                                                    <div className="text-[9px] font-bold text-amber-600 uppercase mb-0.5 flex items-center gap-1"><RotateCcw size={8}/> Carry Forward</div>
+                                                                    <p className="text-[11px] text-amber-800 whitespace-pre-wrap">{item.carryForwardNote}</p>
+                                                                    {item.nextPlannedAt && (
+                                                                        <div className="text-[10px] text-amber-600 mt-1 font-medium">
+                                                                            Next: {new Date(item.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(item.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {item.cancellationReason && (
+                                                                <div className="bg-red-50 rounded p-2 border border-red-100">
+                                                                    <div className="text-[9px] font-bold text-red-500 uppercase mb-0.5">Cancelled</div>
+                                                                    <p className="text-[11px] text-red-700 whitespace-pre-wrap">{item.cancellationReason}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         );
