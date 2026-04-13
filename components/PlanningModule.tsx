@@ -38,6 +38,14 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
   
+  // Calendar week navigation state
+  const [calendarWeekStart, setCalendarWeekStart] = useState<Date>(() => {
+      const d = new Date();
+      d.setDate(d.getDate() - d.getDay() + 1); // Start Monday of current week
+      d.setHours(0, 0, 0, 0);
+      return d;
+  });
+  
   // Mobile Tab State
   const [mobileTab, setMobileTab] = useState<ActivityStatus>('PLANNED');
 
@@ -119,7 +127,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       const site = sites.find(s => s.id === act.siteId);
       if (site) return site.name;
       if (act.houseNumber) return `House: ${act.houseNumber}`;
-      return 'Location URL Provided';
+      // Fall back to customer name or building number instead of generic text
+      const cust = customers.find(c => c.id === act.customerId);
+      if (cust?.buildingNumber) return `Bldg: ${cust.buildingNumber}`;
+      if (cust?.name) return cust.name;
+      if (act.locationUrl) return 'Map link available';
+      return 'No location set';
   };
 
   // Determine available associates based on selected date
@@ -179,7 +192,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         
         return (
           <div 
-            onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} 
+            onClick={() => setViewingActivity(act)} 
             className={`bg-white rounded-lg shadow-sm border cursor-pointer hover:shadow-md transition-all group ${
                 isDelayed ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'
             } ${isMobileCard ? 'p-4 mb-3 mx-1' : 'p-4'}`}
@@ -409,12 +422,41 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   };
 
   const CalendarView = () => {
-    // Mock Week Days
+    // Use calendarWeekStart state for week days
     const days = Array.from({length: 7}, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - d.getDay() + i + 1); // Start Monday
+        const d = new Date(calendarWeekStart);
+        d.setDate(d.getDate() + i);
         return d;
     });
+
+    const goToPrevWeek = () => {
+        setCalendarWeekStart(prev => {
+            const d = new Date(prev);
+            d.setDate(d.getDate() - 7);
+            return d;
+        });
+    };
+    const goToNextWeek = () => {
+        setCalendarWeekStart(prev => {
+            const d = new Date(prev);
+            d.setDate(d.getDate() + 7);
+            return d;
+        });
+    };
+    const goToThisWeek = () => {
+        const d = new Date();
+        d.setDate(d.getDate() - d.getDay() + 1); // Monday
+        d.setHours(0, 0, 0, 0);
+        setCalendarWeekStart(d);
+    };
+
+    const isCurrentWeek = (() => {
+        const now = new Date();
+        const mon = new Date(now);
+        mon.setDate(mon.getDate() - mon.getDay() + 1);
+        mon.setHours(0, 0, 0, 0);
+        return calendarWeekStart.getTime() === mon.getTime();
+    })();
 
     // Use Team Leads for rows in Calendar View (since they manage schedules usually)
     // Also add a "Freelancer / Unassigned" row for activities without an internal lead
@@ -422,6 +464,25 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     
     return (
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+        {/* Calendar Navigation Bar */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-white">
+            <button onClick={goToPrevWeek} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-800">
+                <ChevronLeft size={18} />
+            </button>
+            <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-slate-800">
+                    {days[0].toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} — {days[6].toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+                {!isCurrentWeek && (
+                    <button onClick={goToThisWeek} className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full hover:bg-blue-100 transition-colors">
+                        Today
+                    </button>
+                )}
+            </div>
+            <button onClick={goToNextWeek} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-800">
+                <ChevronRight size={18} />
+            </button>
+        </div>
         {/* Header Grid */}
         <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-50">
            <div className="p-4 border-r border-slate-200 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center justify-center">
@@ -462,7 +523,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         return (
                         <div 
                           key={act.id} 
-                          onClick={() => { setEditingActivity(act); setIsModalOpen(true); }}
+                          onClick={() => setViewingActivity(act)}
                           className={`mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all ${
                             (act.escalationLevel || 0) > 0 ? 'bg-red-50 border-red-400 border-l-4' :
                             act.status === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
@@ -511,7 +572,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         return (
                           <div 
                             key={act.id} 
-                            onClick={() => { setEditingActivity(act); setIsModalOpen(true); }}
+                            onClick={() => setViewingActivity(act)}
                             className="mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all bg-amber-50 border-amber-200 border-l-4 border-l-amber-400"
                           >
                             <div className="font-bold truncate text-amber-800">{act.type}</div>
@@ -1011,8 +1072,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     <span className="text-slate-400">Customer</span>
                     <span className="font-semibold text-slate-800">{customer?.name || 'Unknown'}</span>
                   </div>
-                  {va.houseNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">Location</span><span className="text-slate-700">{va.houseNumber}</span></div>}
-                  {va.locationUrl && <div className="flex justify-between text-sm"><span className="text-slate-400">Map</span><a href={va.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[60%]">{va.locationUrl}</a></div>}
+                  {customer?.phone && <div className="flex justify-between text-sm"><span className="text-slate-400">Phone</span><span className="text-slate-700">{customer.phone}</span></div>}
+                  {va.houseNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">House / Villa</span><span className="text-slate-700">{va.houseNumber}</span></div>}
+                  {customer?.buildingNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">Building</span><span className="text-slate-700">{customer.buildingNumber}</span></div>}
+                  {va.locationUrl && <div className="flex justify-between text-sm"><span className="text-slate-400">Map</span><a href={va.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[60%]">Open Map</a></div>}
                 </div>
                 {/* Timing */}
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
@@ -1021,6 +1084,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <div className="flex justify-between text-sm"><span className="text-slate-400">Priority</span><span className={`font-bold ${va.priority === 'URGENT' ? 'text-red-600' : va.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{va.priority}</span></div>
                   {va.startedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Started</span><span className="text-emerald-600 font-medium">{new Date(va.startedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit', minute:'2-digit' })}</span></div>}
                   {va.completedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Completed</span><span className="text-emerald-600 font-medium">{new Date(va.completedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit', minute:'2-digit' })}</span></div>}
+                  {va.startedAt && va.completedAt && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Actual Duration</span>
+                      <span className="font-bold text-slate-700">{Math.round((new Date(va.completedAt).getTime() - new Date(va.startedAt).getTime()) / 60000)}m</span>
+                    </div>
+                  )}
                 </div>
                 {/* Description */}
                 {va.description && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-xs font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 leading-relaxed">{va.description}</p></div>}
@@ -1028,11 +1097,54 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
                   <div className="text-xs font-bold text-slate-400 uppercase mb-2">Assigned Resources</div>
                   {lead && <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-purple-500"/><span className="font-medium text-slate-800">{lead.name}</span><span className="text-[10px] text-slate-400">Lead Engineer</span></div>}
+                  {va.primaryEngineerId && va.primaryEngineerId !== va.leadTechId && (() => {
+                    const prim = technicians.find(t => t.id === va.primaryEngineerId);
+                    return prim ? <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-blue-500"/><span className="font-medium text-blue-700">{prim.name}</span><span className="text-[10px] text-slate-400">Primary (Execution)</span></div> : null;
+                  })()}
                   {salesLd && <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLd.name}</span><span className="text-[10px] text-slate-400">Sales Lead</span></div>}
                   {assistants.map((a: any) => <div key={a.id} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-teal-500"/><span className="text-slate-700">{a.name}</span><span className="text-[10px] text-slate-400">Technical Associate</span></div>)}
+                  {(va.supportingEngineerIds || []).filter((sid: string) => !(va.assistantTechIds || []).includes(sid) && sid !== va.primaryEngineerId).map((sid: string) => {
+                    const se = technicians.find(t => t.id === sid);
+                    return se ? <div key={sid} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-blue-400"/><span className="text-slate-700">{se.name}</span><span className="text-[10px] text-slate-400">Supporting Engineer</span></div> : null;
+                  })}
                   {fls.map((fl: any, i: number) => <div key={`fl-${i}`} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-amber-800 font-medium">{fl.name}</span><span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-200">Freelancer · {fl.role === 'FIELD_ENGINEER' ? 'FE' : 'TA'}</span>{fl.phone && <span className="text-[10px] text-slate-400 ml-auto">{fl.phone}</span>}</div>)}
                   {!lead && !salesLd && assistants.length === 0 && fls.length === 0 && <p className="text-xs text-slate-400 italic">No resources assigned</p>}
                 </div>
+                {/* Remarks & Completion Summary */}
+                {(va.remarks || va.completionNote || va.carryForwardNote || va.cancellationReason) && (
+                  <div className="space-y-3">
+                    <div className="text-xs font-bold text-slate-400 uppercase">Notes & Remarks</div>
+                    {va.remarks && (
+                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
+                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{va.remarks}</p>
+                      </div>
+                    )}
+                    {va.completionNote && (
+                      <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                        <div className="text-[10px] font-bold text-emerald-500 uppercase mb-1">Completion Summary</div>
+                        <p className="text-sm text-emerald-800 leading-relaxed whitespace-pre-wrap">{va.completionNote}</p>
+                      </div>
+                    )}
+                    {va.carryForwardNote && (
+                      <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                        <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div>
+                        <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">{va.carryForwardNote}</p>
+                        {va.nextPlannedAt && (
+                          <div className="text-xs text-amber-600 mt-2 font-medium">
+                            Next planned: {new Date(va.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(va.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {va.cancellationReason && (
+                      <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                        <div className="text-[10px] font-bold text-red-500 uppercase mb-1">Cancellation Reason</div>
+                        <p className="text-sm text-red-700 leading-relaxed whitespace-pre-wrap">{va.cancellationReason}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {va.odooLink && <div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Odoo:</span><a href={va.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">{va.odooLink}</a></div>}
               </div>
               <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
