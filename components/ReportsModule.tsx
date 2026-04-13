@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { 
     Download, FileText, Activity as ActivityIcon, 
-    ArrowRight, FileSpreadsheet, Printer, Save, Trash2, X, ChevronUp, ChevronDown, CheckSquare
+    ArrowRight, FileSpreadsheet, Printer, Save, Trash2, X, ChevronUp, ChevronDown, CheckSquare, Eye
 } from 'lucide-react';
 import ReactDatePicker from "react-datepicker";
 
@@ -19,6 +19,7 @@ interface ReportsModuleProps {
   technicians: Technician[];
   sites: Site[];
   customers?: any[];
+  onNavigate?: (type: 'ticket' | 'activity', id: string) => void;
 }
 
 // --- Date Helpers ---
@@ -118,7 +119,7 @@ interface ReportTemplate {
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#64748b', '#8b5cf6'];
 
-const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, technicians, sites, customers = [] }) => {
+const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, technicians, sites, customers = [], onNavigate }) => {
   const [reportType, setReportType] = useState<'tickets' | 'operations'>('tickets');
   
   // Date Range State - Default: This Month (MTD)
@@ -159,7 +160,11 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'id', label: 'Ticket ID', getValue: (t: Ticket) => t.id },
       { id: 'date', label: 'Created Date', getValue: (t: Ticket) => new Date(t.createdAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' }) },
       { id: 'time', label: 'Created Time', getValue: (t: Ticket) => new Date(t.createdAt).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) },
-      { id: 'customer', label: 'Customer Name', getValue: (t: Ticket) => t.customerName },
+      { id: 'customer', label: 'Customer Name', getValue: (t: Ticket) => {
+          // Resolve from customers table first for data consistency, fall back to stored name
+          const cust = customers.find((c: any) => c.id === t.customerId);
+          return cust?.name || t.customerName;
+      }},
       { id: 'phone', label: 'Phone Number', getValue: (t: Ticket) => t.phoneNumber },
       { id: 'category', label: 'Category', getValue: (t: Ticket) => t.category },
       { id: 'type', label: 'Ticket Type', getValue: (t: Ticket) => t.type },
@@ -722,16 +727,33 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                  {availableFields.slice(0, 6).map(f => (
                                      <th key={f.id} className="px-6 py-3 whitespace-nowrap">{f.label}</th>
                                  ))}
+                                 {onNavigate && <th className="px-6 py-3 whitespace-nowrap text-right">Actions</th>}
                              </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                              {filteredData.slice(0, 10).map((item: any, idx) => (
-                                 <tr key={idx} className="hover:bg-slate-50">
+                                 <tr key={idx} className="hover:bg-slate-50 group">
                                      {availableFields.slice(0, 6).map(f => (
                                          <td key={f.id} className="px-6 py-3 whitespace-nowrap text-slate-700">
                                              {f.getValue(item)}
                                          </td>
                                      ))}
+                                     {onNavigate && (
+                                         <td className="px-6 py-3 whitespace-nowrap text-right">
+                                             <button
+                                                 onClick={() => {
+                                                     if (reportType === 'tickets') {
+                                                         onNavigate('ticket', item.id);
+                                                     } else {
+                                                         onNavigate('activity', item.id);
+                                                     }
+                                                 }}
+                                                 className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                             >
+                                                 <Eye size={12}/> View
+                                             </button>
+                                         </td>
+                                     )}
                                  </tr>
                              ))}
                         </tbody>
