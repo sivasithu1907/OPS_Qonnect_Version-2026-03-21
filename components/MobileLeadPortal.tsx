@@ -501,6 +501,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   <span className="truncate max-w-[200px]">{locationDisplay}</span>
               </div>
 
+              {/* Carry Forward indicator */}
+              {ticket.carryForwardNote && (
+                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
+                      <span className="font-bold">⟲ CF:</span>
+                      <span className="truncate">{ticket.carryForwardNote.split('\n')[0]}</span>
+                  </div>
+              )}
+
               <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-200 group-hover:text-slate-400 transition-colors">
                   <ChevronRight size={20} />
               </div>
@@ -565,6 +573,27 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           </a>
                       )}
                   </div>
+                  {/* Carry Forward Banner */}
+                  {ticket.carryForwardNote && (
+                      <div className="bg-amber-50 rounded-xl p-3 mb-3 border border-amber-200">
+                          <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-[10px] font-bold text-amber-700 uppercase">⟲ Carry Forward</span>
+                          </div>
+                          <p className="text-xs text-amber-800 whitespace-pre-wrap line-clamp-3">{ticket.carryForwardNote}</p>
+                          {ticket.nextPlannedAt && (
+                              <div className="text-[10px] text-amber-600 mt-1 font-medium">
+                                  Next: {new Date(ticket.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(ticket.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                              </div>
+                          )}
+                      </div>
+                  )}
+                  {/* Completion note */}
+                  {ticket.status === TicketStatus.RESOLVED && (ticket as any).completionNote && (
+                      <div className="bg-emerald-50 rounded-xl p-3 mb-3 border border-emerald-200">
+                          <div className="text-[10px] font-bold text-emerald-600 uppercase mb-0.5">Resolution</div>
+                          <p className="text-xs text-emerald-800 whitespace-pre-wrap line-clamp-2">{(ticket as any).completionNote}</p>
+                      </div>
+                  )}
                   {/* Call */}
                   {ticket.phoneNumber ? (
                       <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
@@ -659,6 +688,27 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {/* Description */}
                 {act.description && (
                     <div className="bg-slate-50 rounded-xl p-3 mb-3 text-xs text-slate-700 line-clamp-2">{act.description}</div>
+                )}
+                {/* Carry Forward Banner */}
+                {act.carryForwardNote && (
+                    <div className="bg-amber-50 rounded-xl p-3 mb-3 border border-amber-200">
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-bold text-amber-700 uppercase">⟲ Carry Forward</span>
+                        </div>
+                        <p className="text-xs text-amber-800 whitespace-pre-wrap line-clamp-3">{act.carryForwardNote}</p>
+                        {act.nextPlannedAt && (
+                            <div className="text-[10px] text-amber-600 mt-1 font-medium">
+                                Next: {new Date(act.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(act.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                            </div>
+                        )}
+                    </div>
+                )}
+                {/* Completion note if done */}
+                {actStatus === 'DONE' && act.completionNote && (
+                    <div className="bg-emerald-50 rounded-xl p-3 mb-3 border border-emerald-200">
+                        <div className="text-[10px] font-bold text-emerald-600 uppercase mb-0.5">Resolution</div>
+                        <p className="text-xs text-emerald-800 whitespace-pre-wrap line-clamp-2">{act.completionNote}</p>
+                    </div>
                 )}
                 {/* Call */}
                 {actCustomer?.phone ? (
