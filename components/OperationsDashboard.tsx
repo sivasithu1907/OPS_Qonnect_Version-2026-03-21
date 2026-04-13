@@ -320,7 +320,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   const nowX = getNowX();
 
   return (
-    <div className="flex flex-col h-[calc(100vh)] bg-slate-100 overflow-hidden font-sans text-slate-900">
+    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-sans text-slate-900">
         
         {/* TOP: KPI & Controls */}
         <div className="flex-none bg-white z-30 shadow-sm">
@@ -437,7 +437,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                 {/* Vertically Scrollable List (Synced via JS) */}
                 <div 
                     ref={leftColRef}
-                    className="flex-1 overflow-hidden bg-white"
+                    className="flex-1 overflow-y-auto overflow-x-hidden bg-white"
                     onWheel={handleLeftWheel}
                 >
                     {operationsStaff.map(tech => {
@@ -576,7 +576,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
             </div>
 
             {/* COLUMN 2: CENTER TIMELINE (Horizontal Scroll) */}
-            <div className="flex flex-col overflow-hidden relative min-w-0">
+            <div className="flex flex-col overflow-hidden relative min-w-0 h-full">
                 {/* Header Scroller */}
                 <div 
                     ref={headerScrollRef}
