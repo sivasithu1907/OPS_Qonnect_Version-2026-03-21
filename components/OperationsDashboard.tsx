@@ -320,7 +320,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   const nowX = getNowX();
 
   return (
-    <div className="flex flex-col h-[calc(100vh)] bg-slate-100 overflow-hidden font-sans text-slate-900">
+    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-sans text-slate-900">
         
         {/* TOP: KPI & Controls */}
         <div className="flex-none bg-white z-30 shadow-sm">
@@ -426,7 +426,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
         </div>
 
         {/* MAIN LAYOUT: FIXED 3-COLUMN GRID */}
-        <div className="flex-1 overflow-hidden grid grid-cols-[280px_minmax(0,1fr)_240px]">
+        <div className="flex-1 min-h-0 overflow-hidden grid grid-cols-[280px_minmax(0,1fr)_240px]">
             
             {/* COLUMN 1: LEFT TEAMS (Fixed Width) */}
             <div className="flex flex-col border-r border-slate-200 bg-white relative z-20">
@@ -437,7 +437,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                 {/* Vertically Scrollable List (Synced via JS) */}
                 <div 
                     ref={leftColRef}
-                    className="flex-1 overflow-hidden bg-white"
+                    className="flex-1 overflow-y-auto overflow-x-hidden bg-white"
                     onWheel={handleLeftWheel}
                 >
                     {operationsStaff.map(tech => {
