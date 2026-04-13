@@ -320,7 +320,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   const nowX = getNowX();
 
   return (
-    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-sans text-slate-900">
+    <div className="flex flex-col h-[calc(100vh)] bg-slate-100 overflow-hidden font-sans text-slate-900">
         
         {/* TOP: KPI & Controls */}
         <div className="flex-none bg-white z-30 shadow-sm">
@@ -437,7 +437,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                 {/* Vertically Scrollable List (Synced via JS) */}
                 <div 
                     ref={leftColRef}
-                    className="flex-1 overflow-y-auto overflow-x-hidden bg-white"
+                    className="flex-1 overflow-hidden bg-white"
                     onWheel={handleLeftWheel}
                 >
                     {operationsStaff.map(tech => {
@@ -576,7 +576,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
             </div>
 
             {/* COLUMN 2: CENTER TIMELINE (Horizontal Scroll) */}
-            <div className="flex flex-col overflow-hidden relative min-w-0 h-full">
+            <div className="flex flex-col overflow-hidden relative min-w-0">
                 {/* Header Scroller */}
                 <div 
                     ref={headerScrollRef}
@@ -884,14 +884,14 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
             </div>
 
             {/* COLUMN 3: RIGHT FEED (Fixed Width) */}
-            <div className="flex flex-col h-full max-h-full border-l border-slate-200 bg-white z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
+            <div className="flex flex-col border-l border-slate-200 bg-white z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
                 <div className="h-10 border-b border-slate-100 bg-slate-50 flex items-center px-3 justify-between shrink-0">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                         <History size={12} /> Live Feed
                     </span>
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                 </div>
-                <div className="flex-1 overflow-y-auto overflow-x-hidden max-h-[calc(100vh-120px)] p-0">
+                <div className="flex-1 overflow-y-auto p-0">
                     {liveFeed.map((item, i) => (
                         <div 
                             key={`${item.id}-${i}`} 
