@@ -333,7 +333,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         locationUrl: selectedTicket.locationUrl || '',
         houseNumber: selectedTicket.houseNumber || '',
         customerId: selectedTicket.customerId,
-        customerName: selectedTicket.customerName,
+        customerName: customers?.find(c => c.id === selectedTicket.customerId)?.name || selectedTicket.customerName,
         phoneNumber: selectedTicket.phoneNumber
       });
       setClientLinkMode('view');
@@ -831,7 +831,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 return (
                     <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' : ''}`}>
                         <div className="flex justify-between items-start mb-1">
-                            <span className="font-medium text-slate-900">{ticket.customerName}</span>
+                            <span className="font-medium text-slate-900">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
                                               ticket.status === 'NEW'           ? 'bg-slate-100 text-slate-600' :
                                               ticket.status === 'OPEN'          ? 'bg-blue-100 text-blue-700' :
