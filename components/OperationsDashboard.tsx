@@ -19,6 +19,7 @@ interface OperationsDashboardProps {
   onUpdateActivity?: (activity: Activity) => void;
   onNavigate?: (type: 'ticket' | 'activity', id: string) => void;
   readOnly?: boolean;
+  tvMode?: boolean; // TV Display: bigger rows, full names, wider zoom, no KPI bar
 }
 
 // Define a union type for the selected item in the drawer
@@ -33,20 +34,22 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     customers,
     onUpdateActivity,
     onNavigate,
-    readOnly = false
+    readOnly = false,
+    tvMode = false
 }) => {
   const [selectedItem, setSelectedItem] = useState<DrawerItem | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   
   // Timeline Configuration
-  const [zoomLevel, setZoomLevel] = useState(140); // Pixels per hour
+  const [zoomLevel, setZoomLevel] = useState(tvMode ? 100 : 140); // TV: wider view, Desktop: 140px/hr
   
   // Constants for Fixed Timeline (00:00 - 24:00)
   const TIMELINE_START = 0;
   const TIMELINE_END = 24;
   const TOTAL_HOURS = TIMELINE_END - TIMELINE_START; 
   const totalGridWidth = TOTAL_HOURS * zoomLevel;
-  const LEFT_COL_WIDTH = 280;
+  const LEFT_COL_WIDTH = tvMode ? 240 : 280;
+  const ROW_HEIGHT = tvMode ? 'h-28' : 'h-24'; // Taller rows for TV readability
 
   // Filters
   const [bodyScrollLeft, setBodyScrollLeft] = useState(0);
@@ -320,9 +323,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   const nowX = getNowX();
 
   return (
-    <div className="flex flex-col h-[calc(100vh)] bg-slate-100 overflow-hidden font-sans text-slate-900">
+    <div className={`flex flex-col ${tvMode ? 'h-full' : 'h-[calc(100vh)]'} bg-slate-100 overflow-hidden font-sans text-slate-900`}>
         
-        {/* TOP: KPI & Controls */}
+        {/* TOP: KPI & Controls — HIDDEN in TV mode */}
+        {!tvMode && (
         <div className="flex-none bg-white z-30 shadow-sm">
             {/* KPI Row */}
             <div className="p-4 pb-2 grid grid-cols-6 gap-4 border-b border-slate-200">
@@ -424,9 +428,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                 </div>
             </div>
         </div>
+        )}
 
-        {/* MAIN LAYOUT: FIXED 3-COLUMN GRID */}
-        <div className="flex-1 overflow-hidden grid grid-cols-[280px_minmax(0,1fr)_240px]">
+        {/* MAIN LAYOUT: 3-COLUMN GRID — dynamic widths for TV vs Desktop */}
+        <div className={`flex-1 overflow-hidden grid ${tvMode ? 'grid-cols-[220px_minmax(0,1fr)_200px]' : 'grid-cols-[280px_minmax(0,1fr)_240px]'}`}>
             
             {/* COLUMN 1: LEFT TEAMS (Fixed Width) */}
             <div className="flex flex-col border-r border-slate-200 bg-white relative z-20">
@@ -478,7 +483,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         const isActiveNow = activeActs.length > 0;
 
                         return (
-                            <div key={tech.id} className="h-24 border-b border-slate-200 p-3 flex flex-col justify-center">
+                            <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center`}>
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="relative">
                                         <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 border border-slate-100 object-cover" alt=""/>
@@ -489,7 +494,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2">
                                             <span className="font-bold text-slate-800 text-xs truncate">
-                                                {`Team ${tech.name.split(' ')[0]}`}
+                                                {tech.name}
                                             </span>
                                             {isActiveNow && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">LIVE</span>}
                                         </div>
@@ -549,7 +554,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                     })}
                     {/* Freelancer-only Jobs Row (no internal engineer assigned) */}
                     {unassignedFreelancerActs.length > 0 && (
-                        <div className="h-24 border-b border-slate-200 p-3 flex flex-col justify-center bg-amber-50/30">
+                        <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center bg-amber-50/30`}>
                             <div className="flex items-center gap-3 mb-2">
                                 <div className="w-9 h-9 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 text-[10px] font-bold">FL</div>
                                 <div className="min-w-0 flex-1">
@@ -774,7 +779,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             const timelineItems = [...techActivities, ...techTickets];
 
                             return (
-                                <div key={tech.id} className="h-24 border-b border-slate-200 relative w-full hover:bg-slate-100/50 transition-colors">
+                                <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full hover:bg-slate-100/50 transition-colors`}>
                                     {timelineItems.map((item: any) => {
                                         const style = getPositionStyle(item.plannedDate, item.durationHours);
                                         const isTicket = item.type === 'ticket';
@@ -829,7 +834,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         })}
                         {/* Freelancer-only timeline row */}
                         {unassignedFreelancerActs.length > 0 && (
-                            <div className="h-24 border-b border-slate-200 relative w-full bg-amber-50/20">
+                            <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full bg-amber-50/20`}>
                                 {unassignedFreelancerActs.map(a => {
                                     const s = normalizeStatus(a.status);
                                     const actualStart = (a as any).startedAt;
