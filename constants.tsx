@@ -6,8 +6,11 @@ export const APP_NAME = "Qonnect";
 // --- STATUS LABELS (DB-safe values, UI-friendly text) ---
 export const ACTIVITY_STATUS_LABELS: Record<ActivityStatus, string> = {
   PLANNED: 'Planned',
+  ON_MY_WAY: 'On My Way',
+  ARRIVED: 'Arrived',
   IN_PROGRESS: 'In-Progress',
   DONE: 'Done',
+  CARRY_FORWARD: 'Carry Forward',
   CANCELLED: 'Cancelled',
 };
 
