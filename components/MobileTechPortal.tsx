@@ -62,7 +62,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const [photoJobId, setPhotoJobId] = useState<string | null>(null);
   const [photoJobType, setPhotoJobType] = useState<'ticket' | 'activity'>('activity');
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [showPhotoSourcePicker, setShowPhotoSourcePicker] = useState(false);
   const photoInputRef = React.useRef<HTMLInputElement>(null);
+  const cameraInputRef = React.useRef<HTMLInputElement>(null);
 
   // Combine Tickets and Activities into a single "Job" concept for display
   // Prioritize Delayed Jobs
@@ -112,6 +114,16 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const handlePhotoClick = (jobId: string, jobType: 'ticket' | 'activity') => {
       setPhotoJobId(jobId);
       setPhotoJobType(jobType);
+      setShowPhotoSourcePicker(true);
+  };
+
+  const handlePhotoFromCamera = () => {
+      setShowPhotoSourcePicker(false);
+      cameraInputRef.current?.click();
+  };
+
+  const handlePhotoFromGallery = () => {
+      setShowPhotoSourcePicker(false);
       photoInputRef.current?.click();
   };
 
@@ -858,15 +870,50 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
         </div>
     </div>
 
-      {/* Hidden photo file input */}
+      {/* Hidden photo file inputs — separate for camera and gallery */}
       <input
-          ref={photoInputRef}
+          ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
           className="hidden"
           onChange={handlePhotoUpload}
       />
+      <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handlePhotoUpload}
+      />
+
+      {/* Photo Source Picker Modal */}
+      {showPhotoSourcePicker && (
+          <div className="fixed inset-0 z-[200] bg-black/60 flex items-end justify-center" onClick={() => setShowPhotoSourcePicker(false)}>
+              <div className="bg-white w-full max-w-sm rounded-t-2xl p-6 space-y-3 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-lg font-bold text-slate-900 text-center mb-4">Upload Photo</h3>
+                  <button 
+                      onClick={handlePhotoFromCamera}
+                      className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  >
+                      <Camera size={20} /> Open Camera
+                  </button>
+                  <button 
+                      onClick={handlePhotoFromGallery}
+                      className="w-full py-3.5 bg-slate-100 text-slate-800 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform border border-slate-200"
+                  >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                      Choose from Gallery
+                  </button>
+                  <button 
+                      onClick={() => setShowPhotoSourcePicker(false)}
+                      className="w-full py-3 text-slate-500 font-bold text-sm"
+                  >
+                      Cancel
+                  </button>
+              </div>
+          </div>
+      )}
 
       {/* Change Password Modal */}
       {showChangePwd && (
