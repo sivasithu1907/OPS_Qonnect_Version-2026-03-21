@@ -1220,6 +1220,7 @@ useEffect(() => {
                         tickets={tickets} 
                         technicians={technicians}
                         customers={customers}
+                        activities={activities}
                         currentUser={currentUser}
                         onDeleteTicket={handleDeleteTicket}
                         onAddCustomer={handleAddCustomer}
