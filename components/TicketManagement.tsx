@@ -5,7 +5,7 @@ import { TICKET_CATEGORIES, SEARCH_INPUT_STYLES, INPUT_STYLES } from '../constan
 import { analyzeTicketMessage } from '../services/geminiService';
 import CustomerSelector from './CustomerSelector';
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
-import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2 } from 'lucide-react';
+import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2, Eye, Edit, Phone as PhoneIcon, RotateCcw, Briefcase, ExternalLink } from 'lucide-react';
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
 
 // Converts a UTC ISO string → datetime-local input value in LOCAL timezone
@@ -29,6 +29,7 @@ interface TicketManagementProps {
   technicians: Technician[];
   // Pass full customer list and creation handler
   customers?: Customer[]; 
+  activities?: any[]; // For looking up linked activity data (appointment, assignment)
   onAddCustomer?: (customer: Customer) => Promise<Customer | null> | void;
   
   onUpdateTicket: (ticket: Ticket) => void;
@@ -79,6 +80,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     tickets, 
     technicians,
     customers = [],
+    activities = [],
     onAddCustomer = (_: Customer) => {}, // Fixed default signature
     onUpdateTicket,
     onOpenTicket,
@@ -98,6 +100,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
+  
+  // Panel View/Edit mode — default to VIEW (read-only summary)
+  const [panelMode, setPanelMode] = useState<'view' | 'edit'>('view');
   
   // --- Local Filter State ---
   const [searchTerm, setSearchTerm] = useState('');
@@ -340,6 +345,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       setNewClientName('');
       setAnalysisResult(null); // Reset analysis on ticket change
       setReplyText('');
+      setPanelMode('view'); // Always open in read-only view
     } else {
         setEditForm(null);
     }
@@ -875,20 +881,6 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                
                {/* NEW WRAPPER DIV FOR BOTH BUTTONS */}
                <div className="flex items-center gap-2">
-                  {currentUser?.role === 'ADMIN' && (
-                       <button 
-                           onClick={() => {
-                               if (onDeleteTicket && selectedTicketId) {
-                                   onDeleteTicket(selectedTicketId);
-                                   setSelectedTicketId(null); // Clear selection after delete
-                               }
-                           }}
-                           className="text-xs font-semibold flex items-center gap-1 text-red-600 hover:bg-red-50 px-2 py-1.5 rounded transition-colors"
-                       >
-                           <Trash2 size={14} /> Delete
-                       </button>
-                   )}
-
                    <button onClick={handleAIAnalysis} disabled={isAnalyzing} className="text-xs font-semibold flex items-center gap-1 text-purple-600 hover:bg-purple-50 px-2 py-1.5 rounded transition-colors disabled:opacity-50">
                        {isAnalyzing ? <div className="animate-spin w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full"/> : <Sparkles size={14} />}
                        AI Analyze
@@ -977,14 +969,283 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           </div>
           <div className="w-80 bg-slate-50 flex flex-col h-full overflow-hidden border-l border-slate-200">
              
-             {/* Client Management Section */}
-             <div className="p-4 border-b border-slate-200 bg-white space-y-4 shrink-0">
+             {/* Panel Mode Toggle Header */}
+             <div className="p-3 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
+                 <div className="flex items-center gap-2">
+                     <button 
+                         onClick={() => setPanelMode('view')}
+                         className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+                             panelMode === 'view' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+                         }`}
+                     >
+                         <Eye size={12}/> Summary
+                     </button>
+                     <button 
+                         onClick={() => setPanelMode('edit')}
+                         className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+                             panelMode === 'edit' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
+                         }`}
+                     >
+                         <Edit size={12}/> Edit
+                     </button>
+                 </div>
+                 {currentUser?.role === 'ADMIN' && (
+                     <button 
+                         onClick={() => {
+                             if (onDeleteTicket && selectedTicketId) {
+                                 onDeleteTicket(selectedTicketId);
+                                 setSelectedTicketId(null);
+                             }
+                         }}
+                         className="text-[10px] font-semibold text-red-500 hover:bg-red-50 px-1.5 py-1 rounded transition-colors"
+                     >
+                         <Trash2 size={12} />
+                     </button>
+                 )}
+             </div>
+
+             {/* ==================== VIEW MODE (Read-Only Summary) ==================== */}
+             {panelMode === 'view' && selectedTicket && (() => {
+                 const cust = customers?.find(c => c.id === selectedTicket.customerId);
+                 const assignedTech = technicians.find(t => t.id === selectedTicket.assignedTechId);
+                 // Look up linked activity for this ticket's customer on same date
+                 const linkedActivity = activities.find((a: any) => 
+                     a.customerId === selectedTicket.customerId && 
+                     a.status !== 'CANCELLED' &&
+                     (a.leadTechId === selectedTicket.assignedTechId || (a as any).primaryEngineerId === selectedTicket.assignedTechId)
+                 );
+                 const issueText = selectedTicket.messages?.find((m: any) => m.sender === 'CLIENT')?.content 
+                     || (selectedTicket as any).ai_summary 
+                     || selectedTicket.notes 
+                     || '';
+                 const statusBadge =
+                     selectedTicket.status === TicketStatus.NEW ? 'bg-slate-100 text-slate-700' :
+                     selectedTicket.status === TicketStatus.OPEN ? 'bg-blue-50 text-blue-700' :
+                     selectedTicket.status === TicketStatus.ASSIGNED ? 'bg-purple-50 text-purple-700' :
+                     selectedTicket.status === TicketStatus.ON_MY_WAY ? 'bg-cyan-50 text-cyan-700' :
+                     selectedTicket.status === TicketStatus.ARRIVED ? 'bg-indigo-50 text-indigo-700' :
+                     selectedTicket.status === TicketStatus.IN_PROGRESS ? 'bg-amber-50 text-amber-700' :
+                     selectedTicket.status === TicketStatus.CARRY_FORWARD ? 'bg-orange-50 text-orange-700' :
+                     selectedTicket.status === TicketStatus.RESOLVED ? 'bg-emerald-50 text-emerald-700' :
+                     selectedTicket.status === TicketStatus.CANCELLED ? 'bg-red-50 text-red-600' :
+                     'bg-slate-50 text-slate-600';
+                 return (
+                     <div className="flex-1 overflow-y-auto">
+                         {/* Status Banner */}
+                         <div className={`px-4 py-3 ${statusBadge} border-b`}>
+                             <div className="flex justify-between items-center">
+                                 <span className="text-xs font-bold uppercase">{selectedTicket.status.replace(/_/g, ' ')}</span>
+                                 <span className="text-[10px] font-mono opacity-70">{selectedTicket.id}</span>
+                             </div>
+                         </div>
+
+                         <div className="p-4 space-y-4">
+                             {/* Customer */}
+                             <div className="space-y-1.5">
+                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><User size={10}/> Customer</h4>
+                                 <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-1">
+                                     <div className="font-bold text-slate-800 text-sm">{cust?.name || selectedTicket.customerName}</div>
+                                     <div className="text-xs text-slate-500 font-mono flex items-center gap-1">
+                                         <PhoneIcon size={10}/> {formatPhoneDisplay(selectedTicket.phoneNumber)}
+                                     </div>
+                                     {cust?.email && <div className="text-xs text-slate-500">{cust.email}</div>}
+                                     {!cust && <div className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded inline-block mt-1">Unlinked</div>}
+                                 </div>
+                             </div>
+
+                             {/* Service Info */}
+                             <div className="space-y-1.5">
+                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Briefcase size={10}/> Service Info</h4>
+                                 <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-2">
+                                     <div className="flex justify-between text-xs">
+                                         <span className="text-slate-400">Type</span>
+                                         <span className="font-medium text-slate-700">{selectedTicket.type || '—'}</span>
+                                     </div>
+                                     <div className="flex justify-between text-xs">
+                                         <span className="text-slate-400">Category</span>
+                                         <span className="font-medium text-slate-700">{selectedTicket.category}</span>
+                                     </div>
+                                     <div className="flex justify-between text-xs">
+                                         <span className="text-slate-400">Priority</span>
+                                         <span className={`font-bold ${selectedTicket.priority === 'URGENT' ? 'text-red-600' : selectedTicket.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>
+                                             {toTitleCase(selectedTicket.priority)}
+                                         </span>
+                                     </div>
+                                 </div>
+                             </div>
+
+                             {/* Schedule & Timing */}
+                             <div className="space-y-1.5">
+                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Calendar size={10}/> Schedule</h4>
+                                 <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-2">
+                                     {/* Use activity plannedDate if available, otherwise ticket appointment */}
+                                     {(() => {
+                                         const apptSource = linkedActivity?.plannedDate || selectedTicket.appointmentTime;
+                                         return apptSource ? (
+                                             <div className="flex justify-between text-xs">
+                                                 <span className="text-slate-400">{linkedActivity ? 'Planned (Activity)' : 'Appointment'}</span>
+                                                 <span className="font-semibold text-slate-700">
+                                                     {new Date(apptSource).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}
+                                                     {' '}{new Date(apptSource).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                                                 </span>
+                                             </div>
+                                         ) : (
+                                             <div className="text-xs text-slate-400 italic">No appointment scheduled</div>
+                                         );
+                                     })()}
+                                     {(selectedTicket as any).startedAt && (
+                                         <div className="flex justify-between text-xs">
+                                             <span className="text-slate-400">Started</span>
+                                             <span className="text-emerald-600 font-medium">{new Date((selectedTicket as any).startedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</span>
+                                         </div>
+                                     )}
+                                     {(selectedTicket as any).completedAt && (
+                                         <div className="flex justify-between text-xs">
+                                             <span className="text-slate-400">Completed</span>
+                                             <span className="text-emerald-600 font-medium">{new Date((selectedTicket as any).completedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</span>
+                                         </div>
+                                     )}
+                                     <div className="flex justify-between text-xs">
+                                         <span className="text-slate-400">Created</span>
+                                         <span className="text-slate-600">{new Date(selectedTicket.createdAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}</span>
+                                     </div>
+                                 </div>
+                             </div>
+
+                             {/* Assignment */}
+                             <div className="space-y-1.5">
+                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><UserCheck size={10}/> Assignment</h4>
+                                 <div className="bg-white rounded-lg p-3 border border-slate-100">
+                                     {assignedTech ? (
+                                         <div className="flex items-center gap-2">
+                                             <img src={assignedTech.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/>
+                                             <div>
+                                                 <div className="text-xs font-bold text-slate-800">{assignedTech.name}</div>
+                                                 <div className="text-[10px] text-slate-400">{assignedTech.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</div>
+                                             </div>
+                                         </div>
+                                     ) : (
+                                         <div className="text-xs text-slate-400 italic">Unassigned</div>
+                                     )}
+                                 </div>
+                             </div>
+
+                             {/* Location */}
+                             {(selectedTicket.houseNumber || selectedTicket.locationUrl) && (
+                                 <div className="space-y-1.5">
+                                     <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><MapPin size={10}/> Location</h4>
+                                     <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-1.5">
+                                         {selectedTicket.houseNumber && <div className="text-xs text-slate-700 font-medium">{selectedTicket.houseNumber}</div>}
+                                         {selectedTicket.locationUrl && (
+                                             <a href={selectedTicket.locationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline">
+                                                 <ExternalLink size={10}/> Open Map
+                                             </a>
+                                         )}
+                                     </div>
+                                 </div>
+                             )}
+
+                             {/* Scope / Issue */}
+                             {issueText && (
+                                 <div className="space-y-1.5">
+                                     <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><MessageSquare size={10}/> Scope of Work</h4>
+                                     <div className="bg-white rounded-lg p-3 border border-slate-100">
+                                         <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{issueText}</p>
+                                     </div>
+                                 </div>
+                             )}
+
+                             {/* AI Summary */}
+                             {(selectedTicket as any)?.ai_summary && !issueText.includes((selectedTicket as any).ai_summary) && (
+                                 <div className="space-y-1.5">
+                                     <h4 className="text-[10px] font-bold text-purple-400 uppercase flex items-center gap-1"><Sparkles size={10}/> AI Summary</h4>
+                                     <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                                         <p className="text-xs text-purple-900 leading-relaxed">{(selectedTicket as any).ai_summary}</p>
+                                     </div>
+                                 </div>
+                             )}
+
+                             {/* Notes & Remarks */}
+                             {(selectedTicket.notes || (selectedTicket as any).completionNote || selectedTicket.assignmentNote) && (
+                                 <div className="space-y-1.5">
+                                     <h4 className="text-[10px] font-bold text-slate-400 uppercase">Notes</h4>
+                                     {selectedTicket.notes && (
+                                         <div className="bg-white rounded-lg p-3 border border-slate-100">
+                                             <div className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Remarks</div>
+                                             <p className="text-xs text-slate-700 whitespace-pre-wrap">{selectedTicket.notes}</p>
+                                         </div>
+                                     )}
+                                     {(selectedTicket as any).completionNote && (
+                                         <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+                                             <div className="text-[9px] font-bold text-emerald-500 uppercase mb-0.5">Completion Summary</div>
+                                             <p className="text-xs text-emerald-800 whitespace-pre-wrap">{(selectedTicket as any).completionNote}</p>
+                                         </div>
+                                     )}
+                                     {selectedTicket.assignmentNote && (
+                                         <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+                                             <div className="text-[9px] font-bold text-indigo-500 uppercase mb-0.5">Assignment Note</div>
+                                             <p className="text-xs text-indigo-800 whitespace-pre-wrap">{selectedTicket.assignmentNote}</p>
+                                         </div>
+                                     )}
+                                 </div>
+                             )}
+
+                             {/* Carry Forward Section */}
+                             {selectedTicket.carryForwardNote && (
+                                 <div className="space-y-1.5">
+                                     <h4 className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1"><RotateCcw size={10}/> Carry Forward</h4>
+                                     <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 space-y-2">
+                                         <p className="text-xs text-amber-800 whitespace-pre-wrap leading-relaxed">{selectedTicket.carryForwardNote}</p>
+                                         {selectedTicket.nextPlannedAt && (
+                                             <div className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                                                 <Clock size={10}/> Re-scheduled: {new Date(selectedTicket.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} at {new Date(selectedTicket.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                                             </div>
+                                         )}
+                                     </div>
+                                 </div>
+                             )}
+
+                             {/* Cancellation Reason */}
+                             {selectedTicket.cancellationReason && (
+                                 <div className="bg-red-50 rounded-lg p-3 border border-red-100">
+                                     <div className="text-[9px] font-bold text-red-500 uppercase mb-0.5">Cancellation Reason</div>
+                                     <p className="text-xs text-red-700 whitespace-pre-wrap">{selectedTicket.cancellationReason}</p>
+                                 </div>
+                             )}
+
+                             {/* External Refs */}
+                             {selectedTicket.odooLink && (
+                                 <div className="flex items-center gap-2 text-xs">
+                                     <LinkIcon size={10} className="text-slate-400"/>
+                                     <span className="text-slate-400">Odoo:</span>
+                                     <a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate">{selectedTicket.odooLink}</a>
+                                 </div>
+                             )}
+                         </div>
+
+                         {/* View Mode Footer */}
+                         <div className="p-3 border-t border-slate-200 bg-white shrink-0">
+                             <button 
+                                 onClick={() => setPanelMode('edit')}
+                                 className="w-full py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 flex items-center justify-center gap-2 transition-colors"
+                             >
+                                 <Edit size={14}/> Edit Ticket
+                             </button>
+                         </div>
+                     </div>
+                 );
+             })()}
+
+             {/* ==================== EDIT MODE (Existing Form) ==================== */}
+             {panelMode === 'edit' && (
+               <>
+               {/* Client Management Section */}
+               <div className="p-4 border-b border-slate-200 bg-white space-y-4 shrink-0">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-xs uppercase tracking-wider">
                     <User size={14}/> Client Details
                 </h3>
 
                 {linkedCustomer ? (
-                    // Linked View
                     <div className="flex justify-between items-start p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
                         <div>
                             <div className="font-bold text-slate-900 text-sm">{linkedCustomer.name}</div>
@@ -1003,12 +1264,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         </button>
                     </div>
                 ) : (
-                    // Unlinked View
                     <div className="space-y-3">
                         <div className="flex items-center justify-between p-3 bg-slate-100 border border-slate-200 rounded-lg">
                             <div>
                                 <div className="text-[10px] font-bold text-slate-500 uppercase">Detected Contact</div>
-                                <div className="font-mono text-sm font-bold text-slate-700">{formatPhoneDisplay(editForm.phoneNumber) || "No Phone"}</div>
+                                <div className="font-mono text-sm font-bold text-slate-700">{formatPhoneDisplay(editForm?.phoneNumber || '') || "No Phone"}</div>
                             </div>
                             <div className="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded font-medium">Unlinked</div>
                         </div>
@@ -1023,9 +1283,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                     onClick={() => {
                                         updateField('customerId', potentialMatch.id);
                                         updateField('customerName', potentialMatch.name);
-                                        // Also auto-fill location if missing
-                                        if (!editForm.houseNumber && potentialMatch.buildingNumber) updateField('houseNumber', potentialMatch.buildingNumber);
-                                        if (!editForm.locationUrl && potentialMatch.address) updateField('locationUrl', potentialMatch.address);
+                                        if (editForm && !editForm.houseNumber && potentialMatch.buildingNumber) updateField('houseNumber', potentialMatch.buildingNumber);
+                                        if (editForm && !editForm.locationUrl && potentialMatch.address) updateField('locationUrl', potentialMatch.address);
                                     }}
                                     className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm"
                                 >
@@ -1049,11 +1308,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                         onSelect={(c) => {
                                             updateField('customerId', c.id);
                                             updateField('customerName', c.name);
-                                            if (!editForm.houseNumber && c.buildingNumber) updateField('houseNumber', c.buildingNumber);
-                                            if (!editForm.locationUrl && c.address) updateField('locationUrl', c.address);
+                                            if (editForm && !editForm.houseNumber && c.buildingNumber) updateField('houseNumber', c.buildingNumber);
+                                            if (editForm && !editForm.locationUrl && c.address) updateField('locationUrl', c.address);
                                             setClientLinkMode('view');
                                         }}
-                                        onCreateNew={() => {}} // Disabled here
+                                        onCreateNew={() => {}}
                                     />
                                 </div>
                                 <button onClick={() => setClientLinkMode('view')} className="text-xs text-slate-500 hover:text-slate-800 w-full text-center hover:underline">Cancel Search</button>
@@ -1072,7 +1331,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                     placeholder="Client Name"
                                     className={INPUT_STYLES}
                                 />
-                                <div className="text-xs text-slate-500">Phone: {formatPhoneDisplay(editForm.phoneNumber)}</div>
+                                <div className="text-xs text-slate-500">Phone: {formatPhoneDisplay(editForm?.phoneNumber || '')}</div>
                                 <button 
                                     onClick={handleInlineCreateClient}
                                     className="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-emerald-700"
@@ -1154,7 +1413,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Appointment</label>
                     <input
                         type="datetime-local"
-                        value={toLocalDatetimeInput(editForm.appointmentTime)}
+                        value={toLocalDatetimeInput(editForm?.appointmentTime || '')}
                         onChange={e => updateField('appointmentTime', fromLocalDatetimeInput(e.target.value))}
                         className={INPUT_STYLES}
                         min={toLocalDatetimeInput(new Date().toISOString())}
@@ -1194,19 +1453,47 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              </div>
              <div className="p-4 border-t border-slate-200 bg-white">
                  {hasUnsavedChanges() && <div className="mb-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200"><AlertCircle size={14} /> Unsaved changes</div>}
-
-                 <button 
-                    onClick={handleSaveChanges} 
-                    disabled={!hasUnsavedChanges() || !isDetailValid()} 
-                    className={`w-full py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
-                        hasUnsavedChanges() && isDetailValid() 
-                        ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-md' 
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                >
-                    <Save size={18} /> Update Ticket Details
-                </button>
+                 <div className="flex gap-2">
+                     <button 
+                        onClick={() => {
+                            // Reset form to original ticket data and go back to view
+                            if (selectedTicket) {
+                                setEditForm({
+                                    status: selectedTicket.status,
+                                    type: selectedTicket.type,
+                                    priority: selectedTicket.priority,
+                                    category: selectedTicket.category,
+                                    assignedTechId: selectedTicket.assignedTechId || '',
+                                    appointmentTime: selectedTicket.appointmentTime || '',
+                                    odooLink: selectedTicket.odooLink || '',
+                                    locationUrl: selectedTicket.locationUrl || '',
+                                    houseNumber: selectedTicket.houseNumber || '',
+                                    customerId: selectedTicket.customerId,
+                                    customerName: customers?.find(c => c.id === selectedTicket.customerId)?.name || selectedTicket.customerName,
+                                    phoneNumber: selectedTicket.phoneNumber
+                                });
+                            }
+                            setPanelMode('view');
+                        }}
+                        className="flex-1 py-2.5 rounded-lg font-semibold text-xs text-slate-500 hover:bg-slate-100 transition-colors"
+                     >
+                        Cancel
+                     </button>
+                     <button 
+                        onClick={() => { handleSaveChanges(); setPanelMode('view'); }} 
+                        disabled={!hasUnsavedChanges() || !isDetailValid()} 
+                        className={`flex-1 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all text-xs ${
+                            hasUnsavedChanges() && isDetailValid() 
+                            ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-md' 
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                    >
+                        <Save size={14} /> Save Changes
+                    </button>
+                 </div>
              </div>
+             </>
+             )}
           </div>
         </div>
       ) : (
