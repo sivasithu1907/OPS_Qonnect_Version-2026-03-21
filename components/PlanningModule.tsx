@@ -835,9 +835,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                            <LinkIcon size={12} /> Odoo Reference (CRM Link)
                        </label>
                        <input 
-                        type="url" 
+                        type="text" 
                         name="odooLink" 
-                        required 
                         defaultValue={editingActivity?.odooLink} 
                         placeholder="https://odoo.crm..." 
                         className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
