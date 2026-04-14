@@ -845,25 +845,14 @@ useEffect(() => {
 
   // --- Render ---
 
-  if (!currentUser) {
-      return <Login onLogin={handleLogin} error={loginError} />;
+  // ── TV Display Mode — Fullscreen read-only, NO LOGIN REQUIRED ──
+  // Renders before login check — TV fetches its own data from public /api/tv-data endpoint
+  if (isTVMode) {
+    return <TVDisplayMode />;
   }
 
-  // ── TV Display Mode — Fullscreen read-only ──
-  if (isTVMode && currentUser) {
-    return (
-      <TVDisplayMode
-        teams={teams}
-        sites={sites}
-        technicians={technicians}
-        activities={activities}
-        tickets={tickets}
-        customers={customers}
-        onRefresh={async () => {
-          await Promise.all([loadTickets(), loadActivities(), loadTeams(), loadSites(), loadCustomers(), loadUsers()]);
-        }}
-      />
-    );
+  if (!currentUser) {
+      return <Login onLogin={handleLogin} error={loginError} />;
   }
 
   // ── Fullscreen Portal Mode ─────────────────────────────────────────────
