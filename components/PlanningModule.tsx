@@ -55,6 +55,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   
   // Customer Selector State
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  
+  // Location auto-fill state (controlled, populated from customer on select)
+  const [locationUrl, setLocationUrl] = useState('');
+  const [houseNumber, setHouseNumber] = useState('');
 
   // Freelancers State (activity-level, no user record)
   const [freelancers, setFreelancers] = useState<{ name: string; role: string; phone: string }[]>([]);
@@ -105,6 +109,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 unit: editingActivity.durationUnit || 'HOURS'
             });
             setSelectedCustomerId(editingActivity.customerId || '');
+            setLocationUrl(editingActivity.locationUrl || '');
+            setHouseNumber(editingActivity.houseNumber || '');
             setFreelancers((editingActivity as any).freelancers || []);
         } else {
             const now = new Date();
@@ -113,6 +119,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             setPlannedDatetime(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T09:00`);
             setDurationState({ val: '2', unit: 'HOURS' });
             setSelectedCustomerId('');
+            setLocationUrl('');
+            setHouseNumber('');
             setFreelancers([]);
         }
     }
@@ -683,14 +691,15 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   const activityPayload: any = {
                       type: data.type,
-                      serviceCategory: data.serviceCategory, // New Field
-                      customerId: selectedCustomerId, // New Link
+                      serviceCategory: data.serviceCategory,
+                      customerId: selectedCustomerId,
                       priority: data.priority,
                       status: data.status || 'PLANNED',
                       plannedDate: plannedDateIso,
                       durationHours: Number(durationState.val),
                       durationUnit: durationState.unit,
                       description: data.description,
+                      remarks: data.remarks || '',
                       
                       odooLink: data.odooLink,
                       locationUrl: data.locationUrl,
@@ -719,7 +728,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <CustomerSelector 
                         customers={customers}
                         selectedCustomerId={selectedCustomerId}
-                        onSelect={(c) => setSelectedCustomerId(c.id)}
+                        onSelect={(c) => {
+                            setSelectedCustomerId(c.id);
+                            // Auto-fill location from customer record if not already set
+                            if (c.address && !locationUrl) setLocationUrl(c.address);
+                            if (c.buildingNumber && !houseNumber) setHouseNumber(c.buildingNumber);
+                        }}
                         onCreateNew={handleNewCustomer}
                       />
                   </div>
@@ -762,11 +776,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">Location URL</label>
-                              <input type="url" name="locationUrl" defaultValue={editingActivity?.locationUrl} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="url" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">House Number</label>
-                              <input type="text" name="houseNumber" defaultValue={editingActivity?.houseNumber} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="text" name="houseNumber" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                       </div>
                   </div>
@@ -832,12 +846,16 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   
                   {/* Resource Allocation Section */}
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                           <User size={16}/> Resource Allocation
                       </h4>
-                      <div className="space-y-4">
+                      <div className="space-y-5">
+                          {/* ── Sales Lead ── */}
                           <div className="space-y-1">
-                              <label className="text-xs font-semibold text-slate-500 uppercase">Sales Lead</label>
+                              <div className="flex items-center gap-2 mb-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/>
+                                  <label className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sales Lead</label>
+                              </div>
                               <select name="salesLeadId" defaultValue={editingActivity?.salesLeadId || ''} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
                                   <option value="" disabled hidden>{salesTeam.length === 0 ? 'No Sales Lead available' : 'Select Sales Lead'}</option>
                                   {salesTeam.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -847,9 +865,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               )}
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-200">
+                                {/* ── Field Engineer ── */}
                                 <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase">Field Engineer</label>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500"/>
+                                        <label className="text-xs font-bold text-purple-700 uppercase tracking-wider">Field Engineer</label>
+                                    </div>
                                     <select
                                       name="leadTechId"
                                       defaultValue={editingActivity?.leadTechId || ""}
@@ -900,8 +922,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                     )}
 
                                 </div>
+                                {/* ── Technical Associates ── */}
                                 <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase">Technical Associates</label>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-teal-500"/>
+                                        <label className="text-xs font-bold text-teal-700 uppercase tracking-wider">Technical Associates</label>
+                                    </div>
                                     <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
                                         {availableAssociates.length > 0 ? availableAssociates.map(t => (
                                             <div key={t.id} className="flex items-center gap-2">
@@ -1014,7 +1040,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Description / Scope of Work</label>
-                      <textarea name="description" rows={3} defaultValue={editingActivity?.description} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"></textarea>
+                      <textarea name="description" rows={3} defaultValue={editingActivity?.description} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
+                  </div>
+
+                  {/* General Remarks (separate from carry forward reason) */}
+                  <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">General Remarks</label>
+                      <textarea name="remarks" rows={2} defaultValue={(editingActivity as any)?.remarks} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
                   </div>
 
                   {editingActivity && (
