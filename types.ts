@@ -180,8 +180,23 @@ export interface TicketFilter {
 }
 
 export type ActivityType = 'Installation' | 'Service' | 'Maintenance' | 'Inspection' | 'Survey';
-export type ActivityStatus = 'PLANNED' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+export type ActivityStatus = 'PLANNED' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED' | 'CARRY_FORWARD' | 'ON_MY_WAY' | 'ARRIVED';
 export type ServiceCategory = 'ELV Systems' | 'Home Automation';
+
+export interface VisitRecord {
+  date: string;
+  startedAt?: string;
+  completedAt?: string;
+  assignedTeam?: {
+    leadTechId?: string;
+    primaryEngineerId?: string;
+    supportingEngineerIds?: string[];
+    freelancers?: any[];
+  };
+  remarks?: string;
+  carryForwardReason?: string;
+  status: string;
+}
 
 export interface Activity {
   id: string; // e.g. ACT-00045
@@ -228,4 +243,9 @@ export interface Activity {
   delayStatus?: 'none' | 'delayed_not_started' | 'delayed_overdue';
   lastEscalatedAt?: string; // ISO String
   delayReason?: string;
+
+  // Visit History (carry forward tracking)
+  visitHistory?: VisitRecord[];
+  carryForwardNote?: string;
+  previousActivityRef?: string; // Reference to the activity this was carried forward from
 }
