@@ -453,9 +453,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             // Execution: this tech is the primary (actual) engineer
                             if ((a as any).primaryEngineerId === tech.id) return true;
                             // Planning: this tech is the planned lead and activity not yet started
-                            if (a.leadTechId === tech.id && isToday && !['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status)) return true;
+                            if (a.leadTechId === tech.id && isToday && !['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status)) return true;
                             // IN_PROGRESS/DONE without primaryEngineerId (legacy): fall back to leadTechId
-                            if (a.leadTechId === tech.id && !(a as any).primaryEngineerId && ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status)) return true;
+                            if (a.leadTechId === tech.id && !(a as any).primaryEngineerId && ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status)) return true;
                             return false;
                         });
                         
@@ -516,7 +516,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             isExecSupport ? 'bg-blue-50 text-blue-700' : 'bg-teal-50 text-teal-700 border border-teal-200'
                                         }`}
                                     >
-                                        <Users size={8} className={isExecSupport ? 'text-blue-400' : 'text-teal-400'} /> {assoc.name.split(' ')[0]}
+                                        <Users size={8} className={isExecSupport ? 'text-blue-400' : 'text-teal-400'} /> {assoc.name}
                                         {isTA && !isExecSupport && <span className="text-[7px] opacity-60">TA</span>}
                                     </span>
                                     );
@@ -528,7 +528,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         key={`fl-${i}`}
                                         className="px-1.5 py-0.5 bg-amber-50 text-[9px] font-medium text-amber-700 rounded flex items-center gap-1 border border-amber-200"
                                     >
-                                        {fl.name.split(' ')[0]} <span className="text-[7px] opacity-60">FL</span>
+                                        {fl.name} <span className="text-[7px] opacity-60">FL</span>
                                     </span>
                                     ))
                                 )}
@@ -563,7 +563,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             <div className="flex flex-wrap gap-1 mb-1">
                                 {unassignedFreelancerActs.flatMap(a => (a as any).freelancers || []).map((fl: any, i: number) => (
                                     <span key={`ufl-${i}`} className="px-1.5 py-0.5 bg-amber-100 text-[9px] font-medium text-amber-700 rounded flex items-center gap-1 border border-amber-200">
-                                        {fl.name.split(' ')[0]} <span className="text-[7px] opacity-60">FL</span>
+                                        {fl.name} <span className="text-[7px] opacity-60">FL</span>
                                     </span>
                                 ))}
                             </div>
@@ -665,7 +665,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             // Unified timeline items (both Activities and Tickets)
                             // 1. Normalize Activities — use primaryEngineerId for execution, leadTechId for planning
                             const techActivities = activities.filter(a => {
-                                const isExecutionPhase = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status);
+                                const isExecutionPhase = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status);
                                 const hasPrimaryEngineer = !!(a as any).primaryEngineerId;
 
                                 if (isExecutionPhase) {
@@ -690,7 +690,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 }
                             }).map(a => {
                                 const s = normalizeStatus(a.status);
-                                const isExecution = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED'].includes(a.status);
+                                const isExecution = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status);
                                 const actualStart = (a as any).startedAt;
                                 const actualEnd = (a as any).completedAt;
                                 const supportCount = ((a as any).supportingEngineerIds || []).length + ((a as any).freelancers || []).length;
@@ -791,6 +791,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                     isTicket && item.status === 'ASSIGNED'    ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
                                                     isTicket                                  ? 'bg-slate-50 border-slate-200 text-slate-600' :
                                                     item.status === 'DONE'        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
+                                                    item.status === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-300 text-orange-800 opacity-90' :
                                                     item.status === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-900 ring-blue-400' :
                                                     item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-200 text-cyan-800 ring-cyan-400' :
                                                     item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-200 text-indigo-800 ring-indigo-400' :
@@ -903,6 +904,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
                                     normalizeStatus(item.status) === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
                                     item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
+                                    item.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
                                     item.status === 'NEW' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'
                                 }`}>{item.status.replace('_', ' ')}</span>
                             </div>
