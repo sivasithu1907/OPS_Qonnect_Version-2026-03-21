@@ -311,6 +311,7 @@ async function initDb() {
       );
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS visit_history JSONB DEFAULT '[]';
 
       -- Permanent fix: normalise any users whose level is blank or whose systemRole
       -- was stored as a human-readable label instead of the enum value.
@@ -1395,8 +1396,9 @@ app.get("/api/activities", authenticate, async (req, res) => {
         siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
         durationHours: Number(r.duration_hours), ...r.details,
         createdAt: r.created_at, updatedAt: r.updated_at,
-        startedAt:   r.started_at   || null,   // actual start time (when engineer clicked Start Work)
-        completedAt: r.completed_at || null,   // actual completion time
+        startedAt:   r.started_at   || null,
+        completedAt: r.completed_at || null,
+        visitHistory: r.visit_history || [],
     })));
   } catch (e) { res.status(500).json({error: "Failed to load activities"}); }
 });
@@ -1420,22 +1422,22 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
 
         // Fetch current row to detect transitions and merge details
-        const current = await pool.query("SELECT status, started_at, details FROM activities WHERE id=$1", [req.params.id]);
+        const current = await pool.query("SELECT status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id FROM activities WHERE id=$1", [req.params.id]);
         if (!current.rows[0]) return res.status(404).json({ error: "Activity not found" });
         const prevStatus = current.rows[0]?.status;
         const alreadyStarted = current.rows[0]?.started_at;
         const existingDetails = current.rows[0]?.details || {};
+        const existingHistory = current.rows[0]?.visit_history || [];
 
         // Merge execution fields into details JSONB
         const mergedDetails = { ...existingDetails, ...details };
-        // Capture who actually started the work (only set once, on first IN_PROGRESS)
         if (primaryEngineerId) {
             mergedDetails.primaryEngineerId = primaryEngineerId;
         }
         if (supportingEngineerIds !== undefined) {
             mergedDetails.supportingEngineerIds = supportingEngineerIds;
         }
-        // Validate freelancers array if present (activity-level, no user record)
+        // Validate freelancers array if present
         if (mergedDetails.freelancers && Array.isArray(mergedDetails.freelancers)) {
             mergedDetails.freelancers = mergedDetails.freelancers
                 .filter(f => f && typeof f.name === 'string' && f.name.trim())
@@ -1446,23 +1448,66 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
                 }));
         }
 
-        // Determine started_at / completed_at based on status transition
+        // ── CARRY FORWARD HANDLING ──
+        // When status is CARRY_FORWARD: record current visit in history, mark as CARRY_FORWARD on original date,
+        // then the frontend will create a NEW activity for the rescheduled date
+        if (status === 'CARRY_FORWARD' && prevStatus !== 'CARRY_FORWARD') {
+            // Build visit record from current state
+            const visitRecord = {
+                date: current.rows[0].planned_date,
+                startedAt: current.rows[0].started_at || null,
+                completedAt: new Date().toISOString(),
+                assignedTeam: {
+                    leadTechId: current.rows[0].lead_tech_id || leadTechId,
+                    primaryEngineerId: existingDetails.primaryEngineerId || primaryEngineerId,
+                    supportingEngineerIds: existingDetails.supportingEngineerIds || supportingEngineerIds || [],
+                    freelancers: existingDetails.freelancers || []
+                },
+                remarks: mergedDetails.remarks || details.remarks || '',
+                carryForwardReason: mergedDetails.carryForwardNote || details.carryForwardNote || '',
+                status: 'CARRY_FORWARD'
+            };
+            const updatedHistory = [...existingHistory, visitRecord];
+
+            // Update activity: set status to CARRY_FORWARD, record completed_at as NOW, store visit history
+            await pool.query(
+                `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=$4, site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW() WHERE id=$11`,
+                [type, priority, current.rows[0].planned_date, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
+            );
+            return res.json({ok: true, visitRecorded: true});
+        }
+
+        // ── NORMAL STATUS TRANSITIONS ──
         let startedAtClause = "";
         let completedAtClause = "";
+        let visitHistoryClause = "";
 
         if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
-            // First time entering IN_PROGRESS — record real start time
             startedAtClause = ", started_at = NOW()";
         }
         if (status === 'ON_MY_WAY' && prevStatus === 'PLANNED') {
-            // Engineer started travelling — record as started_at
             startedAtClause = ", started_at = NOW()";
         }
         if (status === 'DONE' && prevStatus !== 'DONE') {
             completedAtClause = ", completed_at = NOW()";
+            // Record the completed visit in history
+            const visitRecord = {
+                date: current.rows[0].planned_date || plannedDate,
+                startedAt: current.rows[0].started_at || null,
+                completedAt: new Date().toISOString(),
+                assignedTeam: {
+                    leadTechId: leadTechId || current.rows[0].lead_tech_id,
+                    primaryEngineerId: mergedDetails.primaryEngineerId || primaryEngineerId,
+                    supportingEngineerIds: mergedDetails.supportingEngineerIds || [],
+                    freelancers: mergedDetails.freelancers || []
+                },
+                remarks: mergedDetails.remarks || details.remarks || mergedDetails.completionNote || '',
+                status: 'DONE'
+            };
+            const updatedHistory = [...existingHistory, visitRecord];
+            visitHistoryClause = `, visit_history = '${JSON.stringify(updatedHistory).replace(/'/g, "''")}'::jsonb`;
         }
         if (status === 'PLANNED' || status === 'CANCELLED') {
-            // Reset timestamps and execution fields if re-planned or cancelled
             startedAtClause  = ", started_at = NULL";
             completedAtClause = ", completed_at = NULL";
             delete mergedDetails.primaryEngineerId;
@@ -1470,7 +1515,7 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
         }
 
         await pool.query(
-            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=$5, site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause} WHERE id=$11`,
+            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=$5, site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause}${visitHistoryClause} WHERE id=$11`,
             [type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), req.params.id]
         );
         res.json({ok: true});
