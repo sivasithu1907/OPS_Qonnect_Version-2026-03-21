@@ -1,36 +1,58 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Team, Site, Technician, Activity, Ticket, Customer } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  MapPin, Clock, Activity as ActivityIcon, Calendar, 
+  Clock, Activity as ActivityIcon, Calendar, 
   CheckCircle2, AlertCircle, Ticket as TicketIcon, 
-  Zap, Users, ChevronRight, Monitor, RefreshCw
+  Users, Monitor, RefreshCw, MapPin
 } from 'lucide-react';
 
-interface TVDisplayModeProps {
-  teams: Team[];
-  sites: Site[];
-  technicians: Technician[];
-  activities: Activity[];
-  tickets: Ticket[];
-  customers: Customer[];
-  onRefresh?: () => void;
-}
-
-const TVDisplayMode: React.FC<TVDisplayModeProps> = ({ 
-  teams, sites, technicians, activities, tickets, customers, onRefresh 
-}) => {
+// Self-contained TV Display — fetches its own data, no auth needed
+const TVDisplayMode: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activePanel, setActivePanel] = useState<'monitor' | 'calendar'>('monitor');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Self-managed data state
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [technicians, setTechnicians] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [sites, setSites] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+
+  // Fetch data from public TV endpoint
+  const fetchTVData = async () => {
+    try {
+      const res = await fetch('/api/tv-data');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setTickets(data.tickets || []);
+      setActivities(data.activities || []);
+      setTechnicians(data.technicians || []);
+      setTeams(data.teams || []);
+      setSites(data.sites || []);
+      setCustomers(data.customers || []);
+      setLoading(false);
+      setError('');
+    } catch (e: any) {
+      console.error('TV data fetch failed:', e);
+      setError(e.message || 'Failed to load');
+      setLoading(false);
+    }
+  };
+
+  // Initial load
+  useEffect(() => { fetchTVData(); }, []);
 
   // Auto-refresh every 60 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-      onRefresh?.();
+      fetchTVData();
     }, 60000);
     return () => clearInterval(timer);
-  }, [onRefresh]);
+  }, []);
 
   // Auto-toggle between panels every 30 seconds
   useEffect(() => {
@@ -40,7 +62,7 @@ const TVDisplayMode: React.FC<TVDisplayModeProps> = ({
     return () => clearInterval(toggle);
   }, []);
 
-  // Clock update
+  // Clock update every second
   useEffect(() => {
     const clock = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(clock);
@@ -118,6 +140,34 @@ const TVDisplayMode: React.FC<TVDisplayModeProps> = ({
     if (s === 'CARRY_FORWARD') return 'bg-orange-50 border-orange-200 text-orange-800';
     return 'bg-amber-50 border-amber-200 text-amber-800';
   };
+
+  // --- Loading / Error ---
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-amber-500 text-slate-900 w-16 h-16 rounded-2xl flex items-center justify-center font-black text-3xl mx-auto mb-4">Q</div>
+          <div className="text-xl font-bold text-white mb-2">Qonnect TV Display</div>
+          <div className="text-sm text-slate-400">Loading operations data...</div>
+          <div className="mt-4 w-32 h-1 bg-slate-800 rounded-full mx-auto overflow-hidden">
+            <div className="h-full bg-amber-500 rounded-full animate-pulse" style={{width:'60%'}} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && tickets.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-xl font-bold text-red-400 mb-2">Connection Error</div>
+          <div className="text-sm text-slate-400 mb-4">{error}</div>
+          <button onClick={fetchTVData} className="px-4 py-2 bg-amber-500 text-slate-900 rounded-lg font-bold text-sm">Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-slate-950 text-white overflow-hidden flex flex-col" style={{ fontFamily: "'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif" }}>
