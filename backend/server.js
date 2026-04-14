@@ -511,6 +511,67 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ── PUBLIC TV Display Data (no auth required) ──
+// Returns read-only snapshot of operations data for office TV screens
+app.get('/api/tv-data', async (req, res) => {
+    try {
+        const [ticketsRes, activitiesRes, usersRes, teamsRes, sitesRes, customersRes] = await Promise.all([
+            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 100"),
+            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200"),
+            pool.query("SELECT id, name, role, status, avatar, level, phone FROM users WHERE status != 'INACTIVE'"),
+            pool.query("SELECT * FROM teams"),
+            pool.query("SELECT * FROM sites"),
+            pool.query("SELECT id, name, phone, email, address, avatar, building_number FROM customers")
+        ]);
+
+        const tickets = ticketsRes.rows.map(r => ({
+            id: r.id, customerId: r.customer_id, customerName: r.customer_name,
+            phoneNumber: r.phone_number, category: r.category, type: r.type,
+            priority: r.priority, status: r.status, assignedTechId: r.assigned_tech_id,
+            createdAt: r.created_at, updatedAt: r.updated_at,
+            appointmentTime: r.appointment_time, houseNumber: r.house_number,
+            locationUrl: r.location_url, startedAt: r.started_at, completedAt: r.completed_at,
+            messages: [], // Exclude messages for privacy
+        }));
+
+        const activities = activitiesRes.rows.map(r => ({
+            id: r.id, reference: r.reference, type: r.type, priority: r.priority,
+            status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
+            siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
+            durationHours: Number(r.duration_hours), ...r.details,
+            createdAt: r.created_at, updatedAt: r.updated_at,
+            startedAt: r.started_at || null, completedAt: r.completed_at || null,
+        }));
+
+        const technicians = usersRes.rows.map(r => ({
+            id: r.id, name: r.name, systemRole: r.role, status: r.status || 'AVAILABLE',
+            avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name)}&background=random`,
+            level: r.level || r.role, isActive: true, email: '', role: r.role, phone: r.phone,
+        }));
+
+        const teams = teamsRes.rows.map(r => ({
+            id: r.id, name: r.name, leadId: r.lead_id,
+            memberIds: r.member_ids || [], status: r.status || 'AVAILABLE', workloadLevel: 'MEDIUM',
+        }));
+
+        const sites = sitesRes.rows.map(r => ({
+            id: r.id, name: r.name, clientName: r.client_name || '',
+            location: r.location || '', priority: r.priority || 'MEDIUM', status: r.status || 'ACTIVE',
+        }));
+
+        const customers = customersRes.rows.map(r => ({
+            id: r.id, name: r.name, phone: r.phone || '',
+            email: r.email || '', address: r.address || '',
+            avatar: r.avatar || '', buildingNumber: r.building_number || '',
+        }));
+
+        res.json({ tickets, activities, technicians, teams, sites, customers, timestamp: new Date().toISOString() });
+    } catch (e) {
+        console.error('TV data endpoint error:', e);
+        res.status(500).json({ error: 'Failed to load TV data' });
+    }
+});
+
 // ==============================
 // Tickets (PostgreSQL)
 // ==============================
