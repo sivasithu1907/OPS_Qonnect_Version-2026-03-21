@@ -431,7 +431,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
         )}
 
         {/* MAIN LAYOUT: 3-COLUMN GRID — dynamic widths for TV vs Desktop */}
-        <div className={`flex-1 overflow-hidden grid ${tvMode ? 'grid-cols-[220px_minmax(0,1fr)_200px]' : 'grid-cols-[280px_minmax(0,1fr)_240px]'}`}>
+        <div className={`flex-1 overflow-hidden grid ${tvMode ? 'grid-cols-[180px_minmax(0,1fr)_160px]' : 'grid-cols-[280px_minmax(0,1fr)_240px]'}`}>
             
             {/* COLUMN 1: LEFT TEAMS (Fixed Width) */}
             <div className="flex flex-col border-r border-slate-200 bg-white relative z-20">
