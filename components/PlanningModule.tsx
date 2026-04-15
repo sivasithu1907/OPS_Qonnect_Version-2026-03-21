@@ -150,27 +150,34 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   }, [plannedDatetime]);
 
   const availableAssociates = useMemo(() => {
-      if (!selectedDateString) return technicalAssociates;
+      if (!selectedDateString || !plannedDatetime) return technicalAssociates;
+      
+      const newStart = new Date(plannedDatetime).getTime();
+      const durationMs = Number(durationState.val) * (durationState.unit === 'DAYS' ? 86400000 : 3600000);
+      const newEnd = newStart + durationMs;
       
       return technicalAssociates.filter(tech => {
-          // Check if tech is booked on this date in another activity
+          // Check if tech has overlapping time slot on this date
           const isBooked = activities.some(act => {
-              // Ignore self if editing
-              if (editingActivity && act.id === editingActivity.id) return false; 
-              // Ignore closed/cancelled
+              if (editingActivity && act.id === editingActivity.id) return false;
               if (act.status === 'DONE' || act.status === 'CANCELLED') return false;
+              if (!act.assistantTechIds?.includes(tech.id)) return false;
               
               const actDate = new Date(act.plannedDate).toDateString();
-              // Check date collision
               if (actDate !== selectedDateString) return false;
               
-              // Check if tech is listed as assistant
-              return act.assistantTechIds?.includes(tech.id);
+              // Check time overlap
+              const actStart = new Date(act.plannedDate).getTime();
+              const actDuration = (act.durationHours || 2) * 3600000;
+              const actEnd = actStart + actDuration;
+              
+              // Overlap: newStart < actEnd AND newEnd > actStart
+              return newStart < actEnd && newEnd > actStart;
           });
           
           return !isBooked;
       });
-  }, [technicalAssociates, activities, selectedDateString, editingActivity]);
+  }, [technicalAssociates, activities, selectedDateString, editingActivity, plannedDatetime, durationState]);
 
   // --- Handlers ---
   const handleNewCustomer = async (cust: Customer): Promise<Customer | null> => {
