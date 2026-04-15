@@ -431,7 +431,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
         )}
 
         {/* MAIN LAYOUT: 3-COLUMN GRID — dynamic widths for TV vs Desktop */}
-        <div className={`flex-1 overflow-hidden grid ${tvMode ? 'grid-cols-[180px_minmax(0,1fr)_160px]' : 'grid-cols-[280px_minmax(0,1fr)_240px]'}`}>
+        <div className={`flex-1 overflow-hidden grid ${tvMode ? 'grid-cols-[220px_minmax(0,1fr)_200px]' : 'grid-cols-[280px_minmax(0,1fr)_240px]'}`}>
             
             {/* COLUMN 1: LEFT TEAMS (Fixed Width) */}
             <div className="flex flex-col border-r border-slate-200 bg-white relative z-20">
@@ -672,23 +672,22 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             const techActivities = activities.filter(a => {
                                 const isExecutionPhase = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status);
                                 const hasPrimaryEngineer = !!(a as any).primaryEngineerId;
+                                
+                                // Check if this tech is involved in ANY capacity
+                                const isPrimary = hasPrimaryEngineer && (a as any).primaryEngineerId === tech.id;
+                                const isLead = a.leadTechId === tech.id;
+                                const isSupporting = ((a as any).supportingEngineerIds || []).includes(tech.id);
+                                const isTA = (a.assistantTechIds || []).includes(tech.id);
+                                const isInvolved = isPrimary || isLead || isSupporting || isTA;
+
+                                if (!isInvolved) return false;
 
                                 if (isExecutionPhase) {
-                                    // EXECUTION: show under the actual primary engineer
-                                    if (hasPrimaryEngineer) {
-                                        if ((a as any).primaryEngineerId !== tech.id) return false;
-                                    } else {
-                                        // Legacy activities without primaryEngineerId — fall back to leadTechId
-                                        if (a.leadTechId !== tech.id) return false;
-                                    }
-                                    // IN_PROGRESS/ON_MY_WAY/ARRIVED always show regardless of date
-                                    if (a.status !== 'DONE') return true;
-                                    // DONE: show if completed today
+                                    if (a.status !== 'DONE' && a.status !== 'CARRY_FORWARD') return true;
+                                    // DONE/CARRY_FORWARD: show if completed today
                                     const d = new Date((a as any).completedAt || a.updatedAt || a.createdAt);
                                     return d.toDateString() === new Date().toDateString();
                                 } else {
-                                    // PLANNING: show under leadTechId (planned assignment)
-                                    if (a.leadTechId !== tech.id) return false;
                                     if (a.status === 'CANCELLED') return false;
                                     const d = new Date(a.plannedDate || a.createdAt);
                                     return d.toDateString() === new Date().toDateString();
