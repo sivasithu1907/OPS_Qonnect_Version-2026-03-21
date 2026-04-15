@@ -59,6 +59,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const [carryForwardDatetime, setCarryForwardDatetime] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [historyDetailJob, setHistoryDetailJob] = useState<any>(null); // For history popup
   const [photoJobId, setPhotoJobId] = useState<string | null>(null);
   const [photoJobType, setPhotoJobType] = useState<'ticket' | 'activity'>('activity');
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -127,34 +128,57 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       photoInputRef.current?.click();
   };
 
+  const MAX_PHOTOS = 5;
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file || !photoJobId) return;
+      const files = e.target.files;
+      if (!files || files.length === 0 || !photoJobId) return;
       setPhotoUploading(true);
       try {
-          // Convert to base64 for storage in JSONB details column
-          const reader = new FileReader();
-          reader.onloadend = async () => {
-              const base64 = (reader.result as string);
-              const photoEntry = { url: base64, takenAt: new Date().toISOString(), name: file.name };
-              if (photoJobType === 'activity') {
-                  const act = activities.find(a => a.id === photoJobId);
-                  if (act && onUpdateActivity) {
-                      const existing = (act as any).photos || [];
-                      onUpdateActivity({ ...act, photos: [...existing, photoEntry] } as any);
-                  }
-              } else {
-                  const ticket = tickets.find(t => t.id === photoJobId);
-                  if (ticket) {
-                      onUpdateTicket?.({ ...ticket, photos: [...((ticket as any).photos || []), photoEntry] } as any);
-                  }
-              }
+          // Get existing photos count
+          let existingPhotos: any[] = [];
+          if (photoJobType === 'activity') {
+              const act = activities.find(a => a.id === photoJobId);
+              existingPhotos = (act as any)?.photos || [];
+          } else {
+              const ticket = tickets.find(t => t.id === photoJobId);
+              existingPhotos = (ticket as any)?.photos || [];
+          }
+          
+          const remaining = MAX_PHOTOS - existingPhotos.length;
+          if (remaining <= 0) {
+              alert(`Maximum ${MAX_PHOTOS} photos allowed per job.`);
               setPhotoUploading(false);
-              setPhotoJobId(null);
-              // Reset file input so same file can be picked again
-              if (photoInputRef.current) photoInputRef.current.value = '';
-          };
-          reader.readAsDataURL(file);
+              return;
+          }
+
+          const filesToProcess = Array.from(files).slice(0, remaining);
+          const newPhotos: any[] = [];
+
+          for (const file of filesToProcess) {
+              const base64 = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(file);
+              });
+              newPhotos.push({ url: base64, takenAt: new Date().toISOString(), name: file.name });
+          }
+
+          if (photoJobType === 'activity') {
+              const act = activities.find(a => a.id === photoJobId);
+              if (act && onUpdateActivity) {
+                  onUpdateActivity({ ...act, photos: [...existingPhotos, ...newPhotos] } as any);
+              }
+          } else {
+              const ticket = tickets.find(t => t.id === photoJobId);
+              if (ticket) {
+                  onUpdateTicket?.({ ...ticket, photos: [...existingPhotos, ...newPhotos] } as any);
+              }
+          }
+          setPhotoUploading(false);
+          setPhotoJobId(null);
+          if (photoInputRef.current) photoInputRef.current.value = '';
+          if (cameraInputRef.current) cameraInputRef.current.value = '';
       } catch (err) {
           console.error('Photo upload failed:', err);
           setPhotoUploading(false);
@@ -278,7 +302,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       if (!carryForwardIssue.trim() || !carryForwardDatetime) return;
 
       const nextIso = new Date(carryForwardDatetime).toISOString();
-      const combinedNote = carryForwardIssue ? `Issue: ${carryForwardIssue}${carryForwardRemark ? '\nRemark: ' + carryForwardRemark : ''}` : carryForwardRemark;
+      const combinedNote = carryForwardIssue ? `Reason: ${carryForwardIssue}${carryForwardRemark ? '\nRemark: ' + carryForwardRemark : ''}` : carryForwardRemark;
 
       if (activeJobItem?.type === 'ticket') {
           const t = activeJobItem.data as Ticket;
@@ -298,8 +322,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           if (onUpdateActivity) {
               onUpdateActivity({
                   ...a,
-                  status: 'PLANNED', // Re-queue
-                  plannedDate: nextIso,
+                  status: 'CARRY_FORWARD' as any, // Keep carry-forwarded status visible
+                  carryForwardNote: combinedNote,
                   remarks: combinedNote ? (a.remarks ? a.remarks + '\n---\n' + combinedNote : combinedNote) : a.remarks,
                   updatedAt: new Date().toISOString()
               });
@@ -544,7 +568,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     const dt        = new Date(item.sortDate || job.updatedAt || job.createdAt);
                                     return (
                                         <div key={job.id}
-                                            onClick={() => setSelectedJobId(job.id)}
+                                            onClick={() => setHistoryDetailJob({ ...job, kind: item.kind })}
                                             className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3 cursor-pointer active:scale-[0.99] transition-transform"
                                         >
                                             <div className="flex justify-between items-start mb-2">
@@ -806,13 +830,13 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Issue <span className="text-red-500">*</span></label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Reason for Carry Forward <span className="text-red-500">*</span></label>
                                     <textarea 
                                         value={carryForwardIssue}
                                         onChange={e => setCarryForwardIssue(e.target.value)}
                                         className={INPUT_STYLES}
                                         rows={3}
-                                        placeholder="What is the issue?"
+                                        placeholder="Why is this job being carried forward?"
                                     />
                                 </div>
                                 
@@ -866,6 +890,91 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                     </div>
                 )}
 
+                {/* History Detail Popup */}
+                {historyDetailJob && (() => {
+                    const hj = historyDetailJob;
+                    const isAct = hj.kind === 'activity';
+                    const custName = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.name || 'Unknown') : (hj.customerName || 'Unknown');
+                    const custPhone = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.phone || '') : (hj.phoneNumber || '');
+                    const fmtDt = (iso: string) => iso ? `${new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} ${new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}` : '—';
+                    const photos = hj.photos || [];
+                    return (
+                        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setHistoryDetailJob(null)}>
+                            <div className="bg-white w-full max-w-md rounded-t-[2rem] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+                                <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                                    <div>
+                                        <div className="text-[10px] font-mono text-slate-400">{hj.reference || hj.id}</div>
+                                        <h3 className="font-bold text-lg text-slate-900">{isAct ? hj.type : hj.category}</h3>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${hj.status === 'DONE' || hj.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : hj.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-700'}`}>{(hj.status || '').replace(/_/g, ' ')}</span>
+                                        <button onClick={() => setHistoryDetailJob(null)} className="p-1.5 bg-slate-100 rounded-full"><X size={16} className="text-slate-500"/></button>
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                                    {/* Customer */}
+                                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
+                                        <div className="text-sm font-bold text-slate-800">{custName}</div>
+                                        {custPhone && <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {custPhone}</div>}
+                                    </div>
+                                    {/* Timing */}
+                                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+                                        <div className="flex justify-between text-xs"><span className="text-slate-400">{isAct ? 'Planned' : 'Created'}</span><span className="text-slate-700">{fmtDt(isAct ? hj.plannedDate : hj.createdAt)}</span></div>
+                                        {hj.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(hj.startedAt)}</span></div>}
+                                        {hj.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(hj.completedAt)}</span></div>}
+                                        {hj.startedAt && hj.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Duration</span><span className="font-bold text-slate-700">{Math.round((new Date(hj.completedAt).getTime() - new Date(hj.startedAt).getTime()) / 60000)}m</span></div>}
+                                    </div>
+                                    {/* Description */}
+                                    {(hj.description || hj.notes) && (
+                                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div>
+                                            <p className="text-xs text-slate-700 whitespace-pre-wrap">{hj.description || hj.notes}</p>
+                                        </div>
+                                    )}
+                                    {/* Completion Note */}
+                                    {hj.completionNote && (
+                                        <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                                            <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div>
+                                            <p className="text-xs text-emerald-800 whitespace-pre-wrap">{hj.completionNote}</p>
+                                        </div>
+                                    )}
+                                    {/* Carry Forward */}
+                                    {hj.carryForwardNote && (
+                                        <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
+                                            <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div>
+                                            <p className="text-xs text-amber-800 whitespace-pre-wrap">{hj.carryForwardNote}</p>
+                                        </div>
+                                    )}
+                                    {/* Location */}
+                                    {(hj.houseNumber || hj.locationUrl) && (
+                                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 space-y-1">
+                                            <div className="text-[10px] font-bold text-blue-600 uppercase">Location</div>
+                                            {hj.houseNumber && <div className="text-xs text-slate-700">{hj.houseNumber}</div>}
+                                            {hj.locationUrl && <a href={hj.locationUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline">Open Map</a>}
+                                        </div>
+                                    )}
+                                    {/* Photos */}
+                                    {photos.length > 0 && (
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Photos ({photos.length})</div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {photos.map((p: any, i: number) => (
+                                                    <img key={i} src={p.url || p} alt={`Photo ${i+1}`} className="w-full h-20 object-cover rounded-lg border border-slate-200" onClick={() => window.open(p.url || p, '_blank')} />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="p-4 border-t border-slate-100 shrink-0">
+                                    <button onClick={() => setHistoryDetailJob(null)} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
             </div>
         </div>
     </div>
@@ -883,6 +992,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           ref={photoInputRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           onChange={handlePhotoUpload}
       />
