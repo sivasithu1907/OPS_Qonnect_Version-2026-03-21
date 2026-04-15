@@ -343,7 +343,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       onUpdateTicket({
           ...modalTicket,
           status: TicketStatus.CARRY_FORWARD, 
-          carryForwardNote: carryIssue ? `Issue: ${carryIssue}\nRemark: ${actionNote}` : actionNote,
+          carryForwardNote: carryIssue ? `Reason: ${carryIssue}\nRemark: ${actionNote}` : actionNote,
           nextPlannedAt: nextDate, 
           updatedAt: new Date().toISOString()
       } as any);
@@ -1938,12 +1938,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         </div>
                         <div className="p-6 space-y-4 overflow-y-auto flex-1">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Issue <span className="text-red-500">*</span></label>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Reason for Carry Forward <span className="text-red-500">*</span></label>
                                 <textarea 
                                     value={carryIssue} 
                                     onChange={e => setCarryIssue(e.target.value)}
                                     className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl text-[#111827] placeholder-[#9CA3AF] px-4 py-3.5 text-sm leading-[1.4] focus:outline-none focus:ring-0 focus:border-[#F5B301] transition-colors resize-none"
-                                    placeholder="What is the issue?"
+                                    placeholder="Why is this job being carried forward?"
                                     rows={3}
                                     autoFocus
                                 />
@@ -2007,12 +2007,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             </div>
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Issue <span className="text-red-500">*</span></label>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Reason for Carry Forward <span className="text-red-500">*</span></label>
                     <textarea 
                         value={carryIssue} 
                         onChange={e => setCarryIssue(e.target.value)}
                         className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl text-[#111827] placeholder-[#9CA3AF] px-4 py-3.5 text-sm leading-[1.4] focus:outline-none focus:ring-0 focus:border-[#F5B301] transition-colors resize-none"
-                        placeholder="What is the issue?"
+                        placeholder="Why is this job being carried forward?"
                         rows={3}
                         autoFocus
                     />
@@ -2052,7 +2052,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     onClick={() => {
                         if (!modalActivity || !onUpdateActivity || !onAddActivity || !nextDate) return;
                         const a: any = modalActivity as any;
-                        const cfNote = carryIssue ? `Issue: ${carryIssue}${actionNote ? '\nRemark: ' + actionNote : ''}` : actionNote;
+                        const cfNote = carryIssue ? `Reason: ${carryIssue}${actionNote ? '\nRemark: ' + actionNote : ''}` : actionNote;
                         
                         // 1. Mark ORIGINAL activity as CARRY_FORWARD (stays on original date)
                         onUpdateActivity({
@@ -2284,7 +2284,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     </div>
 )}
             {showDatePicker && (
-                <div className="fixed inset-0 z-[70] flex items-end justify-center">
+                <div className="fixed inset-0 z-[80] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDatePicker(false)} />
                     <div className="bg-white w-full rounded-t-2xl p-4 pb-safe animate-in slide-in-from-bottom duration-300 relative z-10 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
                         <div className="flex justify-between items-center border-b border-slate-100 pb-4 shrink-0">
