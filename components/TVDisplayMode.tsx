@@ -77,6 +77,25 @@ const TVDisplayMode: React.FC = () => {
     return 'bg-amber-100 border-amber-300 text-amber-900';
   };
 
+  // Status badge colors for calendar cards (pill-style, high contrast)
+  const getStatusBadgeStyle = (status: string) => {
+    const s = normalizeStatus(status);
+    if (s === 'IN_PROGRESS') return 'bg-blue-600 text-white';
+    if (s === 'ON_MY_WAY') return 'bg-cyan-600 text-white';
+    if (s === 'ARRIVED') return 'bg-indigo-600 text-white';
+    if (s === 'DONE' || s === 'RESOLVED') return 'bg-emerald-600 text-white';
+    if (s === 'CARRY_FORWARD') return 'bg-amber-500 text-white';
+    if (s === 'CANCELLED') return 'bg-slate-500 text-white';
+    return 'bg-slate-400 text-white'; // PLANNED
+  };
+  const getStatusLabel = (status: string) => {
+    const s = normalizeStatus(status);
+    if (s === 'IN_PROGRESS') return 'IN PROGRESS';
+    if (s === 'ON_MY_WAY') return 'ON WAY';
+    if (s === 'CARRY_FORWARD') return 'CARRY FWD';
+    return s.replace(/_/g, ' ');
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 bg-slate-950 flex items-center justify-center">
@@ -185,8 +204,13 @@ const TVDisplayMode: React.FC = () => {
                     return (
                       <div key={d.toString()} className={`p-1 border-r border-slate-100 last:border-0 ${d.toDateString() === new Date().toDateString() ? 'bg-amber-50/30' : ''}`}>
                         {dayActs.map((act: any) => (
-                          <div key={act.id} className={`mb-1 p-1.5 rounded border text-[10px] ${getStatusBg(act.status)}`}>
-                            <div className="font-bold truncate">{act.type}</div>
+                          <div key={act.id} className={`mb-1 p-1.5 rounded border text-[10px] relative ${getStatusBg(act.status)}`}>
+                            <div className="flex items-start justify-between gap-1">
+                              <div className="font-bold truncate flex-1">{act.type}</div>
+                              <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[8px] font-black leading-none whitespace-nowrap ${getStatusBadgeStyle(act.status)}`}>
+                                {getStatusLabel(act.status)}
+                              </span>
+                            </div>
                             <div className="truncate opacity-80">{customers.find((c: any) => c.id === act.customerId)?.name || act.houseNumber || ''}</div>
                             <div className="opacity-60">{new Date(act.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })}</div>
                           </div>
