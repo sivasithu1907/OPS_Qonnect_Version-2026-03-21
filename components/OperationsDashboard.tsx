@@ -323,7 +323,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   const nowX = getNowX();
 
   return (
-    <div className={`flex flex-col ${tvMode ? 'h-full' : 'h-[calc(100vh)]'} bg-slate-100 overflow-hidden font-sans text-slate-900`}>
+    <div className="flex flex-col h-full bg-slate-100 overflow-hidden font-sans text-slate-900">
         
         {/* TOP: KPI & Controls — HIDDEN in TV mode */}
         {!tvMode && (
