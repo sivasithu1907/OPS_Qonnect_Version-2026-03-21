@@ -625,18 +625,21 @@ app.get("/api/tickets", authenticate, async (req, res) => {
 app.post("/api/tickets", authenticate, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages } = req.body;
-    const phone = customerId; // Usually the phone number is the unique ID here
+    const { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber } = req.body;
 
     await client.query('BEGIN');
 
     // STEP A: Ensure the customer exists first (UPSERT)
-    // This prevents the "violates foreign key constraint" error
+    // Use the actual phone number from the request, NOT the customerId
     await client.query(`
-      INSERT INTO customers (id, name, phone)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone
-    `, [customerId, customerName, phone]);
+      INSERT INTO customers (id, name, phone, address, building_number)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (id) DO UPDATE SET 
+        name = COALESCE(EXCLUDED.name, customers.name), 
+        phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone),
+        address = COALESCE(NULLIF(EXCLUDED.address, ''), customers.address),
+        building_number = COALESCE(NULLIF(EXCLUDED.building_number, ''), customers.building_number)
+    `, [customerId, customerName, phoneNumber || '', locationUrl || '', houseNumber || '']);
 
     // STEP B: Now create the ticket safely
     const result = await client.query(
@@ -950,7 +953,7 @@ app.get("/api/customers", authenticate, async (req, res) => {
 // Create customer
 app.post("/api/customers", authenticate, async (req, res) => {
   try {
-    const { name, phone, email, address, notes, is_active } = req.body || {};
+    const { name, phone, email, address, notes, is_active, buildingNumber } = req.body || {};
 
     if (!name || String(name).trim().length < 2) {
       return res.status(400).json({ error: "Customer name is required" });
@@ -960,8 +963,8 @@ app.post("/api/customers", authenticate, async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      INSERT INTO customers (id, name, phone, email, address, notes, is_active)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      INSERT INTO customers (id, name, phone, email, address, notes, is_active, building_number)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING *
       `,
       [
@@ -972,6 +975,7 @@ app.post("/api/customers", authenticate, async (req, res) => {
         address ? String(address).trim() : null,
         notes ? String(notes).trim() : null,
         typeof is_active === "boolean" ? is_active : true,
+        buildingNumber ? String(buildingNumber).trim() : null,
       ]
     );
 
