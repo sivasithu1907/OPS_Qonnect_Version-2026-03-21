@@ -620,10 +620,10 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               id: `c${Date.now()}`,
               name: createForm.customerName,
               phone: finalPhone,
-              address: createForm.houseNumber,
+              address: createForm.locationUrl || '',
               email: '',
               avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(createForm.customerName)}&background=random`,
-              buildingNumber: createForm.houseNumber
+              buildingNumber: createForm.houseNumber || ''
           };
 
           // Await API to get the DB-generated customer ID (QNC-CUST-XXXX)
