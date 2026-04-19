@@ -2002,17 +2002,25 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             
                             <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Next Visit <span className="text-red-500">*</span></label>
-                                <div 
-                                    onClick={openDateTimePicker}
-                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 flex items-center gap-3 cursor-pointer active:bg-slate-100 transition-colors"
-                                >
-                                    <Calendar size={18} className="text-slate-400"/>
-                                    {nextDate ? (
-                                        <span className="text-[#111827] text-sm font-medium">{formatNextVisit(nextDate)}</span>
-                                    ) : (
-                                        <span className="text-[#94A3B8] text-sm">Select date & time...</span>
-                                    )}
-                                </div>
+                                <input
+                                    type="datetime-local"
+                                    value={nextDate ? (() => {
+                                        const d = new Date(nextDate);
+                                        const pad = (n: number) => String(n).padStart(2, '0');
+                                        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                                    })() : ''}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        if (val) {
+                                            const d = new Date(val);
+                                            if (!isNaN(d.getTime())) setNextDate(d.toISOString());
+                                        } else {
+                                            setNextDate('');
+                                        }
+                                    }}
+                                    min={new Date().toISOString().slice(0,16)}
+                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                                />
                                 {(!nextDate && carryIssue.trim()) && (
                                     <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
                                         <AlertTriangle size={10} /> Please select next visit date & time.
@@ -2071,17 +2079,25 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Next Visit <span className="text-red-500">*</span></label>
-                    <div 
-                        onClick={openDateTimePicker}
-                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 flex items-center gap-3 cursor-pointer active:bg-slate-100 transition-colors"
-                    >
-                        <Calendar size={18} className="text-slate-400"/>
-                        {nextDate ? (
-                            <span className="text-[#111827] text-sm font-medium">{formatNextVisit(nextDate)}</span>
-                        ) : (
-                            <span className="text-[#94A3B8] text-sm">Select date & time...</span>
-                        )}
-                    </div>
+                    <input
+                        type="datetime-local"
+                        value={nextDate ? (() => {
+                            const d = new Date(nextDate);
+                            const pad = (n: number) => String(n).padStart(2, '0');
+                            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                        })() : ''}
+                        onChange={e => {
+                            const val = e.target.value;
+                            if (val) {
+                                const d = new Date(val);
+                                if (!isNaN(d.getTime())) setNextDate(d.toISOString());
+                            } else {
+                                setNextDate('');
+                            }
+                        }}
+                        min={new Date().toISOString().slice(0,16)}
+                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                    />
                     {(!nextDate && carryIssue.trim()) && (
                         <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
                             <AlertTriangle size={10} /> Please select next visit date & time.
