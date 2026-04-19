@@ -805,7 +805,7 @@ useEffect(() => {
     prepareLeadPortal();
 }, [activeView]);
 
-  // Auto-refresh every 8s — runs for all views including lead_portal and tech_portal
+  // Auto-refresh every 60s — gentle refresh that won't disrupt active editing
   useEffect(() => {
     let isRefreshing = false;
     const interval = setInterval(async () => {
@@ -816,7 +816,7 @@ useEffect(() => {
       } finally {
         isRefreshing = false;
       }
-    }, 8000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [activeView]);
   
