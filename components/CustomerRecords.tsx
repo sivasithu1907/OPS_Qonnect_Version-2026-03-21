@@ -848,7 +848,7 @@ onSaveCustomer(data as Customer);
                             {/* Completion */}
                             {h.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{h.completionNote}</p></div>}
                             {/* Remarks */}
-                            {h.remarks && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.remarks}</p></div>}
+                            {h.remarks && h.remarks !== h.completionNote && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.remarks}</p></div>}
                             {/* Carry Forward */}
                             {h.carryForwardNote && <div className="bg-amber-50 rounded-xl p-3 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{h.carryForwardNote}</p>{h.nextPlannedAt && <div className="text-[10px] text-amber-600 mt-1">Re-scheduled: {fmtDt(h.nextPlannedAt)}</div>}</div>}
                             {/* Cancellation */}
