@@ -1597,7 +1597,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                     <p className="text-sm text-emerald-800 whitespace-pre-wrap">{viewJob.data.completionNote}</p>
                                                 </div>
                                             )}
-                                            {(viewJob.data.remarks || viewJob.data.notes) && (
+                                            {(viewJob.data.remarks || viewJob.data.notes) && (viewJob.data.remarks || viewJob.data.notes) !== viewJob.data.completionNote && (
                                                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                                                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
                                                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{viewJob.data.remarks || viewJob.data.notes}</p>
