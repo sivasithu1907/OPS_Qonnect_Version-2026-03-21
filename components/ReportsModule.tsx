@@ -931,7 +931,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                             {(d.completionNote || d.remarks || d.notes || d.description) && (
                                 <div className="space-y-2">
                                     {d.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{d.completionNote}</p></div>}
-                                    {(d.remarks || d.notes) && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.remarks || d.notes}</p></div>}
+                                    {(d.remarks || d.notes) && (d.remarks || d.notes) !== d.completionNote && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.remarks || d.notes}</p></div>}
                                     {d.description && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.description}</p></div>}
                                 </div>
                             )}
