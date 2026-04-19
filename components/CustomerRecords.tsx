@@ -367,14 +367,14 @@ onSaveCustomer(data as Customer);
                 </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
+                    <table className="w-full text-sm text-left table-fixed">
                         <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
                             <tr>
-                                <th className="px-6 py-4">Client</th>
-                                <th className="px-6 py-4">Contact</th>
-                                <th className="px-6 py-4">Location</th>
-                                <th className="px-6 py-4 text-center">History</th>
-                                <th className="px-6 py-4 text-right">Actions</th>
+                                <th className="px-6 py-4 w-[28%]">Client</th>
+                                <th className="px-6 py-4 w-[18%]">Contact</th>
+                                <th className="px-6 py-4 w-[26%]">Location</th>
+                                <th className="px-6 py-4 text-center w-[12%]">History</th>
+                                <th className="px-6 py-4 text-right w-[16%]">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -413,19 +413,25 @@ onSaveCustomer(data as Customer);
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">
-                                            <div>
-                                                {cust.buildingNumber && cust.buildingNumber !== 'N/A' ? (
-                                                    <div className="font-medium text-slate-800">{cust.buildingNumber}</div>
-                                                ) : (
+                                            <div className="overflow-hidden">
+                                                {cust.buildingNumber && cust.buildingNumber !== 'N/A' && !cust.buildingNumber.startsWith('http') ? (
+                                                    <div className="font-medium text-slate-800 truncate">{cust.buildingNumber}</div>
+                                                ) : !cust.buildingNumber || cust.buildingNumber === 'N/A' ? (
                                                     <div className="text-slate-400 text-xs italic">No building</div>
-                                                )}
-                                                {cust.address && cust.address.startsWith('http') ? (
-                                                    <a href={cust.address} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
-                                                        <MapPin size={10} /> View Map
-                                                    </a>
-                                                ) : cust.address && cust.address !== cust.buildingNumber ? (
-                                                    <div className="text-xs text-slate-500 truncate max-w-[200px] mt-0.5">{cust.address}</div>
                                                 ) : null}
+                                                {/* Show map link if address or buildingNumber contains a URL */}
+                                                {(() => {
+                                                    const mapUrl = (cust.address && cust.address.startsWith('http')) ? cust.address 
+                                                        : (cust.buildingNumber && cust.buildingNumber.startsWith('http')) ? cust.buildingNumber 
+                                                        : null;
+                                                    return mapUrl ? (
+                                                        <a href={mapUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
+                                                            <MapPin size={10} className="shrink-0" /> View Map
+                                                        </a>
+                                                    ) : cust.address && cust.address !== cust.buildingNumber ? (
+                                                        <div className="text-xs text-slate-500 truncate mt-0.5">{cust.address}</div>
+                                                    ) : null;
+                                                })()}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
