@@ -35,6 +35,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [historyPreview, setHistoryPreview] = useState<any>(null); // Timeline item preview popup
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -225,6 +226,7 @@ onSaveCustomer(data as Customer);
               nextPlannedAt: (a as any).nextPlannedAt,
               cancellationReason: (a as any).cancellationReason,
               serviceCategory: a.serviceCategory,
+              photos: (a as any).photos || [],
           });
       });
 
@@ -709,9 +711,9 @@ onSaveCustomer(data as Customer);
                                                     {isTicket && <TicketIcon size={8} className="text-white absolute top-0.5 left-0.5" />}
                                                 </div>
                                                 
-                                                <div className={`rounded-lg p-4 border hover:shadow-md transition-shadow ${
+                                                <div className={`rounded-lg p-4 border hover:shadow-md transition-shadow cursor-pointer ${
                                                     isTicket ? 'bg-purple-50/30 border-purple-100' : 'bg-slate-50 border-slate-100'
-                                                }`}>
+                                                }`} onClick={() => setHistoryPreview(item)}>
                                                     {/* Header Row */}
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex-1 min-w-0">
@@ -805,6 +807,66 @@ onSaveCustomer(data as Customer);
                 </div>
             </div>
         )}
+
+        {/* History Item Preview Popup */}
+        {historyPreview && (() => {
+            const h = historyPreview;
+            const isTicket = h.kind === 'ticket';
+            const fmtDt = (iso: string) => iso ? new Date(iso).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+            const statusColor = h.status === 'DONE' || h.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : h.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' : h.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : h.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
+            const photos = h.photos || [];
+            return (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setHistoryPreview(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                            <div>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{isTicket ? 'TICKET' : 'ACTIVITY'}</span>
+                                    <span className="text-[10px] font-mono text-slate-400">{h.ref}</span>
+                                </div>
+                                <h3 className="font-bold text-slate-900">{h.title}</h3>
+                                {h.serviceCategory && <div className="text-xs text-indigo-600">{h.serviceCategory}</div>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${statusColor}`}>{h.status.replace(/_/g, ' ')}</span>
+                                <button onClick={() => setHistoryPreview(null)} className="p-1 hover:bg-slate-200 rounded-lg"><X size={16} className="text-slate-400"/></button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                            {/* Timing */}
+                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span className="text-slate-700">{h.dateLabel}</span></div>
+                                {h.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(h.startedAt)}</span></div>}
+                                {h.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(h.completedAt)}</span></div>}
+                                {h.startedAt && h.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Duration</span><span className="font-bold text-slate-700">{Math.round((new Date(h.completedAt).getTime() - new Date(h.startedAt).getTime()) / 60000)}m</span></div>}
+                            </div>
+                            {/* Engineer */}
+                            {h.techName && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div><div className="text-xs font-bold text-slate-700">{h.techName}</div></div>}
+                            {/* Description */}
+                            {h.description && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.description}</p></div>}
+                            {/* Completion */}
+                            {h.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{h.completionNote}</p></div>}
+                            {/* Remarks */}
+                            {h.remarks && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.remarks}</p></div>}
+                            {/* Carry Forward */}
+                            {h.carryForwardNote && <div className="bg-amber-50 rounded-xl p-3 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{h.carryForwardNote}</p>{h.nextPlannedAt && <div className="text-[10px] text-amber-600 mt-1">Re-scheduled: {fmtDt(h.nextPlannedAt)}</div>}</div>}
+                            {/* Cancellation */}
+                            {h.cancellationReason && <div className="bg-red-50 rounded-xl p-3 border border-red-100"><div className="text-[10px] font-bold text-red-500 uppercase mb-1">Cancelled</div><p className="text-xs text-red-700 whitespace-pre-wrap">{h.cancellationReason}</p></div>}
+                            {/* Location */}
+                            {h.location && <div className="flex items-center gap-2 text-xs text-slate-500"><MapPin size={10}/> {h.location}</div>}
+                            {/* Photos */}
+                            {photos.length > 0 && (
+                                <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-3 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(p.url || p, '_blank')} />)}</div></div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                            <button onClick={() => setHistoryPreview(null)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Close</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        })()}
 
     </div>
   );
