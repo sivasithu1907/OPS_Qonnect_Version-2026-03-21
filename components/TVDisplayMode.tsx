@@ -57,7 +57,8 @@ const TVDisplayMode: React.FC = () => {
 
   const calendarDays = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() - d.getDay() + 1);
+    // Qatar work week: Saturday to Friday
+    d.setDate(d.getDate() - ((d.getDay() + 1) % 7)); // Most recent Saturday
     return Array.from({ length: 7 }, (_, i) => { const day = new Date(d); day.setDate(day.getDate() + i); return day; });
   }, []);
 
