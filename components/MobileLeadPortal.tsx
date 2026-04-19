@@ -203,7 +203,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           )
           .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || t.createdAt }));
       const doneActivities = (activities || [])
-          .filter(a => a.leadTechId === currentUserId && (a.status === 'DONE' || a.status === 'CANCELLED'))
+          .filter(a => a.leadTechId === currentUserId && (a.status === 'DONE' || a.status === 'CANCELLED' || a.status === 'CARRY_FORWARD'))
           .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.updatedAt || a.createdAt }));
       return [...doneTickets, ...doneActivities]
           .sort((a, b) => new Date(b.sortDate || 0).getTime() - new Date(a.sortDate || 0).getTime())
@@ -1186,7 +1186,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                                 {/* Description */}
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Issue Description</h4>
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Remarks / Description</h4>
                                     <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
                                         {viewTicket.messages?.find((m: any) => m.sender === 'CLIENT')?.content
                                             || (viewTicket as any).notes
@@ -1463,7 +1463,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     {/* Description */}
                                     <div className="bg-white rounded-xl p-4 border border-slate-100">
                                         <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
-                                            {viewJob.type === 'ticket' ? 'Issue Description' : 'Scope of Work'}
+                                            {viewJob.type === 'ticket' ? 'Remarks / Description' : 'Scope of Work'}
                                         </div>
                                         <p className="text-sm text-slate-700 leading-relaxed">
                                             {viewJob.type === 'ticket'
@@ -1587,6 +1587,47 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             </div>
                                         );
                                     })()}
+
+                                    {/* Completion / CF / Photos — shown for finished jobs */}
+                                    {(viewJob.data.status === 'DONE' || viewJob.data.status === 'RESOLVED' || viewJob.data.status === 'CARRY_FORWARD' || viewJob.data.status === 'CANCELLED') && (
+                                        <div className="space-y-3">
+                                            {viewJob.data.completionNote && (
+                                                <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                                                    <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div>
+                                                    <p className="text-sm text-emerald-800 whitespace-pre-wrap">{viewJob.data.completionNote}</p>
+                                                </div>
+                                            )}
+                                            {(viewJob.data.remarks || viewJob.data.notes) && (
+                                                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
+                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{viewJob.data.remarks || viewJob.data.notes}</p>
+                                                </div>
+                                            )}
+                                            {viewJob.data.carryForwardNote && (
+                                                <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                                                    <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div>
+                                                    <p className="text-sm text-amber-800 whitespace-pre-wrap">{viewJob.data.carryForwardNote}</p>
+                                                </div>
+                                            )}
+                                            {(viewJob.data.photos || []).length > 0 && (
+                                                <div>
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({viewJob.data.photos.length})</div>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        {viewJob.data.photos.map((p: any, i: number) => (
+                                                            <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(p.url || p, '_blank')} />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {(viewJob.data.startedAt || viewJob.data.completedAt) && (
+                                                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1">
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+                                                    {viewJob.data.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-slate-700">{new Date(viewJob.data.startedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
+                                                    {viewJob.data.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-slate-700">{new Date(viewJob.data.completedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Work Actions */}
                                     {viewJob.type === 'ticket' && viewJob.data.assignedTechId === currentUserId && (
