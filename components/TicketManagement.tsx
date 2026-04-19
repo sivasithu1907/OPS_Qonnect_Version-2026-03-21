@@ -1045,9 +1045,20 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                  <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><User size={10}/> Customer</h4>
                                  <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-1">
                                      <div className="font-bold text-slate-800 text-sm">{cust?.name || selectedTicket.customerName}</div>
-                                     <div className="text-xs text-slate-500 font-mono flex items-center gap-1">
-                                         <PhoneIcon size={10}/> {formatPhoneDisplay(selectedTicket.phoneNumber)}
-                                     </div>
+                                     {(() => {
+                                         // Show phone: prefer ticket phoneNumber, fall back to customer record
+                                         const ticketPhone = selectedTicket.phoneNumber || '';
+                                         const custPhone = cust?.phone || '';
+                                         // If ticketPhone looks like a customer ID (starts with QNC- or c), use customer phone instead
+                                         const displayPhone = (ticketPhone && !ticketPhone.startsWith('QNC-') && !ticketPhone.startsWith('c')) 
+                                             ? ticketPhone 
+                                             : custPhone;
+                                         return displayPhone ? (
+                                             <div className="text-xs text-slate-500 font-mono flex items-center gap-1">
+                                                 <PhoneIcon size={10}/> {formatPhoneDisplay(displayPhone)}
+                                             </div>
+                                         ) : null;
+                                     })()}
                                      {cust?.email && <div className="text-xs text-slate-500">{cust.email}</div>}
                                      {!cust && <div className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded inline-block mt-1">Unlinked</div>}
                                  </div>
