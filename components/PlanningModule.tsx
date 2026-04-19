@@ -245,7 +245,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
   const ListView = () => {
   const [listFilter, setListFilter] = React.useState<string>('ALL');
-  const statusFilters = ['ALL', 'PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
+  const statusFilters = ['ALL', 'PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
   const filteredActs = listFilter === 'ALL'
     ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
     : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
@@ -315,9 +315,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                     act.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
                     act.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                    act.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
                     act.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
                     'bg-amber-100 text-amber-700'
-                  }`}>{act.status}</span>
+                  }`}>{getActivityStatusLabel(act.status)}</span>
                 </td>
                 <td className="px-6 py-4 text-slate-600">
                   <div className="flex items-center gap-1">
@@ -374,15 +375,16 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 };
 
   const KanbanView = () => {
-    const columns: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
+    const columns: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
     
     return (
       <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-14rem)]">
         {columns.map(status => (
-          <div key={status} className="flex-1 min-w-[300px] flex flex-col bg-slate-100/50 rounded-xl border border-slate-200/60">
+          <div key={status} className="flex-1 min-w-[280px] flex flex-col bg-slate-100/50 rounded-xl border border-slate-200/60">
             <div className={`p-4 border-b border-slate-200 flex justify-between items-center ${
               status === 'PLANNED' ? 'bg-amber-50/50' : 
               status === 'IN_PROGRESS' ? 'bg-blue-50/50' : 
+              status === 'CARRY_FORWARD' ? 'bg-orange-50/50' :
               status === 'DONE' ? 'bg-emerald-50/50' : 'bg-slate-50'
             }`}>
               <h3 className="font-bold text-slate-700 text-sm">{getActivityStatusLabel(status)}</h3>
@@ -404,7 +406,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
   // --- Mobile Tab View ---
   const MobileTabView = () => {
-      const tabs: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'];
+      const tabs: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
       const filteredActs = activities.filter(a => a.status === mobileTab);
 
       return (
@@ -535,6 +537,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                    <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-slate-50/50 transition-colors">
                       {dayActs.map(act => {
                         const actFreelancers = (act as any).freelancers || [];
+                        const actCustomer = customers.find(c => c.id === act.customerId);
+                        const actTAs = (act.assistantTechIds || []).map(id => technicians.find(t => t.id === id)).filter(Boolean);
+                        const actSupport = ((act as any).supportingEngineerIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
+                        const statusColor = act.status === 'DONE' ? 'bg-emerald-500' : act.status === 'IN_PROGRESS' ? 'bg-blue-500' : act.status === 'CARRY_FORWARD' ? 'bg-orange-500' : act.status === 'CANCELLED' ? 'bg-slate-400' : 'bg-slate-400';
                         return (
                         <div 
                           key={act.id} 
@@ -542,22 +548,50 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           className={`mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all ${
                             (act.escalationLevel || 0) > 0 ? 'bg-red-50 border-red-400 border-l-4' :
                             act.status === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
+                            act.status === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200' :
                             act.priority === 'URGENT' ? 'bg-red-50 border-red-200 border-l-4 border-l-red-500' : 
                             'bg-white border-slate-200 border-l-4 border-l-blue-400'
                           }`}
                         >
-                          <div className="font-bold truncate text-slate-700 flex items-center justify-between">
-                              {act.type}
-                              {(act.escalationLevel || 0) > 0 && <AlertCircle size={10} className="text-red-500"/>}
+                          <div className="flex items-start justify-between gap-1 mb-0.5">
+                              <div className="font-bold truncate text-slate-700 flex items-center gap-1">
+                                  {act.type}
+                                  {(act.escalationLevel || 0) > 0 && <AlertCircle size={10} className="text-red-500"/>}
+                              </div>
+                              <span className={`shrink-0 px-1 py-0.5 rounded text-[7px] font-bold text-white leading-none ${statusColor}`}>
+                                  {getActivityStatusLabel(act.status)}
+                              </span>
                           </div>
-                          <div className="text-[10px] text-slate-500 truncate mt-0.5">{getDisplayLocation(act)}</div>
-                          <div className="text-[9px] text-slate-400 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}</div>
-                          {actFreelancers.length > 0 && (
+                          {/* Client Name */}
+                          {actCustomer && <div className="text-[10px] font-medium text-slate-800 truncate">{actCustomer.name}</div>}
+                          <div className="text-[9px] text-slate-400 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}{act.durationHours ? ` · ${act.durationHours}h` : ''}</div>
+                          {/* TAs */}
+                          {actTAs.length > 0 && (
                             <div className="flex flex-wrap gap-0.5 mt-1">
-                              {actFreelancers.map((fl: any, i: number) => (
-                                <span key={i} className="text-[8px] px-1 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200">{fl.name.split(' ')[0]} FL</span>
+                              {actTAs.map((ta: any) => (
+                                <span key={ta.id} className="text-[7px] px-1 py-0.5 bg-teal-50 text-teal-700 rounded border border-teal-200 truncate max-w-[80px]">{ta.name}</span>
                               ))}
                             </div>
+                          )}
+                          {/* Support Engineers */}
+                          {actSupport.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-0.5">
+                              {actSupport.map((se: any) => (
+                                <span key={se.id} className="text-[7px] px-1 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 truncate max-w-[80px]">{se.name}</span>
+                              ))}
+                            </div>
+                          )}
+                          {/* Freelancers */}
+                          {actFreelancers.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-0.5">
+                              {actFreelancers.map((fl: any, i: number) => (
+                                <span key={i} className="text-[7px] px-1 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200">{fl.name} FL</span>
+                              ))}
+                            </div>
+                          )}
+                          {/* Odoo Link */}
+                          {(act as any).odooLink && (
+                            <a href={(act as any).odooLink} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[7px] text-purple-600 hover:underline mt-0.5 block truncate">Odoo ↗</a>
                           )}
                         </div>
                       )})}
@@ -738,8 +772,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         onSelect={(c) => {
                             setSelectedCustomerId(c.id);
                             // Auto-fill location from customer record if not already set
-                            if (c.address && !locationUrl) setLocationUrl(c.address);
-                            if (c.buildingNumber && !houseNumber) setHouseNumber(c.buildingNumber);
+                            // Always fill location from customer when selecting
+                            if (c.address) setLocationUrl(c.address);
+                            if (c.buildingNumber) setHouseNumber(c.buildingNumber);
                         }}
                         onCreateNew={handleNewCustomer}
                       />
@@ -783,7 +818,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">Location URL</label>
-                              <input type="url" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="text" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">House Number</label>
