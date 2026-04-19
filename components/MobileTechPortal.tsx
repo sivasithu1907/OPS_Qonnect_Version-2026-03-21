@@ -715,6 +715,17 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     <span className="text-xs font-semibold">{photoUploading && photoJobId === act.id ? 'Saving...' : 'Photos'}</span>
                                 </button>
                             </div>
+                            {/* Uploaded Photos — visible to engineer */}
+                            {((act as any).photos || []).length > 0 && (
+                                <div className="space-y-2 mb-4">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Uploaded Photos ({(act as any).photos.length})</div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(act as any).photos.map((p: any, i: number) => (
+                                            <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(p.url || p, '_blank')} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {/* Workflow action buttons — full 5-step flow matching tickets */}
                             <div className="space-y-3 pb-6">
                                 {(actStatus === 'PLANNED') && (
