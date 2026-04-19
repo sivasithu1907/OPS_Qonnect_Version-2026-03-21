@@ -102,7 +102,7 @@ const TVDisplayMode: React.FC = () => {
       <div className="fixed inset-0 bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <div className="bg-amber-500 text-slate-900 w-16 h-16 rounded-2xl flex items-center justify-center font-black text-3xl mx-auto mb-4">Q</div>
-          <div className="text-xl font-bold text-white mb-2">Qonnect TV Display</div>
+          <div className="text-xl font-bold text-white mb-2">Qonnect Field Operations Monitor</div>
           <div className="text-sm text-slate-400">Loading operations data...</div>
         </div>
       </div>
@@ -128,7 +128,7 @@ const TVDisplayMode: React.FC = () => {
       <div className="h-12 bg-slate-900 flex items-center justify-between px-6 shrink-0 z-50">
         <div className="flex items-center gap-3">
           <div className="bg-amber-500 text-slate-900 w-8 h-8 rounded-lg flex items-center justify-center font-black text-lg">Q</div>
-          <span className="text-white font-bold text-sm">Qonnect Field Operations</span>
+          <span className="text-white font-bold text-sm">Qonnect Field Operations Monitor</span>
           <div className="flex items-center gap-1 ml-4">
             <button 
               onClick={() => setActivePanel('monitor')}
@@ -205,15 +205,15 @@ const TVDisplayMode: React.FC = () => {
                     return (
                       <div key={d.toString()} className={`p-1 border-r border-slate-100 last:border-0 ${d.toDateString() === new Date().toDateString() ? 'bg-amber-50/30' : ''}`}>
                         {dayActs.map((act: any) => (
-                          <div key={act.id} className={`mb-1 p-1.5 rounded border text-[10px] relative ${getStatusBg(act.status)}`}>
-                            <div className="flex items-start justify-between gap-1">
-                              <div className="font-bold truncate flex-1">{act.type}</div>
-                              <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[8px] font-black leading-none whitespace-nowrap ${getStatusBadgeStyle(act.status)}`}>
-                                {getStatusLabel(act.status)}
-                              </span>
+                          <div key={act.id} className={`mb-1 p-1.5 rounded border text-[10px] ${getStatusBg(act.status)}`}>
+                            <div className="font-bold truncate">{act.type}</div>
+                            <div className="truncate font-medium opacity-90">{customers.find((c: any) => c.id === act.customerId)?.name || ''}</div>
+                            {act.serviceCategory && <div className="truncate opacity-60">{act.serviceCategory}</div>}
+                            {act.remarks && <div className="truncate opacity-60">{act.remarks.substring(0, 30)}</div>}
+                            <div className="flex items-center justify-between mt-0.5">
+                              <span className="opacity-60">{new Date(act.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })}</span>
+                              <span className={`px-1 py-0.5 rounded text-[7px] font-bold leading-none ${getStatusBadgeStyle(act.status)}`}>{getStatusLabel(act.status)}</span>
                             </div>
-                            <div className="truncate opacity-80">{customers.find((c: any) => c.id === act.customerId)?.name || act.houseNumber || ''}</div>
-                            <div className="opacity-60">{new Date(act.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })}</div>
                           </div>
                         ))}
                       </div>
@@ -228,7 +228,7 @@ const TVDisplayMode: React.FC = () => {
 
       {/* BOTTOM STATUS BAR */}
       <div className="h-6 bg-slate-900 flex items-center justify-between px-6 text-[10px] text-slate-500 shrink-0">
-        <span>Qonnect Field Operations — TV Display</span>
+        <span>Qonnect Field Operations Monitor</span>
         <span className="flex items-center gap-2"><Monitor size={10} /> Read-Only · Panel toggle 45s</span>
       </div>
     </div>
