@@ -216,7 +216,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           onUpdateActivity({
               ...a,
               status: 'DONE',
-              remarks: note ? (a.remarks ? a.remarks + '\n' + note : note) : a.remarks,
+              completionNote: note || undefined,
               updatedAt: new Date().toISOString()
           });
       }
