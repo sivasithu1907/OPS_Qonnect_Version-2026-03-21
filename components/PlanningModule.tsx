@@ -1174,28 +1174,48 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 </div>
                 {/* Description */}
                 {va.description && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-xs font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 leading-relaxed">{va.description}</p></div>}
-                {/* Resources */}
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
-                  <div className="text-xs font-bold text-slate-400 uppercase mb-2">Assigned Resources</div>
-                  {lead && <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-purple-500"/><span className="font-medium text-slate-800">{lead.name}</span><span className="text-[10px] text-slate-400">Lead Engineer</span></div>}
-                  {va.primaryEngineerId && va.primaryEngineerId !== va.leadTechId && (() => {
-                    const prim = technicians.find(t => t.id === va.primaryEngineerId);
-                    return prim ? <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-blue-500"/><span className="font-medium text-blue-700">{prim.name}</span><span className="text-[10px] text-slate-400">Primary (Execution)</span></div> : null;
-                  })()}
-                  {salesLd && <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLd.name}</span><span className="text-[10px] text-slate-400">Sales Lead</span></div>}
-                  {assistants.map((a: any) => <div key={a.id} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-teal-500"/><span className="text-slate-700">{a.name}</span><span className="text-[10px] text-slate-400">Technical Associate</span></div>)}
-                  {(va.supportingEngineerIds || []).filter((sid: string) => !(va.assistantTechIds || []).includes(sid) && sid !== va.primaryEngineerId).map((sid: string) => {
-                    const se = technicians.find(t => t.id === sid);
-                    return se ? <div key={sid} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-blue-400"/><span className="text-slate-700">{se.name}</span><span className="text-[10px] text-slate-400">Supporting Engineer</span></div> : null;
-                  })}
-                  {fls.map((fl: any, i: number) => <div key={`fl-${i}`} className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-amber-800 font-medium">{fl.name}</span><span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-200">Freelancer · {fl.role === 'FIELD_ENGINEER' ? 'FE' : 'TA'}</span>{fl.phone && <span className="text-[10px] text-slate-400 ml-auto">{fl.phone}</span>}</div>)}
-                  {!lead && !salesLd && assistants.length === 0 && fls.length === 0 && <p className="text-xs text-slate-400 italic">No resources assigned</p>}
+                {/* Resources — split into sections */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
+                  {/* Sales Lead — separate section */}
+                  {salesLd && (
+                    <div className="pb-2 border-b border-slate-200">
+                      <div className="text-[10px] font-bold text-indigo-600 uppercase mb-1.5">Sales Lead</div>
+                      <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLd.name}</span></div>
+                    </div>
+                  )}
+                  {/* Assigned Team */}
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Assigned Team</div>
+                    {lead && <div className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-purple-500"/><span className="font-medium text-slate-800">{lead.name}</span><span className="text-[10px] text-slate-400">Lead Engineer</span></div>}
+                    {va.primaryEngineerId && va.primaryEngineerId !== va.leadTechId && (() => {
+                      const prim = technicians.find(t => t.id === va.primaryEngineerId);
+                      return prim ? <div className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-blue-500"/><span className="font-medium text-blue-700">{prim.name}</span><span className="text-[10px] text-slate-400">Primary (Execution)</span></div> : null;
+                    })()}
+                    {assistants.map((a: any) => <div key={a.id} className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-teal-500"/><span className="text-slate-700">{a.name}</span><span className="text-[10px] text-slate-400">Technical Associate</span></div>)}
+                    {(va.supportingEngineerIds || []).filter((sid: string) => !(va.assistantTechIds || []).includes(sid) && sid !== va.primaryEngineerId).map((sid: string) => {
+                      const se = technicians.find(t => t.id === sid);
+                      return se ? <div key={sid} className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-blue-400"/><span className="text-slate-700">{se.name}</span><span className="text-[10px] text-slate-400">Supporting Engineer</span></div> : null;
+                    })}
+                    {fls.map((fl: any, i: number) => <div key={`fl-${i}`} className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-amber-800 font-medium">{fl.name}</span><span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-200">Freelancer · {fl.role === 'FIELD_ENGINEER' ? 'FE' : 'TA'}</span>{fl.phone && <span className="text-[10px] text-slate-400 ml-auto">{fl.phone}</span>}</div>)}
+                    {!lead && assistants.length === 0 && fls.length === 0 && <p className="text-xs text-slate-400 italic">No team assigned</p>}
+                  </div>
                 </div>
+                {/* Photos */}
+                {(va.photos || []).length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold text-slate-400 uppercase">Completion Photos ({va.photos.length})</div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {va.photos.map((p: any, i: number) => (
+                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-md" onClick={() => window.open(p.url || p, '_blank')} />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {/* Remarks & Completion Summary */}
                 {(va.remarks || va.completionNote || va.carryForwardNote || va.cancellationReason) && (
                   <div className="space-y-3">
                     <div className="text-xs font-bold text-slate-400 uppercase">Notes & Remarks</div>
-                    {va.remarks && (
+                    {va.remarks && va.remarks !== va.completionNote && (
                       <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                         <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
                         <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{va.remarks}</p>
