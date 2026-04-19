@@ -135,13 +135,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   const getDisplayLocation = (act: Activity) => {
       const site = sites.find(s => s.id === act.siteId);
       if (site) return site.name;
-      if (act.houseNumber) return `House: ${act.houseNumber}`;
-      // Fall back to customer name or building number instead of generic text
+      // If houseNumber is a URL, don't show raw URL
+      if (act.houseNumber && !act.houseNumber.startsWith('http')) return `House: ${act.houseNumber}`;
       const cust = customers.find(c => c.id === act.customerId);
-      if (cust?.buildingNumber) return `Bldg: ${cust.buildingNumber}`;
+      if (cust?.buildingNumber && !cust.buildingNumber.startsWith('http')) return `Bldg: ${cust.buildingNumber}`;
       if (cust?.name) return cust.name;
-      if (act.locationUrl) return 'Map link available';
-      return 'No location set';
+      if (act.locationUrl || act.houseNumber?.startsWith('http') || cust?.address?.startsWith('http')) return 'Map linked';
+      return 'N/A';
   };
 
   // Determine available associates based on selected date
@@ -261,17 +261,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         ))}
       </div>
       <div className="overflow-x-auto flex-1 overflow-y-auto">
-      <table className="w-full text-sm text-left min-w-[900px]">
+      <table className="w-full text-sm text-left table-fixed">
         <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
           <tr>
-            <th className="px-6 py-4">Ref</th>
-            <th className="px-6 py-4">Type</th>
-            <th className="px-6 py-4">Customer / Location</th>
-            <th className="px-6 py-4">Priority</th>
-            <th className="px-6 py-4">Status</th>
-            <th className="px-6 py-4">Planned</th>
-            <th className="px-6 py-4">Resources</th>
-            <th className="px-6 py-4 text-right">Actions</th>
+            <th className="px-4 py-4 w-[10%]">Ref</th>
+            <th className="px-4 py-4 w-[10%]">Type</th>
+            <th className="px-4 py-4 w-[24%]">Customer / Location</th>
+            <th className="px-4 py-4 w-[8%]">Priority</th>
+            <th className="px-4 py-4 w-[10%]">Status</th>
+            <th className="px-4 py-4 w-[12%]">Planned</th>
+            <th className="px-4 py-4 w-[18%]">Resources</th>
+            <th className="px-4 py-4 text-right w-[8%]">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -284,7 +284,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
             return (
               <tr key={act.id} className={`hover:bg-slate-50 group ${isDelayed ? 'bg-red-50/30' : ''}`}>
-                <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                <td className="px-4 py-4 font-mono text-xs text-slate-500">
                     <div className="flex items-center gap-2">
                         {act.reference}
                         {isDelayed && <AlertCircle size={12} className="text-red-500" />}
@@ -295,24 +295,29 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         </a>
                     )}
                 </td>
-                <td className="px-6 py-4 font-medium text-slate-800">
+                <td className="px-4 py-4 font-medium text-slate-800">
                     {act.type}
                     {act.serviceCategory && <div className="text-[10px] text-slate-500 font-normal">{act.serviceCategory}</div>}
                 </td>
-                <td className="px-6 py-4">
-                  <div className="font-medium text-slate-900">{customer?.name || 'Unknown'}</div>
-                  <div className="text-xs text-slate-500 flex items-center gap-1">
-                      <MapPin size={10} /> {getDisplayLocation(act)}
+                <td className="px-4 py-4">
+                  <div className="font-medium text-slate-900 truncate">{customer?.name || 'Unknown'}</div>
+                  <div className="text-xs text-slate-500 flex items-center gap-1 truncate">
+                      <MapPin size={10} className="shrink-0" /> {getDisplayLocation(act)}
                   </div>
+                  {act.locationUrl && (
+                      <a href={act.locationUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
+                          <MapPin size={8} className="shrink-0" /> View Map
+                      </a>
+                  )}
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-4">
                   <span className={`px-2 py-1 rounded text-[10px] font-bold border ${
                     act.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
                     act.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                     'bg-slate-50 text-slate-600 border-slate-200'
                   }`}>{act.priority}</span>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-4">
                   <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                     act.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
                     act.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
@@ -321,7 +326,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     'bg-amber-100 text-amber-700'
                   }`}>{getActivityStatusLabel(act.status)}</span>
                 </td>
-                <td className="px-6 py-4 text-slate-600">
+                <td className="px-4 py-4 text-slate-600">
                   <div className="flex items-center gap-1">
                       <Calendar size={12} /> {new Date(act.plannedDate).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}
                   </div>
@@ -329,7 +334,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <Clock size={12} /> {new Date(act.plannedDate).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
                   </div>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-4">
                      <div className="flex flex-col gap-1">
                        {lead ? (
                          <div className="flex items-center gap-2">
@@ -358,7 +363,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                        )}
                      </div>
                 </td>
-                <td className="px-6 py-4 text-right">
+                <td className="px-4 py-4 text-right">
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => setViewingActivity(act)} className="text-slate-400 hover:text-blue-600 font-medium text-xs">View</button>
                     <span className="text-slate-200">|</span>
@@ -711,7 +716,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       {isModalOpen && (
          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-2xl max-h-[90vh] rounded-2xl'} overflow-hidden flex flex-col`}>
-               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+               <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                   <h3 className="font-bold text-lg text-slate-900">
                       {editingActivity ? `Edit Activity` : 'Plan New Activity'}
                   </h3>
@@ -1123,7 +1128,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewingActivity(null)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <div>
                   <div className="text-xs font-mono text-slate-400">{va.reference}</div>
                   <h3 className="font-bold text-lg text-slate-900">{va.type}</h3>
