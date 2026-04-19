@@ -214,7 +214,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
                   <p className="text-xs text-emerald-800 whitespace-pre-wrap leading-relaxed">{d.completionNote}</p>
                 </div>
               )}
-              {(d.remarks || d.notes) && (
+              {(d.remarks || d.notes) && (d.remarks || d.notes) !== d.completionNote && (
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                   <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
                   <p className="text-xs text-slate-700 whitespace-pre-wrap">{d.remarks || d.notes}</p>
