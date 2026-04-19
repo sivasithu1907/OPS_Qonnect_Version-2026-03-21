@@ -251,7 +251,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
     : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
       <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50/80 overflow-x-auto">
         {statusFilters.map(f => (
           <button key={f} onClick={() => setListFilter(f)}
@@ -260,7 +260,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           </button>
         ))}
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto flex-1 overflow-y-auto">
       <table className="w-full text-sm text-left min-w-[900px]">
         <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
           <tr>
@@ -540,7 +540,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         const actFreelancers = (act as any).freelancers || [];
                         const actCustomer = customers.find(c => c.id === act.customerId);
                         const actTAs = (act.assistantTechIds || []).map(id => technicians.find(t => t.id === id)).filter(Boolean);
-                        const actSupport = ((act as any).supportingEngineerIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
+                        const actSupport = ((act as any).supportingEngineerIds || [])
+                            .filter((id: string) => !(act.assistantTechIds || []).includes(id)) // exclude TAs already shown
+                            .map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
                         const statusColor = act.status === 'DONE' ? 'bg-emerald-500' : act.status === 'IN_PROGRESS' ? 'bg-blue-500' : act.status === 'CARRY_FORWARD' ? 'bg-orange-500' : act.status === 'CANCELLED' ? 'bg-slate-400' : 'bg-slate-400';
                         return (
                         <div 
