@@ -138,6 +138,10 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
   const [newTemplateName, setNewTemplateName] = useState('');
   const [isSaveTemplateMode, setIsSaveTemplateMode] = useState(false);
 
+  // Preview popup state — read-only data preview for completed items
+  const [previewItem, setPreviewItem] = useState<any>(null);
+  const [previewType, setPreviewType] = useState<'ticket' | 'activity'>('ticket');
+
   // --- Load/Save Templates Logic ---
   useEffect(() => {
       const saved = localStorage.getItem('qonnect_report_templates');
@@ -275,6 +279,10 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       handleDateRangeChange(formatDateYYYYMMDD(start), formatDateYYYYMMDD(end), preset);
   };
 
+  // Reports should only show completed/resolved/carry-forwarded jobs — NOT planned or in-progress
+  const REPORT_TICKET_STATUSES = ['RESOLVED', 'CARRY_FORWARD', 'CANCELLED'];
+  const REPORT_ACTIVITY_STATUSES = ['DONE', 'CARRY_FORWARD', 'CANCELLED'];
+
   const filteredTickets = useMemo(() => {
       const start = parseDateYYYYMMDD(startDate);
       start.setHours(0,0,0,0);
@@ -283,7 +291,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       end.setHours(23,59,59,999);
 
       return tickets.filter(t => {
-          // For RESOLVED tickets, filter by actual completion date so they appear in the correct reporting period
+          // Only show resolved/carry-forwarded/cancelled tickets
+          if (!REPORT_TICKET_STATUSES.includes(t.status)) return false;
           const dateField = (t.status === 'RESOLVED' && (t as any).completedAt) ? (t as any).completedAt : t.createdAt;
           const tDate = new Date(dateField).getTime();
           return tDate >= start.getTime() && tDate <= end.getTime();
@@ -298,7 +307,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       end.setHours(23,59,59,999);
 
       return activities.filter(a => {
-          // For DONE activities, filter by actual completion date; otherwise use plannedDate
+          // Only show done/carry-forwarded/cancelled activities
+          if (!REPORT_ACTIVITY_STATUSES.includes(a.status)) return false;
           const dateField = (a.status === 'DONE' && (a as any).completedAt) ? (a as any).completedAt : a.plannedDate;
           const aDate = new Date(dateField).getTime();
           return aDate >= start.getTime() && aDate <= end.getTime();
@@ -742,15 +752,12 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                          <td className="px-6 py-3 whitespace-nowrap text-right">
                                              <button
                                                  onClick={() => {
-                                                     if (reportType === 'tickets') {
-                                                         onNavigate('ticket', item.id);
-                                                     } else {
-                                                         onNavigate('activity', item.id);
-                                                     }
+                                                     setPreviewItem(item);
+                                                     setPreviewType(reportType === 'tickets' ? 'ticket' : 'activity');
                                                  }}
                                                  className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors opacity-0 group-hover:opacity-100"
                                              >
-                                                 <Eye size={12}/> View
+                                                 <Eye size={12}/> Preview
                                              </button>
                                          </td>
                                      )}
@@ -870,6 +877,96 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                 </div>
              </div>
         )}
+
+        {/* ── Data Preview Popup (Read-Only) ── */}
+        {previewItem && (() => {
+            const d = previewItem;
+            const isTicket = previewType === 'ticket';
+            const cust = customers.find((c: any) => c.id === d.customerId);
+            const tech = technicians.find(t => t.id === (d.assignedTechId || d.leadTechId || (d as any).primaryEngineerId));
+            const fmtDt = (iso: string) => iso ? `${new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} ${new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}` : '—';
+            const statusColor = d.status === 'DONE' || d.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : d.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' : d.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600';
+            const photos = (d as any).photos || [];
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setPreviewItem(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                            <div>
+                                <div className="text-[10px] font-mono text-slate-400">{d.id || d.reference}</div>
+                                <h3 className="font-bold text-slate-900">{isTicket ? d.category : d.type}</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${statusColor}`}>{(d.status || '').replace(/_/g, ' ')}</span>
+                                <button onClick={() => setPreviewItem(null)} className="p-1 hover:bg-slate-200 rounded-lg"><X size={16} className="text-slate-400"/></button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                            {/* Customer */}
+                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
+                                <div className="text-sm font-bold text-slate-800">{cust?.name || d.customerName || 'Unknown'}</div>
+                                {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{cust?.phone || d.phoneNumber}</div>}
+                            </div>
+                            {/* Service */}
+                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 grid grid-cols-2 gap-2">
+                                <div><span className="text-[10px] text-slate-400 block">{isTicket ? 'Category' : 'Type'}</span><span className="text-xs font-medium text-slate-700">{isTicket ? d.category : d.type}</span></div>
+                                <div><span className="text-[10px] text-slate-400 block">Priority</span><span className="text-xs font-medium text-slate-700">{d.priority}</span></div>
+                                {!isTicket && d.serviceCategory && <div><span className="text-[10px] text-slate-400 block">Service</span><span className="text-xs font-medium text-slate-700">{d.serviceCategory}</span></div>}
+                            </div>
+                            {/* Timing */}
+                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span className="text-slate-700">{fmtDt(isTicket ? d.createdAt : d.plannedDate)}</span></div>
+                                {d.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(d.startedAt)}</span></div>}
+                                {d.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(d.completedAt)}</span></div>}
+                            </div>
+                            {/* Assigned */}
+                            {tech && (
+                                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div>
+                                    <div className="text-xs font-bold text-slate-700">{tech.name}</div>
+                                </div>
+                            )}
+                            {/* Notes */}
+                            {(d.completionNote || d.remarks || d.notes || d.description) && (
+                                <div className="space-y-2">
+                                    {d.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{d.completionNote}</p></div>}
+                                    {(d.remarks || d.notes) && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.remarks || d.notes}</p></div>}
+                                    {d.description && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.description}</p></div>}
+                                </div>
+                            )}
+                            {/* Carry Forward */}
+                            {d.carryForwardNote && (
+                                <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
+                                    <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div>
+                                    <p className="text-xs text-amber-800 whitespace-pre-wrap">{d.carryForwardNote}</p>
+                                    {d.nextPlannedAt && <div className="text-[10px] text-amber-600 mt-1">Re-scheduled: {fmtDt(d.nextPlannedAt)}</div>}
+                                </div>
+                            )}
+                            {/* Photos */}
+                            {photos.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Photos ({photos.length})</div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(p.url || p, '_blank')} />)}
+                                    </div>
+                                </div>
+                            )}
+                            {/* Location */}
+                            {(d.locationUrl || d.houseNumber) && (
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                    {d.houseNumber && !d.houseNumber.startsWith('http') && <span>House: {d.houseNumber}</span>}
+                                    {d.locationUrl && <a href={d.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View Map</a>}
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                            <button onClick={() => setPreviewItem(null)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Close</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        })()}
     </div>
   );
 };
