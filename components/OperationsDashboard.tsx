@@ -817,6 +817,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                         <span className="ml-auto text-[8px] font-medium text-slate-400 italic shrink-0">planned</span>
                                                     )}
                                                 </div>
+                                                {item.clientLine && (
+                                                    <div className="text-[8px] font-medium truncate opacity-90 leading-tight">{item.clientLine}</div>
+                                                )}
                                                 <div className="text-[9px] truncate opacity-80 leading-tight">
                                                     {item.description}
                                                 </div>
