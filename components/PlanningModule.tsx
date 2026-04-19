@@ -41,7 +41,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   // Calendar week navigation state
   const [calendarWeekStart, setCalendarWeekStart] = useState<Date>(() => {
       const d = new Date();
-      d.setDate(d.getDate() - d.getDay() + 1); // Start Monday of current week
+      // Qatar work week: Saturday to Friday
+      d.setDate(d.getDate() - ((d.getDay() + 1) % 7)); // Most recent Saturday
       d.setHours(0, 0, 0, 0);
       return d;
   });
@@ -462,17 +463,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     };
     const goToThisWeek = () => {
         const d = new Date();
-        d.setDate(d.getDate() - d.getDay() + 1); // Monday
+        d.setDate(d.getDate() - ((d.getDay() + 1) % 7)); // Most recent Saturday
         d.setHours(0, 0, 0, 0);
         setCalendarWeekStart(d);
     };
 
     const isCurrentWeek = (() => {
         const now = new Date();
-        const mon = new Date(now);
-        mon.setDate(mon.getDate() - mon.getDay() + 1);
-        mon.setHours(0, 0, 0, 0);
-        return calendarWeekStart.getTime() === mon.getTime();
+        const sat = new Date(now);
+        sat.setDate(sat.getDate() - ((sat.getDay() + 1) % 7)); // Most recent Saturday
+        sat.setHours(0, 0, 0, 0);
+        return calendarWeekStart.getTime() === sat.getTime();
     })();
 
     // Use Team Leads for rows in Calendar View (since they manage schedules usually)
