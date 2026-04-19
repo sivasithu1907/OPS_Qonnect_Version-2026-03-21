@@ -67,6 +67,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
   const [selectedSearchTicket, setSelectedSearchTicket] = useState<Ticket | null>(null);
+  const [previewTicket, setPreviewTicket] = useState<Ticket | null>(null); // Summary popup for completed tickets
   const [recentTicketIds, setRecentTicketIds] = useState<string[]>(() => {
       try {
           const saved = localStorage.getItem('qonnect_recent_tickets');
@@ -724,7 +725,14 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                             <div
                                 key={event.id}
                                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group"
-                                onClick={() => onNavigate({ ticketId: event.ticketId })}
+                                onClick={() => {
+                                    const ticket = tickets.find(t => t.id === event.ticketId);
+                                    if (ticket && (ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.CANCELLED || ticket.status === 'CARRY_FORWARD' as any)) {
+                                        setPreviewTicket(ticket);
+                                    } else {
+                                        onNavigate({ ticketId: event.ticketId });
+                                    }
+                                }}
                             >
                                 {/* Dot */}
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`}/>
@@ -928,6 +936,56 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
               </div>
           </div>
       )}
+
+      {/* Ticket Preview Popup (Read-Only Summary) */}
+      {previewTicket && (() => {
+          const t = previewTicket as any;
+          const tech = technicians.find(tc => tc.id === t.assignedTechId);
+          const fmtDt = (iso: string) => iso ? new Date(iso).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+          const statusColor = t.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : t.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' : t.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600';
+          const issueText = t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || t.notes || t.ai_summary || '';
+          return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setPreviewTicket(null)}>
+                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                      <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                          <div>
+                              <div className="text-[10px] font-mono text-slate-400">{t.id}</div>
+                              <h3 className="font-bold text-slate-900">{t.category}</h3>
+                          </div>
+                          <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${statusColor}`}>{(t.status || '').replace(/_/g, ' ')}</span>
+                              <button onClick={() => setPreviewTicket(null)} className="p-1 hover:bg-slate-200 rounded-lg">✕</button>
+                          </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
+                              <div className="text-sm font-bold text-slate-800">{t.customerName}</div>
+                              {t.phoneNumber && <div className="text-xs text-slate-500">{t.phoneNumber}</div>}
+                          </div>
+                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 grid grid-cols-2 gap-2">
+                              <div><span className="text-[10px] text-slate-400 block">Type</span><span className="text-xs font-medium">{t.type || '—'}</span></div>
+                              <div><span className="text-[10px] text-slate-400 block">Priority</span><span className="text-xs font-medium">{t.priority}</span></div>
+                          </div>
+                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+                              <div className="flex justify-between text-xs"><span className="text-slate-400">Created</span><span>{fmtDt(t.createdAt)}</span></div>
+                              {t.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(t.startedAt)}</span></div>}
+                              {t.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(t.completedAt)}</span></div>}
+                          </div>
+                          {tech && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div><div className="text-xs font-bold">{tech.name}</div></div>}
+                          {issueText && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{issueText}</p></div>}
+                          {t.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{t.completionNote}</p></div>}
+                          {t.carryForwardNote && <div className="bg-amber-50 rounded-xl p-3 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{t.carryForwardNote}</p></div>}
+                      </div>
+                      <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0 flex gap-3">
+                          <button onClick={() => setPreviewTicket(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm">Close</button>
+                          <button onClick={() => { setPreviewTicket(null); onNavigate({ ticketId: t.id }); }} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Edit Ticket</button>
+                      </div>
+                  </div>
+              </div>
+          );
+      })()}
     </div>
   );
 };
