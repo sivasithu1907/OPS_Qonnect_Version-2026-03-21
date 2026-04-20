@@ -33,6 +33,21 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   onClearInitialActivity,
   currentUserId
 }) => {
+  const showPhotoLightbox = (src: string) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+    overlay.onclick = () => overlay.remove();
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+    const close = document.createElement('div');
+    close.textContent = '✕';
+    close.style.cssText = 'position:absolute;top:20px;right:24px;color:white;font-size:28px;font-weight:bold;cursor:pointer;background:rgba(0,0,0,0.5);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;';
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
+  };
+
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>('kanban');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
@@ -1206,7 +1221,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     <div className="text-xs font-bold text-slate-400 uppercase">Completion Photos ({va.photos.length})</div>
                     <div className="grid grid-cols-4 gap-2">
                       {va.photos.map((p: any, i: number) => (
-                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-md" onClick={() => window.open(p.url || p, '_blank')} />
+                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />
                       ))}
                     </div>
                   </div>
