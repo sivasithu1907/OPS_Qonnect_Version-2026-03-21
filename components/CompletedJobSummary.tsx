@@ -290,7 +290,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
                       src={photo.url || photo} 
                       alt={photo.name || `Photo ${i + 1}`}
                       className="w-full h-24 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-lg transition-shadow"
-                      onClick={() => window.open(photo.url || photo, '_blank')}
+                      onClick={() => showPhotoLightbox(photo.url || photo)}
                     />
                     <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] px-1.5 py-0.5 rounded-b-lg truncate">
                       {photo.name || `Photo ${i + 1}`}
