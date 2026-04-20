@@ -120,6 +120,21 @@ interface ReportTemplate {
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#64748b', '#8b5cf6'];
 
 const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, technicians, sites, customers = [], onNavigate }) => {
+  const showPhotoLightbox = (src: string) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+    overlay.onclick = () => overlay.remove();
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+    const close = document.createElement('div');
+    close.textContent = '✕';
+    close.style.cssText = 'position:absolute;top:20px;right:24px;color:white;font-size:28px;font-weight:bold;cursor:pointer;background:rgba(0,0,0,0.5);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;';
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
+  };
+
   const [reportType, setReportType] = useState<'tickets' | 'operations'>('tickets');
   
   // Date Range State - Default: This Month (MTD)
@@ -948,7 +963,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                 <div className="space-y-2">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase">Photos ({photos.length})</div>
                                     <div className="grid grid-cols-3 gap-2">
-                                        {photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(p.url || p, '_blank')} />)}
+                                        {photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />)}
                                     </div>
                                 </div>
                             )}
