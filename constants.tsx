@@ -37,6 +37,15 @@ export const INPUT_STYLES = "w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded
 export const SEARCH_INPUT_STYLES = "w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl pl-10 pr-[14px] py-[12px] text-sm font-medium text-[#0F172A] placeholder-[#94A3B8] outline-none transition-all focus:bg-[#FFFFFF] focus:border-[#FFCC00] focus:ring-[4px] focus:ring-[#FFCC00]/25";
 
 export const NAVIGATION_ITEMS = [
+  // --- Master Dashboard (Top Level) ---
+  {
+    id: 'master_dashboard',
+    label: 'Master Dashboard',
+    icon: <LayoutDashboard size={20} />,
+    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    category: 'Dashboard'
+  },
+
   // --- After-Sales ---
   { 
     id: 'dashboard', 
@@ -65,13 +74,6 @@ export const NAVIGATION_ITEMS = [
     id: 'planning', 
     label: 'Activity Planner', 
     icon: <Calendar size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'Operations'
-  },
-  {
-    id: 'master_dashboard',
-    label: 'Master Dashboard',
-    icon: <LayoutDashboard size={20} />,
     roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'Operations'
   },
