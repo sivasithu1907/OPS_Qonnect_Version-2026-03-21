@@ -27,6 +27,21 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
     readOnly = false,
     isMobile = false
 }) => {
+  const showPhotoLightbox = (src: string) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+    overlay.onclick = () => overlay.remove();
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+    const close = document.createElement('div');
+    close.textContent = '✕';
+    close.style.cssText = 'position:absolute;top:20px;right:24px;color:white;font-size:28px;font-weight:bold;cursor:pointer;background:rgba(0,0,0,0.5);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;';
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
+  };
+
   const [modalType, setModalType] = useState<'add' | 'edit' | 'view' | null>(null);
   const [activeItem, setActiveItem] = useState<Customer | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -857,7 +872,7 @@ onSaveCustomer(data as Customer);
                             {h.location && <div className="flex items-center gap-2 text-xs text-slate-500"><MapPin size={10}/> {h.location}</div>}
                             {/* Photos */}
                             {photos.length > 0 && (
-                                <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-3 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => window.open(p.url || p, '_blank')} />)}</div></div>
+                                <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-3 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />)}</div></div>
                             )}
                         </div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
