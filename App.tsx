@@ -26,11 +26,19 @@ import MasterDashboard from './components/MasterDashboard';
 import { Menu, Bell, Search, LogOut, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { generateActivityId, generateTicketId } from './utils/idUtils';
 
-// Logo Component
-const QonnectLogo = ({ className }: { className?: string }) => (
-  <div className={`bg-slate-900 text-white flex items-center justify-center rounded-lg font-bold text-xl ${className}`}>
-    Q
-  </div>
+// Logo Component — actual Qonnect SVG logo
+const QonnectLogo = ({ className, size = 30 }: { className?: string; size?: number }) => (
+  <svg viewBox="0 0 578 578" xmlns="http://www.w3.org/2000/svg" className={className} width={size} height={size}>
+    <path d="M409.18,407.51a113.86,113.86,0,1,0-225.35,32.32l45-36.75a69.77,69.77,0,0,1,135.75,4.43Z" transform="translate(-8.5 -132)" fill="#fdbb40"/>
+    <rect x="251.37" y="404.96" width="30.72" height="30.72"/>
+    <rect x="293.23" y="404.96" width="30.72" height="30.72"/>
+    <rect x="251.37" y="447.04" width="30.72" height="30.72"/>
+    <rect x="293.23" y="447.04" width="30.72" height="30.72"/>
+    <path d="M297.5,220.76C186.94,220.76,97,310.71,97,421.27A200.3,200.3,0,0,0,112.27,498l36.14-29.53a156.51,156.51,0,0,1-7.3-47.21c0-86.24,70.15-156.4,156.39-156.4S453.89,335,453.89,421.27a156.33,156.33,0,0,1-7.42,47.57l36.11,29.49A200.38,200.38,0,0,0,498,421.27C498,310.71,408.06,220.76,297.5,220.76Z" transform="translate(-8.5 -132)" fill="#fdbb40"/>
+    <path d="M297.5,132c-159.35,0-289,129.64-289,289A287.17,287.17,0,0,0,41.63,555.23l35-28.57A243.44,243.44,0,0,1,52.61,421c0-135,109.86-244.89,244.89-244.89S542.39,286,542.39,421A243.47,243.47,0,0,1,518,527.49l35,28.55A287.17,287.17,0,0,0,586.5,421C586.5,261.64,456.85,132,297.5,132Z" transform="translate(-8.5 -132)" fill="#fdbb40"/>
+    <path d="M247.31,506.42l49.61-43.28,43.65,33.92,37-.7-.13,30.39,56,45.68a.78.78,0,0,0,.05-.14l66.75,54.48A289.41,289.41,0,0,0,529,593.6l-34.38-28h0l-73.11-60,.3-54.08-65.73.08-59.39-48L106.09,559.8,65.5,593.13c8.73,11.73,18.34,25.41,28.71,35.68L247.3,506.42Z" transform="translate(-8.5 -132)"/>
+    <path d="M430.33,626.59A244.06,244.06,0,0,1,164,626.13L128.4,655.2a288.32,288.32,0,0,0,337.55.48Z" transform="translate(-8.5 -132)"/>
+  </svg>
 );
 
 function App() {
@@ -944,7 +952,7 @@ useEffect(() => {
             {/* Sidebar Header */}
             <div className={`flex items-center border-b border-[#0F172A]/[0.08] transition-all duration-300 ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}>
             <div className="shrink-0 transition-all duration-300 flex items-center justify-center">
-                <QonnectLogo className="w-[30px] h-[30px] object-contain block" />
+                <QonnectLogo size={sidebarCollapsed ? 36 : 32} />
             </div>
             
             <div className={`flex flex-col justify-center overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>
