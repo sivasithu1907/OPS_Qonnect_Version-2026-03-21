@@ -22,6 +22,7 @@ import SystemDataTools from './components/SystemDataTools';
 import WhatsAppMonitor from './components/WhatsAppMonitor';
 import TVDisplayMode from './components/TVDisplayMode';
 import CompletedJobSummary from './components/CompletedJobSummary';
+import MasterDashboard from './components/MasterDashboard';
 import { Menu, Bell, Search, LogOut, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { generateActivityId, generateTicketId } from './utils/idUtils';
 
@@ -1319,6 +1320,14 @@ useEffect(() => {
                         sites={sites}
                         customers={customers}
                         onNavigate={handleGlobalNav}
+                    />
+                )}
+                {activeView === 'master_dashboard' && (
+                    <MasterDashboard
+                        tickets={tickets}
+                        activities={activities}
+                        technicians={technicians}
+                        customers={customers}
                     />
                 )}
                 {activeView === 'users' && (
