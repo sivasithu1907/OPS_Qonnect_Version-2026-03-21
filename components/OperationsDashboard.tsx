@@ -171,7 +171,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   const endX = Math.max(0, endOffsetHours * zoomLevel);
 
   // width should never exceed the grid end
-  const width = Math.max(4, endX - left);
+  const width = Math.max(tvMode ? 120 : 4, endX - left); // TV mode: min 120px so content is readable
 
   // if start is already beyond grid end, keep it at the edge with minimal width
   const clampedLeft = Math.min(left, totalGridWidth);
@@ -724,7 +724,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         return a.durationHours || 2;
                                     })(),
                                     description: a.description || a.type,
-                                    escalationLevel: a.escalationLevel || 0
+                                    escalationLevel: a.escalationLevel || 0,
+                                    clientLine: customers.find(c => c.id === a.customerId)?.name || a.houseNumber || ''
                                 };
                             });
 
@@ -772,6 +773,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         escalationLevel: 0,
                                         startedAt: tStarted,
                                         completedAt: tCompleted,
+                                        clientLine: t.customerName || '',
                                     };
                                 });
 
