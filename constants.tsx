@@ -68,6 +68,13 @@ export const NAVIGATION_ITEMS = [
     roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'Operations'
   },
+  {
+    id: 'master_dashboard',
+    label: 'Master Dashboard',
+    icon: <LayoutDashboard size={20} />,
+    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    category: 'Operations'
+  },
 
   // --- General ---
   { 
