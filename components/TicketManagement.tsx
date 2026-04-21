@@ -720,7 +720,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     <div className="flex h-[calc(100vh-6rem)] overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200 m-6">
       
       {/* Left List View (Unchanged) */}
-      <div className="w-1/3 border-r border-slate-200 flex flex-col">
+      <div className="w-[380px] shrink-0 border-r border-slate-200 flex flex-col">
         <div className="p-4 border-b border-slate-100 bg-slate-50 space-y-3">
              <div className="flex justify-between items-center">
                 <h2 className="font-semibold text-slate-800">
@@ -869,387 +869,115 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         </div>
       </div>
 
-      {/* Right Detail View */}
+
+      {/* Right Detail Panel — 2-panel layout (no chat area) */}
       {selectedTicket && editForm ? (
-        <div className="w-2/3 flex flex-row">
-          <div className="flex-1 flex flex-col border-r border-slate-200 relative">
-             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-               <div>
-                   <h3 className="font-bold text-slate-800">{editForm.customerName}</h3>
-                   <p className="text-xs text-slate-500">{formatPhoneDisplay(editForm.phoneNumber)}</p>
-               </div>
-               
-               {/* NEW WRAPPER DIV FOR BOTH BUTTONS */}
-               <div className="flex items-center gap-2">
-                   <button onClick={handleAIAnalysis} disabled={isAnalyzing} className="text-xs font-semibold flex items-center gap-1 text-purple-600 hover:bg-purple-50 px-2 py-1.5 rounded transition-colors disabled:opacity-50">
-                       {isAnalyzing ? <div className="animate-spin w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full"/> : <Sparkles size={14} />}
-                       AI Analyze
-                   </button>
-               </div>
-             </div>
-             
-             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
-		{(selectedTicket?.messages || []).map((msg, idx) => {
-                  // Normalise: DB stores 'at', frontend creates 'timestamp' — handle both
-                  const msgTime = (msg as any).timestamp || (msg as any).at || '';
-                  const msgId = (msg as any).id || `msg-${idx}`;
-                  return (
-                  <div key={msgId} className={`flex ${msg.sender === MessageSender.CLIENT ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`max-w-[80%] rounded-xl p-3 shadow-sm ${msg.sender === MessageSender.CLIENT ? 'bg-white text-slate-800 border border-slate-100' : msg.sender === MessageSender.AGENT ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600 text-sm'}`}>
-                      <p>{msg.content}</p>
-                      <div className={`text-[10px] mt-1 text-right ${msg.sender === MessageSender.AGENT ? 'text-emerald-100' : 'text-slate-400'}`}>
-                        {msgTime ? new Date(msgTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}
+        <div className="flex-1 flex flex-col bg-white">
+          {/* Detail Header */}
+          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+            <div>
+              <div className="text-[10px] font-mono text-slate-400">{selectedTicket.id}</div>
+              <h3 className="font-bold text-lg text-slate-900">{editForm.customerName}</h3>
+              <p className="text-xs text-slate-500">{formatPhoneDisplay(editForm.phoneNumber)} · {editForm.category} · {safeString(editForm.type)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                selectedTicket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
+                selectedTicket.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                selectedTicket.status === 'ON_MY_WAY' ? 'bg-cyan-100 text-cyan-700' :
+                selectedTicket.status === 'ARRIVED' ? 'bg-indigo-100 text-indigo-700' :
+                selectedTicket.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                selectedTicket.status === 'CANCELLED' ? 'bg-red-100 text-red-600' :
+                selectedTicket.status === 'NEW' ? 'bg-purple-100 text-purple-700' :
+                'bg-amber-100 text-amber-700'
+              }`}>{selectedTicket.status.replace(/_/g, ' ')}</span>
+              <div className="flex bg-slate-100 rounded-lg p-0.5">
+                <button onClick={() => setPanelMode('view')}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'view' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+                  <Eye size={12} /> Summary
+                </button>
+                <button onClick={() => setPanelMode('edit')}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'edit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+                  <Edit size={12} /> Edit
+                </button>
+              </div>
+              <button onClick={() => setSelectedTicketId(null)} className="p-1 hover:bg-slate-100 rounded-lg"><X size={16} className="text-slate-400" /></button>
+            </div>
+          </div>
+
+          {/* SUMMARY TAB */}
+          {panelMode === 'view' && selectedTicket && (() => {
+            const tech = technicians.find(t => t.id === selectedTicket.assignedTechId);
+            const cust = customers?.find(c => c.id === selectedTicket.customerId);
+            const issueText = selectedTicket.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (selectedTicket as any).notes || (selectedTicket as any).ai_summary || '';
+            const photos = (selectedTicket as any).photos || [];
+            const visitHist = (selectedTicket as any).visitHistory || (selectedTicket as any).visit_history || [];
+            return (
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="max-w-2xl mx-auto space-y-4">
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Category</div><div className="text-sm font-bold text-slate-800">{selectedTicket.category}</div></div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Type</div><div className="text-sm font-bold text-slate-800">{safeString(selectedTicket.type) || '—'}</div></div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Priority</div><div className={`text-sm font-bold ${selectedTicket.priority === 'URGENT' ? 'text-red-600' : selectedTicket.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-800'}`}>{toTitleCase(selectedTicket.priority)}</div></div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Engineer</div><div className="text-sm font-bold text-slate-800">{tech?.name || 'Unassigned'}</div></div>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
+                    <div className="text-sm font-bold text-slate-800">{cust?.name || editForm.customerName}</div>
+                    {editForm.phoneNumber && <div className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(editForm.phoneNumber)}</div>}
+                    {(selectedTicket.houseNumber || selectedTicket.locationUrl) && <div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><MapPin size={10} />{selectedTicket.houseNumber && !selectedTicket.houseNumber.startsWith('http') && <span>{selectedTicket.houseNumber}</span>}{selectedTicket.locationUrl && <a href={selectedTicket.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View Map</a>}</div>}
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+                    <div className="flex justify-between text-xs"><span className="text-slate-400">Created</span><span>{new Date(selectedTicket.createdAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span></div>
+                    {(selectedTicket as any).startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{new Date((selectedTicket as any).startedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
+                    {(selectedTicket as any).completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{new Date((selectedTicket as any).completedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
+                    {selectedTicket.appointmentTime && <div className="flex justify-between text-xs"><span className="text-slate-400">Appointment</span><span className="text-blue-600">{new Date(selectedTicket.appointmentTime).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
+                  </div>
+                  {issueText && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{issueText}</p></div>}
+                  {(selectedTicket as any).completionNote && <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-sm text-emerald-800 whitespace-pre-wrap">{(selectedTicket as any).completionNote}</p></div>}
+                  {(selectedTicket as any).carryForwardNote && <div className="bg-amber-50 rounded-xl p-4 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-sm text-amber-800 whitespace-pre-wrap">{(selectedTicket as any).carryForwardNote}</p>{(selectedTicket as any).nextPlannedAt && <div className="text-xs text-amber-600 mt-1">Re-scheduled: {new Date((selectedTicket as any).nextPlannedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</div>}</div>}
+                  {visitHist.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">Visit History ({visitHist.length} visit{visitHist.length > 1 ? 's' : ''})</div>
+                      <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
+                        {visitHist.map((v: any, i: number) => {
+                          const isCF = v.status === 'CARRY_FORWARD'; const isDone = v.status === 'DONE';
+                          const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
+                          const hdrColor = isDone ? 'text-emerald-800' : isCF ? 'text-orange-800' : 'text-blue-800';
+                          const badgeStyle = isDone ? 'bg-emerald-100 text-emerald-700' : isCF ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700';
+                          const dotColor = isDone ? 'bg-emerald-500' : isCF ? 'bg-orange-500' : 'bg-blue-500';
+                          const dur = v.startedAt && v.completedAt ? Math.round((new Date(v.completedAt).getTime() - new Date(v.startedAt).getTime()) / 60000) : null;
+                          const fT = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'}) : '—';
+                          const fD = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'}) : '—';
+                          return (
+                            <div key={i} className="relative pl-5">
+                              <div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
+                              <div className={`rounded-xl p-3 border ${cardBg}`}>
+                                <div className="flex justify-between items-center mb-1.5"><span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} — {fD(v.date)}</span><span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span></div>
+                                <div className="text-[10px] text-slate-500">{fT(v.startedAt)} → {v.completedAt ? fT(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
+                                {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
+                                {v.completionNote && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
+                                {v.carryForwardReason && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  </div>
-                  );
-                })}
-             </div>
+                  )}
+                  {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => { const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';ov.onclick=()=>ov.remove();const im=document.createElement('img');im.src=p.url||p;im.style.cssText='max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';ov.appendChild(im);document.body.appendChild(ov); }} />)}</div></div>}
+                  {selectedTicket.odooLink && <div className="flex items-center gap-2 text-xs text-slate-500"><ExternalLink size={10} /><span>Odoo:</span><a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate">{selectedTicket.odooLink}</a></div>}
+                </div>
+              </div>
+            );
+          })()}
 
-             {/* AI Analysis Panel */}
-             {analysisResult && (
-                 <div className="mx-4 mb-2 p-3 bg-white rounded-xl shadow-lg border border-purple-100 animate-in slide-in-from-bottom-2">
-                     <div className="flex justify-between items-start mb-2">
-                         <div className="flex items-center gap-2">
-                             <Sparkles size={16} className="text-purple-600" />
-                             <span className="text-xs font-bold text-slate-700 uppercase">AI Insights</span>
-                             <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">{analysisResult.confidence}% Conf.</span>
-                         </div>
-                         <button onClick={() => setAnalysisResult(null)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-                     </div>
-                     
-                     <div className="grid grid-cols-2 gap-2 mb-2">
-                         <div className="bg-purple-50 p-2 rounded-lg border border-purple-100">
-                             <span className="text-[10px] text-purple-600 font-bold block mb-0.5">Summary</span>
-                             <p className="text-xs text-slate-800 leading-tight">{analysisResult.summary}</p>
-                         </div>
-                         <div className="space-y-1">
-                             <div className="flex gap-1">
-                                 <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-medium truncate">{analysisResult.service_category}</span>
-                                 <span className={`text-[10px] px-2 py-0.5 rounded border font-medium ${getPriorityColor(analysisResult.priority)} bg-slate-50`}>{toTitleCase(analysisResult.priority)}</span>
-                             </div>
-                             {analysisResult.remote_possible && (
-                                 <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
-                                     <Wifi size={12} /> Remote Possible
-                                 </div>
-                             )}
-                             {analysisResult.recommended_action === 'assign_field_engineer' && (
-                                 <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-100">
-                                     <Wrench size={12} /> Field Eng. Required
-                                 </div>
-                             )}
-                         </div>
-                     </div>
-
-                     {analysisResult.suggested_questions.length > 0 && (
-                         <div className="mb-2">
-                             <span className="text-[10px] font-bold text-slate-400 block mb-1">Suggested Questions</span>
-                             <div className="flex flex-wrap gap-1">
-                                 {analysisResult.suggested_questions.map((q, i) => (
-                                     <button 
-                                        key={i} 
-                                        onClick={() => setReplyText(prev => prev ? `${prev}\n${q}` : q)}
-                                        className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-full transition-colors border border-slate-200 text-left truncate max-w-full"
-                                     >
-                                         + {q}
-                                     </button>
-                                 ))}
-                             </div>
-                         </div>
-                     )}
-                 </div>
-             )}
-
-             <div className="p-4 bg-white border-t border-slate-200 shrink-0">
-                <div className="flex gap-2">
-                 <input type="text" value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Type a response..." className={INPUT_STYLES} onKeyDown={(e) => e.key === 'Enter' && handleSend()} />
-                 <button onClick={handleSend} className="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700 transition-colors"><Send size={20} /></button>
-               </div>
-             </div>
-          </div>
-          <div className="w-80 bg-slate-50 flex flex-col h-full overflow-hidden border-l border-slate-200">
-             
-             {/* Panel Mode Toggle Header */}
-             <div className="p-3 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
-                 <div className="flex items-center gap-2">
-                     <button 
-                         onClick={() => setPanelMode('view')}
-                         className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
-                             panelMode === 'view' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-                         }`}
-                     >
-                         <Eye size={12}/> Summary
-                     </button>
-                     <button 
-                         onClick={() => setPanelMode('edit')}
-                         className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
-                             panelMode === 'edit' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'
-                         }`}
-                     >
-                         <Edit size={12}/> Edit
-                     </button>
-                 </div>
-                 {currentUser?.role === 'ADMIN' && (
-                     <button 
-                         onClick={() => {
-                             if (onDeleteTicket && selectedTicketId) {
-                                 onDeleteTicket(selectedTicketId);
-                                 setSelectedTicketId(null);
-                             }
-                         }}
-                         className="text-[10px] font-semibold text-red-500 hover:bg-red-50 px-1.5 py-1 rounded transition-colors"
-                     >
-                         <Trash2 size={12} />
-                     </button>
-                 )}
-             </div>
-
-             {/* ==================== VIEW MODE (Read-Only Summary) ==================== */}
-             {panelMode === 'view' && selectedTicket && (() => {
-                 const cust = customers?.find(c => c.id === selectedTicket.customerId);
-                 const assignedTech = technicians.find(t => t.id === selectedTicket.assignedTechId);
-                 // Look up linked activity for this ticket's customer on same date
-                 const linkedActivity = activities.find((a: any) => 
-                     a.customerId === selectedTicket.customerId && 
-                     a.status !== 'CANCELLED' &&
-                     (a.leadTechId === selectedTicket.assignedTechId || (a as any).primaryEngineerId === selectedTicket.assignedTechId)
-                 );
-                 const issueText = selectedTicket.messages?.find((m: any) => m.sender === 'CLIENT')?.content 
-                     || (selectedTicket as any).ai_summary 
-                     || selectedTicket.notes 
-                     || '';
-                 const statusBadge =
-                     selectedTicket.status === TicketStatus.NEW ? 'bg-slate-100 text-slate-700' :
-                     selectedTicket.status === TicketStatus.OPEN ? 'bg-blue-50 text-blue-700' :
-                     selectedTicket.status === TicketStatus.ASSIGNED ? 'bg-purple-50 text-purple-700' :
-                     selectedTicket.status === TicketStatus.ON_MY_WAY ? 'bg-cyan-50 text-cyan-700' :
-                     selectedTicket.status === TicketStatus.ARRIVED ? 'bg-indigo-50 text-indigo-700' :
-                     selectedTicket.status === TicketStatus.IN_PROGRESS ? 'bg-amber-50 text-amber-700' :
-                     selectedTicket.status === TicketStatus.CARRY_FORWARD ? 'bg-orange-50 text-orange-700' :
-                     selectedTicket.status === TicketStatus.RESOLVED ? 'bg-emerald-50 text-emerald-700' :
-                     selectedTicket.status === TicketStatus.CANCELLED ? 'bg-red-50 text-red-600' :
-                     'bg-slate-50 text-slate-600';
-                 return (
-                     <div className="flex-1 overflow-y-auto">
-                         {/* Status Banner */}
-                         <div className={`px-4 py-3 ${statusBadge} border-b`}>
-                             <div className="flex justify-between items-center">
-                                 <span className="text-xs font-bold uppercase">{selectedTicket.status.replace(/_/g, ' ')}</span>
-                                 <span className="text-[10px] font-mono opacity-70">{selectedTicket.id}</span>
-                             </div>
-                         </div>
-
-                         <div className="p-4 space-y-4">
-                             {/* Customer */}
-                             <div className="space-y-1.5">
-                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><User size={10}/> Customer</h4>
-                                 <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-1">
-                                     <div className="font-bold text-slate-800 text-sm">{cust?.name || selectedTicket.customerName}</div>
-                                     {(() => {
-                                         // Show phone: prefer ticket phoneNumber, fall back to customer record
-                                         const ticketPhone = selectedTicket.phoneNumber || '';
-                                         const custPhone = cust?.phone || '';
-                                         // If ticketPhone looks like a customer ID (starts with QNC- or c), use customer phone instead
-                                         const displayPhone = (ticketPhone && !ticketPhone.startsWith('QNC-') && !ticketPhone.startsWith('c')) 
-                                             ? ticketPhone 
-                                             : custPhone;
-                                         return displayPhone ? (
-                                             <div className="text-xs text-slate-500 font-mono flex items-center gap-1">
-                                                 <PhoneIcon size={10}/> {formatPhoneDisplay(displayPhone)}
-                                             </div>
-                                         ) : null;
-                                     })()}
-                                     {cust?.email && <div className="text-xs text-slate-500">{cust.email}</div>}
-                                     {!cust && <div className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded inline-block mt-1">Unlinked</div>}
-                                 </div>
-                             </div>
-
-                             {/* Service Info */}
-                             <div className="space-y-1.5">
-                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Briefcase size={10}/> Service Info</h4>
-                                 <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-2">
-                                     <div className="flex justify-between text-xs">
-                                         <span className="text-slate-400">Type</span>
-                                         <span className="font-medium text-slate-700">{selectedTicket.type || '—'}</span>
-                                     </div>
-                                     <div className="flex justify-between text-xs">
-                                         <span className="text-slate-400">Category</span>
-                                         <span className="font-medium text-slate-700">{selectedTicket.category}</span>
-                                     </div>
-                                     <div className="flex justify-between text-xs">
-                                         <span className="text-slate-400">Priority</span>
-                                         <span className={`font-bold ${selectedTicket.priority === 'URGENT' ? 'text-red-600' : selectedTicket.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>
-                                             {toTitleCase(selectedTicket.priority)}
-                                         </span>
-                                     </div>
-                                 </div>
-                             </div>
-
-                             {/* Schedule & Timing */}
-                             <div className="space-y-1.5">
-                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Calendar size={10}/> Schedule</h4>
-                                 <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-2">
-                                     {/* Use activity plannedDate if available, otherwise ticket appointment */}
-                                     {(() => {
-                                         const apptSource = linkedActivity?.plannedDate || selectedTicket.appointmentTime;
-                                         return apptSource ? (
-                                             <div className="flex justify-between text-xs">
-                                                 <span className="text-slate-400">{linkedActivity ? 'Planned (Activity)' : 'Appointment'}</span>
-                                                 <span className="font-semibold text-slate-700">
-                                                     {new Date(apptSource).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}
-                                                     {' '}{new Date(apptSource).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
-                                                 </span>
-                                             </div>
-                                         ) : (
-                                             <div className="text-xs text-slate-400 italic">No appointment scheduled</div>
-                                         );
-                                     })()}
-                                     {(selectedTicket as any).startedAt && (
-                                         <div className="flex justify-between text-xs">
-                                             <span className="text-slate-400">Started</span>
-                                             <span className="text-emerald-600 font-medium">{new Date((selectedTicket as any).startedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</span>
-                                         </div>
-                                     )}
-                                     {(selectedTicket as any).completedAt && (
-                                         <div className="flex justify-between text-xs">
-                                             <span className="text-slate-400">Completed</span>
-                                             <span className="text-emerald-600 font-medium">{new Date((selectedTicket as any).completedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</span>
-                                         </div>
-                                     )}
-                                     <div className="flex justify-between text-xs">
-                                         <span className="text-slate-400">Created</span>
-                                         <span className="text-slate-600">{new Date(selectedTicket.createdAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}</span>
-                                     </div>
-                                 </div>
-                             </div>
-
-                             {/* Assignment */}
-                             <div className="space-y-1.5">
-                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><UserCheck size={10}/> Assignment</h4>
-                                 <div className="bg-white rounded-lg p-3 border border-slate-100">
-                                     {assignedTech ? (
-                                         <div className="flex items-center gap-2">
-                                             <img src={assignedTech.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/>
-                                             <div>
-                                                 <div className="text-xs font-bold text-slate-800">{assignedTech.name}</div>
-                                                 <div className="text-[10px] text-slate-400">{assignedTech.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</div>
-                                             </div>
-                                         </div>
-                                     ) : (
-                                         <div className="text-xs text-slate-400 italic">Unassigned</div>
-                                     )}
-                                 </div>
-                             </div>
-
-                             {/* Location */}
-                             {(selectedTicket.houseNumber || selectedTicket.locationUrl) && (
-                                 <div className="space-y-1.5">
-                                     <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><MapPin size={10}/> Location</h4>
-                                     <div className="bg-white rounded-lg p-3 border border-slate-100 space-y-1.5">
-                                         {selectedTicket.houseNumber && <div className="text-xs text-slate-700 font-medium">{selectedTicket.houseNumber}</div>}
-                                         {selectedTicket.locationUrl && (
-                                             <a href={selectedTicket.locationUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:underline">
-                                                 <ExternalLink size={10}/> Open Map
-                                             </a>
-                                         )}
-                                     </div>
-                                 </div>
-                             )}
-
-                             {/* Scope / Issue */}
-                             {issueText && (
-                                 <div className="space-y-1.5">
-                                     <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><MessageSquare size={10}/> Scope of Work</h4>
-                                     <div className="bg-white rounded-lg p-3 border border-slate-100">
-                                         <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{issueText}</p>
-                                     </div>
-                                 </div>
-                             )}
-
-                             {/* AI Summary */}
-                             {(selectedTicket as any)?.ai_summary && !issueText.includes((selectedTicket as any).ai_summary) && (
-                                 <div className="space-y-1.5">
-                                     <h4 className="text-[10px] font-bold text-purple-400 uppercase flex items-center gap-1"><Sparkles size={10}/> AI Summary</h4>
-                                     <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
-                                         <p className="text-xs text-purple-900 leading-relaxed">{(selectedTicket as any).ai_summary}</p>
-                                     </div>
-                                 </div>
-                             )}
-
-                             {/* Notes & Remarks */}
-                             {(selectedTicket.notes || (selectedTicket as any).completionNote || selectedTicket.assignmentNote) && (
-                                 <div className="space-y-1.5">
-                                     <h4 className="text-[10px] font-bold text-slate-400 uppercase">Notes</h4>
-                                     {selectedTicket.notes && (
-                                         <div className="bg-white rounded-lg p-3 border border-slate-100">
-                                             <div className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Remarks</div>
-                                             <p className="text-xs text-slate-700 whitespace-pre-wrap">{selectedTicket.notes}</p>
-                                         </div>
-                                     )}
-                                     {(selectedTicket as any).completionNote && (
-                                         <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
-                                             <div className="text-[9px] font-bold text-emerald-500 uppercase mb-0.5">Completion Summary</div>
-                                             <p className="text-xs text-emerald-800 whitespace-pre-wrap">{(selectedTicket as any).completionNote}</p>
-                                         </div>
-                                     )}
-                                     {selectedTicket.assignmentNote && (
-                                         <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
-                                             <div className="text-[9px] font-bold text-indigo-500 uppercase mb-0.5">Assignment Note</div>
-                                             <p className="text-xs text-indigo-800 whitespace-pre-wrap">{selectedTicket.assignmentNote}</p>
-                                         </div>
-                                     )}
-                                 </div>
-                             )}
-
-                             {/* Carry Forward Section */}
-                             {selectedTicket.carryForwardNote && (
-                                 <div className="space-y-1.5">
-                                     <h4 className="text-[10px] font-bold text-amber-500 uppercase flex items-center gap-1"><RotateCcw size={10}/> Carry Forward</h4>
-                                     <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 space-y-2">
-                                         <p className="text-xs text-amber-800 whitespace-pre-wrap leading-relaxed">{selectedTicket.carryForwardNote}</p>
-                                         {selectedTicket.nextPlannedAt && (
-                                             <div className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
-                                                 <Clock size={10}/> Re-scheduled: {new Date(selectedTicket.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} at {new Date(selectedTicket.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
-                                             </div>
-                                         )}
-                                     </div>
-                                 </div>
-                             )}
-
-                             {/* Cancellation Reason */}
-                             {selectedTicket.cancellationReason && (
-                                 <div className="bg-red-50 rounded-lg p-3 border border-red-100">
-                                     <div className="text-[9px] font-bold text-red-500 uppercase mb-0.5">Cancellation Reason</div>
-                                     <p className="text-xs text-red-700 whitespace-pre-wrap">{selectedTicket.cancellationReason}</p>
-                                 </div>
-                             )}
-
-                             {/* External Refs */}
-                             {selectedTicket.odooLink && (
-                                 <div className="flex items-center gap-2 text-xs">
-                                     <LinkIcon size={10} className="text-slate-400"/>
-                                     <span className="text-slate-400">Odoo:</span>
-                                     <a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate">{selectedTicket.odooLink}</a>
-                                 </div>
-                             )}
-                         </div>
-
-                         {/* View Mode Footer */}
-                         <div className="p-3 border-t border-slate-200 bg-white shrink-0">
-                             <button 
-                                 onClick={() => setPanelMode('edit')}
-                                 className="w-full py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 flex items-center justify-center gap-2 transition-colors"
-                             >
-                                 <Edit size={14}/> Edit Ticket
-                             </button>
-                         </div>
-                     </div>
-                 );
-             })()}
-
+          {/* EDIT TAB */}
              {/* ==================== EDIT MODE (Existing Form) ==================== */}
              {panelMode === 'edit' && (
-               <>
+               <div className="flex-1 overflow-y-auto">
+               <div className="max-w-2xl mx-auto">
                {/* Client Management Section */}
                <div className="p-4 border-b border-slate-200 bg-white space-y-4 shrink-0">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-xs uppercase tracking-wider">
@@ -1503,12 +1231,14 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     </button>
                  </div>
              </div>
-             </>
+             </div>
+             </div>
+             </div>
              )}
           </div>
         </div>
       ) : (
-        <div className="w-2/3 flex items-center justify-center bg-slate-50 text-slate-400">
+        <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400">
           <div className="text-center"><MoreHorizontal size={48} className="mx-auto mb-2 opacity-50" /><p>Select a ticket to view details</p></div>
         </div>
       )}
