@@ -303,7 +303,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-20">
         <table className="w-full text-sm text-left table-fixed">
           <thead className="bg-white text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
             <tr>
