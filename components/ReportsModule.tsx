@@ -135,7 +135,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
     document.body.appendChild(overlay);
   };
 
-  const [reportType, setReportType] = useState<'tickets' | 'operations'>('tickets');
+  const [reportType, setReportType] = useState<'tickets' | 'operations' | 'all'>('tickets');
   
   // Date Range State - Default: This Month (MTD)
   const [startDate, setStartDate] = useState(() => formatDateYYYYMMDD(startOfMonth(new Date())));
@@ -236,7 +236,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'odoo', label: 'Odoo Ref', getValue: (a: Activity) => a.odooLink || '' },
   ], [technicians, sites, customers]);
 
-  const availableFields = reportType === 'tickets' ? ticketFields : activityFields;
+  const availableFields = reportType === 'tickets' ? ticketFields : reportType === 'operations' ? activityFields : [...ticketFields.slice(0, 4), ...activityFields.slice(0, 4)];
 
   // --- Filter Logic ---
 
@@ -330,7 +330,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       });
   }, [activities, startDate, endDate]);
 
-  const filteredData = reportType === 'tickets' ? filteredTickets : filteredActivities;
+  const filteredData = reportType === 'tickets' ? filteredTickets : reportType === 'operations' ? filteredActivities : [...filteredTickets, ...filteredActivities];
 
   // --- Chart Data Preparation ---
   const statusData = useMemo(() => {
@@ -505,7 +505,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
           document.body.removeChild(link);
 
       } else {
-          // PDF Export using jsPDF + autoTable — real file download, no print dialog
+          // PDF Export — branded Qonnect layout with watermark
           const script = document.createElement('script');
           script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
           script.onload = () => {
@@ -515,46 +515,86 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                   try {
                       const { jsPDF } = (window as any).jspdf;
                       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                      const pageW = (doc as any).internal.pageSize.getWidth();
+                      const pageH = (doc as any).internal.pageSize.getHeight();
 
-                      // Header
-                      doc.setFontSize(16);
-                      doc.setTextColor(15, 23, 42);
+                      const reportTitle = reportType === 'tickets' ? 'After-Sales Tickets Report' : reportType === 'operations' ? 'Operations Activity Report' : 'Combined Operations & Tickets Report';
+
+                      // --- Header Band ---
+                      doc.setFillColor(15, 23, 42);
+                      doc.rect(0, 0, pageW, 28, 'F');
+
+                      // Qonnect branding
+                      doc.setFontSize(18);
+                      doc.setTextColor(253, 187, 64); // Amber
+                      doc.text('QONNECT', 14, 12);
+                      doc.setFontSize(8);
+                      doc.setTextColor(148, 163, 184);
+                      doc.text('Your Home; Smarter', 14, 18);
+
+                      // Report title — right side
+                      doc.setFontSize(13);
+                      doc.setTextColor(255, 255, 255);
+                      doc.text(reportTitle, pageW - 14, 12, { align: 'right' });
+                      doc.setFontSize(8);
+                      doc.setTextColor(148, 163, 184);
                       doc.text(
-                          reportType === 'tickets' ? 'After-Sales Tickets Report' : 'Operations Activity Report',
-                          14, 16
+                          `Generated: ${new Date().toLocaleString('en-GB', {timeZone:'Asia/Qatar'})}  |  Period: ${startDate} to ${endDate}  |  Records: ${filteredData.length}`,
+                          pageW - 14, 18, { align: 'right' }
                       );
-                      doc.setFontSize(9);
-                      doc.setTextColor(100, 116, 139);
-                      doc.text(
-                          `Generated: ${new Date().toLocaleString('en-GB')}   |   Period: ${startDate} to ${endDate}   |   Records: ${filteredData.length}`,
-                          14, 23
-                      );
+
+                      // Amber accent line
+                      doc.setFillColor(253, 187, 64);
+                      doc.rect(0, 28, pageW, 1.5, 'F');
 
                       // Table
                       (doc as any).autoTable({
-                          startY: 28,
+                          startY: 34,
                           head: [fieldsToExport.map(f => f.label)],
                           body: filteredData.map(item => fieldsToExport.map(f => String(f.getValue(item) ?? ''))),
-                          styles: { fontSize: 8, cellPadding: 3 },
-                          headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
+                          styles: { fontSize: 7.5, cellPadding: 2.5, textColor: [30, 41, 59], lineColor: [226, 232, 240], lineWidth: 0.1 },
+                          headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7 },
                           alternateRowStyles: { fillColor: [248, 250, 252] },
-                          margin: { left: 14, right: 14 },
+                          margin: { left: 10, right: 10, bottom: 18 },
+                          didDrawPage: (data: any) => {
+                              // Repeat header band on every page
+                              if (data.pageNumber > 1) {
+                                  doc.setFillColor(15, 23, 42);
+                                  doc.rect(0, 0, pageW, 20, 'F');
+                                  doc.setFontSize(12);
+                                  doc.setTextColor(253, 187, 64);
+                                  doc.text('QONNECT', 14, 10);
+                                  doc.setFontSize(7);
+                                  doc.setTextColor(148, 163, 184);
+                                  doc.text('Your Home; Smarter', 14, 15);
+                                  doc.setFontSize(9);
+                                  doc.setTextColor(255, 255, 255);
+                                  doc.text(reportTitle, pageW - 14, 10, { align: 'right' });
+                                  doc.setFillColor(253, 187, 64);
+                                  doc.rect(0, 20, pageW, 1, 'F');
+                              }
+                          }
                       });
 
-                      // Footer
-                      const pageCount = (doc as any).internal.getNumberOfPages();
-                      for (let i = 1; i <= pageCount; i++) {
+                      // Watermark on every page — light "Q" logo mark
+                      const totalPages = (doc as any).internal.getNumberOfPages();
+                      for (let i = 1; i <= totalPages; i++) {
                           doc.setPage(i);
-                          doc.setFontSize(8);
-                          doc.setTextColor(148, 163, 184);
-                          doc.text(
-                              `Qonnect Field Operations   |   Page ${i} of ${pageCount}`,
-                              14,
-                              (doc as any).internal.pageSize.getHeight() - 8
-                          );
+                          // Subtle watermark
+                          doc.setFontSize(120);
+                          doc.setTextColor(240, 240, 240);
+                          doc.text('Q', pageW / 2, pageH / 2 + 20, { align: 'center' });
+
+                          // Footer
+                          doc.setFillColor(248, 250, 252);
+                          doc.rect(0, pageH - 12, pageW, 12, 'F');
+                          doc.setFontSize(7);
+                          doc.setTextColor(100, 116, 139);
+                          doc.text('Qonnect W.L.L.  |  Your Home; Smarter  |  qonnect.qa', 14, pageH - 5);
+                          doc.text(`Page ${i} of ${totalPages}`, pageW - 14, pageH - 5, { align: 'right' });
                       }
 
-                      doc.save(`${reportType}_report_${startDate}_to_${endDate}.pdf`);
+                      doc.save(`qonnect_${reportType}_report_${startDate}_to_${endDate}.pdf`);
                   } catch (err) {
                       console.error('PDF generation failed:', err);
                       alert('PDF generation failed. Please try again.');
@@ -604,6 +644,12 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                             className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${reportType === 'operations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <ActivityIcon size={16} /> Operations
+                        </button>
+                        <button 
+                            onClick={() => setReportType('all')}
+                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${reportType === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <Download size={16} /> All
                         </button>
                     </div>
                 </div>
