@@ -250,31 +250,67 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
             </div>
           )}
 
-          {/* Visit History */}
+          {/* Visit History — each visit as a separate card */}
           {visitHistory.length > 0 && (
             <div className="space-y-3">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Clock size={10} /> Visit History ({visitHistory.length} visits)</h4>
-              <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
-                {visitHistory.map((visit: any, i: number) => (
-                  <div key={i} className="relative pl-5">
-                    <div className={`absolute -left-[7px] top-1 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
-                      visit.status === 'DONE' ? 'bg-emerald-500' : visit.status === 'CARRY_FORWARD' ? 'bg-orange-500' : 'bg-slate-400'
-                    }`} />
-                    <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 text-xs space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-slate-700">Visit {i + 1}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                          visit.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
-                        }`}>{(visit.status || '').replace(/_/g, ' ')}</span>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Clock size={10} /> Visit History ({visitHistory.length} visit{visitHistory.length > 1 ? 's' : ''})</h4>
+              <div className="relative border-l-2 border-slate-200 ml-2 space-y-4">
+                {visitHistory.map((visit: any, i: number) => {
+                  const isCF = visit.status === 'CARRY_FORWARD';
+                  const isDone = visit.status === 'DONE';
+                  const dotColor = isDone ? 'bg-emerald-500' : isCF ? 'bg-orange-500' : 'bg-blue-500';
+                  const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
+                  const headerColor = isDone ? 'text-emerald-800' : isCF ? 'text-orange-800' : 'text-blue-800';
+                  const badgeStyle = isDone ? 'bg-emerald-100 text-emerald-700' : isCF ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700';
+                  const team = visit.assignedTeam || {};
+                  const teamNames: string[] = [];
+                  if (team.primaryEngineerId) { const t = technicians.find(x => x.id === team.primaryEngineerId); if (t) teamNames.push(t.name); }
+                  else if (team.leadTechId) { const t = technicians.find(x => x.id === team.leadTechId); if (t) teamNames.push(t.name); }
+                  (team.assistantTechIds || team.supportingEngineerIds || []).forEach((sid: string) => {
+                    if (sid === team.primaryEngineerId || sid === team.leadTechId) return;
+                    const t = technicians.find(x => x.id === sid); if (t && !teamNames.includes(t.name)) teamNames.push(t.name);
+                  });
+                  const duration = visit.startedAt && visit.completedAt
+                    ? Math.round((new Date(visit.completedAt).getTime() - new Date(visit.startedAt).getTime()) / 60000)
+                    : null;
+
+                  return (
+                    <div key={i} className="relative pl-6">
+                      <div className={`absolute -left-[7px] top-2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
+                      <div className={`rounded-xl p-4 border ${cardBg}`}>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className={`font-bold text-sm ${headerColor}`}>Visit {i + 1} — {visit.date ? fmtDate(visit.date) : '—'}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${badgeStyle}`}>{(visit.status || '').replace(/_/g, ' ')}</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mb-1">
+                          {visit.startedAt ? fmtTime(visit.startedAt) : '—'} → {visit.completedAt ? fmtTime(visit.completedAt) : 'ongoing'}
+                          {duration !== null && ` (${duration >= 60 ? `${Math.floor(duration/60)}h ${duration%60}m` : `${duration}m`})`}
+                        </div>
+                        {teamNames.length > 0 && (
+                          <div className="text-xs text-slate-600 mb-2">Team: {teamNames.join(', ')}</div>
+                        )}
+                        {visit.remarks && (
+                          <div className="bg-white/60 rounded-lg p-2.5 border border-white/80 mb-2">
+                            <div className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Remark</div>
+                            <p className="text-xs text-slate-700 whitespace-pre-wrap">{visit.remarks}</p>
+                          </div>
+                        )}
+                        {visit.completionNote && (
+                          <div className="bg-emerald-50/50 rounded-lg p-2.5 border border-emerald-100 mb-2">
+                            <div className="text-[9px] font-bold text-emerald-600 uppercase mb-0.5">Completion note</div>
+                            <p className="text-xs text-emerald-800 whitespace-pre-wrap">{visit.completionNote}</p>
+                          </div>
+                        )}
+                        {visit.carryForwardReason && (
+                          <div className="bg-orange-50/50 rounded-lg p-2.5 border border-orange-200">
+                            <div className="text-[9px] font-bold text-orange-600 uppercase mb-0.5">Carry forward reason</div>
+                            <p className="text-xs text-orange-800 whitespace-pre-wrap">{visit.carryForwardReason}</p>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-slate-500">{visit.date ? fmtDate(visit.date) : '—'}</div>
-                      {visit.startedAt && <div className="text-slate-500">Start: {fmtTime(visit.startedAt)}</div>}
-                      {visit.completedAt && <div className="text-slate-500">End: {fmtTime(visit.completedAt)}</div>}
-                      {visit.remarks && <div className="text-slate-600 mt-1">{visit.remarks}</div>}
-                      {visit.carryForwardReason && <div className="text-amber-700 mt-1">CF: {visit.carryForwardReason}</div>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
