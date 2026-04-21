@@ -1233,13 +1233,14 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              </div>
              </div>
              </div>
-             </div>
              )}
-          </div>
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400">
-          <div className="text-center"><MoreHorizontal size={48} className="mx-auto mb-2 opacity-50" /><p>Select a ticket to view details</p></div>
+          <div className="text-center">
+            <MoreHorizontal size={48} className="mx-auto mb-2 opacity-50" />
+            <p>Select a ticket to view details</p>
+          </div>
         </div>
       )}
 
