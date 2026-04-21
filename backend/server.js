@@ -1526,10 +1526,12 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
                     leadTechId: current.rows[0].lead_tech_id || leadTechId,
                     primaryEngineerId: existingDetails.primaryEngineerId || primaryEngineerId,
                     supportingEngineerIds: existingDetails.supportingEngineerIds || supportingEngineerIds || [],
+                    assistantTechIds: existingDetails.assistantTechIds || [],
                     freelancers: existingDetails.freelancers || []
                 },
-                remarks: mergedDetails.remarks || details.remarks || '',
+                remarks: mergedDetails.currentVisitRemark || mergedDetails.remarks || details.remarks || '',
                 carryForwardReason: mergedDetails.carryForwardNote || details.carryForwardNote || '',
+                completionNote: mergedDetails.completionNote || '',
                 status: 'CARRY_FORWARD'
             };
             const updatedHistory = [...existingHistory, visitRecord];
