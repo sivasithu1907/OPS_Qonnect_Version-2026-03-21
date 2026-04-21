@@ -204,8 +204,8 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
             </div>
           )}
 
-          {/* Remarks & Completion Notes */}
-          {(d.remarks || d.completionNote || d.notes || d.assignmentNote) && (
+          {/* Remarks & Completion Notes — only show when no visit history (visits show these per-visit) */}
+          {visitHistory.length === 0 && (d.remarks || d.completionNote || d.notes || d.assignmentNote) && (
             <div className="space-y-3">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase">Notes & Completion Summary</h4>
               {d.completionNote && (
@@ -229,8 +229,8 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
             </div>
           )}
 
-          {/* Carry Forward Info */}
-          {d.carryForwardNote && (
+          {/* Carry Forward Info — only when no visit history */}
+          {visitHistory.length === 0 && d.carryForwardNote && (
             <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 space-y-2">
               <h4 className="text-[10px] font-bold text-amber-600 uppercase flex items-center gap-1"><RotateCcw size={10} /> Carry Forward</h4>
               <p className="text-xs text-amber-800 whitespace-pre-wrap leading-relaxed">{d.carryForwardNote}</p>
