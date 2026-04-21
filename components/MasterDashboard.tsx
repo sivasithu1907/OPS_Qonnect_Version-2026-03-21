@@ -426,6 +426,42 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 {(d as any).completionNote && <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{(d as any).completionNote}</p></div>}
                 {((d as any).remarks || d.notes) && ((d as any).remarks || d.notes) !== (d as any).completionNote && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs whitespace-pre-wrap">{(d as any).remarks || d.notes}</p></div>}
                 {(d as any).carryForwardNote && <div className="bg-amber-50 rounded-xl p-4 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{(d as any).carryForwardNote}</p></div>}
+                {/* Visit History */}
+                {((d as any).visitHistory || (d as any).visit_history || []).length > 0 && (() => {
+                    const visits = (d as any).visitHistory || (d as any).visit_history || [];
+                    return (
+                        <div className="space-y-3">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase">Visit history ({visits.length} visit{visits.length > 1 ? 's' : ''})</div>
+                            <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
+                                {visits.map((v: any, i: number) => {
+                                    const isCF = v.status === 'CARRY_FORWARD'; const isDone = v.status === 'DONE';
+                                    const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
+                                    const hdrColor = isDone ? 'text-emerald-800' : isCF ? 'text-orange-800' : 'text-blue-800';
+                                    const badgeStyle = isDone ? 'bg-emerald-100 text-emerald-700' : isCF ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700';
+                                    const dotColor = isDone ? 'bg-emerald-500' : isCF ? 'bg-orange-500' : 'bg-blue-500';
+                                    const dur = v.startedAt && v.completedAt ? Math.round((new Date(v.completedAt).getTime() - new Date(v.startedAt).getTime()) / 60000) : null;
+                                    const fmtT = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'}) : '\u2014';
+                                    const fmtD2 = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'}) : '\u2014';
+                                    return (
+                                        <div key={i} className="relative pl-5">
+                                            <div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
+                                            <div className={`rounded-xl p-3 border ${cardBg}`}>
+                                                <div className="flex justify-between items-center mb-1.5">
+                                                    <span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} \u2014 {fmtD2(v.date)}</span>
+                                                    <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500">{fmtT(v.startedAt)} \u2192 {v.completedAt ? fmtT(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
+                                                {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
+                                                {v.completionNote && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
+                                                {v.carryForwardReason && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">Carry forward reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })()}
                 {photos.length > 0 && (
                   <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div>
                     <div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />)}</div>
