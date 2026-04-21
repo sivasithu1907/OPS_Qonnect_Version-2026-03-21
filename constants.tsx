@@ -144,8 +144,9 @@ export const NAVIGATION_ITEMS = [
 export const TICKET_CATEGORIES = [
   'Wi-Fi & Networking',
   'CCTV',
-  'Light Automation',
+  'Home Automation',
   'Intercom',
-  'Smart Speaker'
+  'Smart Speaker',
+  'Other'
 ];
 
