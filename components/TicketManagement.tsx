@@ -720,7 +720,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     <div className="flex h-[calc(100vh-6rem)] overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200 m-6">
       
       {/* Left List View (Unchanged) */}
-      <div className="w-[380px] shrink-0 border-r border-slate-200 flex flex-col">
+      <div className="w-[440px] shrink-0 border-r border-slate-200 flex flex-col">
         <div className="p-4 border-b border-slate-100 bg-slate-50 space-y-3">
              <div className="flex justify-between items-center">
                 <h2 className="font-semibold text-slate-800">
