@@ -337,9 +337,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           if (onUpdateActivity) {
               onUpdateActivity({
                   ...a,
-                  status: 'CARRY_FORWARD' as any, // Keep carry-forwarded status visible
+                  status: 'CARRY_FORWARD' as any,
                   carryForwardNote: combinedNote,
-                  remarks: combinedNote ? (a.remarks ? a.remarks + '\n---\n' + combinedNote : combinedNote) : a.remarks,
+                  currentVisitRemark: carryForwardRemark || '',
                   updatedAt: new Date().toISOString()
               });
           }
