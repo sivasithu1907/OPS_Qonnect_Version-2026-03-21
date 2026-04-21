@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import OperationsDashboard from './OperationsDashboard';
-import { Monitor, RefreshCw, Calendar, Activity as ActivityIcon } from 'lucide-react';
+import { Monitor, RefreshCw, Calendar, Activity as ActivityIcon, LayoutDashboard } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts';
 
 const TVDisplayMode: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [activePanel, setActivePanel] = useState<'monitor' | 'calendar'>('monitor');
+  const [activePanel, setActivePanel] = useState<'monitor' | 'calendar' | 'dashboard'>('monitor');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -45,7 +46,7 @@ const TVDisplayMode: React.FC = () => {
 
   useEffect(() => {
     const toggle = setInterval(() => {
-      setActivePanel(p => p === 'monitor' ? 'calendar' : 'monitor');
+      setActivePanel(p => p === 'monitor' ? 'calendar' : p === 'calendar' ? 'dashboard' : 'monitor');
     }, 45000);
     return () => clearInterval(toggle);
   }, []);
@@ -144,6 +145,12 @@ const TVDisplayMode: React.FC = () => {
             >
               <Calendar size={12} /> Calendar
             </button>
+            <button 
+              onClick={() => setActivePanel('dashboard')}
+              className={`px-3 py-1 rounded text-xs font-bold transition-colors flex items-center gap-1 ${activePanel === 'dashboard' ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:text-white'}`}
+            >
+              <LayoutDashboard size={12} /> Dashboard
+            </button>
           </div>
         </div>
         
@@ -226,12 +233,112 @@ const TVDisplayMode: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* DASHBOARD OVERVIEW PANEL */}
+        {activePanel === 'dashboard' && (() => {
+          const all = [...tickets, ...activities];
+          const statusCounts: Record<string, number> = {};
+          all.forEach((j: any) => { statusCounts[j.status] = (statusCounts[j.status] || 0) + 1; });
+          const pieData = Object.entries(statusCounts).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value }));
+          const pieColors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#64748b','#06b6d4','#f97316'];
+
+          const engCounts: Record<string, { name: string, tickets: number, activities: number }> = {};
+          tickets.forEach((t: any) => {
+            const tech = technicians.find((tc: any) => tc.id === t.assignedTechId);
+            const n = tech?.name || 'Unassigned';
+            if (!engCounts[n]) engCounts[n] = { name: n, tickets: 0, activities: 0 };
+            engCounts[n].tickets++;
+          });
+          activities.forEach((a: any) => {
+            const tech = technicians.find((tc: any) => tc.id === (a.primaryEngineerId || a.leadTechId));
+            const n = tech?.name || 'Unassigned';
+            if (!engCounts[n]) engCounts[n] = { name: n, tickets: 0, activities: 0 };
+            engCounts[n].activities++;
+          });
+          const barData = Object.values(engCounts).sort((a, b) => (b.tickets + b.activities) - (a.tickets + a.activities)).slice(0, 8);
+
+          const totalJobs = all.length;
+          const activeJobs = all.filter((j: any) => ['IN_PROGRESS','ON_MY_WAY','ARRIVED','ASSIGNED'].includes(j.status)).length;
+          const completedJobs = all.filter((j: any) => ['DONE','RESOLVED'].includes(j.status)).length;
+          const cfJobs = all.filter((j: any) => j.status === 'CARRY_FORWARD').length;
+          const plannedJobs = all.filter((j: any) => ['PLANNED','NEW','OPEN'].includes(j.status)).length;
+
+          return (
+            <div className="h-full p-6 overflow-auto bg-slate-50">
+              {/* KPI Cards Row */}
+              <div className="grid grid-cols-5 gap-4 mb-6">
+                <div className="bg-slate-900 text-white rounded-2xl p-5 text-center">
+                  <div className="text-4xl font-black">{totalJobs}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-300 mt-1">Total Jobs</div>
+                </div>
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-5 text-center">
+                  <div className="text-4xl font-black text-blue-700">{activeJobs}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-blue-500 mt-1">Active</div>
+                </div>
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 text-center">
+                  <div className="text-4xl font-black text-amber-700">{plannedJobs}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-amber-500 mt-1">Planned</div>
+                </div>
+                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 text-center">
+                  <div className="text-4xl font-black text-emerald-700">{completedJobs}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-emerald-500 mt-1">Completed</div>
+                </div>
+                <div className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-5 text-center">
+                  <div className="text-4xl font-black text-orange-700">{cfJobs}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-orange-500 mt-1">Carry Forward</div>
+                </div>
+              </div>
+
+              {/* Charts Row */}
+              <div className="grid grid-cols-2 gap-6">
+                {/* Status Pie */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                  <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Status Distribution</h3>
+                  <div className="flex items-center gap-6">
+                    <ResponsiveContainer width="50%" height={220}>
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={2} dataKey="value">
+                          {pieData.map((_: any, i: number) => <Cell key={i} fill={pieColors[i % pieColors.length]} />)}
+                        </Pie>
+                        <RTooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex-1 space-y-2">
+                      {pieData.map((d: any, i: number) => (
+                        <div key={d.name} className="flex items-center gap-2 text-sm">
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ background: pieColors[i % pieColors.length] }} />
+                          <span className="text-slate-600 flex-1">{d.name}</span>
+                          <span className="font-bold text-slate-800">{d.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Engineer Workload Bar */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                  <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Workload by Engineer</h3>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                      <RTooltip />
+                      <Bar dataKey="activities" stackId="a" fill="#3b82f6" name="Activities" />
+                      <Bar dataKey="tickets" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Tickets" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* BOTTOM STATUS BAR */}
       <div className="h-6 bg-slate-900 flex items-center justify-between px-6 text-[10px] text-slate-500 shrink-0">
         <span>Qonnect Field Operations Monitor</span>
-        <span className="flex items-center gap-2"><Monitor size={10} /> Read-Only · Panel toggle 45s</span>
+        <span className="flex items-center gap-2"><Monitor size={10} /> Read-Only · 3-panel auto-cycle 45s</span>
       </div>
     </div>
   );
