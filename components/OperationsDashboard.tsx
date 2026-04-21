@@ -769,7 +769,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         supportCount: 0,
                                         plannedDate: tPlannedDate,
                                         durationHours: tDuration,
-                                        description: t.customerName + ' - ' + t.category,
+                                        description: t.category + (t.type ? ' · ' + t.type : ''),
                                         escalationLevel: 0,
                                         startedAt: tStarted,
                                         completedAt: tCompleted,
@@ -969,7 +969,14 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                  </div>
                                  <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
                                      <Phone size={10} /> 
-                                     {selectedItem.type === 'ticket' ? (selectedItem.data as Ticket).phoneNumber : 
+                                     {selectedItem.type === 'ticket' ? 
+                                        ((() => {
+                                            const t = selectedItem.data as Ticket;
+                                            const phone = t.phoneNumber;
+                                            if (phone && phone.length > 8 && /^\+?\d/.test(phone)) return phone;
+                                            const c = customers?.find(cx => cx.id === t.customerId);
+                                            return c?.phone || phone || 'N/A';
+                                        })()) : 
                                         (customers?.find(c => c.id === (selectedItem.data as Activity).customerId)?.phone || 'Contact on file')}
                                  </div>
                              </div>
