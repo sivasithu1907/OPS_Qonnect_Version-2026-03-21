@@ -2462,12 +2462,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   <select value={createTicketForm.category} onChange={e => setCreateTicketForm(p => ({...p, category: e.target.value}))}
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
                     <option value="">Select</option>
-                    <option value="ELV Systems">ELV Systems</option>
-                    <option value="Home Automation">Home Automation</option>
-                    <option value="IT Network">IT Network</option>
+                    <option value="Wi-Fi & Networking">Wi-Fi & Networking</option>
                     <option value="CCTV">CCTV</option>
-                    <option value="Access Control">Access Control</option>
+                    <option value="Home Automation">Home Automation</option>
                     <option value="Intercom">Intercom</option>
+                    <option value="Smart Speaker">Smart Speaker</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
@@ -2476,10 +2475,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   <select value={createTicketForm.type} onChange={e => setCreateTicketForm(p => ({...p, type: e.target.value}))}
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
                     <option value="">Select</option>
-                    <option value="SERVICE">Service</option>
-                    <option value="INSTALLATION">Installation</option>
-                    <option value="MAINTENANCE">Maintenance</option>
-                    <option value="COMPLAINT">Complaint</option>
+                    <option value="Under Warranty">Under Warranty</option>
+                    <option value="Chargeable">Chargeable</option>
+                    <option value="Under AMC">Under AMC</option>
                   </select>
                 </div>
               </div>
