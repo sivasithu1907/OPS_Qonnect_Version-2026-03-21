@@ -267,29 +267,27 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
             const ph = (doc as any).internal.pageSize.getHeight();
             const title = exportType === 'tickets' ? 'After-Sales Tickets Report' : exportType === 'activities' ? 'Operations Activity Report' : 'Combined Operations Report';
 
-            doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 28, 'F');
-            doc.setFontSize(18); doc.setTextColor(253, 187, 64); doc.text('QONNECT', 14, 12);
-            doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.text('Your Home; Smarter', 14, 18);
-            doc.setFontSize(13); doc.setTextColor(255, 255, 255); doc.text(title, pw - 14, 12, { align: 'right' });
+            doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 24, 'F');
+            doc.setFontSize(16); doc.setTextColor(253, 187, 64); doc.text('QONNECT', 14, 14);
+            doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text(title, pw - 14, 10, { align: 'right' });
             doc.setFontSize(8); doc.setTextColor(148, 163, 184);
-            doc.text(`Period: ${exportDateStart} to ${exportDateEnd}  |  Records: ${data.length}  |  Generated: ${new Date().toLocaleString('en-GB', {timeZone:'Asia/Qatar'})}`, pw - 14, 18, { align: 'right' });
-            doc.setFillColor(253, 187, 64); doc.rect(0, 28, pw, 1.5, 'F');
+            doc.text(`Period: ${exportDateStart} to ${exportDateEnd}  |  Records: ${data.length}  |  Generated: ${new Date().toLocaleString('en-GB', {timeZone:'Asia/Qatar'})}`, pw - 14, 17, { align: 'right' });
+            doc.setFillColor(253, 187, 64); doc.rect(0, 24, pw, 1, 'F');
 
             (doc as any).autoTable({
-              startY: 34,
+              startY: 30,
               head: [cols.map(c => c.label)],
               body: data.map(item => cols.map(c => String(c.getValue(item) ?? ''))),
               styles: { fontSize: 7.5, cellPadding: 2.5, textColor: [30, 41, 59], lineColor: [226, 232, 240], lineWidth: 0.1 },
               headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7 },
               alternateRowStyles: { fillColor: [248, 250, 252] },
-              margin: { left: 10, right: 10, bottom: 18 },
+              margin: { left: 10, right: 10, bottom: 16 },
               didDrawPage: (d2: any) => {
                 if (d2.pageNumber > 1) {
-                  doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 20, 'F');
-                  doc.setFontSize(12); doc.setTextColor(253, 187, 64); doc.text('QONNECT', 14, 10);
-                  doc.setFontSize(7); doc.setTextColor(148, 163, 184); doc.text('Your Home; Smarter', 14, 15);
-                  doc.setFontSize(9); doc.setTextColor(255, 255, 255); doc.text(title, pw - 14, 10, { align: 'right' });
-                  doc.setFillColor(253, 187, 64); doc.rect(0, 20, pw, 1, 'F');
+                  doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 18, 'F');
+                  doc.setFontSize(11); doc.setTextColor(253, 187, 64); doc.text('QONNECT', 14, 11);
+                  doc.setFontSize(8); doc.setTextColor(255, 255, 255); doc.text(title, pw - 14, 11, { align: 'right' });
+                  doc.setFillColor(253, 187, 64); doc.rect(0, 18, pw, 0.5, 'F');
                 }
               }
             });
@@ -297,11 +295,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
             const tp = (doc as any).internal.getNumberOfPages();
             for (let i = 1; i <= tp; i++) {
               doc.setPage(i);
-              doc.setFontSize(120); doc.setTextColor(245, 245, 245); doc.text('Q', pw / 2, ph / 2 + 20, { align: 'center' });
-              doc.setFillColor(248, 250, 252); doc.rect(0, ph - 12, pw, 12, 'F');
+              doc.setFillColor(248, 250, 252); doc.rect(0, ph - 10, pw, 10, 'F');
               doc.setFontSize(7); doc.setTextColor(100, 116, 139);
-              doc.text('Qonnect W.L.L.  |  Your Home; Smarter  |  qonnect.qa', 14, ph - 5);
-              doc.text(`Page ${i} of ${tp}`, pw - 14, ph - 5, { align: 'right' });
+              doc.text('Qonnect W.L.L.  |  qonnect.qa', 14, ph - 4);
+              doc.text(`Page ${i} of ${tp}`, pw - 14, ph - 4, { align: 'right' });
             }
             doc.save(`qonnect_${exportType}_${exportDateStart}_to_${exportDateEnd}.pdf`);
           } catch (err) { console.error('PDF failed:', err); alert('PDF generation failed.'); }
@@ -321,11 +318,11 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   };
 
   const EXPORT_COLUMNS = [
-    { id: 'date', label: 'Date' }, { id: 'type', label: 'Type' }, { id: 'reference', label: 'Reference' },
-    { id: 'client', label: 'Client' }, { id: 'category', label: 'Category' }, { id: 'status', label: 'Status' },
-    { id: 'priority', label: 'Priority' }, { id: 'leadEngineer', label: 'Lead Engineer' },
-    { id: 'technicalAssociate', label: 'Technical Associate' }, { id: 'salesLead', label: 'Sales Lead' },
-    { id: 'description', label: 'Description' }, { id: 'odooRef', label: 'Odoo Ref' },
+    { id: 'date', label: 'Date' }, { id: 'type', label: 'Type' }, { id: 'client', label: 'Client' },
+    { id: 'category', label: 'Category' }, { id: 'status', label: 'Status' }, { id: 'description', label: 'Description' },
+    { id: 'salesLead', label: 'Sales Lead' }, { id: 'leadEngineer', label: 'Lead Engineer' },
+    { id: 'technicalAssociate', label: 'Technical Associate' }, { id: 'reference', label: 'Reference' },
+    { id: 'odooRef', label: 'Odoo Ref' }, { id: 'priority', label: 'Priority' },
   ];
 
   return (
