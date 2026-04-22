@@ -755,7 +755,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   const activityPayload: any = {
                       type: data.type,
-                      serviceCategory: data.serviceCategory,
+                      serviceCategory: (formData.getAll('serviceCategory') as string[]).filter(Boolean).join(', ') || 'Other',
                       customerId: selectedCustomerId,
                       priority: data.priority,
                       status: data.status || 'PLANNED',
@@ -819,18 +819,22 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       </div>
                   </div>
 
-                  {/* Service Category */}
+                  {/* Service Category (multi-select) */}
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
-                      <select 
-                        name="serviceCategory" 
-                        required 
-                        defaultValue={editingActivity?.serviceCategory || 'ELV Systems'} 
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm"
-                      >
-                         <option value="ELV Systems">ELV Systems</option>
-                         <option value="Home Automation">Home Automation</option>
-                      </select>
+                      <div className="flex flex-wrap gap-2 p-2 bg-white border border-slate-300 rounded-lg min-h-[40px]">
+                        {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(cat => {
+                          const currentVal = editingActivity?.serviceCategory || '';
+                          const selected = currentVal.split(', ').includes(cat);
+                          return (
+                            <label key={cat} className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full cursor-pointer border transition-colors ${selected ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
+                              <input type="checkbox" name="serviceCategory" value={cat} defaultChecked={selected} className="sr-only" />
+                              {cat}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <input type="hidden" name="serviceCategory" value="" />
                   </div>
                   
                   {/* Location Details */}
@@ -1226,8 +1230,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     </div>
                   </div>
                 )}
-                {/* Remarks & Completion Summary */}
-                {(va.remarks || va.completionNote || va.carryForwardNote || va.cancellationReason) && (
+                {/* Remarks & Completion — only show when no visit history */}
+                {!(va.visitHistory || []).length && (va.remarks || va.completionNote || va.carryForwardNote || va.cancellationReason) && (
                   <div className="space-y-3">
                     <div className="text-xs font-bold text-slate-400 uppercase">Notes & Remarks</div>
                     {va.remarks && va.remarks !== va.completionNote && (
@@ -1259,6 +1263,36 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         <p className="text-sm text-red-700 leading-relaxed whitespace-pre-wrap">{va.cancellationReason}</p>
                       </div>
                     )}
+                  </div>
+                )}
+                {/* Visit History Cards */}
+                {(va.visitHistory || []).length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-xs font-bold text-slate-400 uppercase">Visit History ({va.visitHistory.length} visit{va.visitHistory.length > 1 ? 's' : ''})</div>
+                    <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
+                      {va.visitHistory.map((v: any, i: number) => {
+                        const isCF = v.status === 'CARRY_FORWARD'; const isDone = v.status === 'DONE';
+                        const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
+                        const hdrColor = isDone ? 'text-emerald-800' : isCF ? 'text-orange-800' : 'text-blue-800';
+                        const badgeStyle = isDone ? 'bg-emerald-100 text-emerald-700' : isCF ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700';
+                        const dotColor = isDone ? 'bg-emerald-500' : isCF ? 'bg-orange-500' : 'bg-blue-500';
+                        const dur = v.startedAt && v.completedAt ? Math.round((new Date(v.completedAt).getTime() - new Date(v.startedAt).getTime()) / 60000) : null;
+                        const fT = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'}) : '—';
+                        const fD = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'}) : '—';
+                        return (
+                          <div key={i} className="relative pl-5">
+                            <div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
+                            <div className={`rounded-xl p-3 border ${cardBg}`}>
+                              <div className="flex justify-between items-center mb-1.5"><span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} — {fD(v.date)}</span><span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span></div>
+                              <div className="text-[10px] text-slate-500">{fT(v.startedAt)} → {v.completedAt ? fT(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
+                              {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
+                              {v.completionNote && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
+                              {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
                 {va.odooLink && <div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Odoo:</span><a href={va.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">{va.odooLink}</a></div>}
