@@ -86,13 +86,6 @@ export const NAVIGATION_ITEMS = [
     roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'General'
   },
-  { 
-    id: 'reports', 
-    label: 'Reports & Analytics', 
-    icon: <FileBarChart size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'General'
-  },
 
   // --- Admin ---
   { 
