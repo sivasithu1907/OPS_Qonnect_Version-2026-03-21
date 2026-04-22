@@ -2494,20 +2494,23 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 <input value={createTicketForm.phone} onChange={e => setCreateTicketForm(p => ({...p, phone: e.target.value}))}
                   placeholder="+974 XXXX XXXX" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Category *</label>
-                  <select value={createTicketForm.category} onChange={e => setCreateTicketForm(p => ({...p, category: e.target.value}))}
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
-                    <option value="">Select</option>
-                    <option value="Wi-Fi & Networking">Wi-Fi & Networking</option>
-                    <option value="CCTV">CCTV</option>
-                    <option value="Home Automation">Home Automation</option>
-                    <option value="Intercom">Intercom</option>
-                    <option value="Smart Speaker">Smart Speaker</option>
-                    <option value="Other">Other</option>
-                  </select>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(c => {
+                      const cats = (createTicketForm.category || '').split(', ').filter(Boolean);
+                      const sel = cats.includes(c);
+                      return <button key={c} type="button" onClick={() => {
+                        const curr = (createTicketForm.category || '').split(', ').filter(Boolean);
+                        const next = sel ? curr.filter(x => x !== c) : [...curr, c];
+                        setCreateTicketForm(p => ({...p, category: next.join(', ')}));
+                      }} className={`text-[11px] px-2.5 py-1.5 rounded-full border transition-colors ${sel ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{c}</button>;
+                    })}
+                  </div>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Type *</label>
                   <select value={createTicketForm.type} onChange={e => setCreateTicketForm(p => ({...p, type: e.target.value}))}
