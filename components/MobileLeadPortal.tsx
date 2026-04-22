@@ -2505,7 +2505,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         const curr = (createTicketForm.category || '').split(', ').filter(Boolean);
                         const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                         setCreateTicketForm(p => ({...p, category: next.join(', ')}));
-                      }} className={`text-[11px] px-2.5 py-1.5 rounded-full border transition-colors ${sel ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{c}</button>;
+                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                     })}
                   </div>
                 </div>
