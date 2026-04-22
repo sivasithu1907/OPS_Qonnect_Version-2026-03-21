@@ -1147,7 +1147,19 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 </div>
 
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Type</label><select value={getFormValue('type') as TicketType} onChange={(e) => updateField('type', e.target.value)} className={INPUT_STYLES}>{Object.values(TicketType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Category</label><select value={getFormValue('category') as string} onChange={(e) => updateField('category', e.target.value)} className={INPUT_STYLES}>{TICKET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Category</label>
+                  <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[36px]">
+                    {TICKET_CATEGORIES.map(c => {
+                      const cats = ((getFormValue('category') as string) || '').split(', ').filter(Boolean);
+                      const sel = cats.includes(c);
+                      return <button key={c} type="button" onClick={() => {
+                        const curr = ((getFormValue('category') as string) || '').split(', ').filter(Boolean);
+                        const next = sel ? curr.filter(x => x !== c) : [...curr, c];
+                        updateField('category', next.join(', ') || 'Other');
+                      }} className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${sel ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{c}</button>;
+                    })}
+                  </div>
+                </div>
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Appointment</label>
                     <input
@@ -1338,15 +1350,17 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-slate-500 uppercase">Category <span className="text-red-500">*</span></label>
-                        <select 
-                            value={createForm.category}
-                            onChange={(e) => setCreateForm({...createForm, category: e.target.value})}
-                            required
-                            className={INPUT_STYLES}
-                        >
-                            <option value="" disabled>Select Category</option>
-                            {TICKET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[36px]">
+                          {TICKET_CATEGORIES.map(c => {
+                            const cats = (createForm.category || '').split(', ').filter(Boolean);
+                            const sel = cats.includes(c);
+                            return <button key={c} type="button" onClick={() => {
+                              const curr = (createForm.category || '').split(', ').filter(Boolean);
+                              const next = sel ? curr.filter(x => x !== c) : [...curr, c];
+                              setCreateForm({...createForm, category: next.join(', ')});
+                            }} className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${sel ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{c}</button>;
+                          })}
+                        </div>
                     </div>
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-slate-500 uppercase">Priority <span className="text-red-500">*</span></label>
