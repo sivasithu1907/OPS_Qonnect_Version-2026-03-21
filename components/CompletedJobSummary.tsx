@@ -301,7 +301,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
                             <p className="text-xs text-emerald-800 whitespace-pre-wrap">{visit.completionNote}</p>
                           </div>
                         )}
-                        {visit.carryForwardReason && (
+                        {visit.carryForwardReason && isCF && (
                           <div className="bg-orange-50/50 rounded-lg p-2.5 border border-orange-200">
                             <div className="text-[9px] font-bold text-orange-600 uppercase mb-0.5">Carry forward reason</div>
                             <p className="text-xs text-orange-800 whitespace-pre-wrap">{visit.carryForwardReason}</p>
