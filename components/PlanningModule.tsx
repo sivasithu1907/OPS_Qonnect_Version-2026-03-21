@@ -74,6 +74,16 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   
   // Location auto-fill state (controlled, populated from customer on select)
   const [locationUrl, setLocationUrl] = useState('');
+  const [serviceCats, setServiceCats] = useState<string[]>([]);
+
+  // Sync serviceCats when editing activity changes
+  React.useEffect(() => {
+    if (editingActivity?.serviceCategory) {
+      setServiceCats(editingActivity.serviceCategory.split(', ').filter(Boolean));
+    } else {
+      setServiceCats([]);
+    }
+  }, [editingActivity]);
   const [houseNumber, setHouseNumber] = useState('');
 
   // Freelancers State (activity-level, no user record)
@@ -755,7 +765,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   const activityPayload: any = {
                       type: data.type,
-                      serviceCategory: (formData.getAll('serviceCategory') as string[]).filter(Boolean).join(', ') || 'Other',
+                      serviceCategory: serviceCats.join(', ') || 'Other',
                       customerId: selectedCustomerId,
                       priority: data.priority,
                       status: data.status || 'PLANNED',
@@ -822,19 +832,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {/* Service Category (multi-select) */}
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
-                      <div className="flex flex-wrap gap-2 p-2 bg-white border border-slate-300 rounded-lg min-h-[40px]">
+                      <div className="flex flex-wrap gap-2 p-2.5 bg-white border border-slate-300 rounded-lg min-h-[40px]">
                         {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(cat => {
-                          const currentVal = editingActivity?.serviceCategory || '';
-                          const selected = currentVal.split(', ').includes(cat);
+                          const sel = serviceCats.includes(cat);
                           return (
-                            <label key={cat} className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full cursor-pointer border transition-colors ${selected ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
-                              <input type="checkbox" name="serviceCategory" value={cat} defaultChecked={selected} className="sr-only" />
-                              {cat}
-                            </label>
+                            <button key={cat} type="button" onClick={() => setServiceCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
+                              className={`text-xs px-3 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                              {sel && <span className="mr-1">✓</span>}{cat}
+                            </button>
                           );
                         })}
                       </div>
-                      <input type="hidden" name="serviceCategory" value="" />
                   </div>
                   
                   {/* Location Details */}
