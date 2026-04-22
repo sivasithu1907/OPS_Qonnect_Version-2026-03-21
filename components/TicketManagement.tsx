@@ -1156,7 +1156,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         const curr = ((getFormValue('category') as string) || '').split(', ').filter(Boolean);
                         const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                         updateField('category', next.join(', ') || 'Other');
-                      }} className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${sel ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{c}</button>;
+                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                     })}
                   </div>
                 </div>
@@ -1358,7 +1358,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                               const curr = (createForm.category || '').split(', ').filter(Boolean);
                               const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                               setCreateForm({...createForm, category: next.join(', ')});
-                            }} className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${sel ? 'bg-amber-100 border-amber-300 text-amber-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>{c}</button>;
+                            }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                           })}
                         </div>
                     </div>
