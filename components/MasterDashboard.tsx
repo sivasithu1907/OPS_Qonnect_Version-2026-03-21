@@ -114,10 +114,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
     let combined = [...ticketJobs, ...activityJobs];
 
-    // Date filter — Qatar week = Saturday to Thursday
+    // Date filter — Qatar week = Saturday to Thursday, cap at today for non-'all'
     if (dateRange === 'today') combined = combined.filter(j => j.date.toDateString() === todayStr);
-    else if (dateRange === 'week') combined = combined.filter(j => j.date >= qatarWeekStart);
-    else if (dateRange === 'month') combined = combined.filter(j => j.date >= monthAgo);
+    else if (dateRange === 'week') combined = combined.filter(j => j.date >= qatarWeekStart && j.date <= now);
+    else if (dateRange === 'month') combined = combined.filter(j => j.date >= monthAgo && j.date <= now);
 
     if (typeFilter === 'tickets') combined = combined.filter(j => j.kind === 'ticket');
     else if (typeFilter === 'activities') combined = combined.filter(j => j.kind === 'activity');
@@ -202,9 +202,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     'CANCELLED': 'bg-slate-100 text-slate-500',
   };
 
-  const fmtDt = (iso: string) => iso ? new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '2014';
-  const fmtTime = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) : '2014';
-  const fmtDate = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }) : '2014';
+  const fmtDt = (iso: string) => iso ? new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  const fmtTime = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) : '—';
+  const fmtDate = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
   // Toggle multi-select helpers
   const toggleCat = (cat: string) => setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
@@ -499,7 +499,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                   <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[job.status] || 'bg-slate-100 text-slate-500'}`}>{job.status.replace(/_/g, ' ')}</span></td>
                   <td className="px-4 py-3 text-xs text-slate-500">{job.dateLabel}</td>
                   <td className="px-4 py-3 text-xs text-slate-700 truncate">{job.techName}</td>
-                  <td className="px-4 py-3 text-center">{photos.length > 0 ? <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">{photos.length}</span> : <span className="text-slate-300">{"2014"}</span>}</td>
+                  <td className="px-4 py-3 text-center">{photos.length > 0 ? <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">{photos.length}</span> : <span className="text-slate-300">{"—"}</span>}</td>
                   <td className="px-4 py-3 text-right"><button onClick={() => setPreviewItem(job)} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded opacity-0 group-hover:opacity-100"><Eye size={12} /> View</button></td>
                 </tr>
               );
@@ -511,6 +511,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       {/* Preview Popup */}
       {previewItem && (() => {
         const d = previewItem.raw;
+        if (!d) { setPreviewItem(null); return null; }
         const isTicket = previewItem.kind === 'ticket';
         const cust = customers.find(c => c.id === (d.customerId || previewItem.customerId));
         const tech = technicians.find(t => t.id === (d.assignedTechId || (d as any).primaryEngineerId || d.leadTechId));
@@ -585,10 +586,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                             <div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
                             <div className={`rounded-xl p-3 border ${cardBg}`}>
                               <div className="flex justify-between items-center mb-1.5">
-                                <span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} {"2014"} {fmtDate(v.date)}</span>
+                                <span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} {"—"} {fmtDate(v.date)}</span>
                                 <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span>
                               </div>
-                              <div className="text-[10px] text-slate-500">{fmtTime(v.startedAt)} {"2192"} {v.completedAt ? fmtTime(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
+                              <div className="text-[10px] text-slate-500">{fmtTime(v.startedAt)} {"→"} {v.completedAt ? fmtTime(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
                               {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
                               {v.completionNote && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
                               {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">Carry forward reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
