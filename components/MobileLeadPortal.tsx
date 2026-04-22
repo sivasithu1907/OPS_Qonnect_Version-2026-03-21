@@ -1603,25 +1603,62 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         );
                                     })()}
 
-                                    {/* Completion / CF / Photos — shown for finished jobs */}
-                                    {(viewJob.data.status === 'DONE' || viewJob.data.status === 'RESOLVED' || viewJob.data.status === 'CARRY_FORWARD' || viewJob.data.status === 'CANCELLED') && (
+                                    {/* Completion / CF / Photos / Visit History — shown for finished jobs */}
+                                    {(viewJob.data.status === 'DONE' || viewJob.data.status === 'RESOLVED' || viewJob.data.status === 'CARRY_FORWARD' || viewJob.data.status === 'CANCELLED') && (() => {
+                                        const visits = viewJob.data.visitHistory || viewJob.data.visit_history || [];
+                                        const hasVisits = visits.length > 0;
+                                        return (
                                         <div className="space-y-3">
-                                            {viewJob.data.completionNote && (
+                                            {!hasVisits && viewJob.data.completionNote && (
                                                 <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
                                                     <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div>
                                                     <p className="text-sm text-emerald-800 whitespace-pre-wrap">{viewJob.data.completionNote}</p>
                                                 </div>
                                             )}
-                                            {(viewJob.data.remarks || viewJob.data.notes) && (viewJob.data.remarks || viewJob.data.notes) !== viewJob.data.completionNote && (
+                                            {!hasVisits && (viewJob.data.remarks || viewJob.data.notes) && (viewJob.data.remarks || viewJob.data.notes) !== viewJob.data.completionNote && (
                                                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                                                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
                                                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{viewJob.data.remarks || viewJob.data.notes}</p>
                                                 </div>
                                             )}
-                                            {viewJob.data.carryForwardNote && (
+                                            {!hasVisits && viewJob.data.carryForwardNote && (
                                                 <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
                                                     <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div>
                                                     <p className="text-sm text-amber-800 whitespace-pre-wrap">{viewJob.data.carryForwardNote}</p>
+                                                </div>
+                                            )}
+                                            {/* Visit History Cards */}
+                                            {hasVisits && (
+                                                <div className="space-y-2">
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Visit History ({visits.length} visit{visits.length > 1 ? 's' : ''})</div>
+                                                    <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
+                                                        {visits.map((v: any, vi: number) => {
+                                                            const isCF = v.status === 'CARRY_FORWARD';
+                                                            const isDone = v.status === 'DONE';
+                                                            const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
+                                                            const hdrColor = isDone ? 'text-emerald-800' : isCF ? 'text-orange-800' : 'text-blue-800';
+                                                            const badgeStyle = isDone ? 'bg-emerald-100 text-emerald-700' : isCF ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700';
+                                                            const dotColor = isDone ? 'bg-emerald-500' : isCF ? 'bg-orange-500' : 'bg-blue-500';
+                                                            const dur = v.startedAt && v.completedAt ? Math.round((new Date(v.completedAt).getTime() - new Date(v.startedAt).getTime()) / 60000) : null;
+                                                            const fT = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'}) : '—';
+                                                            const fD = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'}) : '—';
+                                                            return (
+                                                                <div key={vi} className="relative pl-5">
+                                                                    <div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
+                                                                    <div className={`rounded-xl p-3 border ${cardBg}`}>
+                                                                        <div className="flex justify-between items-center mb-1">
+                                                                            <span className={`font-bold text-xs ${hdrColor}`}>Visit {vi + 1} — {fD(v.date)}</span>
+                                                                            <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span>
+                                                                        </div>
+                                                                        <div className="text-[10px] text-slate-500">{fT(v.startedAt)} → {v.completedAt ? fT(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
+                                                                        {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-1.5 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
+                                                                        {v.completionNote && isDone && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
+                                                                        {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
                                             )}
                                             {(viewJob.data.photos || []).length > 0 && (
@@ -1642,7 +1679,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 </div>
                                             )}
                                         </div>
-                                    )}
+                                        );
+                                    })()}
 
                                     {/* Work Actions */}
                                     {viewJob.type === 'ticket' && viewJob.data.assignedTechId === currentUserId && (
