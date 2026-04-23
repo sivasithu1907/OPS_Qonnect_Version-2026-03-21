@@ -67,16 +67,14 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-scroll to current time on open
+  // Auto-scroll to show 8:00-20:00 as default view
   useEffect(() => {
     const el = bodyScrollRef.current;
     if (!el) return;
 
-    const now = new Date();
-    const nowX =
-      ((now.getHours() - TIMELINE_START) + now.getMinutes() / 60) * zoomLevel;
-
-    const target = Math.max(0, nowX - el.clientWidth * 0.4);
+    // Default: scroll to 8:00 position so working hours (8-20) are visible
+    const defaultStartHour = 8;
+    const target = defaultStartHour * zoomLevel;
     el.scrollLeft = target;
   }, []);
 
