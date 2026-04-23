@@ -73,7 +73,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     if (!el) return;
 
     // Default: scroll to 8:00 position so working hours (8-20) are visible
-    const defaultStartHour = 8;
+    const defaultStartHour = 9;
     const target = defaultStartHour * zoomLevel;
     el.scrollLeft = target;
   }, []);
