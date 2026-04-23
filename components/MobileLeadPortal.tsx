@@ -123,7 +123,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals State
-  const [modalType, setModalType] = useState<'dispatch' | 'cancel' | 'carry' | 'job_carry' | 'job_complete' | 'activity_job_carry' | 'activity_job_complete' | 'activity_dispatch' | null>(null);
+  const [modalType, setModalType] = useState<'dispatch' | 'cancel' | 'carry' | 'job_carry' | 'job_complete' | 'activity_job_carry' | 'activity_job_complete' | 'activity_dispatch' | 'manage_team' | null>(null);
   const [modalTicket, setModalTicket] = useState<Ticket | null>(null);
   const [modalActivity, setModalActivity] = useState<Activity | null>(null);
   
@@ -1746,7 +1746,19 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 </button>
                                             )}
                                             {viewJob.data.status === 'IN_PROGRESS' && (
-                                                <div className="grid grid-cols-2 gap-2">
+                                                <div className="space-y-2 pb-2">
+                                                    <button onClick={() => {
+                                                        const a = viewJob.data;
+                                                        setModalActivity(a);
+                                                        setDispatchPrimaryId((a as any).primaryEngineerId || a.leadTechId || '');
+                                                        setDispatchSupportIds((a as any).assistantTechIds || []);
+                                                        setModalType('manage_team');
+                                                        setViewJob(null);
+                                                    }}
+                                                        className="w-full bg-indigo-600 text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform text-sm">
+                                                        <Users size={16} /> Manage Team
+                                                    </button>
+                                                    <div className="grid grid-cols-2 gap-2">
                                                     <button onClick={() => { setModalActivity(viewJob.data); setModalType('activity_job_carry'); setActionNote(''); setNextDate(''); setViewJob(null); }}
                                                         className="py-3.5 bg-white border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
                                                         Carry Forward
@@ -1755,6 +1767,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                         className="py-3.5 bg-emerald-500 text-white font-bold rounded-2xl text-xs active:scale-[0.98]">
                                                         Complete ✓
                                                     </button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -2388,6 +2401,77 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     className="w-full py-3.5 bg-blue-600 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold rounded-xl shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
                 >
                     <Users size={18} /> Confirm Dispatch
+                </button>
+            </div>
+        </div>
+    </div>
+)}
+
+{/* Manage Team Modal — Add/remove engineers for IN_PROGRESS jobs */}
+{modalType === 'manage_team' && modalActivity && (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={closeModal}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                <div>
+                    <h3 className="font-bold text-lg text-slate-900">Manage Team</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">{(modalActivity as any).reference} — In Progress</p>
+                </div>
+                <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
+            </div>
+            <div className="p-5 space-y-5 overflow-y-auto flex-1">
+                <div>
+                    <label className="text-xs font-bold text-purple-600 uppercase tracking-wider block mb-2">Lead / Primary Engineer</label>
+                    <select value={dispatchPrimaryId} onChange={e => setDispatchPrimaryId(e.target.value)}
+                        className="w-full border border-slate-300 rounded-xl p-3 text-sm bg-white">
+                        <option value="">Select Engineer</option>
+                        {technicians.filter((t: any) => t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD').map((t: any) => (
+                            <option key={t.id} value={t.id}>{t.name} ({t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'})</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-teal-600 uppercase tracking-wider block mb-2">Supporting Engineers & TAs</label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {technicians.filter((t: any) =>
+                            (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD' || t.systemRole === 'TECHNICAL_ASSOCIATE') &&
+                            t.id !== dispatchPrimaryId
+                        ).map((t: any) => (
+                            <label key={t.id} className={`flex items-center gap-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
+                                dispatchSupportIds.includes(t.id) ? 'bg-teal-50 border-teal-400' : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}>
+                                <input type="checkbox" checked={dispatchSupportIds.includes(t.id)}
+                                    onChange={() => setDispatchSupportIds(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}
+                                    className="sr-only" />
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                                    dispatchSupportIds.includes(t.id) ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'
+                                }`}>{dispatchSupportIds.includes(t.id) ? '✓' : t.name.charAt(0)}</div>
+                                <div>
+                                    <div className="text-sm font-medium text-slate-800">{t.name}</div>
+                                    <div className="text-[10px] text-slate-400">{t.systemRole === 'TECHNICAL_ASSOCIATE' ? 'Technical Associate' : t.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</div>
+                                </div>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 shrink-0">
+                <button
+                    onClick={() => {
+                        if (!modalActivity || !onUpdateActivity) return;
+                        const a = modalActivity as any;
+                        onUpdateActivity({
+                            ...a,
+                            primaryEngineerId: dispatchPrimaryId || a.primaryEngineerId,
+                            assistantTechIds: dispatchSupportIds,
+                            supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
+                            leadTechId: a.leadTechId || dispatchPrimaryId,
+                            updatedAt: new Date().toISOString()
+                        });
+                        closeModal();
+                    }}
+                    className="w-full py-3.5 bg-indigo-600 text-white font-bold rounded-xl shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                >
+                    <Users size={18} /> Update Team
                 </button>
             </div>
         </div>
