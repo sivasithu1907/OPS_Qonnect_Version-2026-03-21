@@ -782,6 +782,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       salesLeadId: data.salesLeadId || undefined,
                       leadTechId: data.leadTechId || undefined,
                       assistantTechIds: formData.getAll('assistantTechIds') as string[],
+                      supportingEngineerIds: formData.getAll('supportingEngineerIds') as string[],
                       freelancers: freelancers.filter(f => f.name.trim())
                   };
 
@@ -997,6 +998,31 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                       <div className="mt-1 text-xs text-slate-400">No Team Leads / Field Engineers available.</div>
                                     )}
 
+                                </div>
+                                {/* ── Supporting Field Engineers (Optional) ── */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500"/>
+                                        <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">Supporting Engineers (Optional)</label>
+                                    </div>
+                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                        {[...fieldEngineers, ...teamLeads].filter(t => t.id !== (editingActivity?.leadTechId || '')).length > 0 ?
+                                          [...fieldEngineers, ...teamLeads].filter(t => t.id !== (editingActivity?.leadTechId || '')).map(t => (
+                                            <div key={t.id} className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    name="supportingEngineerIds"
+                                                    value={t.id}
+                                                    defaultChecked={(editingActivity as any)?.supportingEngineerIds?.includes(t.id)}
+                                                    id={`support_fe_${t.id}`}
+                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <label htmlFor={`support_fe_${t.id}`} className="text-sm text-slate-700 cursor-pointer select-none">
+                                                    {t.name} <span className="text-[10px] text-slate-400">{t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'}</span>
+                                                </label>
+                                            </div>
+                                        )) : <div className="text-xs text-slate-400 italic">No other engineers available.</div>}
+                                    </div>
                                 </div>
                                 {/* ── Technical Associates ── */}
                                 <div className="space-y-1">
