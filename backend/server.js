@@ -629,23 +629,46 @@ app.post("/api/tickets", authenticate, async (req, res) => {
 
     await client.query('BEGIN');
 
-    // STEP A: Ensure the customer exists first (UPSERT)
-    // Use the actual phone number from the request, NOT the customerId
-    await client.query(`
-      INSERT INTO customers (id, name, phone, address, building_number)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (id) DO UPDATE SET 
-        name = COALESCE(EXCLUDED.name, customers.name), 
-        phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone),
-        address = COALESCE(NULLIF(EXCLUDED.address, ''), customers.address),
-        building_number = COALESCE(NULLIF(EXCLUDED.building_number, ''), customers.building_number)
-    `, [customerId, customerName, phoneNumber || '', locationUrl || '', houseNumber || '']);
+    // STEP A: Check for existing customer by phone (prevent duplicates)
+    let actualCustomerId = customerId;
+    if (phoneNumber && String(phoneNumber).trim().length > 4) {
+      const normalizedPhone = String(phoneNumber).trim().replace(/\s+/g, '');
+      const existingCust = await client.query(
+        `SELECT id FROM customers WHERE REPLACE(phone, ' ', '') = $1 LIMIT 1`,
+        [normalizedPhone]
+      );
+      if (existingCust.rows.length > 0) {
+        actualCustomerId = existingCust.rows[0].id;
+        // Update name/location if provided
+        await client.query(`UPDATE customers SET name=COALESCE(NULLIF($1,''), name), building_number=COALESCE(NULLIF($2,''), building_number) WHERE id=$3`,
+          [customerName, houseNumber || '', actualCustomerId]);
+      } else {
+        // Create new customer
+        await client.query(`
+          INSERT INTO customers (id, name, phone, address, building_number)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (id) DO UPDATE SET 
+            name = COALESCE(EXCLUDED.name, customers.name), 
+            phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone),
+            building_number = COALESCE(NULLIF(EXCLUDED.building_number, ''), customers.building_number)
+        `, [customerId, customerName, phoneNumber || '', locationUrl || '', houseNumber || '']);
+      }
+    } else {
+      await client.query(`
+        INSERT INTO customers (id, name, phone, address, building_number)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO UPDATE SET 
+          name = COALESCE(EXCLUDED.name, customers.name), 
+          phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone),
+          building_number = COALESCE(NULLIF(EXCLUDED.building_number, ''), customers.building_number)
+      `, [customerId, customerName, phoneNumber || '', locationUrl || '', houseNumber || '']);
+    }
 
     // STEP B: Now create the ticket safely
     const result = await client.query(
       `INSERT INTO tickets (id, customer_id, customer_name, category, type, priority, status, location_url, house_number, messages, assigned_tech_id, appointment_time)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-      [id, customerId, customerName, category,
+      [id, actualCustomerId, customerName, category,
        req.body.type || 'Under Warranty',
        priority,
        req.body.status || 'NEW',
@@ -950,13 +973,44 @@ app.get("/api/customers", authenticate, async (req, res) => {
   }
 });
 
-// Create customer
+// Create customer (with duplicate phone prevention)
 app.post("/api/customers", authenticate, async (req, res) => {
   try {
     const { name, phone, email, address, notes, is_active, buildingNumber } = req.body || {};
 
     if (!name || String(name).trim().length < 2) {
       return res.status(400).json({ error: "Customer name is required" });
+    }
+
+    // Check for existing customer with same phone number
+    if (phone && String(phone).trim().length > 4) {
+      const normalizedPhone = String(phone).trim().replace(/\s+/g, '');
+      const existing = await pool.query(
+        `SELECT * FROM customers WHERE REPLACE(phone, ' ', '') = $1 LIMIT 1`,
+        [normalizedPhone]
+      );
+      if (existing.rows.length > 0) {
+        const r = existing.rows[0];
+        // Update name/address if provided and different
+        if (name && name !== r.name) {
+          await pool.query(`UPDATE customers SET name=$1 WHERE id=$2`, [String(name).trim(), r.id]);
+        }
+        if (buildingNumber && buildingNumber !== r.building_number) {
+          await pool.query(`UPDATE customers SET building_number=$1 WHERE id=$2`, [String(buildingNumber).trim(), r.id]);
+        }
+        return res.json({
+          id: r.id,
+          name: name || r.name,
+          phone: r.phone || '',
+          email: r.email || '',
+          address: r.address || '',
+          buildingNumber: buildingNumber || r.building_number || r.address || '',
+          avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
+          isActive: r.is_active !== false,
+          notes: r.notes || '',
+          existed: true
+        });
+      }
     }
 
     const id = await nextCustomerId();
