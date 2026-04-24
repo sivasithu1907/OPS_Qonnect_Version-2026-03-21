@@ -73,7 +73,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     if (!el) return;
 
     // Default: scroll to 8:00 position so working hours (8-20) are visible
-    const defaultStartHour = 9;
+    const defaultStartHour = 8;
     const target = defaultStartHour * zoomLevel;
     el.scrollLeft = target;
   }, []);
@@ -448,25 +448,26 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         const capacity = 8;
                         const utilization = Math.min(100, Math.round((workload/capacity)*100));
                         
-                        // Find activities where this tech is the ACTUAL primary engineer (execution)
-                        // or the PLANNED lead tech (for activities not yet started)
+                        // Find activities where this tech is assigned for TODAY or currently active
+                        const todayStr = new Date().toDateString();
                         const todayActs = activities.filter(a => {
-                            const isToday = new Date(a.plannedDate).toDateString() === new Date().toDateString();
+                            const isToday = new Date(a.plannedDate).toDateString() === todayStr;
+                            const isActive = ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status);
                             if (a.status === 'CANCELLED') return false;
+                            // Must be today's activity OR currently active
+                            if (!isToday && !isActive) return false;
                             // Execution: this tech is the primary (actual) engineer
                             if ((a as any).primaryEngineerId === tech.id) return true;
-                            // Planning: this tech is the planned lead and activity not yet started
-                            if (a.leadTechId === tech.id && isToday && !['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status)) return true;
-                            // IN_PROGRESS/DONE without primaryEngineerId (legacy): fall back to leadTechId
-                            if (a.leadTechId === tech.id && !(a as any).primaryEngineerId && ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status)) return true;
+                            // Planning: this tech is the planned lead
+                            if (a.leadTechId === tech.id) return true;
                             return false;
                         });
                         
-                        // Extract supporting engineers from ACTUAL execution data
+                        // Extract supporting engineers — only from today's active or planned activities for THIS engineer
                         const activeActs = todayActs.filter(a => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status));
                         const uniqueSupportIds = Array.from(new Set([
                             ...activeActs.flatMap(a => (a as any).supportingEngineerIds || []),
-                            // Also include planned assistantTechIds (TAs) from all today's activities
+                            // Include TAs only from today's assigned activities (not global)
                             ...todayActs.flatMap(a => a.assistantTechIds || [])
                         ].filter(Boolean)));
                         
