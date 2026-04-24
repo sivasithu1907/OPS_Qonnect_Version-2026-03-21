@@ -2408,34 +2408,58 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 )}
 
 {/* Manage Team Modal — Add/remove engineers for IN_PROGRESS jobs */}
-{modalType === 'manage_team' && modalActivity && (
+{modalType === 'manage_team' && modalActivity && (() => {
+    const ma = modalActivity as any;
+    // Find who is busy on OTHER jobs right now (IN_PROGRESS, ON_MY_WAY, ARRIVED)
+    const busyStatuses = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'];
+    const busyIds = new Set<string>();
+    activities.forEach((a: any) => {
+        if (a.id === ma.id) return; // Skip current activity
+        if (!busyStatuses.includes(a.status)) return;
+        if (a.primaryEngineerId) busyIds.add(a.primaryEngineerId);
+        if (a.leadTechId) busyIds.add(a.leadTechId);
+        (a.assistantTechIds || []).forEach((id: string) => busyIds.add(id));
+        (a.supportingEngineerIds || []).forEach((id: string) => busyIds.add(id));
+    });
+    tickets.forEach((t: any) => {
+        if (busyStatuses.includes(t.status) && t.assignedTechId) busyIds.add(t.assignedTechId);
+    });
+
+    const allTeam = technicians.filter((t: any) =>
+        t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD' || t.systemRole === 'TECHNICAL_ASSOCIATE'
+    );
+    const availableForSupport = allTeam.filter((t: any) => t.id !== dispatchPrimaryId && !busyIds.has(t.id));
+    const busyForSupport = allTeam.filter((t: any) => t.id !== dispatchPrimaryId && busyIds.has(t.id));
+
+    return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={closeModal}>
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
                 <div>
                     <h3 className="font-bold text-lg text-slate-900">Manage Team</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">{(modalActivity as any).reference} — In Progress</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{ma.reference} — In Progress</p>
                 </div>
                 <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
             </div>
             <div className="p-5 space-y-5 overflow-y-auto flex-1">
                 <div>
                     <label className="text-xs font-bold text-purple-600 uppercase tracking-wider block mb-2">Lead / Primary Engineer</label>
-                    <select value={dispatchPrimaryId} onChange={e => setDispatchPrimaryId(e.target.value)}
+                    <select value={dispatchPrimaryId} onChange={e => {
+                        setDispatchPrimaryId(e.target.value);
+                        setDispatchSupportIds(prev => prev.filter(id => id !== e.target.value));
+                    }}
                         className="w-full border border-slate-300 rounded-xl p-3 text-sm bg-white">
                         <option value="">Select Engineer</option>
-                        {technicians.filter((t: any) => t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD').map((t: any) => (
+                        {technicians.filter((t: any) => (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD') && !busyIds.has(t.id)).map((t: any) => (
                             <option key={t.id} value={t.id}>{t.name} ({t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'})</option>
                         ))}
                     </select>
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-teal-600 uppercase tracking-wider block mb-2">Supporting Engineers & TAs</label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {technicians.filter((t: any) =>
-                            (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD' || t.systemRole === 'TECHNICAL_ASSOCIATE') &&
-                            t.id !== dispatchPrimaryId
-                        ).map((t: any) => (
+                    <label className="text-xs font-bold text-teal-600 uppercase tracking-wider block mb-2">Add Team Members</label>
+                    <p className="text-[10px] text-slate-400 mb-2">Only showing available people (not assigned to other active jobs)</p>
+                    <div className="space-y-2 max-h-52 overflow-y-auto">
+                        {availableForSupport.length > 0 ? availableForSupport.map((t: any) => (
                             <label key={t.id} className={`flex items-center gap-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
                                 dispatchSupportIds.includes(t.id) ? 'bg-teal-50 border-teal-400' : 'bg-white border-slate-200 hover:border-slate-300'
                             }`}>
@@ -2445,12 +2469,28 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                                     dispatchSupportIds.includes(t.id) ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'
                                 }`}>{dispatchSupportIds.includes(t.id) ? '✓' : t.name.charAt(0)}</div>
-                                <div>
+                                <div className="flex-1">
                                     <div className="text-sm font-medium text-slate-800">{t.name}</div>
                                     <div className="text-[10px] text-slate-400">{t.systemRole === 'TECHNICAL_ASSOCIATE' ? 'Technical Associate' : t.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</div>
                                 </div>
+                                <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full font-bold">Available</span>
                             </label>
-                        ))}
+                        )) : <div className="text-xs text-slate-400 italic p-2">All team members are busy on other jobs.</div>}
+                        {busyForSupport.length > 0 && (
+                            <div className="pt-2 mt-2 border-t border-slate-100">
+                                <div className="text-[10px] text-slate-400 mb-1.5 font-bold uppercase">Currently Busy</div>
+                                {busyForSupport.map((t: any) => (
+                                    <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 opacity-50 mb-1">
+                                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs text-slate-400">{t.name.charAt(0)}</div>
+                                        <div className="flex-1">
+                                            <div className="text-sm text-slate-500">{t.name}</div>
+                                            <div className="text-[10px] text-slate-400">{t.systemRole === 'TECHNICAL_ASSOCIATE' ? 'TA' : t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'}</div>
+                                        </div>
+                                        <span className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full font-bold">Busy</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -2458,13 +2498,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 <button
                     onClick={() => {
                         if (!modalActivity || !onUpdateActivity) return;
-                        const a = modalActivity as any;
                         onUpdateActivity({
-                            ...a,
-                            primaryEngineerId: dispatchPrimaryId || a.primaryEngineerId,
+                            ...ma,
+                            primaryEngineerId: dispatchPrimaryId || ma.primaryEngineerId,
                             assistantTechIds: dispatchSupportIds,
-                            supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
-                            leadTechId: a.leadTechId || dispatchPrimaryId,
+                            supportingEngineerIds: dispatchSupportIds.filter((id: string) => id !== dispatchPrimaryId),
+                            leadTechId: ma.leadTechId || dispatchPrimaryId,
                             updatedAt: new Date().toISOString()
                         });
                         closeModal();
@@ -2476,7 +2515,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             </div>
         </div>
     </div>
-)}
+    );
+})()}
             {showDatePicker && (
                 <div className="fixed inset-0 z-[80] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDatePicker(false)} />
