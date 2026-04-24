@@ -75,6 +75,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   // Location auto-fill state (controlled, populated from customer on select)
   const [locationUrl, setLocationUrl] = useState('');
   const [serviceCats, setServiceCats] = useState<string[]>([]);
+  const [selectedLeadTechId, setSelectedLeadTechId] = useState('');
 
   // Sync serviceCats when editing activity changes
   React.useEffect(() => {
@@ -83,6 +84,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     } else {
       setServiceCats([]);
     }
+    setSelectedLeadTechId(editingActivity?.leadTechId || '');
   }, [editingActivity]);
   const [houseNumber, setHouseNumber] = useState('');
 
@@ -951,7 +953,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                     </div>
                                     <select
                                       name="leadTechId"
-                                      defaultValue={editingActivity?.leadTechId || ""}
+                                      value={selectedLeadTechId}
+                                      onChange={e => setSelectedLeadTechId(e.target.value)}
                                       disabled={(teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign}
                                       className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${
                                         (teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign
@@ -1006,8 +1009,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">Supporting Engineers (Optional)</label>
                                     </div>
                                     <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
-                                        {[...fieldEngineers, ...teamLeads].filter(t => t.id !== (editingActivity?.leadTechId || '')).length > 0 ?
-                                          [...fieldEngineers, ...teamLeads].filter(t => t.id !== (editingActivity?.leadTechId || '')).map(t => (
+                                        {[...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).length > 0 ?
+                                          [...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).map(t => (
                                             <div key={t.id} className="flex items-center gap-2">
                                                 <input
                                                     type="checkbox"
