@@ -2411,11 +2411,15 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 {modalType === 'manage_team' && modalActivity && (() => {
     const ma = modalActivity as any;
     // Find who is busy on OTHER jobs right now (IN_PROGRESS, ON_MY_WAY, ARRIVED)
+    // Also check PLANNED activities for today — they're assigned even if not started
     const busyStatuses = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'];
+    const todayStr = new Date().toDateString();
     const busyIds = new Set<string>();
     (activities || []).forEach((a: any) => {
         if (a.id === ma.id) return; // Skip current activity
-        if (!busyStatuses.includes(a.status)) return;
+        const isActive = busyStatuses.includes(a.status);
+        const isPlannedToday = a.status === 'PLANNED' && new Date(a.plannedDate).toDateString() === todayStr;
+        if (!isActive && !isPlannedToday) return;
         if (a.primaryEngineerId) busyIds.add(a.primaryEngineerId);
         if (a.leadTechId) busyIds.add(a.leadTechId);
         (a.assistantTechIds || []).forEach((id: string) => busyIds.add(id));
@@ -2426,7 +2430,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     });
 
     const allTeam = technicians.filter((t: any) =>
-        t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD' || t.level === 'TECHNICAL_ASSOCIATE'
+        (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD' || t.level === 'TECHNICAL_ASSOCIATE') &&
+        t.isActive !== false && t.status !== 'INACTIVE'
     );
     const availableForSupport = allTeam.filter((t: any) => t.id !== dispatchPrimaryId && !busyIds.has(t.id));
     const busyForSupport = allTeam.filter((t: any) => t.id !== dispatchPrimaryId && busyIds.has(t.id));
@@ -2450,7 +2455,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     }}
                         className="w-full border border-slate-300 rounded-xl p-3 text-sm bg-white">
                         <option value="">Select Engineer</option>
-                        {technicians.filter((t: any) => (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD') && !busyIds.has(t.id)).map((t: any) => (
+                        {technicians.filter((t: any) => (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD') && !busyIds.has(t.id) && t.isActive !== false && t.status !== 'INACTIVE').map((t: any) => (
                             <option key={t.id} value={t.id}>{t.name} ({t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'})</option>
                         ))}
                     </select>
