@@ -980,7 +980,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       {mobileModule === 'clients' && (
                           <div className="h-full overflow-y-auto bg-white">
                               <CustomerRecords 
-                                  customers={customers} activities={activities} technicians={technicians} sites={sites}
+                                  customers={customers} activities={activities} tickets={tickets} technicians={technicians} sites={sites}
                                   onSaveCustomer={onSaveCustomer!} onDeleteCustomer={onDeleteCustomer!} readOnly={true}
                                   isMobile={true}
                               />
