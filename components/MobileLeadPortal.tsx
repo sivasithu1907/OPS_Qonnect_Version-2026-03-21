@@ -1748,10 +1748,15 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             {viewJob.data.status === 'IN_PROGRESS' && (
                                                 <div className="space-y-2 pb-2">
                                                     <button onClick={() => {
-                                                        const a = viewJob.data;
+                                                        const a = viewJob.data as any;
                                                         setModalActivity(a);
-                                                        setDispatchPrimaryId((a as any).primaryEngineerId || a.leadTechId || '');
-                                                        setDispatchSupportIds((a as any).assistantTechIds || []);
+                                                        setDispatchPrimaryId(a.primaryEngineerId || a.leadTechId || '');
+                                                        // Pre-select all currently assigned support: TAs + supporting engineers
+                                                        const currentSupport = Array.from(new Set([
+                                                            ...(a.assistantTechIds || []),
+                                                            ...(a.supportingEngineerIds || [])
+                                                        ]));
+                                                        setDispatchSupportIds(currentSupport);
                                                         setModalType('manage_team');
                                                         setViewJob(null);
                                                     }}
