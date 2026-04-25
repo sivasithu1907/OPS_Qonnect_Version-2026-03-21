@@ -2413,7 +2413,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     // Find who is busy on OTHER jobs right now (IN_PROGRESS, ON_MY_WAY, ARRIVED)
     const busyStatuses = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'];
     const busyIds = new Set<string>();
-    activities.forEach((a: any) => {
+    (activities || []).forEach((a: any) => {
         if (a.id === ma.id) return; // Skip current activity
         if (!busyStatuses.includes(a.status)) return;
         if (a.primaryEngineerId) busyIds.add(a.primaryEngineerId);
@@ -2421,7 +2421,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
         (a.assistantTechIds || []).forEach((id: string) => busyIds.add(id));
         (a.supportingEngineerIds || []).forEach((id: string) => busyIds.add(id));
     });
-    tickets.forEach((t: any) => {
+    (tickets || []).forEach((t: any) => {
         if (busyStatuses.includes(t.status) && t.assignedTechId) busyIds.add(t.assignedTechId);
     });
 
