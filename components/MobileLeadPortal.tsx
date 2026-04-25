@@ -2456,43 +2456,74 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     </select>
                 </div>
                 <div>
-                    <label className="text-xs font-bold text-teal-600 uppercase tracking-wider block mb-2">Add Team Members</label>
-                    <p className="text-[10px] text-slate-400 mb-2">Only showing available people (not assigned to other active jobs)</p>
-                    <div className="space-y-2 max-h-52 overflow-y-auto">
-                        {availableForSupport.length > 0 ? availableForSupport.map((t: any) => (
-                            <label key={t.id} className={`flex items-center gap-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
-                                dispatchSupportIds.includes(t.id) ? 'bg-teal-50 border-teal-400' : 'bg-white border-slate-200 hover:border-slate-300'
-                            }`}>
-                                <input type="checkbox" checked={dispatchSupportIds.includes(t.id)}
-                                    onChange={() => setDispatchSupportIds(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}
-                                    className="sr-only" />
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                                    dispatchSupportIds.includes(t.id) ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'
-                                }`}>{dispatchSupportIds.includes(t.id) ? '✓' : t.name.charAt(0)}</div>
-                                <div className="flex-1">
-                                    <div className="text-sm font-medium text-slate-800">{t.name}</div>
-                                    <div className="text-[10px] text-slate-400">{t.systemRole === 'TECHNICAL_ASSOCIATE' ? 'Technical Associate' : t.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</div>
-                                </div>
-                                <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full font-bold">Available</span>
-                            </label>
-                        )) : <div className="text-xs text-slate-400 italic p-2">All team members are busy on other jobs.</div>}
-                        {busyForSupport.length > 0 && (
-                            <div className="pt-2 mt-2 border-t border-slate-100">
-                                <div className="text-[10px] text-slate-400 mb-1.5 font-bold uppercase">Currently Busy</div>
-                                {busyForSupport.map((t: any) => (
-                                    <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 opacity-50 mb-1">
-                                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs text-slate-400">{t.name.charAt(0)}</div>
-                                        <div className="flex-1">
-                                            <div className="text-sm text-slate-500">{t.name}</div>
-                                            <div className="text-[10px] text-slate-400">{t.systemRole === 'TECHNICAL_ASSOCIATE' ? 'TA' : t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'}</div>
-                                        </div>
-                                        <span className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full font-bold">Busy</span>
+                    <label className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-2">Supporting Engineers</label>
+                    <p className="text-[10px] text-slate-400 mb-2">Only available (not on other active jobs)</p>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                        {(() => {
+                            const engAvail = availableForSupport.filter((t: any) => t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD');
+                            const engBusy = busyForSupport.filter((t: any) => t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD');
+                            return engAvail.length > 0 ? engAvail.map((t: any) => (
+                                <label key={t.id} className={`flex items-center gap-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
+                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200 hover:border-slate-300'
+                                }`}>
+                                    <input type="checkbox" checked={dispatchSupportIds.includes(t.id)}
+                                        onChange={() => setDispatchSupportIds(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}
+                                        className="sr-only" />
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        dispatchSupportIds.includes(t.id) ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'
+                                    }`}>{dispatchSupportIds.includes(t.id) ? '✓' : t.name.charAt(0)}</div>
+                                    <div className="flex-1">
+                                        <div className="text-sm font-medium text-slate-800">{t.name}</div>
+                                        <div className="text-[10px] text-slate-400">{t.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</div>
                                     </div>
-                                ))}
-                            </div>
-                        )}
+                                    <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full font-bold">Available</span>
+                                </label>
+                            )) : <div className="text-[10px] text-slate-400 italic p-1">No engineers available</div>;
+                        })()}
                     </div>
                 </div>
+                <div>
+                    <label className="text-xs font-bold text-teal-600 uppercase tracking-wider block mb-2">Technical Associates</label>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                        {(() => {
+                            const taAvail = availableForSupport.filter((t: any) => t.systemRole === 'TECHNICAL_ASSOCIATE');
+                            return taAvail.length > 0 ? taAvail.map((t: any) => (
+                                <label key={t.id} className={`flex items-center gap-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
+                                    dispatchSupportIds.includes(t.id) ? 'bg-teal-50 border-teal-400' : 'bg-white border-slate-200 hover:border-slate-300'
+                                }`}>
+                                    <input type="checkbox" checked={dispatchSupportIds.includes(t.id)}
+                                        onChange={() => setDispatchSupportIds(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}
+                                        className="sr-only" />
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        dispatchSupportIds.includes(t.id) ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-400'
+                                    }`}>{dispatchSupportIds.includes(t.id) ? '✓' : t.name.charAt(0)}</div>
+                                    <div className="flex-1">
+                                        <div className="text-sm font-medium text-slate-800">{t.name}</div>
+                                        <div className="text-[10px] text-slate-400">Technical Associate</div>
+                                    </div>
+                                    <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full font-bold">Available</span>
+                                </label>
+                            )) : <div className="text-[10px] text-slate-400 italic p-1">No TAs available</div>;
+                        })()}
+                    </div>
+                </div>
+                {busyForSupport.length > 0 && (
+                <div>
+                    <div className="text-[10px] text-slate-400 mb-1.5 font-bold uppercase">Currently Busy</div>
+                    <div className="space-y-1 max-h-28 overflow-y-auto">
+                        {busyForSupport.map((t: any) => (
+                            <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 opacity-50">
+                                <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-400">{t.name.charAt(0)}</div>
+                                <div className="flex-1">
+                                    <div className="text-xs text-slate-500">{t.name}</div>
+                                    <div className="text-[10px] text-slate-400">{t.systemRole === 'TECHNICAL_ASSOCIATE' ? 'TA' : t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'}</div>
+                                </div>
+                                <span className="text-[9px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full font-bold">Busy</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                )}
             </div>
             <div className="p-4 border-t border-slate-100 shrink-0">
                 <button
