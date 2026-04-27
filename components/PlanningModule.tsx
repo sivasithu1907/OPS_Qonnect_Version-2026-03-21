@@ -185,27 +185,56 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       const newEnd = newStart + durationMs;
       
       return technicalAssociates.filter(tech => {
-          // Check if tech has overlapping time slot on this date
+          // Check if tech is assigned to ANY active job (IN_PROGRESS, ON_MY_WAY, ARRIVED)
+          const isOnActiveJob = activities.some(act => {
+              if (editingActivity && act.id === editingActivity.id) return false;
+              if (!['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(act.status)) return false;
+              // Check ALL assignment fields
+              return (act as any).primaryEngineerId === tech.id ||
+                     act.leadTechId === tech.id ||
+                     (act.assistantTechIds || []).includes(tech.id) ||
+                     ((act as any).supportingEngineerIds || []).includes(tech.id);
+          });
+          if (isOnActiveJob) return false;
+
+          // Check if tech has overlapping planned job on this date
           const isBooked = activities.some(act => {
               if (editingActivity && act.id === editingActivity.id) return false;
-              if (act.status === 'DONE' || act.status === 'CANCELLED') return false;
-              if (!act.assistantTechIds?.includes(tech.id)) return false;
+              if (act.status === 'DONE' || act.status === 'CANCELLED' || act.status === 'CARRY_FORWARD') return false;
+              // Check ALL assignment fields
+              const isAssigned = (act.assistantTechIds || []).includes(tech.id) ||
+                                 ((act as any).supportingEngineerIds || []).includes(tech.id) ||
+                                 (act as any).primaryEngineerId === tech.id ||
+                                 act.leadTechId === tech.id;
+              if (!isAssigned) return false;
               
               const actDate = new Date(act.plannedDate).toDateString();
               if (actDate !== selectedDateString) return false;
               
-              // Check time overlap
               const actStart = new Date(act.plannedDate).getTime();
               const actDuration = (act.durationHours || 2) * 3600000;
               const actEnd = actStart + actDuration;
-              
-              // Overlap: newStart < actEnd AND newEnd > actStart
               return newStart < actEnd && newEnd > actStart;
           });
           
           return !isBooked;
       });
   }, [technicalAssociates, activities, selectedDateString, editingActivity, plannedDatetime, durationState]);
+
+  // Engineers currently busy on active jobs — used to show availability in supporting engineers section
+  const busyEngineerIds = useMemo(() => {
+      const busy = new Set<string>();
+      const activeStatuses = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'];
+      activities.forEach(act => {
+          if (editingActivity && act.id === editingActivity.id) return;
+          if (!activeStatuses.includes(act.status)) return;
+          if ((act as any).primaryEngineerId) busy.add((act as any).primaryEngineerId);
+          if (act.leadTechId) busy.add(act.leadTechId);
+          ((act as any).supportingEngineerIds || []).forEach((id: string) => busy.add(id));
+          (act.assistantTechIds || []).forEach((id: string) => busy.add(id));
+      });
+      return busy;
+  }, [activities, editingActivity]);
 
   // --- Handlers ---
   const handleNewCustomer = async (cust: Customer): Promise<Customer | null> => {
@@ -782,7 +811,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       houseNumber: data.houseNumber,
                       
                       salesLeadId: data.salesLeadId || undefined,
-                      leadTechId: data.leadTechId || undefined,
+                      leadTechId: selectedLeadTechId || data.leadTechId || (canSelfAssign ? currentUserId : undefined),
                       assistantTechIds: formData.getAll('assistantTechIds') as string[],
                       supportingEngineerIds: formData.getAll('supportingEngineerIds') as string[],
                       freelancers: freelancers.filter(f => f.name.trim())
@@ -1009,8 +1038,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">Supporting Engineers (Optional)</label>
                                     </div>
                                     <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
-                                        {[...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).length > 0 ?
-                                          [...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).map(t => (
+                                        {[...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId && !busyEngineerIds.has(t.id)).length > 0 ?
+                                          [...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId && !busyEngineerIds.has(t.id)).map(t => (
                                             <div key={t.id} className="flex items-center gap-2">
                                                 <input
                                                     type="checkbox"
