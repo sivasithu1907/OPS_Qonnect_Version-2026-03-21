@@ -1526,13 +1526,19 @@ app.get("/api/activities", authenticate, async (req, res) => {
 app.post("/api/activities", authenticate, async (req, res) => {
     try {
         const { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
+        
+        // Validate required fields
+        if (!id || !type) {
+            return res.status(400).json({ error: "Activity ID and type are required" });
+        }
+        
         await pool.query(
             `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, site_id, lead_tech_id, description, duration_hours, details)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-            [id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(details)]
+            [id, reference || id, type, priority || 'MEDIUM', status || 'PLANNED', plannedDate, customerId || null, siteId || null, leadTechId || null, description || '', durationHours || 2, JSON.stringify(details || {})]
         );
-        res.status(201).json({ok: true});
-    } catch(e) { console.error(e); res.status(500).json({error: "Failed to create activity"}); }
+        res.status(201).json({ok: true, id});
+    } catch(e) { console.error('Activity creation error:', e.message, e.detail || ''); res.status(500).json({error: "Failed to create activity", detail: e.message}); }
 });
 
 // PUT Activity (Update)
