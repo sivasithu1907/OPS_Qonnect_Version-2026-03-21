@@ -171,41 +171,56 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       return 'N/A';
   };
 
-  // Determine available associates based on selected date
+  // Determine available associates — ONLY block on TIME OVERLAP, allow multiple jobs per day
   const selectedDateString = useMemo(() => {
       if (!plannedDatetime) return '';
       return new Date(plannedDatetime).toDateString();
   }, [plannedDatetime]);
 
   const availableAssociates = useMemo(() => {
-      if (!selectedDateString || !plannedDatetime) return technicalAssociates;
+      // If no date/time selected yet, show all TAs (no filtering)
+      if (!plannedDatetime) return technicalAssociates;
       
       const newStart = new Date(plannedDatetime).getTime();
       const durationMs = Number(durationState.val) * (durationState.unit === 'DAYS' ? 86400000 : 3600000);
       const newEnd = newStart + durationMs;
       
       return technicalAssociates.filter(tech => {
-          // Check if tech has overlapping time slot on this date
-          const isBooked = activities.some(act => {
+          // Check EVERY activity to see if this TA has a TIME CONFLICT
+          // A conflict means: the TA is assigned to another job AND the time ranges overlap
+          // NO date-only blocking — multiple jobs per day are fine if times don't overlap
+          const hasTimeConflict = activities.some(act => {
+              // Skip the activity being edited
               if (editingActivity && act.id === editingActivity.id) return false;
-              if (act.status === 'DONE' || act.status === 'CANCELLED') return false;
-              if (!act.assistantTechIds?.includes(tech.id)) return false;
+              // Skip completed/cancelled/carry-forwarded — they're done
+              if (['DONE', 'CANCELLED', 'CARRY_FORWARD'].includes(act.status)) return false;
               
-              const actDate = new Date(act.plannedDate).toDateString();
-              if (actDate !== selectedDateString) return false;
+              // Is this TA assigned to this activity in ANY role?
+              const isAssigned = 
+                  (act.assistantTechIds || []).includes(tech.id) ||
+                  ((act as any).supportingEngineerIds || []).includes(tech.id) ||
+                  (act as any).primaryEngineerId === tech.id ||
+                  act.leadTechId === tech.id;
               
-              // Check time overlap
+              if (!isAssigned) return false;
+              
+              // Now check TIME OVERLAP (this is the ONLY blocking criterion)
               const actStart = new Date(act.plannedDate).getTime();
               const actDuration = (act.durationHours || 2) * 3600000;
               const actEnd = actStart + actDuration;
               
-              // Overlap: newStart < actEnd AND newEnd > actStart
-              return newStart < actEnd && newEnd > actStart;
+              // For IN_PROGRESS jobs: they started but haven't ended — treat as blocking until estimated end
+              // Use startedAt if available for more accurate timing
+              const realStart = (act as any).startedAt ? new Date((act as any).startedAt).getTime() : actStart;
+              const realEnd = (act as any).completedAt ? new Date((act as any).completedAt).getTime() : actEnd;
+              
+              // Overlap check: newStart < existingEnd AND newEnd > existingStart
+              return newStart < realEnd && newEnd > realStart;
           });
           
-          return !isBooked;
+          return !hasTimeConflict;
       });
-  }, [technicalAssociates, activities, selectedDateString, editingActivity, plannedDatetime, durationState]);
+  }, [technicalAssociates, activities, editingActivity, plannedDatetime, durationState]);
 
   // --- Handlers ---
   const handleNewCustomer = async (cust: Customer): Promise<Customer | null> => {
