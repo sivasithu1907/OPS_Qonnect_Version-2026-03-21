@@ -783,7 +783,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   const activityPayload: any = {
                       type: data.type,
                       serviceCategory: serviceCats.join(', ') || 'Other',
-                      customerId: selectedCustomerId,
+                      customerId: selectedCustomerId || undefined,
                       priority: data.priority,
                       status: data.status || 'PLANNED',
                       plannedDate: plannedDateIso,
@@ -793,15 +793,21 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       remarks: data.remarks || '',
                       
                       odooLink: data.odooLink,
-                      locationUrl: data.locationUrl,
-                      houseNumber: data.houseNumber,
+                      locationUrl: locationUrl || data.locationUrl,
+                      houseNumber: houseNumber || data.houseNumber,
                       
                       salesLeadId: data.salesLeadId || undefined,
-                      leadTechId: data.leadTechId || undefined,
+                      leadTechId: selectedLeadTechId || data.leadTechId || (canSelfAssign ? currentUserId : undefined),
                       assistantTechIds: formData.getAll('assistantTechIds') as string[],
                       supportingEngineerIds: formData.getAll('supportingEngineerIds') as string[],
                       freelancers: freelancers.filter(f => f.name.trim())
                   };
+
+                  // Validate required fields
+                  if (!activityPayload.customerId) {
+                      alert('Please select a customer');
+                      return;
+                  }
 
                   if (editingActivity) {
                       onUpdateActivity({
