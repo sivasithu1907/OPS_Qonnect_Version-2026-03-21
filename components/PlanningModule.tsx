@@ -822,10 +822,15 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         selectedCustomerId={selectedCustomerId}
                         onSelect={(c) => {
                             setSelectedCustomerId(c.id);
-                            // Auto-fill location from customer record if not already set
-                            // Always fill location from customer when selecting
-                            if (c.address) setLocationUrl(c.address);
-                            if (c.buildingNumber) setHouseNumber(c.buildingNumber);
+                            // Auto-fill location from customer record
+                            // address field often contains the location URL
+                            const custUrl = c.address && c.address.startsWith('http') ? c.address : 
+                                           c.buildingNumber && c.buildingNumber.startsWith('http') ? c.buildingNumber : '';
+                            const custHouse = c.buildingNumber && !c.buildingNumber.startsWith('http') ? c.buildingNumber : '';
+                            if (custUrl) setLocationUrl(custUrl);
+                            if (custHouse) setHouseNumber(custHouse);
+                            // If address is not a URL, use it as house/building info
+                            if (c.address && !c.address.startsWith('http') && !custHouse) setHouseNumber(c.address);
                         }}
                         onCreateNew={handleNewCustomer}
                       />
