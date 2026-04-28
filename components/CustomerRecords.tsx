@@ -367,9 +367,13 @@ onSaveCustomer(data as Customer);
                                 <div className="flex items-start gap-2 text-xs text-slate-500 mb-2">
                                     <MapPin size={12} className="mt-0.5 shrink-0"/>
                                     <span className="truncate">
-                                        {cust.buildingNumber && cust.buildingNumber !== 'N/A' ? cust.buildingNumber : ''}
-                                        {cust.buildingNumber && cust.address && cust.address.startsWith('http') ? ' · ' : ''}
-                                        {cust.address && cust.address.startsWith('http') ? 'Map linked' : (cust.address || 'No location set')}
+                                        {cust.buildingNumber && cust.buildingNumber !== 'N/A' && !cust.buildingNumber.startsWith('http') ? cust.buildingNumber + ' · ' : ''}
+                                        {(() => {
+                                            const mapUrl = (cust.address && cust.address.startsWith('http')) ? cust.address 
+                                                : (cust.buildingNumber && cust.buildingNumber.startsWith('http')) ? cust.buildingNumber : '';
+                                            return mapUrl ? <a href={mapUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>View Map</a> 
+                                                : <span className="text-slate-400">No location</span>;
+                                        })()}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center">
