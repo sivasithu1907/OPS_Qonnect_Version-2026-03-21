@@ -625,7 +625,23 @@ app.get("/api/tickets", authenticate, async (req, res) => {
 app.post("/api/tickets", authenticate, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber } = req.body;
+    let { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber } = req.body;
+
+    // Generate or fix ID if it would collide
+    if (id) {
+      const exists = await client.query("SELECT 1 FROM tickets WHERE id=$1", [id]);
+      if (exists.rows.length > 0) {
+        const maxResult = await client.query("SELECT id FROM tickets ORDER BY id DESC LIMIT 1");
+        const lastId = maxResult.rows[0]?.id || 'QNC-TK-000000';
+        const lastNum = parseInt(lastId.replace('QNC-TK-', ''), 10) || 0;
+        id = `QNC-TK-${String(lastNum + 1).padStart(6, '0')}`;
+      }
+    } else {
+      const maxResult = await client.query("SELECT id FROM tickets ORDER BY id DESC LIMIT 1");
+      const lastId = maxResult.rows[0]?.id || 'QNC-TK-000000';
+      const lastNum = parseInt(lastId.replace('QNC-TK-', ''), 10) || 0;
+      id = `QNC-TK-${String(lastNum + 1).padStart(6, '0')}`;
+    }
 
     await client.query('BEGIN');
 
@@ -1525,11 +1541,29 @@ app.get("/api/activities", authenticate, async (req, res) => {
 // POST Activity (Create)
 app.post("/api/activities", authenticate, async (req, res) => {
     try {
-        const { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
+        let { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
         
-        // Validate required fields
-        if (!id || !type) {
-            return res.status(400).json({ error: "Activity ID and type are required" });
+        if (!type) {
+            return res.status(400).json({ error: "Activity type is required" });
+        }
+        
+        // Generate ID on server if not provided or if it would conflict
+        if (!id) {
+            const maxResult = await pool.query("SELECT id FROM activities ORDER BY id DESC LIMIT 1");
+            const lastId = maxResult.rows[0]?.id || 'QNC-ACT-000000';
+            const lastNum = parseInt(lastId.replace('QNC-ACT-', ''), 10) || 0;
+            id = `QNC-ACT-${String(lastNum + 1).padStart(6, '0')}`;
+            reference = id;
+        } else {
+            // Check if ID already exists — if so, generate a new one
+            const exists = await pool.query("SELECT 1 FROM activities WHERE id=$1", [id]);
+            if (exists.rows.length > 0) {
+                const maxResult = await pool.query("SELECT id FROM activities ORDER BY id DESC LIMIT 1");
+                const lastId = maxResult.rows[0]?.id || 'QNC-ACT-000000';
+                const lastNum = parseInt(lastId.replace('QNC-ACT-', ''), 10) || 0;
+                id = `QNC-ACT-${String(lastNum + 1).padStart(6, '0')}`;
+                reference = id;
+            }
         }
         
         await pool.query(
