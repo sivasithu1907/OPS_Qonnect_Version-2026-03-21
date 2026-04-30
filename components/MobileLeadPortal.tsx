@@ -156,6 +156,20 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Temp Picker Values
   const [tempDatetime, setTempDatetime] = useState(''); // YYYY-MM-DDTHH:mm for datetime-local
 
+  // Notifications / Activity Log
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Create Activity (quick)
+  const [showCreateActivity, setShowCreateActivity] = useState(false);
+  const [createActivityForm, setCreateActivityForm] = useState({
+      type: '', serviceCategory: '', customerId: '', description: '',
+      plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: ''
+  });
+
+  // Create Ticket — customer phone search
+  const [ticketPhoneSearch, setTicketPhoneSearch] = useState('');
+  const [ticketSelectedCustomer, setTicketSelectedCustomer] = useState<Customer | null>(null);
+
   // Initialize focused ticket
   useEffect(() => {
       if (focusedTicketId) {
@@ -248,6 +262,41 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   );
 
   const selectedTicket = tickets.find(t => t.id === selectedTicketId);
+
+  // Recent changes feed — combines ticket + activity updates, sorted by updatedAt
+  const recentChanges = useMemo(() => {
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const cutoff = now - (7 * dayMs); // last 7 days
+
+      const ticketChanges = tickets
+          .filter(t => new Date(t.updatedAt).getTime() > cutoff)
+          .map(t => ({
+              id: t.id,
+              kind: 'ticket' as const,
+              title: t.customerName || t.id,
+              subtitle: t.category,
+              status: t.status,
+              updatedAt: t.updatedAt,
+              assignedTo: technicians.find(te => te.id === t.assignedTechId)?.name || 'Unassigned'
+          }));
+
+      const actChanges = (activities || [])
+          .filter(a => new Date(a.updatedAt || a.createdAt).getTime() > cutoff)
+          .map(a => ({
+              id: (a as any).reference || a.id,
+              kind: 'activity' as const,
+              title: (a as any).type || 'Activity',
+              subtitle: (a as any).serviceCategory || '',
+              status: (a as any).status || 'PLANNED',
+              updatedAt: a.updatedAt || a.createdAt,
+              assignedTo: technicians.find(te => te.id === (a as any).leadTechId)?.name || 'Unassigned'
+          }));
+
+      return [...ticketChanges, ...actChanges]
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+          .slice(0, 50);
+  }, [tickets, activities, technicians]);
 
   // Dashboard counts
   const currentTech = technicians.find(t => t.id === currentUserId);
@@ -948,33 +997,58 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       <div>
                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Operations</h4>
                           <div className="bg-[#1E293B] rounded-2xl border border-slate-700/50 overflow-hidden divide-y divide-slate-700/30">
+                              <button onClick={() => { setHomeFilter('all'); setActiveTab('home'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
+                                  <div className="p-2 bg-amber-500/10 rounded-lg"><ListTodo size={20} className="text-amber-400" /></div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-white font-medium block">Tickets</span>
+                                      <span className="text-[10px] text-slate-500">View all tickets</span>
+                                  </div>
+                                  <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">{tickets.length}</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
                               <button onClick={() => { setMobileModule('reports'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
                                   <div className="p-2 bg-blue-500/10 rounded-lg"><BarChart3 size={20} className="text-blue-400" /></div>
-                                  <span className="flex-1 text-left text-white font-medium">Reports</span>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-white font-medium block">Reports</span>
+                                      <span className="text-[10px] text-slate-500">Export data</span>
+                                  </div>
                                   <ChevronRight size={16} className="text-slate-500" />
                               </button>
                               <button onClick={() => { setMobileModule('clients'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
                                   <div className="p-2 bg-purple-500/10 rounded-lg"><Contact size={20} className="text-purple-400" /></div>
-                                  <span className="flex-1 text-left text-white font-medium">Clients</span>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-white font-medium block">Clients</span>
+                                      <span className="text-[10px] text-slate-500">Customer records</span>
+                                  </div>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              <button onClick={() => setActiveTab('team')} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
+                                  <div className="p-2 bg-emerald-500/10 rounded-lg"><Users size={20} className="text-emerald-400" /></div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-white font-medium block">Team Management</span>
+                                      <span className="text-[10px] text-slate-500">View field team status</span>
+                                  </div>
                                   <ChevronRight size={16} className="text-slate-500" />
                               </button>
                           </div>
                       </div>
 
-                      {/* Preferences Section */}
+                      {/* Notifications Section */}
                       <div>
-                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Preferences</h4>
-                          <div className="bg-[#1E293B] rounded-2xl border border-slate-700/50 overflow-hidden divide-y divide-slate-700/30">
-                              <div className="flex items-center gap-3 p-4">
-                                  <div className="p-2 bg-amber-500/10 rounded-lg"><BellRing size={20} className="text-amber-400" /></div>
-                                  <span className="flex-1 text-white font-medium">Notifications</span>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Notifications</h4>
+                          <div className="bg-[#1E293B] rounded-2xl border border-slate-700/50 overflow-hidden">
+                              <button onClick={() => setShowNotifications(true)} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
+                                  <div className="p-2 bg-amber-500/10 rounded-lg relative">
+                                      <BellRing size={20} className="text-amber-400" />
+                                      {recentChanges.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[#1E293B]" />}
+                                  </div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-white font-medium block">Activity Log</span>
+                                      <span className="text-[10px] text-slate-500">Recent changes on tickets & activities</span>
+                                  </div>
+                                  {recentChanges.length > 0 && <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">{recentChanges.length}</span>}
                                   <ChevronRight size={16} className="text-slate-500" />
-                              </div>
-                              <div className="flex items-center gap-3 p-4">
-                                  <div className="p-2 bg-slate-500/10 rounded-lg"><Settings size={20} className="text-slate-400" /></div>
-                                  <span className="flex-1 text-white font-medium">App Settings</span>
-                                  <ChevronRight size={16} className="text-slate-500" />
-                              </div>
+                              </button>
                           </div>
                       </div>
 
@@ -1069,25 +1143,30 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
 
                       {/* Quick Actions */}
-                      <div className="grid grid-cols-4 gap-2">
-                          <button onClick={() => { setMobileModule('planner'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
-                              <Calendar size={20} className="text-indigo-400" />
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Planner</span>
-                          </button>
-                          {onCreateTicket && (
-                              <button onClick={() => setShowCreateTicket(true)} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
-                                  <Plus size={20} className="text-amber-400" />
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase">Ticket</span>
+                      <div>
+                          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Quick Actions</h3>
+                          <div className="grid grid-cols-4 gap-2">
+                              {onAddActivity && (
+                                  <button onClick={() => setShowCreateActivity(true)} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                                      <ActivityIcon size={20} className="text-indigo-400" />
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase leading-tight text-center">Activity</span>
+                                  </button>
+                              )}
+                              {onCreateTicket && (
+                                  <button onClick={() => setShowCreateTicket(true)} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                                      <Plus size={20} className="text-amber-400" />
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase">Ticket</span>
+                                  </button>
+                              )}
+                              <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                                  <BarChart3 size={20} className="text-blue-400" />
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase leading-tight text-center">Export</span>
                               </button>
-                          )}
-                          <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
-                              <BarChart3 size={20} className="text-blue-400" />
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Reports</span>
-                          </button>
-                          <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
-                              <Contact size={20} className="text-purple-400" />
-                              <span className="text-[9px] font-bold text-slate-400 uppercase">Clients</span>
-                          </button>
+                              <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                                  <Contact size={20} className="text-purple-400" />
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase">Clients</span>
+                              </button>
+                          </div>
                       </div>
 
                       {/* Search Bar */}
@@ -1097,7 +1176,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               <input 
                                   value={searchTerm}
                                   onChange={(e) => setSearchTerm(e.target.value)}
-                                  placeholder="Search tickets..."
+                                  placeholder="Search by name, phone, or job ID..."
                                   className="w-full bg-[#1E293B] border border-slate-700/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-500/50 transition-colors"
                               />
                           </div>
@@ -1177,7 +1256,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               )}
 
               {activeTab === 'planner' && (
-                  <div className="h-full w-full">
+                  <div className="h-full w-full bg-slate-50">
                       <PlanningModule 
                           activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
                           onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
@@ -1196,6 +1275,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   return (
     <div className="flex h-[100dvh] bg-[#0F172A] font-sans overflow-hidden" style={{paddingTop: 'env(safe-area-inset-top)', paddingBottom: 0}}>
+        {/* Theme color meta tag for browser chrome matching */}
+        <style dangerouslySetInnerHTML={{__html: `
+            body, html { background-color: #0F172A !important; }
+            @media (display-mode: standalone) { body { background-color: #0F172A !important; } }
+        `}} />
         
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col h-full overflow-hidden relative min-h-0">
@@ -2769,24 +2853,257 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       )}
 
       {/* Create Ticket Modal */}
+      {/* --- Notifications / Activity Log Modal --- */}
+      {showNotifications && (
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowNotifications(false)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+                      <h3 className="font-bold text-lg text-slate-900">Activity Log</h3>
+                      <button onClick={() => setShowNotifications(false)}><X size={20} className="text-slate-400" /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                      {recentChanges.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                              <Bell size={40} className="mb-3 text-slate-300" />
+                              <p className="text-sm">No recent changes</p>
+                          </div>
+                      ) : (
+                          <div className="divide-y divide-slate-100">
+                              {recentChanges.map((change, idx) => {
+                                  const dt = new Date(change.updatedAt);
+                                  const timeAgo = (() => {
+                                      const diff = Date.now() - dt.getTime();
+                                      const mins = Math.floor(diff / 60000);
+                                      if (mins < 1) return 'Just now';
+                                      if (mins < 60) return `${mins}m ago`;
+                                      const hrs = Math.floor(mins / 60);
+                                      if (hrs < 24) return `${hrs}h ago`;
+                                      const days = Math.floor(hrs / 24);
+                                      return `${days}d ago`;
+                                  })();
+                                  return (
+                                      <div key={`${change.kind}-${change.id}-${idx}`} className="px-4 py-3 hover:bg-slate-50">
+                                          <div className="flex items-start gap-3">
+                                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                                                  change.kind === 'ticket' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'
+                                              }`}>
+                                                  {change.kind === 'ticket' ? <ListTodo size={14} /> : <ActivityIcon size={14} />}
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                  <div className="flex items-center gap-2 mb-0.5">
+                                                      <span className="text-sm font-bold text-slate-800 truncate">{change.title}</span>
+                                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${getStatusColor(change.status)}`}>
+                                                          {change.status.replace(/_/g,' ')}
+                                                      </span>
+                                                  </div>
+                                                  {change.subtitle && <p className="text-xs text-slate-500 truncate">{change.subtitle}</p>}
+                                                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                                                      <span>{change.id}</span>
+                                                      <span>•</span>
+                                                      <span>{change.assignedTo}</span>
+                                                      <span>•</span>
+                                                      <span>{timeAgo}</span>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- Create Activity Modal (Quick) --- */}
+      {showCreateActivity && onAddActivity && (
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowCreateActivity(false)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+                      <h3 className="font-bold text-lg text-slate-900">Create Activity</h3>
+                      <button onClick={() => setShowCreateActivity(false)}><X size={20} className="text-slate-400" /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Activity Type *</label>
+                          <select value={createActivityForm.type} onChange={e => setCreateActivityForm(p => ({...p, type: e.target.value}))}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
+                              <option value="">Select Type</option>
+                              <option value="Installation">Installation</option>
+                              <option value="Inspection">Inspection</option>
+                              <option value="Maintenance">Maintenance</option>
+                              <option value="Survey">Survey</option>
+                              <option value="Commissioning">Commissioning</option>
+                              <option value="Support">Support</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Service Category</label>
+                          <select value={createActivityForm.serviceCategory} onChange={e => setCreateActivityForm(p => ({...p, serviceCategory: e.target.value}))}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
+                              <option value="">Select Category</option>
+                              <option value="ELV Systems">ELV Systems</option>
+                              <option value="Home Automation">Home Automation</option>
+                              <option value="CCTV">CCTV</option>
+                              <option value="Wi-Fi & Networking">Wi-Fi & Networking</option>
+                              <option value="Intercom">Intercom</option>
+                              <option value="Cable Pulling">Cable Pulling</option>
+                              <option value="Other">Other</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Customer</label>
+                          <select value={createActivityForm.customerId} onChange={e => setCreateActivityForm(p => ({...p, customerId: e.target.value}))}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
+                              <option value="">Select Customer</option>
+                              {(customers || []).map(c => (
+                                  <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
+                              ))}
+                          </select>
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Planned Date & Time *</label>
+                          <input type="datetime-local" value={createActivityForm.plannedDate}
+                              onChange={e => setCreateActivityForm(p => ({...p, plannedDate: e.target.value}))}
+                              min={new Date().toISOString().slice(0,16)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Priority</label>
+                          <div className="flex gap-2 mt-1">
+                              {['LOW','MEDIUM','HIGH','URGENT'].map(p => (
+                                  <button key={p} type="button" onClick={() => setCreateActivityForm(prev => ({...prev, priority: p}))}
+                                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${createActivityForm.priority === p
+                                          ? p === 'URGENT' ? 'bg-red-500 text-white' : p === 'HIGH' ? 'bg-orange-500 text-white' : p === 'MEDIUM' ? 'bg-slate-900 text-white' : 'bg-slate-600 text-white'
+                                          : 'bg-slate-100 text-slate-500'}`}>
+                                      {p}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Description</label>
+                          <textarea value={createActivityForm.description} onChange={e => setCreateActivityForm(p => ({...p, description: e.target.value}))}
+                              rows={3} placeholder="Scope of work..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Location URL</label>
+                          <input value={createActivityForm.locationUrl} onChange={e => setCreateActivityForm(p => ({...p, locationUrl: e.target.value}))}
+                              placeholder="Google Maps link" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">House / Building No.</label>
+                          <input value={createActivityForm.houseNumber} onChange={e => setCreateActivityForm(p => ({...p, houseNumber: e.target.value}))}
+                              placeholder="e.g. Villa 42" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                      </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+                      <button onClick={() => setShowCreateActivity(false)} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                      <button onClick={() => {
+                          if (!createActivityForm.type || !createActivityForm.plannedDate) {
+                              alert('Please fill Activity Type and Planned Date');
+                              return;
+                          }
+                          const plannedDt = new Date(createActivityForm.plannedDate);
+                          onAddActivity({
+                              type: createActivityForm.type,
+                              serviceCategory: createActivityForm.serviceCategory || undefined,
+                              customerId: createActivityForm.customerId || undefined,
+                              description: createActivityForm.description || undefined,
+                              plannedDate: plannedDt.toISOString(),
+                              priority: createActivityForm.priority,
+                              status: 'PLANNED',
+                              locationUrl: createActivityForm.locationUrl || undefined,
+                              houseNumber: createActivityForm.houseNumber || undefined,
+                              leadTechId: currentUserId,
+                          });
+                          setShowCreateActivity(false);
+                          setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' });
+                      }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Create Activity</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+            {/* Create Ticket Modal — Phone-search-first customer flow */}
       {showCreateTicket && onCreateTicket && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowCreateTicket(false)}>
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}>
           <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-slate-900">Create Ticket</h3>
-              <button onClick={() => setShowCreateTicket(false)}><X size={20} className="text-slate-400" /></button>
+              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}><X size={20} className="text-slate-400" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {/* Step 1: Search customer by phone */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Customer Name *</label>
-                <input value={createTicketForm.customerName} onChange={e => setCreateTicketForm(p => ({...p, customerName: e.target.value}))}
-                  placeholder="e.g. Ahmed Al Thani" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number *</label>
+                <div className="flex gap-2 mt-1">
+                    <input 
+                        value={ticketPhoneSearch} 
+                        onChange={e => {
+                            const val = e.target.value;
+                            setTicketPhoneSearch(val);
+                            setTicketSelectedCustomer(null);
+                            setCreateTicketForm(p => ({...p, phone: val, customerName: ''}));
+                            // Auto-search
+                            if (val.length >= 4) {
+                                const found = (customers || []).find(c => c.phone && c.phone.includes(val));
+                                if (found) {
+                                    setTicketSelectedCustomer(found);
+                                    setCreateTicketForm(p => ({...p, customerName: found.name, phone: found.phone || val}));
+                                }
+                            }
+                        }}
+                        placeholder="Enter phone number to search..."
+                        className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                </div>
+                {/* Search results */}
+                {ticketPhoneSearch.length >= 3 && !ticketSelectedCustomer && (() => {
+                    const matches = (customers || []).filter(c => c.phone && c.phone.includes(ticketPhoneSearch));
+                    return matches.length > 0 ? (
+                        <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
+                            {matches.slice(0, 5).map(c => (
+                                <button key={c.id} onClick={() => {
+                                    setTicketSelectedCustomer(c);
+                                    setTicketPhoneSearch(c.phone || ticketPhoneSearch);
+                                    setCreateTicketForm(p => ({...p, customerName: c.name, phone: c.phone || ticketPhoneSearch}));
+                                }} className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
+                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
+                                    <div>
+                                        <div className="text-sm font-medium text-slate-800">{c.name}</div>
+                                        <div className="text-[10px] text-slate-400">{c.phone}</div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p className="text-xs text-amber-700 font-medium">No customer found with this number</p>
+                            <p className="text-[10px] text-amber-600 mt-0.5">A new customer will be created when you submit the ticket</p>
+                        </div>
+                    );
+                })()}
+                {ticketSelectedCustomer && (
+                    <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
+                        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        <div>
+                            <p className="text-sm font-bold text-emerald-800">{ticketSelectedCustomer.name}</p>
+                            <p className="text-[10px] text-emerald-600">{ticketSelectedCustomer.phone}</p>
+                        </div>
+                        <button onClick={() => { setTicketSelectedCustomer(null); setTicketPhoneSearch(''); setCreateTicketForm(p => ({...p, customerName: '', phone: ''})); }} className="ml-auto text-xs text-slate-400 hover:text-slate-600">Change</button>
+                    </div>
+                )}
               </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Phone *</label>
-                <input value={createTicketForm.phone} onChange={e => setCreateTicketForm(p => ({...p, phone: e.target.value}))}
-                  placeholder="+974 XXXX XXXX" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
-              </div>
+              {/* Customer name — only show if no match found */}
+              {!ticketSelectedCustomer && ticketPhoneSearch.length >= 3 && (
+                  <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Customer Name *</label>
+                      <input value={createTicketForm.customerName} onChange={e => setCreateTicketForm(p => ({...p, customerName: e.target.value}))}
+                          placeholder="e.g. Ahmed Al Thani" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                  </div>
+              )}
               <div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Category *</label>
@@ -2845,31 +3162,39 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               </div>
             </div>
             <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
-              <button onClick={() => setShowCreateTicket(false)} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
               <button onClick={async () => {
-                if (!createTicketForm.customerName.trim() || !createTicketForm.phone.trim() || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
+                const phone = ticketSelectedCustomer?.phone || createTicketForm.phone.trim();
+                const name = ticketSelectedCustomer?.name || createTicketForm.customerName.trim();
+                if (!name || !phone || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
                   alert('Please fill all required fields');
                   return;
                 }
-                // Create customer first
-                const newCust: Customer = {
-                  id: `c${Date.now()}`, name: createTicketForm.customerName.trim(),
-                  phone: createTicketForm.phone.trim(), address: createTicketForm.houseNumber, email: '',
-                  avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(createTicketForm.customerName.trim())}&background=random`
-                };
-                const created = onAddCustomer ? await onAddCustomer(newCust) : null;
-                const custId = created?.id || newCust.id;
-                const custName = created?.name || newCust.name;
+                let custId = ticketSelectedCustomer?.id;
+                let custName = name;
+                // If no existing customer matched, create new
+                if (!ticketSelectedCustomer) {
+                    const newCust: Customer = {
+                        id: `c${Date.now()}`, name: name,
+                        phone: phone, address: createTicketForm.houseNumber, email: '',
+                        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+                    };
+                    const created = onAddCustomer ? await onAddCustomer(newCust) : null;
+                    custId = created?.id || newCust.id;
+                    custName = created?.name || newCust.name;
+                }
 
                 onCreateTicket({
                   customerId: custId, customerName: custName,
-                  phoneNumber: createTicketForm.phone.trim(),
+                  phoneNumber: phone,
                   category: createTicketForm.category, type: createTicketForm.type,
                   priority: createTicketForm.priority,
                   initialMessage: createTicketForm.description.trim(),
                   locationUrl: createTicketForm.locationUrl, houseNumber: createTicketForm.houseNumber
                 });
                 setShowCreateTicket(false);
+                setTicketPhoneSearch('');
+                setTicketSelectedCustomer(null);
                 setCreateTicketForm({ customerName: '', phone: '', category: '', type: '', priority: 'MEDIUM', description: '', locationUrl: '', houseNumber: '' });
               }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Create Ticket</button>
             </div>
