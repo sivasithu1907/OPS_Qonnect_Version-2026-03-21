@@ -4,7 +4,8 @@ import {
   ChevronLeft, Phone, MapPin, Search, Plus, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
   CheckCircle2, History, AlertTriangle, X, UserPlus,
-  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound
+  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound,
+  Home, Settings, ClipboardList, Zap, Lock, BellRing, LayoutGrid, Activity as ActivityIcon, Layers
 } from 'lucide-react';
 import ReportsModule from './ReportsModule';
 import PlanningModule from './PlanningModule';
@@ -38,16 +39,7 @@ interface MobileLeadPortalProps {
   currentUserId?: string; // New: For "My Jobs"
 }
 
-// --- Icons & UI Helpers ---
-const NavButton = ({ active, onClick, icon: Icon, label }: any) => (
-    <button 
-        onClick={onClick}
-        className={`flex flex-col items-center justify-center py-2 flex-1 transition-colors ${active ? 'text-amber-500' : 'text-slate-400 hover:text-slate-600'}`}
-    >
-        <Icon size={24} className={active ? 'fill-amber-500/10' : ''} />
-        <span className="text-[10px] font-bold mt-1 uppercase tracking-wide">{label}</span>
-    </button>
-);
+// --- Nav is inline in the bottom bar ---
 
 // --- Helpers ---
 const formatNextVisit = (isoString: string) => {
@@ -117,8 +109,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   }, [isStandalone]);
 
   // State
-  const [activeTab, setActiveTab] = useState<'live' | 'my_jobs' | 'team' | 'menu'>('live'); 
-  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients'>('none'); 
+  const [activeTab, setActiveTab] = useState<'home' | 'my_jobs' | 'team' | 'planner' | 'more'>('home'); 
+  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients'>('none');
+  const [homeFilter, setHomeFilter] = useState<'all'|'active'|'carry'|'pending'|'progress'>('all'); 
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -168,7 +161,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       if (focusedTicketId) {
           setSelectedTicketId(focusedTicketId);
           setMobileModule('none');
-          setActiveTab('live');
+          setActiveTab('home');
       }
   }, [focusedTicketId]);
 
@@ -255,6 +248,23 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   );
 
   const selectedTicket = tickets.find(t => t.id === selectedTicketId);
+
+  // Dashboard counts
+  const currentTech = technicians.find(t => t.id === currentUserId);
+  const activeJobsCount = visibleTickets.filter(t => [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD, TicketStatus.NEW].includes(t.status)).length;
+  const carryForwardCount = visibleTickets.filter(t => t.status === TicketStatus.CARRY_FORWARD).length;
+  const pendingCount = visibleTickets.filter(t => [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED].includes(t.status)).length;
+  const inProgressCount = visibleTickets.filter(t => t.status === TicketStatus.IN_PROGRESS).length;
+  
+  // Filtered tickets for home dashboard filter
+  const homeFilteredTickets = useMemo(() => {
+      if (homeFilter === 'all') return visibleTickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
+      if (homeFilter === 'active') return visibleTickets.filter(t => [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD, TicketStatus.NEW].includes(t.status));
+      if (homeFilter === 'carry') return visibleTickets.filter(t => t.status === TicketStatus.CARRY_FORWARD);
+      if (homeFilter === 'pending') return visibleTickets.filter(t => [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED].includes(t.status));
+      if (homeFilter === 'progress') return visibleTickets.filter(t => t.status === TicketStatus.IN_PROGRESS);
+      return visibleTickets;
+  }, [visibleTickets, homeFilter]);
 
   // --- Handlers ---
 
@@ -492,7 +502,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       return (
           <div 
             onClick={() => handleTicketCardTap(ticket)}
-            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-3 active:scale-[0.98] transition-transform relative overflow-hidden group"
+            className="bg-[#1E293B] p-4 rounded-xl border border-slate-700/50 mb-3 active:scale-[0.98] transition-transform relative overflow-hidden group"
           >
               {stalled && (
                   <div className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold z-10 flex items-center gap-1">
@@ -505,26 +515,26 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(ticket.status)}`}>
                           {ticket.status.replace('_', ' ')}
                       </span>
-                      <span className="text-xs font-mono text-slate-400">#{ticket.id}</span>
+                      <span className="text-xs font-mono text-slate-500">#{ticket.id}</span>
                   </div>
               </div>
 
-              <h4 className="font-bold text-slate-800 text-sm mb-1">{ticket.customerName}</h4>
+              <h4 className="font-bold text-white text-sm mb-1">{ticket.customerName}</h4>
               
-              <div className="flex items-center gap-1 text-xs text-slate-500">
+              <div className="flex items-center gap-1 text-xs text-slate-400">
                   <MapPin size={12} />
                   <span className="truncate max-w-[200px]">{locationDisplay}</span>
               </div>
 
               {/* Carry Forward indicator */}
               {ticket.carryForwardNote && (
-                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
+                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20">
                       <span className="font-bold">⟲ CF:</span>
                       <span className="truncate">{ticket.carryForwardNote.split('\n')[0]}</span>
                   </div>
               )}
 
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-200 group-hover:text-slate-400 transition-colors">
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 group-hover:text-slate-400 transition-colors">
                   <ChevronRight size={20} />
               </div>
           </div>
@@ -766,7 +776,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const TeamView = () => {
       return (
           <div className="p-4 space-y-3 pb-24">
-              <h3 className="font-bold text-slate-800 text-lg mb-4">Field Team Status</h3>
+              <h3 className="font-bold text-white text-lg mb-4">Field Team Status</h3>
               {technicians.filter(t => t.isActive !== false && [Role.TEAM_LEAD, Role.FIELD_ENGINEER].includes(t.systemRole) && t.status !== 'LEAVE').map(tech => {
                   const { activeCount, pendingCount, progressCount } = getTechJobs(tech.id);
                   
@@ -774,32 +784,32 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       <div 
                         key={tech.id} 
                         onClick={() => setViewTech(tech)}
-                        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer"
+                        className="bg-[#1E293B] p-4 rounded-xl border border-slate-700/50 active:scale-95 transition-transform cursor-pointer"
                       >
                           <div className="flex items-center gap-3 mb-3">
                               <div className="relative">
-                                  <img src={tech.avatar} className="w-12 h-12 rounded-full bg-slate-200 object-cover" alt="" />
-                                  <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${tech.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                                  <img src={tech.avatar} className="w-12 h-12 rounded-full bg-slate-700 object-cover ring-2 ring-amber-500/30" alt="" />
+                                  <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#1E293B] ${tech.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-slate-500'}`} />
                               </div>
                               <div className="flex-1">
-                                  <h4 className="font-bold text-slate-800">{tech.name}</h4>
-                                  <div className="text-xs text-slate-500">{tech.systemRole === Role.TEAM_LEAD ? "Team Lead" : "Field Engineer"}</div>
+                                  <h4 className="font-bold text-white">{tech.name}</h4>
+                                  <div className="text-xs text-slate-400">{tech.systemRole === Role.TEAM_LEAD ? "Team Lead" : "Field Engineer"}</div>
                               </div>
-                              <ChevronRight size={16} className="text-slate-300" />
+                              <ChevronRight size={16} className="text-slate-500" />
                           </div>
                           
                           <div className="flex gap-2">
-                              <div className="flex-1 bg-blue-50 border border-blue-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
-                                  <span className="text-lg font-bold text-blue-700 leading-none">{pendingCount}</span>
-                                  <span className="text-[9px] font-bold text-blue-400 uppercase mt-0.5">Pending</span>
+                              <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-lg py-1.5 px-2 flex flex-col items-center">
+                                  <span className="text-lg font-bold text-blue-400 leading-none">{pendingCount}</span>
+                                  <span className="text-[9px] font-bold text-blue-500/60 uppercase mt-0.5">Pending</span>
                               </div>
-                              <div className="flex-1 bg-amber-50 border border-amber-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
-                                  <span className="text-lg font-bold text-amber-700 leading-none">{progressCount}</span>
-                                  <span className="text-[9px] font-bold text-amber-400 uppercase mt-0.5">In Prog</span>
+                              <div className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded-lg py-1.5 px-2 flex flex-col items-center">
+                                  <span className="text-lg font-bold text-amber-400 leading-none">{progressCount}</span>
+                                  <span className="text-[9px] font-bold text-amber-500/60 uppercase mt-0.5">In Prog</span>
                               </div>
-                              <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
-                                  <span className="text-lg font-bold text-slate-700 leading-none">{activeCount}</span>
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Total</span>
+                              <div className="flex-1 bg-slate-500/10 border border-slate-600/30 rounded-lg py-1.5 px-2 flex flex-col items-center">
+                                  <span className="text-lg font-bold text-slate-300 leading-none">{activeCount}</span>
+                                  <span className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Total</span>
                               </div>
                           </div>
                       </div>
@@ -915,48 +925,90 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           );
       }
 
-      // 2. Mobile Menu (Overlay)
-      if (activeTab === 'menu') {
+      // 2. More Menu Tab
+      if (activeTab === 'more') {
           return (
-              <div className="h-full bg-slate-100 p-4 grid grid-cols-2 gap-4 content-start pt-8 overflow-y-auto">
-                  <button onClick={() => { setMobileModule('planner'); setActiveTab('live'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><Calendar size={32}/></div>
-                      <span className="font-bold text-slate-800">Planner</span>
-                  </button>
-                  <button onClick={() => { setMobileModule('none'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><TrendingUp size={32}/></div>
-                      <span className="font-bold text-slate-800">Metrics</span>
-                  </button>
-                  <button onClick={() => { setMobileModule('reports'); setActiveTab('live'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-blue-100 text-blue-600 rounded-xl"><BarChart3 size={32}/></div>
-                      <span className="font-bold text-slate-800">Reports</span>
-                  </button>
-                  <button onClick={() => { setMobileModule('clients'); setActiveTab('live'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-purple-100 text-purple-600 rounded-xl"><Contact size={32}/></div>
-                      <span className="font-bold text-slate-800">Clients</span>
-                  </button>
-                  
-                  <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="col-span-2 bg-slate-800 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
-                      <KeyRound size={20}/> Change Password
-                  </button>
-		  {onLogout && (
-		    <button onClick={onLogout} className="col-span-2 bg-slate-200 text-slate-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2">
-		        <LogOut size={20}/> Logout
-		    </button>
-		)}
+              <div className="h-full overflow-y-auto pb-24">
+                  <div className="p-4 space-y-6">
+                      {/* Profile Card */}
+                      <div className="bg-[#1E293B] rounded-2xl p-5 border border-slate-700/50">
+                          <div className="flex items-center gap-4">
+                              <div className="relative">
+                                  <img src={currentTech?.avatar || `https://ui-avatars.com/api/?name=TL&background=f59e0b&color=fff`} className="w-16 h-16 rounded-full object-cover ring-2 ring-amber-500/40" alt="" />
+                                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#1E293B]" />
+                              </div>
+                              <div>
+                                  <h3 className="text-white font-bold text-lg">{currentTech?.name || 'Team Lead'}</h3>
+                                  <p className="text-slate-400 text-sm">Team Lead</p>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Operations Section */}
+                      <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Operations</h4>
+                          <div className="bg-[#1E293B] rounded-2xl border border-slate-700/50 overflow-hidden divide-y divide-slate-700/30">
+                              <button onClick={() => { setMobileModule('reports'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
+                                  <div className="p-2 bg-blue-500/10 rounded-lg"><BarChart3 size={20} className="text-blue-400" /></div>
+                                  <span className="flex-1 text-left text-white font-medium">Reports</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              <button onClick={() => { setMobileModule('clients'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
+                                  <div className="p-2 bg-purple-500/10 rounded-lg"><Contact size={20} className="text-purple-400" /></div>
+                                  <span className="flex-1 text-left text-white font-medium">Clients</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Preferences Section */}
+                      <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Preferences</h4>
+                          <div className="bg-[#1E293B] rounded-2xl border border-slate-700/50 overflow-hidden divide-y divide-slate-700/30">
+                              <div className="flex items-center gap-3 p-4">
+                                  <div className="p-2 bg-amber-500/10 rounded-lg"><BellRing size={20} className="text-amber-400" /></div>
+                                  <span className="flex-1 text-white font-medium">Notifications</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </div>
+                              <div className="flex items-center gap-3 p-4">
+                                  <div className="p-2 bg-slate-500/10 rounded-lg"><Settings size={20} className="text-slate-400" /></div>
+                                  <span className="flex-1 text-white font-medium">App Settings</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Account Section */}
+                      <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Account</h4>
+                          <div className="bg-[#1E293B] rounded-2xl border border-slate-700/50 overflow-hidden divide-y divide-slate-700/30">
+                              <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-700/30 transition-colors">
+                                  <div className="p-2 bg-slate-500/10 rounded-lg"><Lock size={20} className="text-slate-400" /></div>
+                                  <span className="flex-1 text-left text-white font-medium">Password & Security</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              {onLogout && (
+                                  <button onClick={onLogout} className="w-full flex items-center gap-3 p-4 active:bg-red-500/10 transition-colors">
+                                      <div className="p-2 bg-red-500/10 rounded-lg"><LogOut size={20} className="text-red-400" /></div>
+                                      <span className="flex-1 text-left text-red-400 font-medium">Logout</span>
+                                  </button>
+                              )}
+                          </div>
+                      </div>
+                  </div>
               </div>
           );
       }
 
-      // 3. Full Screen Modules
+      // 3. Full Screen Modules (Reports & Clients only — Planner is now a direct tab)
       if (mobileModule !== 'none') {
           return (
-              <div className="h-full flex flex-col bg-slate-50">
-                  <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-3 shrink-0">
-                      <button onClick={() => setMobileModule('none')} className="p-1 rounded-full hover:bg-slate-100">
-                          <ChevronLeft size={24} className="text-slate-600"/>
+              <div className="h-full flex flex-col bg-[#0F172A]">
+                  <div className="bg-[#1E293B] border-b border-slate-700/50 p-4 flex items-center gap-3 shrink-0">
+                      <button onClick={() => setMobileModule('none')} className="p-1 rounded-full hover:bg-slate-700/50">
+                          <ChevronLeft size={24} className="text-slate-300"/>
                       </button>
-                      <h2 className="font-bold text-lg text-slate-900 capitalize">
+                      <h2 className="font-bold text-lg text-white capitalize">
                           {mobileModule}
                       </h2>
                   </div>
@@ -993,41 +1045,72 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
       // 4. Default Dashboard Tabs
       return (
-          <div className="h-full overflow-y-auto custom-scrollbar pb-24">
-              {activeTab === 'live' && (
-                  <div className="p-4 space-y-6">
+          <div className="h-full overflow-y-auto custom-scrollbar pb-24 bg-[#0F172A]">
+              {activeTab === 'home' && (
+                  <div className="p-4 space-y-5">
+                      {/* Dashboard Status Cards */}
+                      <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => setHomeFilter(homeFilter === 'active' ? 'all' : 'active')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'active' ? 'bg-amber-500/20 border-amber-500/40' : 'bg-[#1E293B] border-slate-700/50'}`}>
+                              <div className="text-2xl font-bold text-white">{activeJobsCount}</div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">Active Jobs</div>
+                          </button>
+                          <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'carry' ? 'bg-orange-500/20 border-orange-500/40' : 'bg-[#1E293B] border-slate-700/50'}`}>
+                              <div className="text-2xl font-bold text-orange-400">{carryForwardCount}</div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">Carry Forward</div>
+                          </button>
+                          <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'pending' ? 'bg-blue-500/20 border-blue-500/40' : 'bg-[#1E293B] border-slate-700/50'}`}>
+                              <div className="text-2xl font-bold text-blue-400">{pendingCount}</div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">Pending</div>
+                          </button>
+                          <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'progress' ? 'bg-emerald-500/20 border-emerald-500/40' : 'bg-[#1E293B] border-slate-700/50'}`}>
+                              <div className="text-2xl font-bold text-emerald-400">{inProgressCount}</div>
+                              <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">In Progress</div>
+                          </button>
+                      </div>
+
+                      {/* Quick Actions */}
+                      <div className="grid grid-cols-4 gap-2">
+                          <button onClick={() => { setMobileModule('planner'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                              <Calendar size={20} className="text-indigo-400" />
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Planner</span>
+                          </button>
+                          {onCreateTicket && (
+                              <button onClick={() => setShowCreateTicket(true)} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                                  <Plus size={20} className="text-amber-400" />
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase">Ticket</span>
+                              </button>
+                          )}
+                          <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                              <BarChart3 size={20} className="text-blue-400" />
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Reports</span>
+                          </button>
+                          <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-[#1E293B] rounded-xl border border-slate-700/50 active:scale-95 transition-transform">
+                              <Contact size={20} className="text-purple-400" />
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Clients</span>
+                          </button>
+                      </div>
+
+                      {/* Search Bar */}
                       <div className="flex gap-2">
                           <div className="relative flex-1">
-                              <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                              <Search size={16} className="absolute left-3 top-3 text-slate-500"/>
                               <input 
                                   value={searchTerm}
                                   onChange={(e) => setSearchTerm(e.target.value)}
                                   placeholder="Search tickets..."
-                                  className={SEARCH_INPUT_STYLES}
+                                  className="w-full bg-[#1E293B] border border-slate-700/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-amber-500/50 transition-colors"
                               />
                           </div>
-                          {onCreateTicket && (
-                              <button 
-                                  onClick={() => setShowCreateTicket(true)}
-                                  className="bg-slate-900 text-white px-3 rounded-xl flex items-center gap-1 text-xs font-bold shrink-0"
-                              >
-                                  <Plus size={14} /> Ticket
-                              </button>
-                          )}
                       </div>
-                      {newTickets.length > 0 && (
-                          <div>
-                              <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 px-1 flex items-center justify-between">
-                                  New Arrivals
-                                  <span className="bg-emerald-100 text-emerald-700 px-2 rounded-full">{newTickets.length}</span>
-                              </h3>
-                              {newTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
-                          </div>
-                      )}
+
+                      {/* Live Feed */}
                       <div>
-                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 px-1">ACTIVE OPERATIONS ({activeOps.length})</h3>
-                          {activeOps.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No active operations</p>}
-                          {activeOps.map(t => <TicketCard key={t.id} ticket={t} />)}
+                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-3 px-1 flex items-center justify-between">
+                              {homeFilter === 'all' ? 'Live Feed' : homeFilter === 'active' ? 'Active Jobs' : homeFilter === 'carry' ? 'Carry Forwards' : homeFilter === 'pending' ? 'Pending Jobs' : 'In Progress'}
+                              <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-[10px]">{homeFilteredTickets.length}</span>
+                          </h3>
+                          {homeFilteredTickets.length === 0 && <p className="text-center text-slate-500 text-sm py-8">No tickets found</p>}
+                          {homeFilteredTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
                       </div>
                   </div>
               )}
@@ -1040,7 +1123,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           </h3>
                           <button
                               onClick={() => setShowJobHistory(s => !s)}
-                              className={`text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${showJobHistory ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'}`}
+                              className={`text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${showJobHistory ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300'}`}
                           >
                               {showJobHistory ? '← Active' : 'History'}
                           </button>
@@ -1048,7 +1131,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                       {/* Active jobs */}
                       {!showJobHistory && myJobs.length === 0 && (
-                          <p className="text-center text-slate-400 text-sm py-8">No active jobs assigned to you</p>
+                          <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+                              <Briefcase size={48} className="text-slate-600 mb-3" />
+                              <p className="text-sm font-medium">No active jobs assigned to you</p>
+                              <p className="text-xs text-slate-600 mt-1">Jobs will appear here when dispatched</p>
+                          </div>
                       )}
                       {!showJobHistory && myJobs.map(item => {
                           if (item.kind === 'ticket') return <JobCard key={item.data.id} ticket={item.data} />;
@@ -1057,7 +1144,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                       {/* History — completed & cancelled jobs */}
                       {showJobHistory && completedJobs.length === 0 && (
-                          <p className="text-center text-slate-400 text-sm py-8">No completed jobs yet</p>
+                          <p className="text-center text-slate-500 text-sm py-8">No completed jobs yet</p>
                       )}
                       {showJobHistory && completedJobs.map(item => {
                           const isAct = item.kind === 'activity';
@@ -1071,21 +1158,32 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   onClick={() => isAct
                                       ? setViewJob({ type: 'activity', data: job })
                                       : setViewTicket(job)}
-                                  className="bg-white rounded-xl border border-slate-200 p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
+                                  className="bg-[#1E293B] rounded-xl border border-slate-700/50 p-4 mb-3 cursor-pointer hover:bg-slate-700/30 active:scale-[0.99] transition-transform">
                                   <div className="flex justify-between items-start mb-1">
                                       <div>
-                                          <div className="text-[10px] font-bold text-slate-400 mb-0.5">{job.reference || job.id}</div>
-                                          <span className="font-bold text-slate-800">{label}</span>
+                                          <div className="text-[10px] font-bold text-slate-500 mb-0.5">{job.reference || job.id}</div>
+                                          <span className="font-bold text-white">{label}</span>
                                       </div>
                                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${statusVal === 'RESOLVED' || statusVal === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
                                           {statusVal.replace(/_/g,' ')}
                                       </span>
                                   </div>
-                                  {sub && <div className="text-xs text-slate-500 mb-1">{sub}</div>}
-                                  <div className="text-xs text-slate-400">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                                  {sub && <div className="text-xs text-slate-400 mb-1">{sub}</div>}
+                                  <div className="text-xs text-slate-500">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
                               </div>
                           );
                       })}
+                  </div>
+              )}
+
+              {activeTab === 'planner' && (
+                  <div className="h-full w-full">
+                      <PlanningModule 
+                          activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
+                          onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
+                          isMobile={true}
+                          currentUserId={currentUserId}
+                      />
                   </div>
               )}
 
@@ -1097,46 +1195,76 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Portal always renders — fullscreen bypass handles device routing
 
   return (
-    <div className="flex h-[100dvh] bg-slate-100 font-sans overflow-hidden" style={{paddingTop: 'env(safe-area-inset-top)', paddingBottom: 0}}>
+    <div className="flex h-[100dvh] bg-[#0F172A] font-sans overflow-hidden" style={{paddingTop: 'env(safe-area-inset-top)', paddingBottom: 0}}>
         
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col h-full overflow-hidden relative min-h-0">
             
             {/* MOBILE HEADER — always visible */}
-            {!selectedTicketId && (
-                <div className="bg-slate-900 text-white p-4 flex items-center justify-between shrink-0 shadow-md z-30 rounded-b-2xl">
+            {!selectedTicketId && mobileModule === 'none' && (
+                <div className="bg-[#0F172A] text-white px-4 pt-4 pb-3 flex items-center justify-between shrink-0 z-30">
                     <div>
-                        <h2 className="font-bold text-lg leading-none">Team Lead Portal</h2>
-                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
-                            {mobileModule !== 'none' ? mobileModule.toUpperCase() : activeTab === 'menu' ? 'MENU' : 'LIVE FEED'}
+                        <h2 className="font-bold text-lg leading-none">
+                            {activeTab === 'home' ? 'Dashboard' : activeTab === 'my_jobs' ? 'My Jobs' : activeTab === 'team' ? 'Field Team' : activeTab === 'planner' ? 'Planner' : 'More'}
+                        </h2>
+                        <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wide">
+                            Team Lead Portal
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => setActiveTab('live')}
-                            className="relative p-1 rounded-full hover:bg-slate-700 transition-colors"
-                            title={stalledCount > 0 ? `${stalledCount} stalled ticket(s) — click to view` : 'Live feed'}
+                            onClick={() => setActiveTab('home')}
+                            className="relative p-1.5 rounded-full hover:bg-slate-800 transition-colors"
+                            title={stalledCount > 0 ? `${stalledCount} stalled ticket(s) — click to view` : 'Dashboard'}
                         >
-                            <Bell size={20} className={stalledCount > 0 ? 'text-red-400' : 'text-slate-400'} />
-                            {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-slate-900" />}
+                            <Bell size={20} className={stalledCount > 0 ? 'text-red-400' : 'text-slate-500'} />
+                            {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-[#0F172A]" />}
                         </button>
-                        <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs shadow-inner border border-slate-800">TL</div>
+                        <div className="w-9 h-9 rounded-full bg-amber-500/20 ring-2 ring-amber-500/40 flex items-center justify-center overflow-hidden">
+                            {currentTech?.avatar ? (
+                                <img src={currentTech.avatar} className="w-full h-full object-cover" alt="" />
+                            ) : (
+                                <span className="font-bold text-xs text-amber-400">TL</span>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
 
             {/* CONTENT BODY */}
-            <div className="flex-1 overflow-hidden relative bg-slate-100 min-h-0">
+            <div className="flex-1 overflow-hidden relative bg-[#0F172A] min-h-0">
                 {renderMobileContent()}
             </div>
 
-            {/* Mobile Bottom Navigation */}
+            {/* Mobile Bottom Navigation — 5 Tabs */}
             {!selectedTicketId && mobileModule === 'none' && (
-                <div className="bg-white border-t border-slate-200 flex justify-between px-2 z-30 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"}}>
-                    <NavButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={ListTodo} label="Live Feed" />
-                    <NavButton active={activeTab === 'my_jobs'} onClick={() => setActiveTab('my_jobs')} icon={Briefcase} label="My Jobs" />
-                    <NavButton active={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={Users} label="Field Team" />
-                    <NavButton active={activeTab === 'menu'} onClick={() => setActiveTab('menu')} icon={Grid} label="More" />
+                <div className="bg-[#1E293B]/95 backdrop-blur-xl border-t border-slate-700/50 flex justify-between px-1 z-30 shrink-0" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"}}>
+                    {[
+                        { key: 'home' as const, icon: Home, label: 'Home' },
+                        { key: 'my_jobs' as const, icon: Briefcase, label: 'My Jobs' },
+                        { key: 'team' as const, icon: Users, label: 'Team' },
+                        { key: 'planner' as const, icon: Calendar, label: 'Planner' },
+                        { key: 'more' as const, icon: Grid, label: 'More' },
+                    ].map(tab => {
+                        const isActive = activeTab === tab.key;
+                        const Icon = tab.icon;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`flex flex-col items-center justify-center py-2 flex-1 transition-all relative ${isActive ? 'text-amber-400' : 'text-slate-500'}`}
+                            >
+                                {isActive && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-amber-400 rounded-full" />}
+                                <div className="relative">
+                                    <Icon size={22} />
+                                    {tab.key === 'my_jobs' && myJobs.length > 0 && (
+                                        <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 bg-amber-500 text-[9px] text-slate-900 font-bold rounded-full flex items-center justify-center px-1">{myJobs.length}</span>
+                                    )}
+                                </div>
+                                <span className="text-[9px] font-bold mt-1 uppercase tracking-wide">{tab.label}</span>
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 
