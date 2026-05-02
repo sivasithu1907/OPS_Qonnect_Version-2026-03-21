@@ -1143,6 +1143,20 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       }
 
       // 4. Default Dashboard Tabs
+      // Planner needs full height (has its own scroll), others need scroll wrapper
+      if (activeTab === 'planner') {
+          return (
+              <div className="h-full w-full bg-slate-50 pb-20">
+                  <PlanningModule 
+                      activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
+                      onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
+                      isMobile={true}
+                      currentUserId={currentUserId}
+                  />
+              </div>
+          );
+      }
+
       return (
           <div className="h-full overflow-y-auto custom-scrollbar pb-24">
               {activeTab === 'home' && (
@@ -1280,17 +1294,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   </div>
               )}
 
-              {activeTab === 'planner' && (
-                  <div className="h-full w-full bg-slate-50">
-                      <PlanningModule 
-                          activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
-                          onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
-                          isMobile={true}
-                          currentUserId={currentUserId}
-                      />
-                  </div>
-              )}
-
               {activeTab === 'team' && <TeamView />}
           </div>
       );
@@ -1345,35 +1348,48 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {renderMobileContent()}
             </div>
 
-            {/* Mobile Bottom Navigation — 5 Tabs */}
+            {/* Mobile Bottom Navigation — Floating Pill */}
             {!selectedTicketId && mobileModule === 'none' && (
-                <div className="bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-between px-1 z-30 shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.05)]" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"}}>
-                    {[
-                        { key: 'home' as const, icon: Home, label: 'Home' },
-                        { key: 'my_jobs' as const, icon: Briefcase, label: 'My Jobs' },
-                        { key: 'team' as const, icon: Users, label: 'Team' },
-                        { key: 'planner' as const, icon: Calendar, label: 'Planner' },
-                        { key: 'more' as const, icon: Grid, label: 'More' },
-                    ].map(tab => {
-                        const isActive = activeTab === tab.key;
-                        const Icon = tab.icon;
-                        return (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveTab(tab.key)}
-                                className={`flex flex-col items-center justify-center py-2 flex-1 transition-all relative ${isActive ? 'text-amber-600' : 'text-slate-400'}`}
-                            >
-                                {isActive && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-amber-500 rounded-full" />}
-                                <div className="relative">
-                                    <Icon size={22} />
-                                    {tab.key === 'my_jobs' && myJobs.length > 0 && (
-                                        <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 bg-amber-500 text-[9px] text-white font-bold rounded-full flex items-center justify-center px-1">{myJobs.length}</span>
-                                    )}
-                                </div>
-                                <span className="text-[9px] font-bold mt-1 uppercase tracking-wide">{tab.label}</span>
-                            </button>
-                        );
-                    })}
+                <div className="absolute bottom-0 left-0 right-0 z-30 px-3" style={{paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))"}}>
+                    <div 
+                        className="bg-white/90 backdrop-blur-2xl rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-200/60 flex justify-between px-2 py-1.5"
+                        onTouchStart={(e) => { (e.currentTarget as any)._touchX = e.touches[0].clientX; }}
+                        onTouchEnd={(e) => {
+                            const startX = (e.currentTarget as any)._touchX;
+                            if (!startX) return;
+                            const diff = e.changedTouches[0].clientX - startX;
+                            const tabs: Array<'home'|'my_jobs'|'team'|'planner'|'more'> = ['home','my_jobs','team','planner','more'];
+                            const idx = tabs.indexOf(activeTab);
+                            if (diff < -60 && idx < tabs.length - 1) setActiveTab(tabs[idx + 1]);
+                            if (diff > 60 && idx > 0) setActiveTab(tabs[idx - 1]);
+                        }}
+                    >
+                        {[
+                            { key: 'home' as const, icon: Home, label: 'Home' },
+                            { key: 'my_jobs' as const, icon: Briefcase, label: 'My Jobs' },
+                            { key: 'team' as const, icon: Users, label: 'Team' },
+                            { key: 'planner' as const, icon: Calendar, label: 'Planner' },
+                            { key: 'more' as const, icon: Grid, label: 'More' },
+                        ].map(tab => {
+                            const isActive = activeTab === tab.key;
+                            const Icon = tab.icon;
+                            return (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    className={`flex flex-col items-center justify-center py-1.5 flex-1 rounded-xl transition-all duration-200 relative ${isActive ? 'bg-slate-900 text-white scale-105' : 'text-slate-400 active:scale-95'}`}
+                                >
+                                    <div className="relative">
+                                        <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                                        {tab.key === 'my_jobs' && myJobs.length > 0 && (
+                                            <span className={`absolute -top-1.5 -right-2.5 min-w-[16px] h-4 ${isActive ? 'bg-amber-400 text-slate-900' : 'bg-amber-500 text-white'} text-[9px] font-bold rounded-full flex items-center justify-center px-1`}>{myJobs.length}</span>
+                                        )}
+                                    </div>
+                                    <span className={`text-[8px] font-bold mt-0.5 uppercase tracking-wide ${isActive ? 'text-white' : 'text-slate-400'}`}>{tab.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 
