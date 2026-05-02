@@ -979,7 +979,70 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           );
       }
 
-      // 2. More Menu Tab
+      // 2. Full Screen Modules — must check BEFORE activeTab so modules open from any tab
+      // (Tickets, Reports, Clients open from More tab; Planner kept for legacy)
+      if (mobileModule !== 'none') {
+          return (
+              <div className="h-full flex flex-col bg-slate-50">
+                  <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-3 shrink-0 shadow-sm">
+                      <button onClick={() => setMobileModule('none')} className="p-1 rounded-full hover:bg-slate-100">
+                          <ChevronLeft size={24} className="text-slate-600"/>
+                      </button>
+                      <h2 className="font-bold text-lg text-slate-900 capitalize">
+                          {mobileModule}
+                      </h2>
+                  </div>
+                  
+                  <div className="flex-1 overflow-hidden relative">
+                      {mobileModule === 'planner' && (
+                          <div className="h-full w-full bg-slate-50">
+                              <PlanningModule 
+                                  activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
+                                  onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
+                                  isMobile={true}
+                                  currentUserId={currentUserId}
+                              />
+                          </div>
+                      )}
+                      {mobileModule === 'tickets' && (
+                          <div className="h-full overflow-y-auto bg-white">
+                              <div className="p-4">
+                                  <div className="relative mb-4">
+                                      <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                                      <input 
+                                          value={searchTerm}
+                                          onChange={(e) => setSearchTerm(e.target.value)}
+                                          placeholder="Search by name, phone, or job ID..."
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-amber-400"
+                                      />
+                                  </div>
+                                  <div className="space-y-2">
+                                      {visibleTickets.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No tickets found</p>}
+                                      {visibleTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+                      {mobileModule === 'reports' && (
+                          <div className="h-full overflow-y-auto bg-white">
+                              <ReportsModule tickets={tickets} activities={activities} technicians={technicians} sites={sites} />
+                          </div>
+                      )}
+                      {mobileModule === 'clients' && (
+                          <div className="h-full overflow-y-auto bg-white">
+                              <CustomerRecords 
+                                  customers={customers} activities={activities} tickets={tickets} technicians={technicians} sites={sites}
+                                  onSaveCustomer={onSaveCustomer!} onDeleteCustomer={onDeleteCustomer!} readOnly={true}
+                                  isMobile={true}
+                              />
+                          </div>
+                      )}
+                  </div>
+              </div>
+          );
+      }
+
+      // 3. More Menu Tab
       if (activeTab === 'more') {
           return (
               <div className="h-full overflow-y-auto pb-24">
@@ -1079,68 +1142,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           );
       }
 
-      // 3. Full Screen Modules (Reports & Clients only — Planner is now a direct tab)
-      if (mobileModule !== 'none') {
-          return (
-              <div className="h-full flex flex-col bg-slate-50">
-                  <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-3 shrink-0 shadow-sm">
-                      <button onClick={() => setMobileModule('none')} className="p-1 rounded-full hover:bg-slate-100">
-                          <ChevronLeft size={24} className="text-slate-600"/>
-                      </button>
-                      <h2 className="font-bold text-lg text-slate-900 capitalize">
-                          {mobileModule}
-                      </h2>
-                  </div>
-                  
-                  <div className="flex-1 overflow-hidden relative">
-                      {mobileModule === 'planner' && (
-                          <div className="h-full w-full bg-slate-50">
-                              <PlanningModule 
-                                  activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
-                                  onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
-                                  isMobile={true}
-                                  currentUserId={currentUserId}
-                              />
-                          </div>
-                      )}
-                      {mobileModule === 'tickets' && (
-                          <div className="h-full overflow-y-auto bg-white">
-                              <div className="p-4">
-                                  <div className="relative mb-4">
-                                      <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
-                                      <input 
-                                          value={searchTerm}
-                                          onChange={(e) => setSearchTerm(e.target.value)}
-                                          placeholder="Search by name, phone, or job ID..."
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-amber-400"
-                                      />
-                                  </div>
-                                  <div className="space-y-2">
-                                      {visibleTickets.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No tickets found</p>}
-                                      {visibleTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
-                                  </div>
-                              </div>
-                          </div>
-                      )}
-                      {mobileModule === 'reports' && (
-                          <div className="h-full overflow-y-auto bg-white">
-                              <ReportsModule tickets={tickets} activities={activities} technicians={technicians} sites={sites} />
-                          </div>
-                      )}
-                      {mobileModule === 'clients' && (
-                          <div className="h-full overflow-y-auto bg-white">
-                              <CustomerRecords 
-                                  customers={customers} activities={activities} tickets={tickets} technicians={technicians} sites={sites}
-                                  onSaveCustomer={onSaveCustomer!} onDeleteCustomer={onDeleteCustomer!} readOnly={true}
-                                  isMobile={true}
-                              />
-                          </div>
-                      )}
-                  </div>
-              </div>
-          );
-      }
-
       // 4. Default Dashboard Tabs
       return (
           <div className="h-full overflow-y-auto custom-scrollbar pb-24">
@@ -1171,7 +1172,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Quick Actions</h3>
                           <div className="grid grid-cols-4 gap-2">
                               {onAddActivity && (
-                                  <button onClick={() => setShowCreateActivity(true)} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
+                                  <button onClick={() => setActiveTab('planner')} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                       <ActivityIcon size={20} className="text-indigo-400" />
                                       <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Activity</span>
                                   </button>
