@@ -4,7 +4,8 @@ import {
   ChevronLeft, Phone, MapPin, Search, Plus, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
   CheckCircle2, History, AlertTriangle, X, UserPlus,
-  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound
+  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound,
+  Home, Settings, ClipboardList, Zap, Lock, BellRing, LayoutGrid, Activity as ActivityIcon, Layers
 } from 'lucide-react';
 import ReportsModule from './ReportsModule';
 import PlanningModule from './PlanningModule';
@@ -38,16 +39,7 @@ interface MobileLeadPortalProps {
   currentUserId?: string; // New: For "My Jobs"
 }
 
-// --- Icons & UI Helpers ---
-const NavButton = ({ active, onClick, icon: Icon, label }: any) => (
-    <button 
-        onClick={onClick}
-        className={`flex flex-col items-center justify-center py-2 flex-1 transition-colors ${active ? 'text-amber-500' : 'text-slate-400 hover:text-slate-600'}`}
-    >
-        <Icon size={24} className={active ? 'fill-amber-500/10' : ''} />
-        <span className="text-[10px] font-bold mt-1 uppercase tracking-wide">{label}</span>
-    </button>
-);
+// --- Nav is inline in the bottom bar ---
 
 // --- Helpers ---
 const formatNextVisit = (isoString: string) => {
@@ -117,8 +109,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   }, [isStandalone]);
 
   // State
-  const [activeTab, setActiveTab] = useState<'live' | 'my_jobs' | 'team' | 'menu'>('live'); 
-  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients'>('none'); 
+  const [activeTab, setActiveTab] = useState<'home' | 'my_jobs' | 'team' | 'planner' | 'more'>('home'); 
+  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients' | 'tickets'>('none');
+  const [homeFilter, setHomeFilter] = useState<'all'|'active'|'carry'|'pending'|'progress'>('all'); 
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -163,12 +156,31 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Temp Picker Values
   const [tempDatetime, setTempDatetime] = useState(''); // YYYY-MM-DDTHH:mm for datetime-local
 
+  // Notifications / Activity Log
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Create Activity customer search
+  const [actCustSearch, setActCustSearch] = useState('');
+  const [actSelectedCustomer, setActSelectedCustomer] = useState<Customer | null>(null);
+  const [actServiceCats, setActServiceCats] = useState<string[]>([]);
+
+  // Create Activity (quick)
+  const [showCreateActivity, setShowCreateActivity] = useState(false);
+  const [createActivityForm, setCreateActivityForm] = useState({
+      type: '', serviceCategory: '', customerId: '', description: '',
+      plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: ''
+  });
+
+  // Create Ticket — customer phone search
+  const [ticketPhoneSearch, setTicketPhoneSearch] = useState('');
+  const [ticketSelectedCustomer, setTicketSelectedCustomer] = useState<Customer | null>(null);
+
   // Initialize focused ticket
   useEffect(() => {
       if (focusedTicketId) {
           setSelectedTicketId(focusedTicketId);
           setMobileModule('none');
-          setActiveTab('live');
+          setActiveTab('home');
       }
   }, [focusedTicketId]);
 
@@ -255,6 +267,58 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   );
 
   const selectedTicket = tickets.find(t => t.id === selectedTicketId);
+
+  // Recent changes feed — combines ticket + activity updates, sorted by updatedAt
+  const recentChanges = useMemo(() => {
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const cutoff = now - (7 * dayMs); // last 7 days
+
+      const ticketChanges = tickets
+          .filter(t => new Date(t.updatedAt).getTime() > cutoff)
+          .map(t => ({
+              id: t.id,
+              kind: 'ticket' as const,
+              title: t.customerName || t.id,
+              subtitle: t.category,
+              status: t.status,
+              updatedAt: t.updatedAt,
+              assignedTo: technicians.find(te => te.id === t.assignedTechId)?.name || 'Unassigned'
+          }));
+
+      const actChanges = (activities || [])
+          .filter(a => new Date(a.updatedAt || a.createdAt).getTime() > cutoff)
+          .map(a => ({
+              id: (a as any).reference || a.id,
+              kind: 'activity' as const,
+              title: (a as any).type || 'Activity',
+              subtitle: (a as any).serviceCategory || '',
+              status: (a as any).status || 'PLANNED',
+              updatedAt: a.updatedAt || a.createdAt,
+              assignedTo: technicians.find(te => te.id === (a as any).leadTechId)?.name || 'Unassigned'
+          }));
+
+      return [...ticketChanges, ...actChanges]
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+          .slice(0, 50);
+  }, [tickets, activities, technicians]);
+
+  // Dashboard counts
+  const currentTech = technicians.find(t => t.id === currentUserId);
+  const activeJobsCount = visibleTickets.filter(t => [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD, TicketStatus.NEW].includes(t.status)).length;
+  const carryForwardCount = visibleTickets.filter(t => t.status === TicketStatus.CARRY_FORWARD).length;
+  const pendingCount = visibleTickets.filter(t => [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED].includes(t.status)).length;
+  const inProgressCount = visibleTickets.filter(t => t.status === TicketStatus.IN_PROGRESS).length;
+  
+  // Filtered tickets for home dashboard filter
+  const homeFilteredTickets = useMemo(() => {
+      if (homeFilter === 'all') return visibleTickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
+      if (homeFilter === 'active') return visibleTickets.filter(t => [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD, TicketStatus.NEW].includes(t.status));
+      if (homeFilter === 'carry') return visibleTickets.filter(t => t.status === TicketStatus.CARRY_FORWARD);
+      if (homeFilter === 'pending') return visibleTickets.filter(t => [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED].includes(t.status));
+      if (homeFilter === 'progress') return visibleTickets.filter(t => t.status === TicketStatus.IN_PROGRESS);
+      return visibleTickets;
+  }, [visibleTickets, homeFilter]);
 
   // --- Handlers ---
 
@@ -505,7 +569,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(ticket.status)}`}>
                           {ticket.status.replace('_', ' ')}
                       </span>
-                      <span className="text-xs font-mono text-slate-400">#{ticket.id}</span>
+                      <span className="text-xs font-mono text-slate-500">#{ticket.id}</span>
                   </div>
               </div>
 
@@ -778,12 +842,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       >
                           <div className="flex items-center gap-3 mb-3">
                               <div className="relative">
-                                  <img src={tech.avatar} className="w-12 h-12 rounded-full bg-slate-200 object-cover" alt="" />
+                                  <img src={tech.avatar} className="w-12 h-12 rounded-full bg-slate-200 object-cover ring-2 ring-amber-400/30" alt="" />
                                   <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${tech.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                               </div>
                               <div className="flex-1">
                                   <h4 className="font-bold text-slate-800">{tech.name}</h4>
-                                  <div className="text-xs text-slate-500">{tech.systemRole === Role.TEAM_LEAD ? "Team Lead" : "Field Engineer"}</div>
+                                  <div className="text-xs text-slate-400">{tech.systemRole === Role.TEAM_LEAD ? "Team Lead" : "Field Engineer"}</div>
                               </div>
                               <ChevronRight size={16} className="text-slate-300" />
                           </div>
@@ -799,7 +863,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               </div>
                               <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
                                   <span className="text-lg font-bold text-slate-700 leading-none">{activeCount}</span>
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Total</span>
+                                  <span className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Total</span>
                               </div>
                           </div>
                       </div>
@@ -915,44 +979,111 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           );
       }
 
-      // 2. Mobile Menu (Overlay)
-      if (activeTab === 'menu') {
+      // 2. More Menu Tab
+      if (activeTab === 'more') {
           return (
-              <div className="h-full bg-slate-100 p-4 grid grid-cols-2 gap-4 content-start pt-8 overflow-y-auto">
-                  <button onClick={() => { setMobileModule('planner'); setActiveTab('live'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><Calendar size={32}/></div>
-                      <span className="font-bold text-slate-800">Planner</span>
-                  </button>
-                  <button onClick={() => { setMobileModule('none'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><TrendingUp size={32}/></div>
-                      <span className="font-bold text-slate-800">Metrics</span>
-                  </button>
-                  <button onClick={() => { setMobileModule('reports'); setActiveTab('live'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-blue-100 text-blue-600 rounded-xl"><BarChart3 size={32}/></div>
-                      <span className="font-bold text-slate-800">Reports</span>
-                  </button>
-                  <button onClick={() => { setMobileModule('clients'); setActiveTab('live'); }} className="bg-white p-6 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-                      <div className="p-3 bg-purple-100 text-purple-600 rounded-xl"><Contact size={32}/></div>
-                      <span className="font-bold text-slate-800">Clients</span>
-                  </button>
-                  
-                  <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="col-span-2 bg-slate-800 text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
-                      <KeyRound size={20}/> Change Password
-                  </button>
-		  {onLogout && (
-		    <button onClick={onLogout} className="col-span-2 bg-slate-200 text-slate-600 p-4 rounded-xl font-bold flex items-center justify-center gap-2">
-		        <LogOut size={20}/> Logout
-		    </button>
-		)}
+              <div className="h-full overflow-y-auto pb-24">
+                  <div className="p-4 space-y-6">
+                      {/* Profile Card */}
+                      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                          <div className="flex items-center gap-4">
+                              <div className="relative">
+                                  <img src={currentTech?.avatar || `https://ui-avatars.com/api/?name=TL&background=f59e0b&color=fff`} className="w-16 h-16 rounded-full object-cover ring-2 ring-amber-400" alt="" />
+                                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white" />
+                              </div>
+                              <div>
+                                  <h3 className="text-slate-900 font-bold text-lg">{currentTech?.name || 'Team Lead'}</h3>
+                                  <p className="text-slate-500 text-sm">Team Lead</p>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Operations Section */}
+                      <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Operations</h4>
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
+                              <button onClick={() => { setMobileModule('tickets'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
+                                  <div className="p-2 bg-amber-50 rounded-lg"><ListTodo size={20} className="text-amber-600" /></div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-slate-900 font-medium block">Tickets</span>
+                                      <span className="text-[10px] text-slate-500">View all tickets</span>
+                                  </div>
+                                  <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{tickets.length}</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              <button onClick={() => { setMobileModule('reports'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
+                                  <div className="p-2 bg-blue-50 rounded-lg"><BarChart3 size={20} className="text-blue-400" /></div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-slate-900 font-medium block">Reports</span>
+                                      <span className="text-[10px] text-slate-500">Export data</span>
+                                  </div>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              <button onClick={() => { setMobileModule('clients'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
+                                  <div className="p-2 bg-purple-50 rounded-lg"><Contact size={20} className="text-purple-400" /></div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-slate-900 font-medium block">Clients</span>
+                                      <span className="text-[10px] text-slate-500">Customer records</span>
+                                  </div>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              <button onClick={() => setActiveTab('team')} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
+                                  <div className="p-2 bg-emerald-50 rounded-lg"><Users size={20} className="text-emerald-400" /></div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-slate-900 font-medium block">Team Management</span>
+                                      <span className="text-[10px] text-slate-500">View field team status</span>
+                                  </div>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Notifications Section */}
+                      <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Notifications</h4>
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                              <button onClick={() => setShowNotifications(true)} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
+                                  <div className="p-2 bg-amber-50 rounded-lg relative">
+                                      <BellRing size={20} className="text-amber-400" />
+                                      {recentChanges.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}
+                                  </div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-slate-900 font-medium block">Activity Log</span>
+                                      <span className="text-[10px] text-slate-500">Recent changes on tickets & activities</span>
+                                  </div>
+                                  {recentChanges.length > 0 && <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{recentChanges.length}</span>}
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Account Section */}
+                      <div>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Account</h4>
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
+                              <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
+                                  <div className="p-2 bg-slate-100 rounded-lg"><Lock size={20} className="text-slate-400" /></div>
+                                  <span className="flex-1 text-left text-slate-900 font-medium">Password & Security</span>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              {onLogout && (
+                                  <button onClick={onLogout} className="w-full flex items-center gap-3 p-4 active:bg-red-500/10 transition-colors">
+                                      <div className="p-2 bg-red-50 rounded-lg"><LogOut size={20} className="text-red-400" /></div>
+                                      <span className="flex-1 text-left text-red-500 font-medium">Logout</span>
+                                  </button>
+                              )}
+                          </div>
+                      </div>
+                  </div>
               </div>
           );
       }
 
-      // 3. Full Screen Modules
+      // 3. Full Screen Modules (Reports & Clients only — Planner is now a direct tab)
       if (mobileModule !== 'none') {
           return (
               <div className="h-full flex flex-col bg-slate-50">
-                  <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-3 shrink-0">
+                  <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-3 shrink-0 shadow-sm">
                       <button onClick={() => setMobileModule('none')} className="p-1 rounded-full hover:bg-slate-100">
                           <ChevronLeft size={24} className="text-slate-600"/>
                       </button>
@@ -970,6 +1101,25 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   isMobile={true}
                                   currentUserId={currentUserId}
                               />
+                          </div>
+                      )}
+                      {mobileModule === 'tickets' && (
+                          <div className="h-full overflow-y-auto bg-white">
+                              <div className="p-4">
+                                  <div className="relative mb-4">
+                                      <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                                      <input 
+                                          value={searchTerm}
+                                          onChange={(e) => setSearchTerm(e.target.value)}
+                                          placeholder="Search by name, phone, or job ID..."
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-amber-400"
+                                      />
+                                  </div>
+                                  <div className="space-y-2">
+                                      {visibleTickets.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No tickets found</p>}
+                                      {visibleTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
+                                  </div>
+                              </div>
                           </div>
                       )}
                       {mobileModule === 'reports' && (
@@ -994,40 +1144,76 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       // 4. Default Dashboard Tabs
       return (
           <div className="h-full overflow-y-auto custom-scrollbar pb-24">
-              {activeTab === 'live' && (
-                  <div className="p-4 space-y-6">
+              {activeTab === 'home' && (
+                  <div className="p-4 space-y-5">
+                      {/* Dashboard Status Cards */}
+                      <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => setHomeFilter(homeFilter === 'active' ? 'all' : 'active')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'active' ? 'bg-amber-50 border-amber-400' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-2xl font-bold text-slate-900">{activeJobsCount}</div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Active Jobs</div>
+                          </button>
+                          <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'carry' ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-2xl font-bold text-orange-600">{carryForwardCount}</div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Carry Forward</div>
+                          </button>
+                          <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'pending' ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-2xl font-bold text-blue-600">{pendingCount}</div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Pending</div>
+                          </button>
+                          <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'progress' ? 'bg-emerald-50 border-emerald-400' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-2xl font-bold text-emerald-600">{inProgressCount}</div>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">In Progress</div>
+                          </button>
+                      </div>
+
+                      {/* Quick Actions */}
+                      <div>
+                          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Quick Actions</h3>
+                          <div className="grid grid-cols-4 gap-2">
+                              {onAddActivity && (
+                                  <button onClick={() => setShowCreateActivity(true)} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
+                                      <ActivityIcon size={20} className="text-indigo-400" />
+                                      <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Activity</span>
+                                  </button>
+                              )}
+                              {onCreateTicket && (
+                                  <button onClick={() => setShowCreateTicket(true)} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
+                                      <Plus size={20} className="text-amber-400" />
+                                      <span className="text-[9px] font-bold text-slate-500 uppercase">Ticket</span>
+                                  </button>
+                              )}
+                              <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
+                                  <BarChart3 size={20} className="text-blue-400" />
+                                  <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Export</span>
+                              </button>
+                              <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
+                                  <Contact size={20} className="text-purple-400" />
+                                  <span className="text-[9px] font-bold text-slate-500 uppercase">Clients</span>
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Search Bar */}
                       <div className="flex gap-2">
                           <div className="relative flex-1">
-                              <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                              <Search size={16} className="absolute left-3 top-3 text-slate-500"/>
                               <input 
                                   value={searchTerm}
                                   onChange={(e) => setSearchTerm(e.target.value)}
-                                  placeholder="Search tickets..."
-                                  className={SEARCH_INPUT_STYLES}
+                                  placeholder="Search by name, phone, or job ID..."
+                                  className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-colors shadow-sm"
                               />
                           </div>
-                          {onCreateTicket && (
-                              <button 
-                                  onClick={() => setShowCreateTicket(true)}
-                                  className="bg-slate-900 text-white px-3 rounded-xl flex items-center gap-1 text-xs font-bold shrink-0"
-                              >
-                                  <Plus size={14} /> Ticket
-                              </button>
-                          )}
                       </div>
-                      {newTickets.length > 0 && (
-                          <div>
-                              <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 px-1 flex items-center justify-between">
-                                  New Arrivals
-                                  <span className="bg-emerald-100 text-emerald-700 px-2 rounded-full">{newTickets.length}</span>
-                              </h3>
-                              {newTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
-                          </div>
-                      )}
+
+                      {/* Live Feed */}
                       <div>
-                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2 px-1">ACTIVE OPERATIONS ({activeOps.length})</h3>
-                          {activeOps.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No active operations</p>}
-                          {activeOps.map(t => <TicketCard key={t.id} ticket={t} />)}
+                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-3 px-1 flex items-center justify-between">
+                              {homeFilter === 'all' ? 'Live Feed' : homeFilter === 'active' ? 'Active Jobs' : homeFilter === 'carry' ? 'Carry Forwards' : homeFilter === 'pending' ? 'Pending Jobs' : 'In Progress'}
+                              <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px]">{homeFilteredTickets.length}</span>
+                          </h3>
+                          {homeFilteredTickets.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No tickets found</p>}
+                          {homeFilteredTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
                       </div>
                   </div>
               )}
@@ -1048,7 +1234,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                       {/* Active jobs */}
                       {!showJobHistory && myJobs.length === 0 && (
-                          <p className="text-center text-slate-400 text-sm py-8">No active jobs assigned to you</p>
+                          <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+                              <Briefcase size={48} className="text-slate-300 mb-3" />
+                              <p className="text-sm font-medium">No active jobs assigned to you</p>
+                              <p className="text-xs text-slate-600 mt-1">Jobs will appear here when dispatched</p>
+                          </div>
                       )}
                       {!showJobHistory && myJobs.map(item => {
                           if (item.kind === 'ticket') return <JobCard key={item.data.id} ticket={item.data} />;
@@ -1057,7 +1247,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                       {/* History — completed & cancelled jobs */}
                       {showJobHistory && completedJobs.length === 0 && (
-                          <p className="text-center text-slate-400 text-sm py-8">No completed jobs yet</p>
+                          <p className="text-center text-slate-500 text-sm py-8">No completed jobs yet</p>
                       )}
                       {showJobHistory && completedJobs.map(item => {
                           const isAct = item.kind === 'activity';
@@ -1071,21 +1261,32 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   onClick={() => isAct
                                       ? setViewJob({ type: 'activity', data: job })
                                       : setViewTicket(job)}
-                                  className="bg-white rounded-xl border border-slate-200 p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
+                                  className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
                                   <div className="flex justify-between items-start mb-1">
                                       <div>
-                                          <div className="text-[10px] font-bold text-slate-400 mb-0.5">{job.reference || job.id}</div>
+                                          <div className="text-[10px] font-bold text-slate-500 mb-0.5">{job.reference || job.id}</div>
                                           <span className="font-bold text-slate-800">{label}</span>
                                       </div>
                                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${statusVal === 'RESOLVED' || statusVal === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
                                           {statusVal.replace(/_/g,' ')}
                                       </span>
                                   </div>
-                                  {sub && <div className="text-xs text-slate-500 mb-1">{sub}</div>}
-                                  <div className="text-xs text-slate-400">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                                  {sub && <div className="text-xs text-slate-400 mb-1">{sub}</div>}
+                                  <div className="text-xs text-slate-500">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
                               </div>
                           );
                       })}
+                  </div>
+              )}
+
+              {activeTab === 'planner' && (
+                  <div className="h-full w-full bg-slate-50">
+                      <PlanningModule 
+                          activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
+                          onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
+                          isMobile={true}
+                          currentUserId={currentUserId}
+                      />
                   </div>
               )}
 
@@ -1098,29 +1299,42 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   return (
     <div className="flex h-[100dvh] bg-slate-100 font-sans overflow-hidden" style={{paddingTop: 'env(safe-area-inset-top)', paddingBottom: 0}}>
+        {/* Theme color meta tag for browser chrome matching */}
+        <style dangerouslySetInnerHTML={{__html: `
+            body, html { background-color: #f1f5f9 !important; }
+            meta[name="theme-color"] { content: #f1f5f9; }
+        `}} />
         
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col h-full overflow-hidden relative min-h-0">
             
             {/* MOBILE HEADER — always visible */}
-            {!selectedTicketId && (
-                <div className="bg-slate-900 text-white p-4 flex items-center justify-between shrink-0 shadow-md z-30 rounded-b-2xl">
+            {!selectedTicketId && mobileModule === 'none' && (
+                <div className="bg-white border-b border-slate-200 px-4 pt-4 pb-3 flex items-center justify-between shrink-0 z-30 shadow-sm">
                     <div>
-                        <h2 className="font-bold text-lg leading-none">Team Lead Portal</h2>
+                        <h2 className="font-bold text-lg leading-none text-slate-900">
+                            {activeTab === 'home' ? 'Dashboard' : activeTab === 'my_jobs' ? 'My Jobs' : activeTab === 'team' ? 'Field Team' : activeTab === 'planner' ? 'Planner' : 'More'}
+                        </h2>
                         <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
-                            {mobileModule !== 'none' ? mobileModule.toUpperCase() : activeTab === 'menu' ? 'MENU' : 'LIVE FEED'}
+                            Team Lead Portal
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => setActiveTab('live')}
-                            className="relative p-1 rounded-full hover:bg-slate-700 transition-colors"
-                            title={stalledCount > 0 ? `${stalledCount} stalled ticket(s) — click to view` : 'Live feed'}
+                            onClick={() => setActiveTab('home')}
+                            className="relative p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                            title={stalledCount > 0 ? `${stalledCount} stalled ticket(s) — click to view` : 'Dashboard'}
                         >
-                            <Bell size={20} className={stalledCount > 0 ? 'text-red-400' : 'text-slate-400'} />
-                            {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-slate-900" />}
+                            <Bell size={20} className={stalledCount > 0 ? 'text-red-500' : 'text-slate-400'} />
+                            {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-white" />}
                         </button>
-                        <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs shadow-inner border border-slate-800">TL</div>
+                        <div className="w-9 h-9 rounded-full bg-amber-50 ring-2 ring-amber-400 flex items-center justify-center overflow-hidden">
+                            {currentTech?.avatar ? (
+                                <img src={currentTech.avatar} className="w-full h-full object-cover" alt="" />
+                            ) : (
+                                <span className="font-bold text-xs text-amber-700">TL</span>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -1130,13 +1344,35 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {renderMobileContent()}
             </div>
 
-            {/* Mobile Bottom Navigation */}
+            {/* Mobile Bottom Navigation — 5 Tabs */}
             {!selectedTicketId && mobileModule === 'none' && (
-                <div className="bg-white border-t border-slate-200 flex justify-between px-2 z-30 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"}}>
-                    <NavButton active={activeTab === 'live'} onClick={() => setActiveTab('live')} icon={ListTodo} label="Live Feed" />
-                    <NavButton active={activeTab === 'my_jobs'} onClick={() => setActiveTab('my_jobs')} icon={Briefcase} label="My Jobs" />
-                    <NavButton active={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={Users} label="Field Team" />
-                    <NavButton active={activeTab === 'menu'} onClick={() => setActiveTab('menu')} icon={Grid} label="More" />
+                <div className="bg-white/95 backdrop-blur-xl border-t border-slate-200 flex justify-between px-1 z-30 shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.05)]" style={{height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)"}}>
+                    {[
+                        { key: 'home' as const, icon: Home, label: 'Home' },
+                        { key: 'my_jobs' as const, icon: Briefcase, label: 'My Jobs' },
+                        { key: 'team' as const, icon: Users, label: 'Team' },
+                        { key: 'planner' as const, icon: Calendar, label: 'Planner' },
+                        { key: 'more' as const, icon: Grid, label: 'More' },
+                    ].map(tab => {
+                        const isActive = activeTab === tab.key;
+                        const Icon = tab.icon;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`flex flex-col items-center justify-center py-2 flex-1 transition-all relative ${isActive ? 'text-amber-600' : 'text-slate-400'}`}
+                            >
+                                {isActive && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-amber-500 rounded-full" />}
+                                <div className="relative">
+                                    <Icon size={22} />
+                                    {tab.key === 'my_jobs' && myJobs.length > 0 && (
+                                        <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 bg-amber-500 text-[9px] text-white font-bold rounded-full flex items-center justify-center px-1">{myJobs.length}</span>
+                                    )}
+                                </div>
+                                <span className="text-[9px] font-bold mt-1 uppercase tracking-wide">{tab.label}</span>
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 
@@ -2641,24 +2877,330 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       )}
 
       {/* Create Ticket Modal */}
+      {/* --- Notifications / Activity Log Modal --- */}
+      {showNotifications && (
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowNotifications(false)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+                      <h3 className="font-bold text-lg text-slate-900">Activity Log</h3>
+                      <button onClick={() => setShowNotifications(false)}><X size={20} className="text-slate-400" /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                      {recentChanges.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                              <Bell size={40} className="mb-3 text-slate-300" />
+                              <p className="text-sm">No recent changes</p>
+                          </div>
+                      ) : (() => {
+                          const grouped: Record<string, typeof recentChanges> = {};
+                          recentChanges.forEach(change => {
+                              const dt = new Date(change.updatedAt);
+                              const today = new Date();
+                              const yesterday = new Date(today);
+                              yesterday.setDate(yesterday.getDate() - 1);
+                              let label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                              if (dt.toDateString() === today.toDateString()) label = 'Today';
+                              else if (dt.toDateString() === yesterday.toDateString()) label = 'Yesterday';
+                              if (!grouped[label]) grouped[label] = [];
+                              grouped[label].push(change);
+                          });
+                          return (
+                              <div>
+                                  {Object.entries(grouped).map(([dateLabel, items]) => (
+                                      <div key={dateLabel}>
+                                          <div className="sticky top-0 bg-slate-50 px-4 py-2 border-b border-slate-100 z-10">
+                                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{dateLabel}</span>
+                                          </div>
+                                          <div className="divide-y divide-slate-50">
+                                              {items.map((change, idx) => {
+                                                  const dt = new Date(change.updatedAt);
+                                                  const timeStr = dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                                                  return (
+                                                      <div key={`${change.kind}-${change.id}-${idx}`} className="px-4 py-3 hover:bg-slate-50">
+                                                          <div className="flex items-start gap-3">
+                                                              <div className="flex flex-col items-center shrink-0 pt-0.5">
+                                                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                                                      change.kind === 'ticket' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'
+                                                                  }`}>
+                                                                      {change.kind === 'ticket' ? <ListTodo size={14} /> : <ActivityIcon size={14} />}
+                                                                  </div>
+                                                                  <span className="text-[9px] text-slate-400 mt-1">{timeStr}</span>
+                                                              </div>
+                                                              <div className="flex-1 min-w-0">
+                                                                  <div className="flex items-center gap-2 mb-0.5">
+                                                                      <span className="text-sm font-bold text-slate-800 truncate">{change.title}</span>
+                                                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${getStatusColor(change.status)}`}>
+                                                                          {change.status.replace(/_/g,' ')}
+                                                                      </span>
+                                                                  </div>
+                                                                  {change.subtitle && <p className="text-xs text-slate-500 truncate">{change.subtitle}</p>}
+                                                                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                                                                      <span className="font-mono">{change.id}</span>
+                                                                      <span>•</span>
+                                                                      <span>{change.assignedTo}</span>
+                                                                  </div>
+                                                              </div>
+                                                          </div>
+                                                      </div>
+                                                  );
+                                              })}
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          );
+                      })()}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- Create Activity Modal (matches PlanningModule exactly) --- */}
+      {showCreateActivity && onAddActivity && (
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowCreateActivity(false)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+                      <h3 className="font-bold text-lg text-slate-900">Plan New Activity</h3>
+                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); }}><X size={20} className="text-slate-400" /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                      {/* Customer — search by name or phone */}
+                      <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Customer <span className="text-red-500">*</span></label>
+                          {actSelectedCustomer ? (
+                              <div className="mt-1 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
+                                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-bold text-emerald-800 truncate">{actSelectedCustomer.name}</p>
+                                      <p className="text-[10px] text-emerald-600">{actSelectedCustomer.phone}</p>
+                                  </div>
+                                  <button onClick={() => { setActSelectedCustomer(null); setActCustSearch(''); }} className="text-xs text-slate-400 hover:text-slate-600">Change</button>
+                              </div>
+                          ) : (
+                              <>
+                                  <div className="relative mt-1">
+                                      <Search size={14} className="absolute left-3 top-3 text-slate-400" />
+                                      <input value={actCustSearch} onChange={e => setActCustSearch(e.target.value)}
+                                          placeholder="Search by name or phone..."
+                                          className="w-full border border-slate-300 rounded-lg pl-9 pr-3 p-2.5 text-sm" />
+                                  </div>
+                                  {actCustSearch.length >= 2 && (() => {
+                                      const q = actCustSearch.toLowerCase();
+                                      const matches = (customers || []).filter(c => 
+                                          c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(actCustSearch))
+                                      );
+                                      return matches.length > 0 ? (
+                                          <div className="mt-1 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
+                                              {matches.slice(0, 5).map(c => (
+                                                  <button key={c.id} onClick={() => { setActSelectedCustomer(c); setActCustSearch(c.name); }}
+                                                      className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
+                                                      <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
+                                                      <div className="min-w-0">
+                                                          <div className="text-sm font-medium text-slate-800 truncate">{c.name}</div>
+                                                          <div className="text-[10px] text-slate-400">{c.phone || 'No phone'}</div>
+                                                      </div>
+                                                  </button>
+                                              ))}
+                                          </div>
+                                      ) : (
+                                          <div className="mt-1 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                              <p className="text-xs text-amber-700 font-medium">No customer found</p>
+                                              <button onClick={() => {
+                                                  const newCust: Customer = {
+                                                      id: `c${Date.now()}`, name: actCustSearch.trim(),
+                                                      phone: actCustSearch.replace(/\D/g, '').length >= 4 ? actCustSearch.trim() : '',
+                                                      address: '', email: '',
+                                                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(actCustSearch.trim())}&background=random`
+                                                  };
+                                                  if (onAddCustomer) {
+                                                      Promise.resolve(onAddCustomer(newCust)).then(created => {
+                                                          setActSelectedCustomer(created || newCust);
+                                                          setActCustSearch((created || newCust).name);
+                                                      });
+                                                  } else {
+                                                      setActSelectedCustomer(newCust);
+                                                  }
+                                              }} className="mt-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors flex items-center gap-1">
+                                                  <UserPlus size={12} /> Create "{actCustSearch.trim()}"
+                                              </button>
+                                          </div>
+                                      );
+                                  })()}
+                              </>
+                          )}
+                      </div>
+
+                      {/* Activity Type & Priority */}
+                      <div className="grid grid-cols-2 gap-3">
+                          <div>
+                              <label className="text-xs font-semibold text-slate-500 uppercase">Activity Type *</label>
+                              <select value={createActivityForm.type} onChange={e => setCreateActivityForm(p => ({...p, type: e.target.value}))}
+                                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
+                                  <option value="">Select Type</option>
+                                  {['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'].map(t => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="text-xs font-semibold text-slate-500 uppercase">Priority</label>
+                              <select value={createActivityForm.priority} onChange={e => setCreateActivityForm(p => ({...p, priority: e.target.value}))}
+                                  className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1">
+                                  {['LOW','MEDIUM','HIGH','URGENT'].map(p => <option key={p} value={p}>{p}</option>)}
+                              </select>
+                          </div>
+                      </div>
+
+                      {/* Service Category — multi-select */}
+                      <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
+                          <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-300 rounded-lg min-h-[40px] mt-1">
+                              {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(cat => {
+                                  const sel = actServiceCats.includes(cat);
+                                  return (
+                                      <button key={cat} type="button" onClick={() => setActServiceCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
+                                          className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}>
+                                          {sel && <span className="mr-0.5">\u2713 </span>}{cat}
+                                      </button>
+                                  );
+                              })}
+                          </div>
+                      </div>
+
+                      {/* Location */}
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                          <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><MapPin size={14} /> Location</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                              <input value={createActivityForm.locationUrl} onChange={e => setCreateActivityForm(p => ({...p, locationUrl: e.target.value}))}
+                                  placeholder="Location URL" className="border border-slate-300 rounded-lg p-2 text-sm" />
+                              <input value={createActivityForm.houseNumber} onChange={e => setCreateActivityForm(p => ({...p, houseNumber: e.target.value}))}
+                                  placeholder="House/Bldg No." className="border border-slate-300 rounded-lg p-2 text-sm" />
+                          </div>
+                      </div>
+
+                      {/* Date & Time */}
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                          <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Calendar size={14} /> Planned Date & Time</h4>
+                          <input type="datetime-local" value={createActivityForm.plannedDate}
+                              onChange={e => setCreateActivityForm(p => ({...p, plannedDate: e.target.value}))}
+                              min={new Date().toISOString().slice(0,16)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                      </div>
+
+                      {/* Description */}
+                      <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Description</label>
+                          <textarea value={createActivityForm.description} onChange={e => setCreateActivityForm(p => ({...p, description: e.target.value}))}
+                              rows={2} placeholder="Scope of work..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                      </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                      <button onClick={() => {
+                          if (!actSelectedCustomer) { alert('Please select a customer'); return; }
+                          if (!createActivityForm.type) { alert('Please select an activity type'); return; }
+                          if (actServiceCats.length === 0) { alert('Please select at least one service category'); return; }
+                          if (!createActivityForm.plannedDate) { alert('Please set a planned date'); return; }
+                          const plannedDt = new Date(createActivityForm.plannedDate);
+                          onAddActivity({
+                              type: createActivityForm.type,
+                              serviceCategory: actServiceCats.join(', '),
+                              customerId: actSelectedCustomer.id,
+                              description: createActivityForm.description || undefined,
+                              plannedDate: plannedDt.toISOString(),
+                              priority: createActivityForm.priority,
+                              status: 'PLANNED',
+                              locationUrl: createActivityForm.locationUrl || undefined,
+                              houseNumber: createActivityForm.houseNumber || undefined,
+                              leadTechId: currentUserId,
+                          });
+                          setShowCreateActivity(false);
+                          setActCustSearch('');
+                          setActSelectedCustomer(null);
+                          setActServiceCats([]);
+                          setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' });
+                      }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Plan Activity</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+            {/* Create Ticket Modal — Phone-search-first customer flow */}
       {showCreateTicket && onCreateTicket && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowCreateTicket(false)}>
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}>
           <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-slate-900">Create Ticket</h3>
-              <button onClick={() => setShowCreateTicket(false)}><X size={20} className="text-slate-400" /></button>
+              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}><X size={20} className="text-slate-400" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {/* Step 1: Search customer by phone */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Customer Name *</label>
-                <input value={createTicketForm.customerName} onChange={e => setCreateTicketForm(p => ({...p, customerName: e.target.value}))}
-                  placeholder="e.g. Ahmed Al Thani" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number *</label>
+                <div className="flex gap-2 mt-1">
+                    <input 
+                        value={ticketPhoneSearch} 
+                        onChange={e => {
+                            const val = e.target.value;
+                            setTicketPhoneSearch(val);
+                            setTicketSelectedCustomer(null);
+                            setCreateTicketForm(p => ({...p, phone: val, customerName: ''}));
+                            // Auto-search
+                            if (val.length >= 4) {
+                                const found = (customers || []).find(c => c.phone && c.phone.includes(val));
+                                if (found) {
+                                    setTicketSelectedCustomer(found);
+                                    setCreateTicketForm(p => ({...p, customerName: found.name, phone: found.phone || val}));
+                                }
+                            }
+                        }}
+                        placeholder="Enter phone number to search..."
+                        className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm"
+                    />
+                </div>
+                {/* Search results */}
+                {ticketPhoneSearch.length >= 3 && !ticketSelectedCustomer && (() => {
+                    const matches = (customers || []).filter(c => c.phone && c.phone.includes(ticketPhoneSearch));
+                    return matches.length > 0 ? (
+                        <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
+                            {matches.slice(0, 5).map(c => (
+                                <button key={c.id} onClick={() => {
+                                    setTicketSelectedCustomer(c);
+                                    setTicketPhoneSearch(c.phone || ticketPhoneSearch);
+                                    setCreateTicketForm(p => ({...p, customerName: c.name, phone: c.phone || ticketPhoneSearch}));
+                                }} className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
+                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
+                                    <div>
+                                        <div className="text-sm font-medium text-slate-800">{c.name}</div>
+                                        <div className="text-[10px] text-slate-400">{c.phone}</div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p className="text-xs text-amber-700 font-medium">No customer found with this number</p>
+                            <p className="text-[10px] text-amber-600 mt-0.5">A new customer will be created when you submit the ticket</p>
+                        </div>
+                    );
+                })()}
+                {ticketSelectedCustomer && (
+                    <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
+                        <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        <div>
+                            <p className="text-sm font-bold text-emerald-800">{ticketSelectedCustomer.name}</p>
+                            <p className="text-[10px] text-emerald-600">{ticketSelectedCustomer.phone}</p>
+                        </div>
+                        <button onClick={() => { setTicketSelectedCustomer(null); setTicketPhoneSearch(''); setCreateTicketForm(p => ({...p, customerName: '', phone: ''})); }} className="ml-auto text-xs text-slate-400 hover:text-slate-600">Change</button>
+                    </div>
+                )}
               </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Phone *</label>
-                <input value={createTicketForm.phone} onChange={e => setCreateTicketForm(p => ({...p, phone: e.target.value}))}
-                  placeholder="+974 XXXX XXXX" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
-              </div>
+              {/* Customer name — only show if no match found */}
+              {!ticketSelectedCustomer && ticketPhoneSearch.length >= 3 && (
+                  <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Customer Name *</label>
+                      <input value={createTicketForm.customerName} onChange={e => setCreateTicketForm(p => ({...p, customerName: e.target.value}))}
+                          placeholder="e.g. Ahmed Al Thani" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
+                  </div>
+              )}
               <div>
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase">Category *</label>
@@ -2717,31 +3259,39 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               </div>
             </div>
             <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
-              <button onClick={() => setShowCreateTicket(false)} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
               <button onClick={async () => {
-                if (!createTicketForm.customerName.trim() || !createTicketForm.phone.trim() || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
+                const phone = ticketSelectedCustomer?.phone || createTicketForm.phone.trim();
+                const name = ticketSelectedCustomer?.name || createTicketForm.customerName.trim();
+                if (!name || !phone || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
                   alert('Please fill all required fields');
                   return;
                 }
-                // Create customer first
-                const newCust: Customer = {
-                  id: `c${Date.now()}`, name: createTicketForm.customerName.trim(),
-                  phone: createTicketForm.phone.trim(), address: createTicketForm.houseNumber, email: '',
-                  avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(createTicketForm.customerName.trim())}&background=random`
-                };
-                const created = onAddCustomer ? await onAddCustomer(newCust) : null;
-                const custId = created?.id || newCust.id;
-                const custName = created?.name || newCust.name;
+                let custId = ticketSelectedCustomer?.id;
+                let custName = name;
+                // If no existing customer matched, create new
+                if (!ticketSelectedCustomer) {
+                    const newCust: Customer = {
+                        id: `c${Date.now()}`, name: name,
+                        phone: phone, address: createTicketForm.houseNumber, email: '',
+                        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+                    };
+                    const created = onAddCustomer ? await onAddCustomer(newCust) : null;
+                    custId = created?.id || newCust.id;
+                    custName = created?.name || newCust.name;
+                }
 
                 onCreateTicket({
                   customerId: custId, customerName: custName,
-                  phoneNumber: createTicketForm.phone.trim(),
+                  phoneNumber: phone,
                   category: createTicketForm.category, type: createTicketForm.type,
                   priority: createTicketForm.priority,
                   initialMessage: createTicketForm.description.trim(),
                   locationUrl: createTicketForm.locationUrl, houseNumber: createTicketForm.houseNumber
                 });
                 setShowCreateTicket(false);
+                setTicketPhoneSearch('');
+                setTicketSelectedCustomer(null);
                 setCreateTicketForm({ customerName: '', phone: '', category: '', type: '', priority: 'MEDIUM', description: '', locationUrl: '', houseNumber: '' });
               }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Create Ticket</button>
             </div>
