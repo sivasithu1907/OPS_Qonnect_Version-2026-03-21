@@ -251,7 +251,7 @@ const WhatsAppMonitor: React.FC = () => {
 
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
-            <div className="bg-white/50 backdrop-blur-xl p-4 rounded-xl border border-white/40 shadow-sm flex flex-col justify-between h-28">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-28">
                 <div className="flex justify-between items-start">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inbound 24h</span>
                     <ArrowDownLeft size={16} className="text-blue-500" />
@@ -262,7 +262,7 @@ const WhatsAppMonitor: React.FC = () => {
                 </div>
             </div>
             
-            <div className="bg-white/50 backdrop-blur-xl p-4 rounded-xl border border-white/40 shadow-sm flex flex-col justify-between h-28">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-28">
                 <div className="flex justify-between items-start">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outbound 24h</span>
                     <ArrowUpRight size={16} className="text-purple-500" />
@@ -273,7 +273,7 @@ const WhatsAppMonitor: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-white/50 backdrop-blur-xl p-4 rounded-xl border border-white/40 shadow-sm flex flex-col justify-between h-28">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-28">
                 <div className="flex justify-between items-start">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg Latency</span>
                     <Activity size={16} className="text-amber-500" />
@@ -287,7 +287,7 @@ const WhatsAppMonitor: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-white/50 backdrop-blur-xl p-4 rounded-xl border border-white/40 shadow-sm flex flex-col justify-between h-28">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-28">
                 <div className="flex justify-between items-start">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Error Rate</span>
                     <AlertCircle size={16} className={metrics.errors > 0 ? 'text-red-500' : 'text-slate-300'} />
@@ -303,7 +303,7 @@ const WhatsAppMonitor: React.FC = () => {
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Status Panel */}
-            <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm p-6 flex flex-col gap-6">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col gap-6">
                 
                 <div>
                     <h3 className="font-bold text-slate-800 text-lg mb-4">Connection Health</h3>
@@ -321,7 +321,7 @@ const WhatsAppMonitor: React.FC = () => {
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg">
+                        <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-slate-200 text-slate-600 rounded-lg">
                                     <Database size={20} />
@@ -334,7 +334,7 @@ const WhatsAppMonitor: React.FC = () => {
                             <CheckCircle2 size={16} className="text-slate-400" />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg">
+                        <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-slate-200 text-slate-600 rounded-lg">
                                     <ShieldCheck size={20} />
@@ -354,7 +354,7 @@ const WhatsAppMonitor: React.FC = () => {
             {/* Right Panel (Tabs) */}
             <div className="lg:col-span-2 min-h-0 flex flex-col gap-4">
                 {/* Tabs Header */}
-                <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm p-2 flex items-center justify-between gap-3">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-2 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-1">
                         <button
                             onClick={() => setActiveTab('LIVE')}
@@ -379,7 +379,7 @@ const WhatsAppMonitor: React.FC = () => {
                     {/* Controls */}
                     <div className="flex items-center gap-2">
                         {(activeTab === 'LIVE') && (
-                            <div className="hidden md:flex items-center gap-1 bg-white/30 backdrop-blur-xl rounded-xl p-1 border border-white/30">
+                            <div className="hidden md:flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                                 {(['ALL','INBOUND','OUTBOUND','ERRORS'] as EventFilter[]).map((f) => (
                                     <button
                                         key={f}
@@ -393,14 +393,14 @@ const WhatsAppMonitor: React.FC = () => {
                         )}
                         <button 
                             onClick={() => setIsPaused(!isPaused)} 
-                            className={`p-2 rounded-lg border transition-colors ${isPaused ? 'border-yellow-200 bg-yellow-50 text-yellow-700 hover:bg-yellow-100' : 'border-white/40 bg-white text-slate-700 hover:bg-white/40'}`}
+                            className={`p-2 rounded-lg border transition-colors ${isPaused ? 'border-yellow-200 bg-yellow-50 text-yellow-700 hover:bg-yellow-100' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
                             title={isPaused ? "Resume" : "Pause"}
                         >
                             {isPaused ? <Play size={14} fill="currentColor"/> : <Pause size={14} fill="currentColor"/>}
                         </button>
                         <button 
                             onClick={() => setLogs([])}
-                            className="p-2 rounded-lg border border-white/40 bg-white text-slate-700 hover:bg-white/40 transition-colors"
+                            className="p-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
                             title="Clear"
                         >
                             <Trash2 size={14} />
@@ -412,13 +412,13 @@ const WhatsAppMonitor: React.FC = () => {
                 {activeTab === 'CONVERSATIONS' ? (
                     <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-4">
                         {/* Threads */}
-                        <div className="xl:col-span-4 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm overflow-hidden flex flex-col min-h-0">
-                            <div className="p-3 border-b border-white/20">
+                        <div className="xl:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+                            <div className="p-3 border-b border-slate-100">
                                 <input
                                     value={threadSearch}
                                     onChange={(e) => setThreadSearch(e.target.value)}
                                     placeholder="Search number..."
-                                    className="w-full px-3 py-2 rounded-lg border border-white/40 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                                 />
                             </div>
                             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -431,7 +431,7 @@ const WhatsAppMonitor: React.FC = () => {
                                             <button
                                                 key={t.key}
                                                 onClick={() => setSelectedThreadKey(t.key)}
-                                                className={`w-full text-left px-4 py-3 border-b border-white/20 transition-colors ${isActive ? 'bg-slate-900 text-white' : 'hover:bg-white/40'}`}
+                                                className={`w-full text-left px-4 py-3 border-b border-slate-100 transition-colors ${isActive ? 'bg-slate-900 text-white' : 'hover:bg-slate-50'}`}
                                             >
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="min-w-0">
@@ -443,7 +443,7 @@ const WhatsAppMonitor: React.FC = () => {
                                                             {t.lastMessageAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                         </div>
                                                         {t.unreadCount > 0 && (
-                                                            <div className={`mt-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-white/50 backdrop-blur-xl text-slate-900' : 'bg-slate-900 text-white'}`}>
+                                                            <div className={`mt-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}`}>
                                                                 {Math.min(99, t.unreadCount)}
                                                             </div>
                                                         )}
@@ -457,8 +457,8 @@ const WhatsAppMonitor: React.FC = () => {
                         </div>
 
                         {/* Chat */}
-                        <div className="xl:col-span-5 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm overflow-hidden flex flex-col min-h-0">
-                            <div className="p-3 border-b border-white/20 flex items-center justify-between">
+                        <div className="xl:col-span-5 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+                            <div className="p-3 border-b border-slate-100 flex items-center justify-between">
                                 <div className="min-w-0">
                                     <div className="text-sm font-bold text-slate-900 truncate">
                                         {selectedThread ? selectedThread.phone : 'Select a conversation'}
@@ -472,7 +472,7 @@ const WhatsAppMonitor: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-white/20">
+                            <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50">
                                 {!selectedThread ? (
                                     <div className="h-full flex items-center justify-center text-slate-500 text-sm">Select a conversation.</div>
                                 ) : selectedMessages.length === 0 ? (
@@ -484,7 +484,7 @@ const WhatsAppMonitor: React.FC = () => {
                                             const bubbleText = m.text ? m.text : typeLabel(m.type);
                                             return (
                                                 <div key={m.id} className={`flex ${inbound ? 'justify-start' : 'justify-end'}`}>
-                                                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm border ${inbound ? 'bg-white border-white/40' : 'bg-slate-900 border-slate-900 text-white'}`}>
+                                                    <div className={`max-w-[85%] rounded-2xl px-3 py-2 shadow-sm border ${inbound ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-900 text-white'}`}>
                                                         <div className={`text-sm ${inbound ? 'text-slate-900' : 'text-white'}`}>
                                                             {bubbleText}
                                                         </div>
@@ -506,7 +506,7 @@ const WhatsAppMonitor: React.FC = () => {
                         </div>
 
                         {/* Context */}
-                        <div className="xl:col-span-3 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm p-4 flex flex-col gap-4">
+                        <div className="xl:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col gap-4">
                             <div>
                                 <div className="text-xs font-bold text-slate-400 uppercase">Customer</div>
                                 <div className="mt-2">
@@ -515,29 +515,29 @@ const WhatsAppMonitor: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="border-t border-white/20 pt-4">
+                            <div className="border-t border-slate-100 pt-4">
                                 <div className="text-xs font-bold text-slate-400 uppercase">Linked Ticket</div>
                                 <div className="mt-2 text-sm text-slate-700">
                                     {selectedThread ? 'Not linked' : '—'}
                                 </div>
                             </div>
 
-                            <div className="border-t border-white/20 pt-4 grid gap-2">
+                            <div className="border-t border-slate-100 pt-4 grid gap-2">
                                 <button
                                     disabled={!selectedThread}
-                                    className={`w-full px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${selectedThread ? 'border-white/40 hover:bg-white/40 text-slate-900' : 'border-white/20 text-slate-300 bg-slate-50 cursor-not-allowed'}`}
+                                    className={`w-full px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${selectedThread ? 'border-slate-200 hover:bg-slate-50 text-slate-900' : 'border-slate-100 text-slate-300 bg-slate-50 cursor-not-allowed'}`}
                                 >
                                     Create Ticket
                                 </button>
                                 <button
                                     disabled={!selectedThread}
-                                    className={`w-full px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${selectedThread ? 'border-white/40 hover:bg-white/40 text-slate-900' : 'border-white/20 text-slate-300 bg-slate-50 cursor-not-allowed'}`}
+                                    className={`w-full px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${selectedThread ? 'border-slate-200 hover:bg-slate-50 text-slate-900' : 'border-slate-100 text-slate-300 bg-slate-50 cursor-not-allowed'}`}
                                 >
                                     Link to Existing Ticket
                                 </button>
                                 <button
                                     disabled={!selectedThread}
-                                    className={`w-full px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${selectedThread ? 'border-white/40 hover:bg-white/40 text-slate-900' : 'border-white/20 text-slate-300 bg-slate-50 cursor-not-allowed'}`}
+                                    className={`w-full px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${selectedThread ? 'border-slate-200 hover:bg-slate-50 text-slate-900' : 'border-slate-100 text-slate-300 bg-slate-50 cursor-not-allowed'}`}
                                 >
                                     AI Summary
                                 </button>
