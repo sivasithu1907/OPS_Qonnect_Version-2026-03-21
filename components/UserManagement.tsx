@@ -70,15 +70,15 @@ const AvatarCropperUM: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+      <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-white/20 flex justify-between items-center">
           <h3 className="font-bold text-slate-900">Adjust Photo</h3>
           <button onClick={onCancel}><X size={20} className="text-slate-400" /></button>
         </div>
         <div className="p-6 flex flex-col items-center gap-4">
           <p className="text-xs text-slate-400 flex items-center gap-1"><Move size={12} /> Drag to reposition</p>
           <div
-            className="relative rounded-full overflow-hidden border-4 border-slate-200 shadow-inner cursor-grab active:cursor-grabbing"
+            className="relative rounded-full overflow-hidden border-4 border-white/40 shadow-inner cursor-grab active:cursor-grabbing"
             style={{ width: SIZE, height: SIZE, touchAction: 'none' }}
             onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
             onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={() => setDragging(false)}
@@ -115,8 +115,8 @@ const AvatarCropperUM: React.FC<{
             }} className="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200"><ZoomIn size={16} className="text-slate-600"/></button>
           </div>
         </div>
-        <div className="p-4 border-t border-slate-100 flex gap-3">
-          <button type="button" onClick={onCancel} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+        <div className="p-4 border-t border-white/20 flex gap-3">
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-white/40 rounded-xl">Cancel</button>
           <button type="button" onClick={handleCrop} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800">Save</button>
         </div>
       </div>
@@ -246,8 +246,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   const renderUserGroup = (groupUsers: Technician[], title: string, Icon: any, colorClass: string) => (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center bg-slate-50">
+    <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-sm border border-white/40 overflow-hidden">
+        <div className="p-5 border-b border-white/20 flex items-center bg-white/20">
             <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${colorClass}`}>
                     <Icon size={18} />
@@ -257,7 +257,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             </div>
         </div>
         <table className="w-full text-sm text-left table-fixed">
-            <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
+            <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-white/30">
                 <tr>
                     <th className="px-6 py-3 w-[32%]">User Profile</th>
                     <th className="px-6 py-3 w-[18%]">System Role</th>
@@ -275,11 +275,11 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     </tr>
                 ) : (
                     groupUsers.map(user => (
-                        <tr key={user.id} className="hover:bg-slate-50/80 transition-colors group">
+                        <tr key={user.id} className="hover:bg-white/40/80 transition-colors group">
                             {/* User Profile */}
                             <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden shrink-0 border border-slate-100">
+                                    <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden shrink-0 border border-white/20">
                                         <img src={getAvatar(user)} alt={user.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=6366f1&color=fff&bold=true&size=128`; }} />
                                     </div>
                                     <div className="min-w-0">
@@ -305,7 +305,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/> Active
                                     </span>
                                 ) : (
-                                    <span className="inline-flex items-center gap-1.5 text-slate-500 text-xs font-bold bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full">
+                                    <span className="inline-flex items-center gap-1.5 text-slate-500 text-xs font-bold bg-slate-100 border border-white/40 px-2.5 py-1 rounded-full">
                                         <span className="w-1.5 h-1.5 rounded-full bg-slate-400"/> Inactive
                                     </span>
                                 )}
@@ -355,7 +355,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         </div>
 
         {/* Filters & Search */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+        <div className="bg-white/50 backdrop-blur-xl p-4 rounded-xl border border-white/40 shadow-sm flex items-center gap-4">
              <div className="relative flex-1">
                  <Search size={18} className="absolute left-3 top-2.5 text-slate-400" />
                  <input 
@@ -363,7 +363,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     placeholder="Search users by name or email..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                    className="w-full pl-10 pr-4 py-2 bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                  />
              </div>
         </div>
@@ -377,9 +377,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
         {/* Modal */}
         {modalOpen && (
-             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white">
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-lg overflow-hidden">
+                    <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white">
                         <h3 className="font-bold text-lg text-slate-900">
                             {editingUser ? 'Edit User' : 'Create New User'}
                         </h3>
@@ -416,7 +416,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
-                            <input name="name" defaultValue={editingUser?.name} required className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="e.g. John Doe"/>
+                            <input name="name" defaultValue={editingUser?.name} required className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="e.g. John Doe"/>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -424,16 +424,16 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Email</label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                                    <input name="email" type="email" defaultValue={editingUser?.email} required className="w-full pl-9 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="user@qonnect.qa"/>
+                                    <input name="email" type="email" defaultValue={editingUser?.email} required className="w-full pl-9 bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="user@qonnect.qa"/>
                                 </div>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
                                 <div className="flex">
-                                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-200 bg-slate-100 text-slate-500 text-sm font-medium">+974</span>
+                                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-white/40 bg-slate-100 text-slate-500 text-sm font-medium">+974</span>
                                     <input name="phone" type="tel"
                                         defaultValue={editingUser?.phone ? editingUser.phone.replace(/^\+974\s?/, '').replace(/^974/, '') : ''}
-                                        className="rounded-none rounded-r-lg w-full bg-slate-50 border border-slate-200 p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        className="rounded-none rounded-r-lg w-full bg-slate-50 border border-white/40 p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                                         placeholder="3300 0000"/>
                                 </div>
                             </div>
@@ -442,7 +442,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                         <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">System Role</label>
-                                <select name="systemRole" defaultValue={editingUser?.systemRole || Role.FIELD_ENGINEER} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10">
+                                <select name="systemRole" defaultValue={editingUser?.systemRole || Role.FIELD_ENGINEER} className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10">
                                     <option value={Role.ADMIN}>Admin</option>
                                     <option value={Role.TEAM_LEAD}>Team Lead</option>
                                     <option value={Role.FIELD_ENGINEER}>Field Engineer</option>
@@ -450,7 +450,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Job Role</label>
-                                <input name="jobRole" defaultValue={(editingUser as any)?.jobRole || editingUser?.role} placeholder="e.g. Senior Electrician" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" />
+                                <input name="jobRole" defaultValue={(editingUser as any)?.jobRole || editingUser?.role} placeholder="e.g. Senior Electrician" className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" />
                             </div>
                         </div>
 
@@ -473,7 +473,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                         name="password" 
                                         type={showPassword ? "text" : "password"} 
                                         placeholder={editingUser ? "Unchanged" : "Create Password"} 
-                                        className="w-full pl-9 pr-10 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" 
+                                        className="w-full pl-9 pr-10 bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" 
                                     />
                                     <button
                                         type="button"
@@ -486,14 +486,14 @@ const UserManagement: React.FC<UserManagementProps> = ({
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Account Status</label>
-                                <select name="isActive" defaultValue={editingUser?.isActive?.toString() || 'true'} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10">
+                                <select name="isActive" defaultValue={editingUser?.isActive?.toString() || 'true'} className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10">
                                     <option value="true">Active</option>
                                     <option value="false">Inactive</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
+                        <div className="pt-4 flex justify-end gap-3 border-t border-white/20 mt-2">
                              <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
                              <button type="submit" className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all">
                                  {editingUser ? 'Save Changes' : 'Create User'}
@@ -506,9 +506,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
         {/* ── Change Password Modal ── */}
         {changePwdModal && (
-            <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+            <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+                    <div className="p-6 border-b border-white/20 flex justify-between items-center">
                         <div>
                             <h3 className="font-bold text-lg text-slate-900">Change Password</h3>
                             <p className="text-xs text-slate-500 mt-0.5">{changePwdModal.name}</p>
@@ -530,25 +530,25 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                     <label className="text-xs font-semibold text-slate-500 uppercase">Current Password</label>
                                     <input type="password" value={changePwdForm.current}
                                         onChange={e => setChangePwdForm(p => ({...p, current: e.target.value}))}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                                         placeholder="Enter current password"/>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-slate-500 uppercase">New Password</label>
                                     <input type="password" value={changePwdForm.next}
                                         onChange={e => setChangePwdForm(p => ({...p, next: e.target.value}))}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                                         placeholder="Minimum 8 characters"/>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-slate-500 uppercase">Confirm New Password</label>
                                     <input type="password" value={changePwdForm.confirm}
                                         onChange={e => setChangePwdForm(p => ({...p, confirm: e.target.value}))}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                        className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                                         placeholder="Repeat new password"/>
                                 </div>
                                 <div className="flex gap-3 pt-2">
-                                    <button type="button" onClick={() => setChangePwdModal(null)} className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                                    <button type="button" onClick={() => setChangePwdModal(null)} className="flex-1 py-2.5 border border-white/40 rounded-xl text-sm font-medium text-slate-600 hover:bg-white/20">Cancel</button>
                                     <button type="button" onClick={() => {
                                         setChangePwdError('');
                                         if (!changePwdForm.current) { setChangePwdError('Enter current password'); return; }
