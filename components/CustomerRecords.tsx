@@ -343,47 +343,65 @@ onSaveCustomer(data as Customer);
 
             {/* Conditional Rendering: Card List (Mobile) vs Table (Desktop) */}
             {isMobile ? (
-                <div className="divide-y divide-slate-100">
+                <div className="p-3 space-y-3">
                     {filteredCustomers.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 italic">
                             No clients found matching "{searchTerm}"
                         </div>
                     ) : (
-                        filteredCustomers.map(cust => (
-                            <div key={cust.id} onClick={() => openModal('view', cust)} className="p-4 active:bg-slate-50 cursor-pointer">
-                                <div className="flex items-center gap-3 mb-2">
-                                    {cust.avatar ? (
-                                        <img src={cust.avatar} className="w-10 h-10 rounded-full bg-slate-200 object-cover" alt="" />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">
-                                            {cust.name.charAt(0)}
+                        filteredCustomers.map(cust => {
+                            const mapUrl = (cust.address && cust.address.startsWith('http')) ? cust.address 
+                                : (cust.buildingNumber && cust.buildingNumber.startsWith('http')) ? cust.buildingNumber : '';
+                            const bldg = cust.buildingNumber && cust.buildingNumber !== 'N/A' && !cust.buildingNumber.startsWith('http') ? cust.buildingNumber : '';
+                            const historyCount = getCustomerHistory(cust.id).length;
+                            return (
+                                <div key={cust.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                    {/* Card header — tap to view details */}
+                                    <div onClick={() => openModal('view', cust)} className="p-4 active:bg-slate-50 cursor-pointer">
+                                        <div className="flex items-center gap-3">
+                                            {cust.avatar ? (
+                                                <img src={cust.avatar} className="w-12 h-12 rounded-full bg-slate-200 object-cover ring-2 ring-slate-100" alt="" />
+                                            ) : (
+                                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center text-sm font-bold text-white ring-2 ring-slate-100">
+                                                    {cust.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-bold text-slate-900 text-sm">{cust.name}</div>
+                                                <div className="text-xs text-slate-400 font-mono">{formatPhoneDisplay(cust.phone)}</div>
+                                                {bldg && <div className="text-[10px] text-slate-500 mt-0.5">{bldg}</div>}
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">{historyCount} {historyCount === 1 ? 'Job' : 'Jobs'}</span>
+                                                <ChevronRight size={14} className="text-slate-300" />
+                                            </div>
                                         </div>
-                                    )}
-                                    <div>
-                                        <div className="font-bold text-slate-900">{cust.name}</div>
-                                        <div className="text-xs text-slate-500 font-mono">{formatPhoneDisplay(cust.phone)}</div>
+                                    </div>
+                                    {/* Action buttons bar */}
+                                    <div className="flex border-t border-slate-100 divide-x divide-slate-100">
+                                        <a href={`tel:${cust.phone}`} onClick={e => e.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-emerald-600 active:bg-emerald-50 transition-colors">
+                                            <Phone size={14} />
+                                            <span className="text-[11px] font-bold">Call</span>
+                                        </a>
+                                        {mapUrl ? (
+                                            <a href={mapUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-blue-600 active:bg-blue-50 transition-colors">
+                                                <MapPin size={14} />
+                                                <span className="text-[11px] font-bold">Map</span>
+                                            </a>
+                                        ) : (
+                                            <div className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-slate-300">
+                                                <MapPin size={14} />
+                                                <span className="text-[11px] font-bold">No Map</span>
+                                            </div>
+                                        )}
+                                        <button onClick={() => openModal('view', cust)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-slate-600 active:bg-slate-50 transition-colors">
+                                            <Clock size={14} />
+                                            <span className="text-[11px] font-bold">History</span>
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="flex items-start gap-2 text-xs text-slate-500 mb-2">
-                                    <MapPin size={12} className="mt-0.5 shrink-0"/>
-                                    <span className="truncate">
-                                        {cust.buildingNumber && cust.buildingNumber !== 'N/A' && !cust.buildingNumber.startsWith('http') ? cust.buildingNumber + ' · ' : ''}
-                                        {(() => {
-                                            const mapUrl = (cust.address && cust.address.startsWith('http')) ? cust.address 
-                                                : (cust.buildingNumber && cust.buildingNumber.startsWith('http')) ? cust.buildingNumber : '';
-                                            return mapUrl ? <a href={mapUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline" onClick={e => e.stopPropagation()}>View Map</a> 
-                                                : <span className="text-slate-400">No location</span>;
-                                        })()}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700">
-                                        {getCustomerHistory(cust.id).length} Orders
-                                    </span>
-                                    <span className="text-xs text-blue-600 font-medium">View Details &rarr;</span>
-                                </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             ) : (
@@ -643,27 +661,50 @@ onSaveCustomer(data as Customer);
                         <h2 className="text-2xl font-bold text-slate-800 text-center mb-1">{activeItem.name}</h2>
                         <p className="text-slate-500 text-sm mb-8 text-center">{activeItem.id}</p>
                         
-                        <div className="w-full space-y-4">
-                            <div className="flex items-center gap-3 text-slate-700">
-                                <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><Phone size={18}/></div>
-                                <span className="text-sm font-mono">{formatPhoneDisplay(activeItem.phone)}</span>
-                            </div>
+                        <div className="w-full space-y-3">
+                            {/* Call button — tappable, opens phone app */}
+                            <a href={`tel:${activeItem.phone}`} className="flex items-center gap-3 text-slate-700 p-2.5 bg-white rounded-xl shadow-sm border border-slate-100 active:bg-emerald-50 transition-colors">
+                                <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><Phone size={18}/></div>
+                                <div className="flex-1">
+                                    <div className="text-xs text-slate-400 font-bold uppercase">Phone</div>
+                                    <span className="text-sm font-mono text-slate-800">{formatPhoneDisplay(activeItem.phone)}</span>
+                                </div>
+                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">CALL</span>
+                            </a>
                             {activeItem.email && (
-                                <div className="flex items-center gap-3 text-slate-700">
-                                    <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><Mail size={18}/></div>
-                                    <span className="text-sm">{activeItem.email}</span>
-                                </div>
+                                <a href={`mailto:${activeItem.email}`} className="flex items-center gap-3 text-slate-700 p-2.5 bg-white rounded-xl shadow-sm border border-slate-100 active:bg-blue-50 transition-colors">
+                                    <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><Mail size={18}/></div>
+                                    <div className="flex-1">
+                                        <div className="text-xs text-slate-400 font-bold uppercase">Email</div>
+                                        <span className="text-sm text-slate-800">{activeItem.email}</span>
+                                    </div>
+                                </a>
                             )}
-                            <div className="flex items-center gap-3 text-slate-700">
-                                <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><MapPin size={18}/></div>
-                                <span className="text-sm truncate max-w-[200px]" title={activeItem.address}>{activeItem.address || 'No Location URL'}</span>
-                            </div>
-                            {activeItem.buildingNumber && (
-                                <div className="flex items-center gap-3 text-slate-700">
-                                    <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><Home size={18}/></div>
-                                    <span className="text-sm">Bldg: {activeItem.buildingNumber}</span>
-                                </div>
-                            )}
+                            {/* Map button — tappable, opens maps app */}
+                            {(() => {
+                                const mapUrl = (activeItem.address && activeItem.address.startsWith('http')) ? activeItem.address 
+                                    : (activeItem.buildingNumber && activeItem.buildingNumber.startsWith('http')) ? activeItem.buildingNumber : '';
+                                const bldg = activeItem.buildingNumber && activeItem.buildingNumber !== 'N/A' && !activeItem.buildingNumber.startsWith('http') ? activeItem.buildingNumber : '';
+                                return mapUrl ? (
+                                    <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-slate-700 p-2.5 bg-white rounded-xl shadow-sm border border-slate-100 active:bg-blue-50 transition-colors">
+                                        <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><MapPin size={18}/></div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-xs text-slate-400 font-bold uppercase">Location</div>
+                                            {bldg && <span className="text-sm text-slate-800 block">{bldg}</span>}
+                                            <span className="text-[10px] text-blue-600 font-medium">Open in Maps →</span>
+                                        </div>
+                                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg shrink-0">MAP</span>
+                                    </a>
+                                ) : (
+                                    <div className="flex items-center gap-3 text-slate-400 p-2.5 bg-white rounded-xl shadow-sm border border-slate-100">
+                                        <div className="p-2 bg-slate-50 rounded-lg text-slate-300"><MapPin size={18}/></div>
+                                        <div className="flex-1">
+                                            <div className="text-xs text-slate-400 font-bold uppercase">Location</div>
+                                            {bldg ? <span className="text-sm text-slate-600">{bldg}</span> : <span className="text-sm text-slate-400">Not set</span>}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {!readOnly && (
