@@ -326,9 +326,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   ];
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-white/20">
+    <div className="h-full flex flex-col overflow-hidden bg-slate-50">
       {/* Header */}
-      <div className="px-6 pt-5 pb-4 bg-white/50 backdrop-blur-xl border-b border-white/30 shrink-0">
+      <div className="px-6 pt-5 pb-4 bg-white border-b border-slate-200 shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-black text-slate-900">Master Dashboard</h1>
@@ -347,7 +347,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
             { label: 'Planned', value: metrics.planned, color: 'bg-amber-50 text-amber-700 border border-amber-200', filter: 'PLANNED' },
             { label: 'Completed', value: metrics.completed, color: 'bg-emerald-50 text-emerald-700 border border-emerald-200', filter: 'DONE' },
             { label: 'Carry Fwd', value: metrics.carryForward, color: 'bg-orange-50 text-orange-700 border border-orange-200', filter: 'CARRY_FORWARD' },
-            { label: 'Cancelled', value: metrics.cancelled, color: 'bg-slate-50 text-slate-500 border border-white/40', filter: 'CANCELLED' },
+            { label: 'Cancelled', value: metrics.cancelled, color: 'bg-slate-50 text-slate-500 border border-slate-200', filter: 'CANCELLED' },
           ].map(kpi => (
             <button key={kpi.label} onClick={() => setStatusFilter(statusFilter === kpi.filter ? 'ALL' : kpi.filter)}
               className={`p-3 rounded-xl text-center transition-all hover:shadow-md ${statusFilter === kpi.filter ? 'ring-2 ring-slate-900 shadow-md scale-[1.02]' : ''} ${kpi.color}`}>
@@ -359,7 +359,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
         {/* Charts Row */}
         <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 p-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Status Distribution</h3>
             <ResponsiveContainer width="100%" height={140}>
               <PieChart><Pie data={statusPieData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2} dataKey="value">
@@ -374,7 +374,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
               ))}
             </div>
           </div>
-          <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 p-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Jobs by Engineer</h3>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={engineerBarData} layout="vertical" margin={{ left: 0, right: 10 }}>
@@ -384,7 +384,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 p-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">7-Day Velocity</h3>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={velocityData} margin={{ left: -10 }}>
@@ -400,12 +400,12 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           <div className="flex-1 relative min-w-[200px]">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search reference, client, engineer..."
-              className="w-full pl-9 pr-4 py-2.5 bg-white/30 backdrop-blur-xl border border-white/30 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white" />
+              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white" />
           </div>
           {/* Type */}
           <div className="flex bg-slate-100 rounded-xl p-0.5 shrink-0">
             {(['all', 'tickets', 'activities'] as const).map(v => (
-              <button key={v} onClick={() => setTypeFilter(v)} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${typeFilter === v ? 'bg-white/50 backdrop-blur-xl text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+              <button key={v} onClick={() => setTypeFilter(v)} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${typeFilter === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
                 {v === 'all' ? 'All' : v === 'tickets' ? 'Tickets' : 'Activities'}
               </button>
             ))}
@@ -413,13 +413,13 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           {/* Category multi-select */}
           <div className="relative">
             <button onClick={() => { setShowCatDropdown(!showCatDropdown); setShowActTypeDropdown(false); }}
-              className="flex items-center gap-1 bg-white/50 backdrop-blur-xl border border-white/40 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
+              className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
               {selectedCategories.length === 0 ? 'All Categories' : `${selectedCategories.length} selected`} <ChevronDown size={12} />
             </button>
             {showCatDropdown && (
-              <div className="absolute top-full mt-1 left-0 bg-white/50 backdrop-blur-xl border border-white/40 rounded-xl shadow-xl z-30 p-2 min-w-[180px]">
+              <div className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-2 min-w-[180px]">
                 {UNIFIED_CATEGORIES.map(c => (
-                  <label key={c} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/40 rounded-lg cursor-pointer text-xs">
+                  <label key={c} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs">
                     <input type="checkbox" checked={selectedCategories.includes(c)} onChange={() => toggleCat(c)} className="rounded" />
                     {c}
                   </label>
@@ -431,13 +431,13 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           {/* Activity Type multi-select */}
           <div className="relative">
             <button onClick={() => { setShowActTypeDropdown(!showActTypeDropdown); setShowCatDropdown(false); }}
-              className="flex items-center gap-1 bg-white/50 backdrop-blur-xl border border-white/40 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
+              className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
               {selectedActTypes.length === 0 ? 'All Activity Types' : `${selectedActTypes.length} selected`} <ChevronDown size={12} />
             </button>
             {showActTypeDropdown && (
-              <div className="absolute top-full mt-1 left-0 bg-white/50 backdrop-blur-xl border border-white/40 rounded-xl shadow-xl z-30 p-2 min-w-[160px]">
+              <div className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-2 min-w-[160px]">
                 {ACTIVITY_TYPES.map(t => (
-                  <label key={t} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/40 rounded-lg cursor-pointer text-xs">
+                  <label key={t} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs">
                     <input type="checkbox" checked={selectedActTypes.includes(t)} onChange={() => toggleActType(t)} className="rounded" />
                     {t}
                   </label>
@@ -448,7 +448,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           </div>
           {/* Assigned To */}
           <select value={assignedFilter} onChange={e => setAssignedFilter(e.target.value)}
-            className="bg-white/50 backdrop-blur-xl border border-white/40 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none shrink-0">
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none shrink-0">
             <option value="ALL">All Engineers</option>
             {allEngineers.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
@@ -456,7 +456,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           <div className="flex bg-slate-100 rounded-xl p-0.5 shrink-0">
             {(['today', 'week', 'month', 'all'] as const).map(v => (
               <button key={v} onClick={() => setDateRange(v)}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold ${dateRange === v ? 'bg-white/50 backdrop-blur-xl text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold ${dateRange === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
                 {v === 'all' ? 'All' : v === 'week' ? 'Week (Sat–Thu)' : v.charAt(0).toUpperCase() + v.slice(1)}
               </button>
             ))}
@@ -467,7 +467,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       {/* Table */}
       <div className="flex-1 overflow-y-auto pb-20">
         <table className="w-full text-sm text-left table-fixed">
-          <thead className="bg-white/50 backdrop-blur-xl text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-white/30">
+          <thead className="bg-white text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 w-[5%]">Type</th>
               <th className="px-4 py-3 w-[9%]">Ref</th>
@@ -487,12 +487,12 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
             ) : allJobs.map(job => {
               const photos = (job.raw as any).photos || [];
               return (
-                <tr key={`${job.kind}-${job.id}`} className="hover:bg-white/40 group">
+                <tr key={`${job.kind}-${job.id}`} className="hover:bg-slate-50 group">
                   <td className="px-4 py-3"><span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${job.kind === 'ticket' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{job.kind === 'ticket' ? 'TKT' : 'ACT'}</span></td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-600 truncate">{job.reference}</td>
                   <td className="px-4 py-3"><div className="font-medium text-slate-800 truncate">{job.title}</div></td>
                   <td className="px-4 py-3 text-xs text-slate-600 truncate">{job.subtitle}</td>
-                  <td className="px-4 py-3"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${job.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' : job.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-white/30 text-slate-600 border-white/40'}`}>{job.priority}</span></td>
+                  <td className="px-4 py-3"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${job.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' : job.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{job.priority}</span></td>
                   <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[job.status] || 'bg-slate-100 text-slate-500'}`}>{job.status.replace(/_/g, ' ')}</span></td>
                   <td className="px-4 py-3 text-xs text-slate-500">{job.dateLabel}</td>
                   <td className="px-4 py-3 text-xs text-slate-700 truncate">{job.techName}</td>
@@ -522,8 +522,8 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
         const isDone = d.status === 'DONE' || d.status === 'RESOLVED';
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setPreviewItem(null)}>
-            <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-slate-50 shrink-0">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full ${statusColor}`} />
                   <div>
@@ -540,37 +540,37 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-1">
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase">Customer</h4>
                   <div className="text-sm font-bold text-slate-800">{cust?.name || (isTicket ? d.customerName : 'Unknown')}</div>
                   {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{cust?.phone || d.phoneNumber}</div>}
                 </div>
-                <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-1.5">
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase">Timing</h4>
                   <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span>{fmtDt(isTicket ? d.createdAt : d.plannedDate)}</span></div>
                   {(d as any).startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt((d as any).startedAt)}</span></div>}
                   {(d as any).completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt((d as any).completedAt)}</span></div>}
                 </div>
                 {(salesLd || tech || assistants.length > 0) && (
-                  <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-2">
-                    {salesLd && <div className="pb-2 border-b border-white/30"><div className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Sales Lead</div><div className="text-xs font-medium text-indigo-700">{salesLd.name}</div></div>}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                    {salesLd && <div className="pb-2 border-b border-slate-200"><div className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Sales Lead</div><div className="text-xs font-medium text-indigo-700">{salesLd.name}</div></div>}
                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Team</div>
                     {tech && <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-purple-500" /><span className="font-medium">{tech.name}</span></div>}
                     {assistants.map((a: any) => <div key={a.id} className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-teal-500" /><span>{a.name}</span><span className="text-[10px] text-slate-400">TA</span></div>)}
                   </div>
                 )}
-                {issueText && <div className="bg-slate-50 rounded-xl p-4 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{issueText}</p></div>}
+                {issueText && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{issueText}</p></div>}
                 {/* Completion note — only for DONE/RESOLVED, separate from remarks */}
                 {isDone && (d as any).completionNote && <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{(d as any).completionNote}</p></div>}
                 {/* Remarks — only if NO visit history (avoids duplication) */}
-                {!hasVisits && ((d as any).remarks || d.notes) && ((d as any).remarks || d.notes) !== (d as any).completionNote && <div className="bg-slate-50 rounded-xl p-4 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs whitespace-pre-wrap">{(d as any).remarks || d.notes}</p></div>}
+                {!hasVisits && ((d as any).remarks || d.notes) && ((d as any).remarks || d.notes) !== (d as any).completionNote && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs whitespace-pre-wrap">{(d as any).remarks || d.notes}</p></div>}
                 {/* Carry forward — only if NO visit history */}
                 {!hasVisits && (d as any).carryForwardNote && <div className="bg-amber-50 rounded-xl p-4 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{(d as any).carryForwardNote}</p></div>}
                 {/* Visit History Cards */}
                 {hasVisits && (
                   <div className="space-y-3">
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Visit History ({visits.length} visit{visits.length > 1 ? 's' : ''})</div>
-                    <div className="relative border-l-2 border-white/40 ml-2 space-y-3">
+                    <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
                       {visits.map((v: any, i: number) => {
                         const visCF = v.status === 'CARRY_FORWARD'; const visDone = v.status === 'DONE';
                         const cardBg = visDone ? 'bg-emerald-50 border-emerald-200' : visCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
@@ -600,7 +600,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />)}</div></div>}
                 {(d as any).odooLink && <div className="flex items-center gap-2 text-xs"><span className="text-slate-400">Odoo:</span><a href={(d as any).odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate">{(d as any).odooLink}</a></div>}
               </div>
-              <div className="p-4 border-t border-white/20 bg-slate-50 shrink-0">
+              <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
                 <button onClick={() => setPreviewItem(null)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Close</button>
               </div>
             </div>
@@ -611,8 +611,8 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       {/* Export Popup */}
       {showExport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowExport(false)}>
-          <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white/20">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-bold text-slate-900">Export Data</h3>
               <button onClick={() => setShowExport(false)} className="p-1 hover:bg-slate-200 rounded-lg"><X size={16} /></button>
             </div>
@@ -621,8 +621,8 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Format</label>
                 <div className="flex gap-2">
-                  <button onClick={() => setExportFormat('pdf')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${exportFormat === 'pdf' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white/50 backdrop-blur-xl text-slate-600 border-white/40'}`}><FileText size={14} /> PDF</button>
-                  <button onClick={() => setExportFormat('excel')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${exportFormat === 'excel' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white/50 backdrop-blur-xl text-slate-600 border-white/40'}`}><FileSpreadsheet size={14} /> Excel (CSV)</button>
+                  <button onClick={() => setExportFormat('pdf')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${exportFormat === 'pdf' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}><FileText size={14} /> PDF</button>
+                  <button onClick={() => setExportFormat('excel')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${exportFormat === 'excel' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}><FileSpreadsheet size={14} /> Excel (CSV)</button>
                 </div>
               </div>
               {/* Type */}
@@ -630,7 +630,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Data Type</label>
                 <div className="flex gap-2">
                   {(['all', 'tickets', 'activities'] as const).map(v => (
-                    <button key={v} onClick={() => setExportType(v)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${exportType === v ? 'bg-slate-900 text-white border-slate-900' : 'bg-white/50 backdrop-blur-xl text-slate-600 border-white/40'}`}>
+                    <button key={v} onClick={() => setExportType(v)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${exportType === v ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
                       {v === 'all' ? 'All' : v === 'tickets' ? 'Tickets' : 'Activities'}
                     </button>
                   ))}
@@ -645,8 +645,8 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input type="date" value={exportDateStart} onChange={e => setExportDateStart(e.target.value)} className="border border-white/40 rounded-lg px-3 py-2 text-sm" />
-                  <input type="date" value={exportDateEnd} onChange={e => setExportDateEnd(e.target.value)} className="border border-white/40 rounded-lg px-3 py-2 text-sm" />
+                  <input type="date" value={exportDateStart} onChange={e => setExportDateStart(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+                  <input type="date" value={exportDateEnd} onChange={e => setExportDateEnd(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
                 </div>
               </div>
               {/* Columns */}
@@ -663,7 +663,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 </div>
               </div>
             </div>
-            <div className="p-4 border-t border-white/20 bg-white/20">
+            <div className="p-4 border-t border-slate-100 bg-slate-50">
               <button onClick={handleExport} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2">
                 <Download size={14} /> Export {exportFormat.toUpperCase()}
               </button>
