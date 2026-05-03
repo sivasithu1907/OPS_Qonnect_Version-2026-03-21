@@ -102,7 +102,7 @@ const TVDisplayMode: React.FC = () => {
     return (
       <div className="fixed inset-0 bg-slate-900 flex items-center justify-center">
         <div className="flex flex-col items-center">
-          <div className="w-24 h-24 bg-white/50 backdrop-blur-xl rounded-3xl flex items-center justify-center shadow-2xl shadow-black/30 mb-6" style={{padding: '12px'}}>
+          <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl shadow-black/30 mb-6" style={{padding: '12px'}}>
             <svg width="60" height="60" viewBox="0 0 578 578" xmlns="http://www.w3.org/2000/svg"><path d="M409.18,407.51a113.86,113.86,0,1,0-225.35,32.32l45-36.75a69.77,69.77,0,0,1,135.75,4.43Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><rect x="251.37" y="404.96" width="30.72" height="30.72"/><rect x="293.23" y="404.96" width="30.72" height="30.72"/><rect x="251.37" y="447.04" width="30.72" height="30.72"/><rect x="293.23" y="447.04" width="30.72" height="30.72"/><path d="M297.5,220.76C186.94,220.76,97,310.71,97,421.27A200.3,200.3,0,0,0,112.27,498l36.14-29.53a156.51,156.51,0,0,1-7.3-47.21c0-86.24,70.15-156.4,156.39-156.4S453.89,335,453.89,421.27a156.33,156.33,0,0,1-7.42,47.57l36.11,29.49A200.38,200.38,0,0,0,498,421.27C498,310.71,408.06,220.76,297.5,220.76Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><path d="M297.5,132c-159.35,0-289,129.64-289,289A287.17,287.17,0,0,0,41.63,555.23l35-28.57A243.44,243.44,0,0,1,52.61,421c0-135,109.86-244.89,244.89-244.89S542.39,286,542.39,421A243.47,243.47,0,0,1,518,527.49l35,28.55A287.17,287.17,0,0,0,586.5,421C586.5,261.64,456.85,132,297.5,132Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><path d="M247.31,506.42l49.61-43.28,43.65,33.92,37-.7-.13,30.39,56,45.68a.78.78,0,0,0,.05-.14l66.75,54.48A289.41,289.41,0,0,0,529,593.6l-34.38-28h0l-73.11-60,.3-54.08-65.73.08-59.39-48L106.09,559.8,65.5,593.13c8.73,11.73,18.34,25.41,28.71,35.68L247.3,506.42Z" transform="translate(-8.5 -132)"/><path d="M430.33,626.59A244.06,244.06,0,0,1,164,626.13L128.4,655.2a288.32,288.32,0,0,0,337.55.48Z" transform="translate(-8.5 -132)"/></svg>
           </div>
           <div className="text-xl font-bold text-white mb-2">Qonnect Field Operations Monitor</div>
@@ -130,7 +130,7 @@ const TVDisplayMode: React.FC = () => {
       {/* TV TOP BAR */}
       <div className="h-12 bg-slate-900 flex items-center justify-between px-6 shrink-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="bg-white/50 backdrop-blur-xl rounded-lg w-8 h-8 flex items-center justify-center shrink-0"><svg viewBox="0 0 578 578" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M409.18,407.51a113.86,113.86,0,1,0-225.35,32.32l45-36.75a69.77,69.77,0,0,1,135.75,4.43Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><rect x="251.37" y="404.96" width="30.72" height="30.72"/><rect x="293.23" y="404.96" width="30.72" height="30.72"/><rect x="251.37" y="447.04" width="30.72" height="30.72"/><rect x="293.23" y="447.04" width="30.72" height="30.72"/><path d="M297.5,220.76C186.94,220.76,97,310.71,97,421.27A200.3,200.3,0,0,0,112.27,498l36.14-29.53a156.51,156.51,0,0,1-7.3-47.21c0-86.24,70.15-156.4,156.39-156.4S453.89,335,453.89,421.27a156.33,156.33,0,0,1-7.42,47.57l36.11,29.49A200.38,200.38,0,0,0,498,421.27C498,310.71,408.06,220.76,297.5,220.76Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><path d="M297.5,132c-159.35,0-289,129.64-289,289A287.17,287.17,0,0,0,41.63,555.23l35-28.57A243.44,243.44,0,0,1,52.61,421c0-135,109.86-244.89,244.89-244.89S542.39,286,542.39,421A243.47,243.47,0,0,1,518,527.49l35,28.55A287.17,287.17,0,0,0,586.5,421C586.5,261.64,456.85,132,297.5,132Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><path d="M247.31,506.42l49.61-43.28,43.65,33.92,37-.7-.13,30.39,56,45.68a.78.78,0,0,0,.05-.14l66.75,54.48A289.41,289.41,0,0,0,529,593.6l-34.38-28h0l-73.11-60,.3-54.08-65.73.08-59.39-48L106.09,559.8,65.5,593.13c8.73,11.73,18.34,25.41,28.71,35.68L247.3,506.42Z" transform="translate(-8.5 -132)" /><path d="M430.33,626.59A244.06,244.06,0,0,1,164,626.13L128.4,655.2a288.32,288.32,0,0,0,337.55.48Z" transform="translate(-8.5 -132)" /></svg></div>
+          <div className="bg-white rounded-lg w-8 h-8 flex items-center justify-center shrink-0"><svg viewBox="0 0 578 578" xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M409.18,407.51a113.86,113.86,0,1,0-225.35,32.32l45-36.75a69.77,69.77,0,0,1,135.75,4.43Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><rect x="251.37" y="404.96" width="30.72" height="30.72"/><rect x="293.23" y="404.96" width="30.72" height="30.72"/><rect x="251.37" y="447.04" width="30.72" height="30.72"/><rect x="293.23" y="447.04" width="30.72" height="30.72"/><path d="M297.5,220.76C186.94,220.76,97,310.71,97,421.27A200.3,200.3,0,0,0,112.27,498l36.14-29.53a156.51,156.51,0,0,1-7.3-47.21c0-86.24,70.15-156.4,156.39-156.4S453.89,335,453.89,421.27a156.33,156.33,0,0,1-7.42,47.57l36.11,29.49A200.38,200.38,0,0,0,498,421.27C498,310.71,408.06,220.76,297.5,220.76Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><path d="M297.5,132c-159.35,0-289,129.64-289,289A287.17,287.17,0,0,0,41.63,555.23l35-28.57A243.44,243.44,0,0,1,52.61,421c0-135,109.86-244.89,244.89-244.89S542.39,286,542.39,421A243.47,243.47,0,0,1,518,527.49l35,28.55A287.17,287.17,0,0,0,586.5,421C586.5,261.64,456.85,132,297.5,132Z" transform="translate(-8.5 -132)" fill="#fdbb40"/><path d="M247.31,506.42l49.61-43.28,43.65,33.92,37-.7-.13,30.39,56,45.68a.78.78,0,0,0,.05-.14l66.75,54.48A289.41,289.41,0,0,0,529,593.6l-34.38-28h0l-73.11-60,.3-54.08-65.73.08-59.39-48L106.09,559.8,65.5,593.13c8.73,11.73,18.34,25.41,28.71,35.68L247.3,506.42Z" transform="translate(-8.5 -132)" /><path d="M430.33,626.59A244.06,244.06,0,0,1,164,626.13L128.4,655.2a288.32,288.32,0,0,0,337.55.48Z" transform="translate(-8.5 -132)" /></svg></div>
           <span className="text-white font-bold text-sm">Qonnect Field Operations Monitor</span>
           <div className="flex items-center gap-1 ml-4">
             <button 
@@ -187,10 +187,10 @@ const TVDisplayMode: React.FC = () => {
         {/* CALENDAR VIEW */}
         {activePanel === 'calendar' && (
           <div className="h-full flex flex-col bg-white">
-            <div className="grid grid-cols-8 border-b border-white/30 bg-slate-50 shrink-0">
-              <div className="p-3 border-r border-white/30 font-bold text-xs text-slate-500 uppercase flex items-center justify-center">Engineer</div>
+            <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-50 shrink-0">
+              <div className="p-3 border-r border-slate-200 font-bold text-xs text-slate-500 uppercase flex items-center justify-center">Engineer</div>
               {calendarDays.map(d => (
-                <div key={d.toString()} className="p-2 text-center border-r border-white/30 last:border-0">
+                <div key={d.toString()} className="p-2 text-center border-r border-slate-200 last:border-0">
                   <div className="text-xs font-bold text-slate-600 uppercase">{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                   <div className={`text-lg font-black mt-0.5 ${d.toDateString() === new Date().toDateString() ? 'text-amber-600 bg-amber-50 w-8 h-8 rounded-full flex items-center justify-center mx-auto' : 'text-slate-700'}`}>
                     {d.getDate()}
@@ -200,8 +200,8 @@ const TVDisplayMode: React.FC = () => {
             </div>
             <div className="flex-1 overflow-y-auto">
               {assignableLeads.map((lead: any) => (
-                <div key={lead.id} className="grid grid-cols-8 border-b border-white/20 min-h-[80px]">
-                  <div className="p-3 border-r border-white/30 bg-slate-50/50 flex flex-col justify-center">
+                <div key={lead.id} className="grid grid-cols-8 border-b border-slate-100 min-h-[80px]">
+                  <div className="p-3 border-r border-slate-200 bg-slate-50/50 flex flex-col justify-center">
                     <div className="font-bold text-slate-800 text-sm">{lead.name}</div>
                     <div className="text-[10px] text-slate-500">{lead.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}</div>
                   </div>
@@ -212,7 +212,7 @@ const TVDisplayMode: React.FC = () => {
                       return a.leadTechId === lead.id || a.salesLeadId === lead.id;
                     });
                     return (
-                      <div key={d.toString()} className={`p-1 border-r border-white/20 last:border-0 ${d.toDateString() === new Date().toDateString() ? 'bg-amber-50/30' : ''}`}>
+                      <div key={d.toString()} className={`p-1 border-r border-slate-100 last:border-0 ${d.toDateString() === new Date().toDateString() ? 'bg-amber-50/30' : ''}`}>
                         {dayActs.map((act: any) => (
                           <div key={act.id} className={`mb-1 p-1.5 rounded border text-[10px] ${getStatusBg(act.status)}`}>
                             <div className="font-bold truncate">{act.type}</div>
@@ -264,7 +264,7 @@ const TVDisplayMode: React.FC = () => {
           const plannedJobs = all.filter((j: any) => ['PLANNED','NEW','OPEN'].includes(j.status)).length;
 
           return (
-            <div className="h-full p-6 overflow-auto bg-white/20">
+            <div className="h-full p-6 overflow-auto bg-slate-50">
               {/* KPI Cards Row */}
               <div className="grid grid-cols-5 gap-4 mb-6">
                 <div className="bg-slate-900 text-white rounded-2xl p-5 text-center">
@@ -292,7 +292,7 @@ const TVDisplayMode: React.FC = () => {
               {/* Charts Row */}
               <div className="grid grid-cols-2 gap-6">
                 {/* Status Pie */}
-                <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 p-6">
+                <div className="bg-white rounded-2xl border border-slate-200 p-6">
                   <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Status Distribution</h3>
                   <div className="flex items-center gap-6">
                     <ResponsiveContainer width="50%" height={220}>
@@ -316,7 +316,7 @@ const TVDisplayMode: React.FC = () => {
                 </div>
 
                 {/* Engineer Workload Bar */}
-                <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 p-6">
+                <div className="bg-white rounded-2xl border border-slate-200 p-6">
                   <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Workload by Engineer</h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20 }}>
