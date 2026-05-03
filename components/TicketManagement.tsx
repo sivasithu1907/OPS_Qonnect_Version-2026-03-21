@@ -362,7 +362,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         case Priority.MEDIUM: return 'border-blue-400';
         case Priority.HIGH: return 'border-orange-400';
         case Priority.URGENT: return 'border-red-500';
-        default: return 'border-slate-200';
+        default: return 'border-white/40';
       }
   };
   const getPriorityDot = (p: string) => {
@@ -717,11 +717,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const suggestTechAssign = analysisResult?.recommended_action === 'assign_field_engineer';
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200 m-6">
+    <div className="flex h-[calc(100vh-6rem)] overflow-hidden bg-white/50 backdrop-blur-xl rounded-lg shadow-sm border border-white/40 m-6">
       
       {/* Left List View (Unchanged) */}
-      <div className="w-[440px] shrink-0 border-r border-slate-200 flex flex-col">
-        <div className="p-4 border-b border-slate-100 bg-slate-50 space-y-3">
+      <div className="w-[440px] shrink-0 border-r border-white/30 flex flex-col">
+        <div className="p-4 border-b border-white/20 bg-slate-50 space-y-3">
              <div className="flex justify-between items-center">
                 <h2 className="font-semibold text-slate-800">
                     {activeFilter ? 'Filtered' : (viewMode === 'active' ? 'Active Queue' : 'History')} 
@@ -764,7 +764,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                     className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
                                         agingFilter === type 
                                         ? (type === 'Fresh' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : type === 'Warning' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-100 text-red-700 border-red-200')
-                                        : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-200'
+                                        : 'bg-white/50 backdrop-blur-xl text-slate-500 border-white/40 hover:border-emerald-200'
                                     }`}
                                  >
                                      {type} <span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] bg-slate-100">{agingCounts[type as keyof typeof agingCounts]}</span>
@@ -785,7 +785,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                     <select 
                                         value={f.val}
                                         onChange={(e) => f.set(e.target.value as any)}
-                                        className="w-full appearance-none bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-[10px] font-medium text-slate-600 focus:outline-none focus:border-slate-400"
+                                        className="w-full appearance-none bg-white/50 backdrop-blur-xl border border-white/40 rounded-lg py-1.5 px-2 text-[10px] font-medium text-slate-600 focus:outline-none focus:border-slate-400"
                                     >
                                         <option value="ALL">All {f.label}</option>
                                         {f.opts.map((o: any) => (
@@ -810,8 +810,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              
              {!activeFilter && (
                  <div className="flex bg-slate-200/50 p-1 rounded-lg">
-                     <button onClick={() => setViewMode('active')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all ${viewMode === 'active' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Active</button>
-                     <button onClick={() => setViewMode('history')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${viewMode === 'history' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><History size={12} /> History</button>
+                     <button onClick={() => setViewMode('active')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all ${viewMode === 'active' ? 'bg-white/50 backdrop-blur-xl text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Active</button>
+                     <button onClick={() => setViewMode('history')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${viewMode === 'history' ? 'bg-white/50 backdrop-blur-xl text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><History size={12} /> History</button>
                  </div>
              )}
 
@@ -835,7 +835,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 const healthColor = getHealthColor(health);
                 
                 return (
-                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' : ''}`}>
+                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-white/20 hover:bg-white/40 cursor-pointer transition-colors ${selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' : ''}`}>
                         <div className="flex justify-between items-start mb-1">
                             <span className="font-medium text-slate-900">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
@@ -853,7 +853,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         </div>
                         <div className="text-sm text-slate-500 mb-2 truncate"><span className="text-xs text-slate-400 font-medium">{ticket.id}</span> • {(safeString(ticket.type) || '—')} • {ticket.category} • {safeString(ticket.phoneNumber)}</div>
                         <div className="flex justify-between items-center text-xs">
-                            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600"><span className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(ticket.priority)}`}/>{toTitleCase(ticket.priority)}</span>
+                            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-white/40 bg-white/30 text-slate-600"><span className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(ticket.priority)}`}/>{toTitleCase(ticket.priority)}</span>
                             <div className="flex items-center gap-2">
                                 {/* Health Badge */}
                                 {health && (
@@ -874,7 +874,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       {selectedTicket && editForm ? (
         <div className="flex-1 flex flex-col bg-white">
           {/* Detail Header */}
-          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+          <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white/50 backdrop-blur-xl shrink-0">
             <div>
               <div className="text-[10px] font-mono text-slate-400">{selectedTicket.id}</div>
               <h3 className="font-bold text-lg text-slate-900">{editForm.customerName}</h3>
@@ -893,11 +893,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               }`}>{selectedTicket.status.replace(/_/g, ' ')}</span>
               <div className="flex bg-slate-100 rounded-lg p-0.5">
                 <button onClick={() => setPanelMode('view')}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'view' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'view' ? 'bg-white/50 backdrop-blur-xl text-slate-900 shadow-sm' : 'text-slate-500'}`}>
                   <Eye size={12} /> Summary
                 </button>
                 <button onClick={() => setPanelMode('edit')}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'edit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
+                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'edit' ? 'bg-white/50 backdrop-blur-xl text-slate-900 shadow-sm' : 'text-slate-500'}`}>
                   <Edit size={12} /> Edit
                 </button>
               </div>
@@ -916,31 +916,31 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="max-w-2xl mx-auto space-y-4">
                   <div className="grid grid-cols-4 gap-3">
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Category</div><div className="text-sm font-bold text-slate-800">{selectedTicket.category}</div></div>
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Type</div><div className="text-sm font-bold text-slate-800">{safeString(selectedTicket.type) || '—'}</div></div>
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Priority</div><div className={`text-sm font-bold ${selectedTicket.priority === 'URGENT' ? 'text-red-600' : selectedTicket.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-800'}`}>{toTitleCase(selectedTicket.priority)}</div></div>
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Engineer</div><div className="text-sm font-bold text-slate-800">{tech?.name || 'Unassigned'}</div></div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] text-slate-400 mb-0.5">Category</div><div className="text-sm font-bold text-slate-800">{selectedTicket.category}</div></div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] text-slate-400 mb-0.5">Type</div><div className="text-sm font-bold text-slate-800">{safeString(selectedTicket.type) || '—'}</div></div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] text-slate-400 mb-0.5">Priority</div><div className={`text-sm font-bold ${selectedTicket.priority === 'URGENT' ? 'text-red-600' : selectedTicket.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-800'}`}>{toTitleCase(selectedTicket.priority)}</div></div>
+                    <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] text-slate-400 mb-0.5">Engineer</div><div className="text-sm font-bold text-slate-800">{tech?.name || 'Unassigned'}</div></div>
                   </div>
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                  <div className="bg-slate-50 rounded-xl p-4 border border-white/20">
                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
                     <div className="text-sm font-bold text-slate-800">{cust?.name || editForm.customerName}</div>
                     {editForm.phoneNumber && <div className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(editForm.phoneNumber)}</div>}
                     {(selectedTicket.houseNumber || selectedTicket.locationUrl) && <div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><MapPin size={10} />{selectedTicket.houseNumber && !selectedTicket.houseNumber.startsWith('http') && <span>{selectedTicket.houseNumber}</span>}{selectedTicket.locationUrl && <a href={selectedTicket.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View Map</a>}</div>}
                   </div>
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5">
+                  <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-1.5">
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
                     <div className="flex justify-between text-xs"><span className="text-slate-400">Created</span><span>{new Date(selectedTicket.createdAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span></div>
                     {(selectedTicket as any).startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{new Date((selectedTicket as any).startedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
                     {(selectedTicket as any).completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{new Date((selectedTicket as any).completedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
                     {selectedTicket.appointmentTime && <div className="flex justify-between text-xs"><span className="text-slate-400">Appointment</span><span className="text-blue-600">{new Date(selectedTicket.appointmentTime).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
                   </div>
-                  {issueText && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{issueText}</p></div>}
+                  {issueText && <div className="bg-slate-50 rounded-xl p-4 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{issueText}</p></div>}
                   {visitHist.length === 0 && (selectedTicket as any).completionNote && <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-sm text-emerald-800 whitespace-pre-wrap">{(selectedTicket as any).completionNote}</p></div>}
                   {visitHist.length === 0 && (selectedTicket as any).carryForwardNote && <div className="bg-amber-50 rounded-xl p-4 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-sm text-amber-800 whitespace-pre-wrap">{(selectedTicket as any).carryForwardNote}</p>{(selectedTicket as any).nextPlannedAt && <div className="text-xs text-amber-600 mt-1">Re-scheduled: {new Date((selectedTicket as any).nextPlannedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</div>}</div>}
                   {visitHist.length > 0 && (
                     <div className="space-y-3">
                       <div className="text-[10px] font-bold text-slate-400 uppercase">Visit History ({visitHist.length} visit{visitHist.length > 1 ? 's' : ''})</div>
-                      <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
+                      <div className="relative border-l-2 border-white/40 ml-2 space-y-3">
                         {visitHist.map((v: any, i: number) => {
                           const isCF = v.status === 'CARRY_FORWARD'; const isDone = v.status === 'DONE';
                           const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
@@ -979,7 +979,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                <div className="flex-1 overflow-y-auto">
                <div className="max-w-2xl mx-auto">
                {/* Client Management Section */}
-               <div className="p-4 border-b border-slate-200 bg-white space-y-4 shrink-0">
+               <div className="p-4 border-b border-white/30 bg-white/50 backdrop-blur-xl space-y-4 shrink-0">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-xs uppercase tracking-wider">
                     <User size={14}/> Client Details
                 </h3>
@@ -1004,7 +1004,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between p-3 bg-slate-100 border border-slate-200 rounded-lg">
+                        <div className="flex items-center justify-between p-3 bg-slate-100 border border-white/40 rounded-lg">
                             <div>
                                 <div className="text-[10px] font-bold text-slate-500 uppercase">Detected Contact</div>
                                 <div className="font-mono text-sm font-bold text-slate-700">{formatPhoneDisplay(editForm?.phoneNumber || '') || "No Phone"}</div>
@@ -1034,14 +1034,14 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
                         {clientLinkMode === 'view' && (
                             <div className="flex gap-2">
-                                <button onClick={() => setClientLinkMode('search')} className="flex-1 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Link Existing</button>
+                                <button onClick={() => setClientLinkMode('search')} className="flex-1 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-white/40 transition-colors">Link Existing</button>
                                 <button onClick={() => setClientLinkMode('create')} className="flex-1 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors">Create New</button>
                             </div>
                         )}
 
                         {clientLinkMode === 'search' && (
                             <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                <div className="bg-white/20 p-2 rounded-lg border border-white/40">
                                     <CustomerSelector 
                                         customers={customers}
                                         onSelect={(c) => {
@@ -1059,7 +1059,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         )}
 
                         {clientLinkMode === 'create' && (
-                            <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in zoom-in-95 duration-200">
+                            <div className="space-y-3 p-3 bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg animate-in fade-in zoom-in-95 duration-200">
                                 <div className="flex items-center justify-between">
                                     <h4 className="text-xs font-bold text-slate-800">New Client Profile</h4>
                                     <button onClick={() => setClientLinkMode('view')}><X size={14} className="text-slate-400 hover:text-slate-600"/></button>
@@ -1104,7 +1104,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     selectedTicket?.status === TicketStatus.CARRY_FORWARD ? 'bg-orange-50 text-orange-700 border-orange-200' :
                     selectedTicket?.status === TicketStatus.RESOLVED      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                     selectedTicket?.status === TicketStatus.CANCELLED     ? 'bg-red-50 text-red-600 border-red-200' :
-                    'bg-slate-50 text-slate-500 border-slate-200'
+                    'bg-slate-50 text-slate-500 border-white/40'
                   }`}>
                     {toTitleCase(selectedTicket?.status || '')}
                   </span>
@@ -1148,7 +1148,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Type</label><select value={getFormValue('type') as TicketType} onChange={(e) => updateField('type', e.target.value)} className={INPUT_STYLES}>{Object.values(TicketType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Category</label>
-                  <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[36px]">
+                  <div className="flex flex-wrap gap-1.5 p-2 border border-white/40 rounded-lg bg-white/50 backdrop-blur-xl min-h-[36px]">
                     {TICKET_CATEGORIES.map(c => {
                       const cats = ((getFormValue('category') as string) || '').split(', ').filter(Boolean);
                       const sel = cats.includes(c);
@@ -1156,7 +1156,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         const curr = ((getFormValue('category') as string) || '').split(', ').filter(Boolean);
                         const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                         updateField('category', next.join(', ') || 'Other');
-                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
+                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white/50 backdrop-blur-xl border-white/40 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                     })}
                   </div>
                 </div>
@@ -1170,7 +1170,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         min={toLocalDatetimeInput(new Date().toISOString())}
                     />
                 </div>
-                <div className="pt-2 border-t border-slate-200">
+                <div className="pt-2 border-t border-white/30">
                     <h4 className="text-xs font-bold text-slate-800 uppercase mb-3 flex items-center gap-2">
                         <MapPin size={12} /> Service Location
                     </h4>
@@ -1197,12 +1197,12 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         </div>
                     </div>
                 </div>
-                <div className="pt-2 border-t border-slate-200">
+                <div className="pt-2 border-t border-white/30">
                     <h4 className="text-xs font-bold text-slate-800 uppercase mb-3">External References</h4>
                     <div><label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1 flex items-center gap-1"><LinkIcon size={10}/> Odoo Link</label><input type="text" value={getFormValue('odooLink') as string} onChange={(e) => updateField('odooLink', e.target.value)} placeholder="https://odoo..." className={INPUT_STYLES} /></div>
                 </div>
              </div>
-             <div className="p-4 border-t border-slate-200 bg-white">
+             <div className="p-4 border-t border-white/30 bg-white">
                  {hasUnsavedChanges() && <div className="mb-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200"><AlertCircle size={14} /> Unsaved changes</div>}
                  <div className="flex gap-2">
                      <button 
@@ -1258,9 +1258,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
       {/* New Ticket Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+             <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white/50 backdrop-blur-xl shrink-0">
                   <h3 className="font-bold text-lg text-slate-900">Create New Ticket</h3>
                   <button onClick={() => setIsCreateModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
              </div>
@@ -1270,7 +1270,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                  {/* Auto-filled Date */}
                  <div className="space-y-1">
                      <label className="text-xs font-semibold text-slate-500 uppercase">Created Date</label>
-                     <div className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-slate-600 text-sm font-medium">
+                     <div className="w-full bg-slate-100 border border-white/40 rounded-lg p-2 text-slate-600 text-sm font-medium">
                          {createForm.createdDateDisplay}
                      </div>
                  </div>
@@ -1286,8 +1286,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             onManualCreate={handleManualCreateTrigger}
                         />
                      ) : (
-                        <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
+                        <div className="bg-slate-50 rounded-xl border border-white/40 p-4 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="flex justify-between items-center mb-3 border-b border-white/30 pb-2">
                                 <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                                     <UserPlus size={16} className="text-emerald-600"/>
                                     New Client Details
@@ -1350,7 +1350,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-slate-500 uppercase">Category <span className="text-red-500">*</span></label>
-                        <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[36px]">
+                        <div className="flex flex-wrap gap-1.5 p-2 border border-white/40 rounded-lg bg-white/50 backdrop-blur-xl min-h-[36px]">
                           {TICKET_CATEGORIES.map(c => {
                             const cats = (createForm.category || '').split(', ').filter(Boolean);
                             const sel = cats.includes(c);
@@ -1358,7 +1358,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                               const curr = (createForm.category || '').split(', ').filter(Boolean);
                               const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                               setCreateForm({...createForm, category: next.join(', ')});
-                            }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
+                            }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white/50 backdrop-blur-xl border-white/40 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                           })}
                         </div>
                     </div>
@@ -1379,7 +1379,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 </div>
 
                 {/* Location Details */}
-                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="p-4 bg-slate-50 rounded-lg border border-white/40">
                     <h4 className="text-xs font-bold text-slate-700 uppercase mb-3">Location Details</h4>
                     <div className="grid grid-cols-1 gap-3">
                         <div className="space-y-1">
@@ -1463,7 +1463,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     />
                  </div>
 
-                 <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
+                 <div className="pt-4 flex justify-end gap-3 border-t border-white/20 mt-2">
                       <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
                       <button 
                         type="submit" 
