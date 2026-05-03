@@ -78,7 +78,7 @@ const DateRangeSelector: React.FC<DateRangeSelectorProps> = ({ startDate, endDat
                         selected={startObj}
                         onChange={(d) => handlePickerChange(d, 'start')}
                         dateFormat="dd/MM/yyyy"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                        className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
                         placeholderText="Select start date"
                         onKeyDown={(e) => e.preventDefault()} // Disable typing
                     />
@@ -92,7 +92,7 @@ const DateRangeSelector: React.FC<DateRangeSelectorProps> = ({ startDate, endDat
                         selected={endObj}
                         onChange={(d) => handlePickerChange(d, 'end')}
                         dateFormat="dd/MM/yyyy"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
+                        className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
                         placeholderText="Select end date"
                         onKeyDown={(e) => e.preventDefault()} // Disable typing
                     />
@@ -587,7 +587,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
             </div>
 
             {/* Filter Bar */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row gap-6 items-start lg:items-end">
+            <div className="bg-white/50 backdrop-blur-xl p-4 rounded-xl border border-white/40 shadow-sm flex flex-col lg:flex-row gap-6 items-start lg:items-end">
                 
                 {/* Type Toggle */}
                 <div className="w-full lg:w-auto">
@@ -595,13 +595,13 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                     <div className="flex bg-slate-100 p-1 rounded-lg">
                         <button 
                             onClick={() => setReportType('tickets')}
-                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${reportType === 'tickets' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${reportType === 'tickets' ? 'bg-white/50 backdrop-blur-xl text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <FileText size={16} /> Tickets
                         </button>
                         <button 
                             onClick={() => setReportType('operations')}
-                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${reportType === 'operations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${reportType === 'operations' ? 'bg-white/50 backdrop-blur-xl text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <ActivityIcon size={16} /> Operations
                         </button>
@@ -622,10 +622,10 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                 <div className="w-full lg:w-auto">
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Quick Presets</label>
                     <div className="flex flex-wrap gap-2">
-                         <button onClick={() => triggerPreset('today')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'today' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>Today</button>
-                         <button onClick={() => triggerPreset('lastWeekSatThu')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'lastWeekSatThu' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>Last Week</button>
-                         <button onClick={() => triggerPreset('thisMonth')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'thisMonth' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>This Month</button>
-                         <button onClick={() => triggerPreset('lastMonth')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'lastMonth' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>Last Month</button>
+                         <button onClick={() => triggerPreset('today')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'today' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-white/40 hover:bg-white/40'}`}>Today</button>
+                         <button onClick={() => triggerPreset('lastWeekSatThu')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'lastWeekSatThu' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-white/40 hover:bg-white/40'}`}>Last Week</button>
+                         <button onClick={() => triggerPreset('thisMonth')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'thisMonth' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-white/40 hover:bg-white/40'}`}>This Month</button>
+                         <button onClick={() => triggerPreset('lastMonth')} className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${currentPreset === 'lastMonth' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-white/40 hover:bg-white/40'}`}>Last Month</button>
                     </div>
                 </div>
             </div>
@@ -636,11 +636,11 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
             
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div className="bg-white/50 backdrop-blur-xl p-5 rounded-xl border border-white/40 shadow-sm">
                     <p className="text-xs font-bold text-slate-500 uppercase">Total Records</p>
                     <h3 className="text-3xl font-bold text-slate-900 mt-2">{filteredData.length}</h3>
                 </div>
-                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                 <div className="bg-white/50 backdrop-blur-xl p-5 rounded-xl border border-white/40 shadow-sm">
                     <p className="text-xs font-bold text-slate-500 uppercase">Status Breakdown</p>
                     {filteredData.length > 0 ? (
                       <>
@@ -662,7 +662,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                       <p className="text-xs text-slate-400 mt-3 italic">No data for selected period</p>
                     )}
                 </div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div className="bg-white/50 backdrop-blur-xl p-5 rounded-xl border border-white/40 shadow-sm">
                     <p className="text-xs font-bold text-slate-500 uppercase">
                         {reportType === 'tickets' ? 'Resolved' : 'Completed'}
                     </p>
@@ -673,7 +673,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                         {filteredData.length > 0 ? `${Math.round((filteredData.filter((d: any) => d.status === 'RESOLVED' || d.status === 'DONE').length / filteredData.length) * 100)}% completion rate` : '—'}
                     </p>
                 </div>
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div className="bg-white/50 backdrop-blur-xl p-5 rounded-xl border border-white/40 shadow-sm">
                     <p className="text-xs font-bold text-slate-500 uppercase">
                         {reportType === 'tickets' ? 'Avg Resolution' : 'Avg Duration'}
                     </p>
@@ -693,7 +693,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-80">
-                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                 <div className="bg-white/50 backdrop-blur-xl p-6 rounded-xl border border-white/40 shadow-sm flex flex-col">
                      <h4 className="font-bold text-slate-800 mb-4">Volume Over Time</h4>
                      <div className="flex-1 min-h-0">
                          <ResponsiveContainer width="100%" height="100%">
@@ -707,7 +707,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                          </ResponsiveContainer>
                      </div>
                  </div>
-                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                 <div className="bg-white/50 backdrop-blur-xl p-6 rounded-xl border border-white/40 shadow-sm flex flex-col">
                      <h4 className="font-bold text-slate-800 mb-4">Status Distribution</h4>
                      <div className="flex-1 min-h-0">
                          <ResponsiveContainer width="100%" height="100%">
@@ -740,8 +740,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
             </div>
 
             {/* Data Preview */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white/20">
                     <h3 className="font-bold text-slate-800">Data Preview</h3>
                     <span className="text-xs text-slate-500">Showing last 10 records</span>
                 </div>
@@ -757,7 +757,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                              {filteredData.slice(0, 10).map((item: any, idx) => (
-                                 <tr key={idx} className="hover:bg-slate-50 group">
+                                 <tr key={idx} className="hover:bg-white/40 group">
                                      {availableFields.slice(0, 6).map(f => (
                                          <td key={f.id} className="px-6 py-3 whitespace-nowrap text-slate-700">
                                              {f.getValue(item)}
@@ -786,9 +786,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
 
         {/* Export Modal */}
         {isExportModalOpen && (
-             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
-                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white">
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                    <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white">
                         <h3 className="font-bold text-lg text-slate-900">Export Configuration</h3>
                         <button onClick={() => setIsExportModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                     </div>
@@ -799,7 +799,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                         <div>
                              <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Export Format</label>
                              <div className="flex gap-4">
-                                 <label className={`flex-1 p-4 border rounded-xl cursor-pointer transition-all flex items-center gap-3 ${exportFormat === 'csv' ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                 <label className={`flex-1 p-4 border rounded-xl cursor-pointer transition-all flex items-center gap-3 ${exportFormat === 'csv' ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500' : 'bg-white/50 backdrop-blur-xl border-white/40 hover:border-slate-300'}`}>
                                      <input type="radio" name="format" value="csv" checked={exportFormat === 'csv'} onChange={() => setExportFormat('csv')} className="hidden" />
                                      <div className={`p-2 rounded-lg ${exportFormat === 'csv' ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}><FileSpreadsheet size={24}/></div>
                                      <div>
@@ -807,7 +807,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                          <span className="text-xs text-slate-500">Best for data analysis</span>
                                      </div>
                                  </label>
-                                 <label className={`flex-1 p-4 border rounded-xl cursor-pointer transition-all flex items-center gap-3 ${exportFormat === 'pdf' ? 'bg-red-50 border-red-500 ring-1 ring-red-500' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                 <label className={`flex-1 p-4 border rounded-xl cursor-pointer transition-all flex items-center gap-3 ${exportFormat === 'pdf' ? 'bg-red-50 border-red-500 ring-1 ring-red-500' : 'bg-white/50 backdrop-blur-xl border-white/40 hover:border-slate-300'}`}>
                                      <input type="radio" name="format" value="pdf" checked={exportFormat === 'pdf'} onChange={() => setExportFormat('pdf')} className="hidden" />
                                      <div className={`p-2 rounded-lg ${exportFormat === 'pdf' ? 'bg-red-200 text-red-800' : 'bg-slate-100 text-slate-500'}`}><FileText size={24}/></div>
                                      <div>
@@ -844,7 +844,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                 <select 
                                     value={selectedTemplateId} 
                                     onChange={handleTemplateChange}
-                                    className="flex-1 bg-white border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
+                                    className="flex-1 bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10"
                                 >
                                     <option value="default">Default Columns</option>
                                     {templates.filter(t => t.type === reportType).map(t => (
@@ -862,9 +862,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                         {/* Field Selection */}
                         <div>
                              <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Select Columns</label>
-                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 max-h-60 overflow-y-auto custom-scrollbar">
+                             <div className="bg-white/20 p-4 rounded-xl border border-white/40 max-h-60 overflow-y-auto custom-scrollbar">
                                  {availableFields.map((field) => (
-                                     <div key={field.id} onClick={() => toggleField(field.id)} className="flex items-center gap-3 p-2 hover:bg-white rounded-lg cursor-pointer group transition-colors">
+                                     <div key={field.id} onClick={() => toggleField(field.id)} className="flex items-center gap-3 p-2 hover:bg-white/50 backdrop-blur-xl rounded-lg cursor-pointer group transition-colors">
                                          <div className={`w-5 h-5 rounded flex items-center justify-center border ${selectedFieldIds.includes(field.id) ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-300'}`}>
                                              {selectedFieldIds.includes(field.id) && <CheckSquare size={14} className="text-white" />}
                                          </div>
@@ -883,7 +883,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                         </div>
                     </div>
 
-                    <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                    <div className="p-6 border-t border-white/20 bg-slate-50 flex justify-end gap-3">
                          <button onClick={() => setIsExportModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
                          <button onClick={executeExport} className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all">
                              Download Report
@@ -904,8 +904,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
             const photos = (d as any).photos || [];
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setPreviewItem(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                    <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-white/20 flex justify-between items-center bg-slate-50 shrink-0">
                             <div>
                                 <div className="text-[10px] font-mono text-slate-400">{d.id || d.reference}</div>
                                 <h3 className="font-bold text-slate-900">{isTicket ? d.category : d.type}</h3>
@@ -917,19 +917,19 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                         </div>
                         <div className="flex-1 overflow-y-auto p-5 space-y-4">
                             {/* Customer */}
-                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                            <div className="bg-slate-50 rounded-xl p-3 border border-white/20 space-y-1">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
                                 <div className="text-sm font-bold text-slate-800">{cust?.name || d.customerName || 'Unknown'}</div>
                                 {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{cust?.phone || d.phoneNumber}</div>}
                             </div>
                             {/* Service */}
-                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 grid grid-cols-2 gap-2">
+                            <div className="bg-slate-50 rounded-xl p-3 border border-white/20 grid grid-cols-2 gap-2">
                                 <div><span className="text-[10px] text-slate-400 block">{isTicket ? 'Category' : 'Type'}</span><span className="text-xs font-medium text-slate-700">{isTicket ? d.category : d.type}</span></div>
                                 <div><span className="text-[10px] text-slate-400 block">Priority</span><span className="text-xs font-medium text-slate-700">{d.priority}</span></div>
                                 {!isTicket && d.serviceCategory && <div><span className="text-[10px] text-slate-400 block">Service</span><span className="text-xs font-medium text-slate-700">{d.serviceCategory}</span></div>}
                             </div>
                             {/* Timing */}
-                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                            <div className="bg-slate-50 rounded-xl p-3 border border-white/20 space-y-1.5">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
                                 <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span className="text-slate-700">{fmtDt(isTicket ? d.createdAt : d.plannedDate)}</span></div>
                                 {d.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(d.startedAt)}</span></div>}
@@ -937,7 +937,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                             </div>
                             {/* Assigned */}
                             {tech && (
-                                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                <div className="bg-slate-50 rounded-xl p-3 border border-white/20">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div>
                                     <div className="text-xs font-bold text-slate-700">{tech.name}</div>
                                 </div>
@@ -946,8 +946,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                             {(d.completionNote || d.remarks || d.notes || d.description) && (
                                 <div className="space-y-2">
                                     {d.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{d.completionNote}</p></div>}
-                                    {(d.remarks || d.notes) && (d.remarks || d.notes) !== d.completionNote && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.remarks || d.notes}</p></div>}
-                                    {d.description && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.description}</p></div>}
+                                    {(d.remarks || d.notes) && (d.remarks || d.notes) !== d.completionNote && <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.remarks || d.notes}</p></div>}
+                                    {d.description && <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{d.description}</p></div>}
                                 </div>
                             )}
                             {/* Carry Forward */}
@@ -963,7 +963,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                 <div className="space-y-2">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase">Photos ({photos.length})</div>
                                     <div className="grid grid-cols-3 gap-2">
-                                        {photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />)}
+                                        {photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-white/40 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />)}
                                     </div>
                                 </div>
                             )}
@@ -975,7 +975,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                 </div>
                             )}
                         </div>
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <div className="p-4 border-t border-white/20 bg-slate-50 shrink-0">
                             <button onClick={() => setPreviewItem(null)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Close</button>
                         </div>
                     </div>
