@@ -2,7 +2,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Customer, Activity, Technician, Site, Ticket } from '../types';
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
-import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon } from 'lucide-react';
+import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight } from 'lucide-react';
 
 interface CustomerRecordsProps {
   customers: Customer[];
