@@ -34,11 +34,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
   const displayError = error || localError;
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-500">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81] flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white/10 backdrop-blur-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-500 border border-white/20">
 
         {/* Header */}
-        <div className="bg-slate-50 p-8 text-center border-b border-slate-100">
+        <div className="bg-white/5 p-8 text-center border-b border-white/10">
           <div className="w-20 h-20 mx-auto mb-4">
             <svg viewBox="0 0 578 578" xmlns="http://www.w3.org/2000/svg" width="80" height="80">
               <path d="M409.18,407.51a113.86,113.86,0,1,0-225.35,32.32l45-36.75a69.77,69.77,0,0,1,135.75,4.43Z" transform="translate(-8.5 -132)" fill="#fdbb40"/>
@@ -50,15 +50,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
               <path d="M430.33,626.59A244.06,244.06,0,0,1,164,626.13L128.4,655.2a288.32,288.32,0,0,0,337.55.48Z" transform="translate(-8.5 -132)"/>
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{APP_NAME} Portal</h1>
-          <p className="text-slate-500 text-sm mt-2">Sign in to access your dashboard</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">{APP_NAME} Portal</h1>
+          <p className="text-white/60 text-sm mt-2">Sign in to access your dashboard</p>
         </div>
 
         {/* Form */}
         <div className="p-8">
           {/* Error banner */}
           {displayError && (
-            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-medium flex items-center gap-2">
+            <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-400/20 rounded-xl text-red-300 text-sm font-medium flex items-center gap-2">
               <span className="text-red-500">⚠</span> {displayError}
             </div>
           )}
@@ -66,17 +66,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <label className="text-xs font-bold text-white/50 uppercase tracking-wider">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
+                <Mail className="absolute left-3 top-3.5 text-white/40" size={18} />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all text-slate-800 placeholder:text-slate-400"
+                  className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl focus:ring-2 focus:ring-amber-400/50 focus:outline-none transition-all text-white placeholder:text-white/30"
                   placeholder="user@qonnect.qa"
                   autoComplete="email"
                 />
@@ -85,17 +85,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
 
             {/* Password */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <label className="text-xs font-bold text-white/50 uppercase tracking-wider">
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3.5 text-slate-400" size={18} />
+                <Lock className="absolute left-3 top-3.5 text-white/40" size={18} />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all text-slate-800 placeholder:text-slate-400"
+                  className="w-full pl-10 pr-12 py-3 bg-slate-50 border border-white/40 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all text-slate-800 placeholder:text-slate-400"
                   placeholder="••••••••"
                   autoComplete="current-password"
                 />
@@ -103,7 +103,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-3 p-0.5 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+                  className="absolute right-3 top-3 p-0.5 text-slate-400 hover:text-white/60 transition-colors focus:outline-none"
                   tabIndex={-1}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
@@ -127,7 +127,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
           </form>
         </div>
       </div>
-      <p className="mt-8 text-slate-600 text-sm">
+      <p className="mt-8 text-white/60 text-sm">
         © {new Date().getFullYear()} {APP_NAME} Enterprise Solutions
       </p>
     </div>
