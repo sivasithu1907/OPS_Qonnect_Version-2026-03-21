@@ -54,11 +54,11 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
     d.status === 'CANCELLED' ? 'bg-slate-500' : 'bg-blue-500';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-slate-50 shrink-0">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-3 h-3 rounded-full ${statusColor}`} />
             <div>
@@ -81,7 +81,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           
           {/* Customer */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-2">
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><User size={10} /> Customer</h4>
             <div className="text-sm font-bold text-slate-800">{customer?.name || (isTicket ? (item as Ticket).customerName : 'Unknown')}</div>
             {(isTicket ? (item as Ticket).phoneNumber : customer?.phone) && (
@@ -90,7 +90,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
           </div>
 
           {/* Service Info */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-2">
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Briefcase size={10} /> Service Details</h4>
             <div className="grid grid-cols-2 gap-3">
               {isTicket && (
@@ -113,7 +113,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
           </div>
 
           {/* Timing */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-2">
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Clock size={10} /> Timing</h4>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -155,7 +155,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
           )}
 
           {/* Assigned Resources */}
-          <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-3">
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
             <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><UserCheck size={10} /> Assigned Resources</h4>
             <div className="space-y-2">
               {assignedTech && (
@@ -194,7 +194,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
 
           {/* Description / Scope */}
           {(d.description || (isTicket && d.messages)) && (
-            <div className="bg-slate-50 rounded-xl p-4 border border-white/20">
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><MessageSquare size={10} /> {isTicket ? 'Issue / Scope' : 'Description'}</h4>
               <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
                 {isTicket 
@@ -215,7 +215,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
                 </div>
               )}
               {(d.remarks || d.notes) && (d.remarks || d.notes) !== d.completionNote && (
-                <div className="bg-slate-50 rounded-xl p-4 border border-white/20">
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                   <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
                   <p className="text-xs text-slate-700 whitespace-pre-wrap">{d.remarks || d.notes}</p>
                 </div>
@@ -254,7 +254,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
           {visitHistory.length > 0 && (
             <div className="space-y-3">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Clock size={10} /> Visit History ({visitHistory.length} visit{visitHistory.length > 1 ? 's' : ''})</h4>
-              <div className="relative border-l-2 border-white/40 ml-2 space-y-4">
+              <div className="relative border-l-2 border-slate-200 ml-2 space-y-4">
                 {visitHistory.map((visit: any, i: number) => {
                   const isCF = visit.status === 'CARRY_FORWARD';
                   const isDone = visit.status === 'DONE';
@@ -325,10 +325,10 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
                     <img 
                       src={photo.url || photo} 
                       alt={photo.name || `Photo ${i + 1}`}
-                      className="w-full h-24 object-cover rounded-lg border border-white/40 cursor-pointer hover:shadow-lg transition-shadow"
+                      className="w-full h-24 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-lg transition-shadow"
                       onClick={() => showPhotoLightbox(photo.url || photo)}
                     />
-                    <div className="absolute bottom-0 inset-x-0 bg-black/30 backdrop-blur-sm text-white text-[8px] px-1.5 py-0.5 rounded-b-lg truncate">
+                    <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] px-1.5 py-0.5 rounded-b-lg truncate">
                       {photo.name || `Photo ${i + 1}`}
                       {photo.takenAt && ` · ${fmtTime(photo.takenAt)}`}
                     </div>
@@ -348,7 +348,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-white/20 bg-slate-50 shrink-0">
+        <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
           <button onClick={onClose} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors">
             Close
           </button>
