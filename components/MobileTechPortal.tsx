@@ -377,9 +377,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   if (!isMobile) {
       return (
-          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-              <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center">
-                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+          <div className="min-h-screen flex items-center justify-center bg-white/20 p-4">
+              <div className="max-w-md w-full bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm p-8 text-center">
+                  <div className="w-16 h-16 bg-gradient-to-br from-[#eef2f7] via-[#e8e0f0] to-[#f5e6e0] rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
                       <Smartphone size={32} />
                   </div>
                   <h2 className="text-2xl font-semibold text-gray-900 mb-3">
@@ -463,8 +463,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 return (
                                     <div 
                                         key={job.id} 
-                                        className={`bg-white rounded-2xl shadow-sm border overflow-hidden active:scale-[0.99] transition-transform relative ${
-                                            delayed ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-100'
+                                        className={`bg-white/50 backdrop-blur-xl rounded-2xl shadow-sm border overflow-hidden active:scale-[0.99] transition-transform relative ${
+                                            delayed ? 'border-red-400 ring-2 ring-red-100' : 'border-white/20'
                                         }`}
                                         onClick={() => setSelectedJobId(job.id)}
                                     >
@@ -514,11 +514,11 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             {/* Call customer if available */}
                                             {actCust?.phone ? (
                                                 <a href={`tel:${actCust.phone}`} onClick={e => e.stopPropagation()}
-                                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
                                                     <Phone size={14}/> Call Customer
                                                 </a>
                                             ) : (
-                                                <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
+                                                <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-400 rounded-xl text-xs mb-4">
                                                     <Phone size={14}/> No phone number
                                                 </div>
                                             )}
@@ -537,7 +537,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
                                                                     i < actStepIdx  ? 'bg-emerald-500 border-emerald-500 text-white' :
                                                                     i === actStepIdx? 'bg-slate-900 border-slate-900 text-white' :
-                                                                    'bg-white border-slate-200 text-slate-400'
+                                                                    'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
                                                                 }`}>{i < actStepIdx ? '✓' : i+1}</div>
                                                                 <span className={`text-[9px] mt-0.5 font-medium ${i===actStepIdx?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
                                                             </div>
@@ -584,7 +584,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     return (
                                         <div key={job.id}
                                             onClick={() => setHistoryDetailJob({ ...job, kind: item.kind })}
-                                            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3 cursor-pointer active:scale-[0.99] transition-transform"
+                                            className="bg-white/50 backdrop-blur-xl p-4 rounded-2xl shadow-sm border border-white/20 mb-3 cursor-pointer active:scale-[0.99] transition-transform"
                                         >
                                             <div className="flex justify-between items-start mb-2">
                                                 <div>
@@ -630,7 +630,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                     const actStep    = actSteps.findIndex(s => s.key === actStatus) === -1 ? 0 : actSteps.findIndex(s => s.key === actStatus);
                     const actProgress = actStatus === 'DONE' ? 100 : Math.max(5, ((actStep + 1) / actSteps.length) * 100);
                     return (
-                    <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
+                    <div className="flex flex-col h-full overflow-y-auto bg-white/20">
                         {/* Progress bar */}
                         <div className="h-1 bg-slate-200 shrink-0">
                             <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgress}%` }}/>
@@ -654,19 +654,19 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             {/* Call customer */}
                             {actCustomer?.phone && (
                                 <a href={`tel:${actCustomer.phone}`}
-                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
+                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
                                     <Phone size={14}/> Call Customer — {actCustomer.phone}
                                 </a>
                             )}
                             {/* Scope of work */}
                             {act.description && (
-                                <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                <div className="bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Scope of Work</div>
                                     <p className="text-sm text-slate-700 leading-relaxed">{act.description}</p>
                                 </div>
                             )}
                             {/* Job details */}
-                            <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
+                            <div className="bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20 space-y-3">
                                 {act.serviceCategory && (
                                     <div className="flex justify-between text-sm">
                                         <span className="text-slate-400 font-medium">Category</span>
@@ -692,14 +692,14 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             </div>
                             {/* Step progress indicators — 5-step unified flow */}
                             {actStatus !== 'DONE' && (
-                                <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
+                                <div className="flex items-center justify-between bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20">
                                     {actSteps.slice(0,4).map((step, i) => (
                                         <React.Fragment key={step.key}>
                                             <div className="flex flex-col items-center">
                                                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
                                                     i < actStep   ? 'bg-emerald-500 border-emerald-500 text-white' :
                                                     i === actStep ? 'bg-slate-900 border-slate-900 text-white' :
-                                                    'bg-white border-slate-200 text-slate-400'
+                                                    'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
                                                 }`}>{i < actStep ? '✓' : i + 1}</div>
                                                 <span className={`text-[9px] mt-1 font-medium ${i === actStep ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
                                             </div>
@@ -712,7 +712,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             <div className="grid grid-cols-2 gap-3">
                                 {act.locationUrl ? (
                                     <a href={act.locationUrl} target="_blank" rel="noopener noreferrer"
-                                        className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform">
+                                        className="flex flex-col items-center justify-center p-3 bg-white border border-white/40 rounded-xl text-slate-600 hover:bg-white/40 active:scale-95 transition-transform">
                                         <Navigation size={22} className="mb-1 text-blue-500"/>
                                         <span className="text-xs font-semibold">Navigate</span>
                                     </a>
@@ -725,7 +725,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 <button
                                     onClick={() => handlePhotoClick(act.id, 'activity')}
                                     disabled={photoUploading}
-                                    className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform disabled:opacity-50">
+                                    className="flex flex-col items-center justify-center p-3 bg-white border border-white/40 rounded-xl text-slate-600 hover:bg-white/40 active:scale-95 transition-transform disabled:opacity-50">
                                     <Camera size={22} className="mb-1"/>
                                     <span className="text-xs font-semibold">{photoUploading && photoJobId === act.id ? 'Saving...' : 'Photos'}</span>
                                 </button>
@@ -736,7 +736,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     <div className="text-[10px] font-bold text-slate-400 uppercase">Uploaded Photos ({(act as any).photos.length})</div>
                                     <div className="grid grid-cols-3 gap-2">
                                         {(act as any).photos.map((p: any, i: number) => (
-                                            <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
+                                            <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-white/40 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
                                         ))}
                                     </div>
                                 </div>
@@ -786,7 +786,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
                 {/* Completion Screen (Only for Activities) */}
                 {activeJob && completionStep && (
-                    <div className="p-6 pt-10 h-full bg-white flex flex-col">
+                    <div className="p-6 pt-10 h-full bg-white/50 backdrop-blur-xl flex flex-col">
                          <h2 className="text-2xl font-bold text-slate-900 mb-6">Job Completion</h2>
                          
                          <div className="space-y-4 flex-1">
@@ -797,7 +797,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                              
                              <button
                                  onClick={() => activeJob && handlePhotoClick((activeJob as any).id, activeJobItem?.type === 'activity' ? 'activity' : 'ticket')}
-                                 className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl bg-slate-50 w-full active:bg-slate-100 transition-colors">
+                                 className="flex items-center gap-3 p-4 border border-white/40 rounded-xl bg-slate-50 w-full active:bg-slate-100 transition-colors">
                                  <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
                                      <Camera size={20} className="text-slate-500" />
                                  </div>
@@ -821,8 +821,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
                 {/* Report Delay Modal */}
                 {reportingDelayActivity && (
-                    <div className="absolute inset-0 z-50 bg-black/50 flex items-end">
-                        <div className="bg-white w-full rounded-t-3xl p-6 animate-in slide-in-from-bottom duration-300">
+                    <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-md flex items-end">
+                        <div className="bg-white/50 backdrop-blur-xl w-full rounded-t-3xl p-6 animate-in slide-in-from-bottom duration-300">
                             <h3 className="text-lg font-bold text-slate-900 mb-4">Report Delay Reason</h3>
                             <p className="text-xs text-slate-500 mb-4">Why is this job delayed?</p>
                             <form onSubmit={handleDelaySubmit} className="space-y-3">
@@ -845,8 +845,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
                 {/* Carry Forward Modal */}
                 {isCarryForwardOpen && (
-                    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setIsCarryForwardOpen(false)}>
-                        <div className="bg-white w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+                    <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-md backdrop-blur-sm flex items-end justify-center" onClick={() => setIsCarryForwardOpen(false)}>
+                        <div className="bg-white/50 backdrop-blur-xl w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-xl font-bold text-slate-900">Carry Forward</h3>
                                 <button onClick={() => setIsCarryForwardOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-500">
@@ -925,9 +925,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                     const fmtDt = (iso: string) => iso ? `${new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} ${new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}` : '—';
                     const photos = hj.photos || [];
                     return (
-                        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setHistoryDetailJob(null)}>
-                            <div className="bg-white w-full max-w-md rounded-t-[2rem] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-                                <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                        <div className="fixed inset-0 z-[100] bg-black/20 backdrop-blur-md backdrop-blur-sm flex items-end justify-center" onClick={() => setHistoryDetailJob(null)}>
+                            <div className="bg-white/50 backdrop-blur-xl w-full max-w-md rounded-t-[2rem] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+                                <div className="p-5 border-b border-white/20 flex justify-between items-center shrink-0">
                                     <div>
                                         <div className="text-[10px] font-mono text-slate-400">{hj.reference || hj.id}</div>
                                         <h3 className="font-bold text-lg text-slate-900">{isAct ? hj.type : hj.category}</h3>
@@ -939,13 +939,13 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
                                     {/* Customer */}
-                                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                                    <div className="bg-slate-50 rounded-xl p-3 border border-white/20 space-y-1">
                                         <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
                                         <div className="text-sm font-bold text-slate-800">{custName}</div>
                                         {custPhone && <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {custPhone}</div>}
                                     </div>
                                     {/* Timing */}
-                                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                                    <div className="bg-slate-50 rounded-xl p-3 border border-white/20 space-y-1.5">
                                         <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
                                         <div className="flex justify-between text-xs"><span className="text-slate-400">{isAct ? 'Planned' : 'Created'}</span><span className="text-slate-700">{fmtDt(isAct ? hj.plannedDate : hj.createdAt)}</span></div>
                                         {hj.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(hj.startedAt)}</span></div>}
@@ -954,7 +954,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     </div>
                                     {/* Description */}
                                     {(hj.description || hj.notes) && (
-                                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                        <div className="bg-slate-50 rounded-xl p-3 border border-white/20">
                                             <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div>
                                             <p className="text-xs text-slate-700 whitespace-pre-wrap">{hj.description || hj.notes}</p>
                                         </div>
@@ -987,13 +987,13 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             <div className="text-[10px] font-bold text-slate-400 uppercase">Photos ({photos.length})</div>
                                             <div className="grid grid-cols-3 gap-2">
                                                 {photos.map((p: any, i: number) => (
-                                                    <img key={i} src={p.url || p} alt={`Photo ${i+1}`} className="w-full h-20 object-cover rounded-lg border border-slate-200" onClick={() => showPhotoLightbox(p.url || p)} />
+                                                    <img key={i} src={p.url || p} alt={`Photo ${i+1}`} className="w-full h-20 object-cover rounded-lg border border-white/40" onClick={() => showPhotoLightbox(p.url || p)} />
                                                 ))}
                                             </div>
                                         </div>
                                     )}
                                 </div>
-                                <div className="p-4 border-t border-slate-100 shrink-0">
+                                <div className="p-4 border-t border-white/20 shrink-0">
                                     <button onClick={() => setHistoryDetailJob(null)} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold">Close</button>
                                 </div>
                             </div>
@@ -1025,8 +1025,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
       {/* Photo Source Picker Modal */}
       {showPhotoSourcePicker && (
-          <div className="fixed inset-0 z-[200] bg-black/60 flex items-end justify-center" onClick={() => setShowPhotoSourcePicker(false)}>
-              <div className="bg-white w-full max-w-sm rounded-t-2xl p-6 space-y-3 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[200] bg-black/20 backdrop-blur-md flex items-end justify-center" onClick={() => setShowPhotoSourcePicker(false)}>
+              <div className="bg-white/50 backdrop-blur-xl w-full max-w-sm rounded-t-2xl p-6 space-y-3 animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
                   <h3 className="text-lg font-bold text-slate-900 text-center mb-4">Upload Photo</h3>
                   <button 
                       onClick={handlePhotoFromCamera}
@@ -1036,7 +1036,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                   </button>
                   <button 
                       onClick={handlePhotoFromGallery}
-                      className="w-full py-3.5 bg-slate-100 text-slate-800 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform border border-slate-200"
+                      className="w-full py-3.5 bg-slate-100 text-slate-800 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform border border-white/40"
                   >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                       Choose from Gallery
@@ -1053,9 +1053,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
       {/* Change Password Modal */}
       {showChangePwd && (
-        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+        <div className="fixed inset-0 z-[200] bg-black/20 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="p-5 border-b border-white/20 flex justify-between items-center">
               <h3 className="font-bold text-lg text-slate-900">Change Password</h3>
               <button onClick={() => setShowChangePwd(false)} className="text-slate-400 p-1">✕</button>
             </div>
@@ -1070,15 +1070,15 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                   {cpError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{cpError}</div>}
                   <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase">Current Password</label>
                     <input type="password" value={cpForm.current} onChange={e => setCpForm(p => ({...p, current: e.target.value}))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Current password"/></div>
+                      className="w-full bg-slate-50 border border-white/40 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Current password"/></div>
                   <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase">New Password</label>
                     <input type="password" value={cpForm.next} onChange={e => setCpForm(p => ({...p, next: e.target.value}))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Min 8 characters"/></div>
+                      className="w-full bg-slate-50 border border-white/40 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Min 8 characters"/></div>
                   <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase">Confirm Password</label>
                     <input type="password" value={cpForm.confirm} onChange={e => setCpForm(p => ({...p, confirm: e.target.value}))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Repeat new password"/></div>
+                      className="w-full bg-slate-50 border border-white/40 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Repeat new password"/></div>
                   <div className="flex gap-3 pt-1">
-                    <button onClick={() => setShowChangePwd(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 text-sm">Cancel</button>
+                    <button onClick={() => setShowChangePwd(false)} className="flex-1 py-3 border border-white/40 rounded-xl font-bold text-slate-600 text-sm">Cancel</button>
                     <button onClick={() => {
                       setCpError('');
                       if (!cpForm.current) { setCpError('Enter current password'); return; }
