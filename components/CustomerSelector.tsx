@@ -134,12 +134,12 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
   const createModal = showCreateModal && !onManualCreate
     ? ReactDOM.createPortal(
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm"
           onMouseDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 mx-4 animate-in zoom-in-95 duration-200"
+            className="bg-white/50 backdrop-blur-xl rounded-xl shadow-2xl w-full max-w-sm p-6 mx-4 animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-4">
@@ -167,7 +167,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
                   onChange={e => setNewName(e.target.value)}
                   disabled={isSaving}
                   placeholder="e.g. John Doe"
-                  className="w-full bg-white text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60"
+                  className="w-full bg-white/50 backdrop-blur-xl text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60"
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
                 />
               </div>
@@ -186,7 +186,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
                   onChange={e => { setNewPhone(e.target.value); setPhoneError(null); }}
                   disabled={isSaving}
                   placeholder="3300 0000"
-                  className={`w-full bg-white text-slate-900 border rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 ${phoneError ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
+                  className={`w-full bg-white/50 backdrop-blur-xl text-slate-900 border rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 ${phoneError ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
                 />
               </div>
@@ -233,7 +233,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
           onChange={e => { setSearchTerm(e.target.value); setIsOpen(true); }}
           onFocus={() => setIsOpen(true)}
           placeholder="Search by phone..."
-          className="w-full bg-white text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-slate-400"
+          className="w-full bg-white/50 backdrop-blur-xl text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-slate-400"
         />
         <Search size={16} className="absolute left-3 top-3 text-slate-400" />
         {selectedCustomer && searchTerm === selectedCustomer.name && (
@@ -263,12 +263,12 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
 
       {/* Dropdown */}
       {showDropdown && (
-        <div className={`absolute left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto z-10 ${showBanner ? 'top-[calc(100%+80px)]' : 'top-full mt-1'}`}>
+        <div className={`absolute left-0 right-0 bg-white/50 backdrop-blur-xl border border-white/40 rounded-lg shadow-xl max-h-60 overflow-y-auto z-10 ${showBanner ? 'top-[calc(100%+80px)]' : 'top-full mt-1'}`}>
           {partialMatches.map(c => (
             <div
               key={c.id}
               onClick={() => { onSelect(c); setSearchTerm(c.name); setIsOpen(false); }}
-              className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex flex-col"
+              className="p-3 hover:bg-white/40 cursor-pointer border-b border-slate-50 last:border-0 flex flex-col"
             >
               <span className="text-sm font-bold text-slate-900">{c.name}</span>
               <span className="text-xs text-slate-500 font-mono mt-0.5">{formatPhoneDisplay(c.phone)}</span>
@@ -276,7 +276,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
           ))}
 
           {!exactMatch && (
-            <div className="p-2 sticky bottom-0 bg-white border-t border-slate-100">
+            <div className="p-2 sticky bottom-0 bg-white/50 backdrop-blur-xl border-t border-white/20">
               <button
                 type="button"
                 onClick={() => {
