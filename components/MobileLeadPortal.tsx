@@ -111,7 +111,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // State
   const [activeTab, setActiveTab] = useState<'home' | 'my_jobs' | 'team' | 'planner' | 'more'>('home'); 
   const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients' | 'tickets'>('none');
-  const [homeFilter, setHomeFilter] = useState<'all'|'active'|'carry'|'pending'|'progress'>('all'); 
+  const [homeFilter, setHomeFilter] = useState<'all'|'progress'|'carry'|'pending'|'all_history'>('all'); 
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -305,20 +305,38 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   // Dashboard counts
   const currentTech = technicians.find(t => t.id === currentUserId);
-  const activeJobsCount = visibleTickets.filter(t => [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD, TicketStatus.NEW].includes(t.status)).length;
+  const activeJobsCount = visibleTickets.filter(t => ![TicketStatus.RESOLVED, TicketStatus.CANCELLED].includes(t.status)).length;
   const carryForwardCount = visibleTickets.filter(t => t.status === TicketStatus.CARRY_FORWARD).length;
   const pendingCount = visibleTickets.filter(t => [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED].includes(t.status)).length;
-  const inProgressCount = visibleTickets.filter(t => t.status === TicketStatus.IN_PROGRESS).length;
+  const inProgressCount = visibleTickets.filter(t => [TicketStatus.IN_PROGRESS, TicketStatus.ON_MY_WAY, TicketStatus.ARRIVED].includes(t.status)).length;
   
   // Filtered tickets for home dashboard filter
   const homeFilteredTickets = useMemo(() => {
-      if (homeFilter === 'all') return visibleTickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
-      if (homeFilter === 'active') return visibleTickets.filter(t => [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD, TicketStatus.NEW].includes(t.status));
+      if (homeFilter === 'all') return visibleTickets.filter(t => ![TicketStatus.RESOLVED, TicketStatus.CANCELLED].includes(t.status));
+      if (homeFilter === 'progress') return visibleTickets.filter(t => [TicketStatus.IN_PROGRESS, TicketStatus.ON_MY_WAY, TicketStatus.ARRIVED].includes(t.status));
       if (homeFilter === 'carry') return visibleTickets.filter(t => t.status === TicketStatus.CARRY_FORWARD);
       if (homeFilter === 'pending') return visibleTickets.filter(t => [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED].includes(t.status));
-      if (homeFilter === 'progress') return visibleTickets.filter(t => t.status === TicketStatus.IN_PROGRESS);
+      if (homeFilter === 'all_history') return visibleTickets; // includes resolved/cancelled too
       return visibleTickets;
   }, [visibleTickets, homeFilter]);
+
+  // Group tickets by date for display
+  const groupedTickets = useMemo(() => {
+      const groups: Record<string, typeof homeFilteredTickets> = {};
+      homeFilteredTickets.forEach(t => {
+          const dt = new Date(t.updatedAt || t.createdAt);
+          const today = new Date();
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          let label: string;
+          if (dt.toDateString() === today.toDateString()) label = 'Today';
+          else if (dt.toDateString() === yesterday.toDateString()) label = 'Yesterday';
+          else label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: dt.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+          if (!groups[label]) groups[label] = [];
+          groups[label].push(t);
+      });
+      return groups;
+  }, [homeFilteredTickets]);
 
   // --- Handlers ---
 
@@ -1004,25 +1022,56 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               />
                           </div>
                       )}
-                      {mobileModule === 'tickets' && (
-                          <div className="h-full overflow-y-auto bg-white">
-                              <div className="p-4">
-                                  <div className="relative mb-4">
-                                      <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
-                                      <input 
-                                          value={searchTerm}
-                                          onChange={(e) => setSearchTerm(e.target.value)}
-                                          placeholder="Search by name, phone, or job ID..."
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-amber-400"
-                                      />
-                                  </div>
-                                  <div className="space-y-2">
+                      {mobileModule === 'tickets' && (() => {
+                          const statusOrder: TicketStatus[] = [TicketStatus.IN_PROGRESS, TicketStatus.ON_MY_WAY, TicketStatus.ARRIVED, TicketStatus.CARRY_FORWARD, TicketStatus.ASSIGNED, TicketStatus.OPEN, TicketStatus.NEW, TicketStatus.RESOLVED, TicketStatus.CANCELLED];
+                          const statusLabels: Record<string, string> = { IN_PROGRESS: 'In Progress', ON_MY_WAY: 'On My Way', ARRIVED: 'Arrived', CARRY_FORWARD: 'Carry Forward', ASSIGNED: 'Assigned', OPEN: 'Open', NEW: 'New', RESOLVED: 'Resolved', CANCELLED: 'Cancelled' };
+                          const statusIcons: Record<string, string> = { IN_PROGRESS: '🔄', ON_MY_WAY: '🚗', ARRIVED: '📍', CARRY_FORWARD: '⟲', ASSIGNED: '👤', OPEN: '📂', NEW: '✨', RESOLVED: '✅', CANCELLED: '❌' };
+                          const grouped: Record<string, Ticket[]> = {};
+                          visibleTickets.forEach(t => {
+                              const key = t.status;
+                              if (!grouped[key]) grouped[key] = [];
+                              grouped[key].push(t);
+                          });
+                          const orderedGroups = statusOrder.filter(s => grouped[s]?.length > 0);
+                          return (
+                              <div className="h-full overflow-y-auto bg-slate-50">
+                                  <div className="p-4">
+                                      <div className="relative mb-4">
+                                          <Search size={16} className="absolute left-3 top-3 text-slate-400"/>
+                                          <input 
+                                              value={searchTerm}
+                                              onChange={(e) => setSearchTerm(e.target.value)}
+                                              placeholder="Search by name, phone, or job ID..."
+                                              className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-amber-400 shadow-sm"
+                                          />
+                                      </div>
+                                      {/* Summary bar */}
+                                      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar">
+                                          {orderedGroups.map(status => (
+                                              <div key={status} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full border border-slate-200 shadow-sm">
+                                                  <span className="text-xs">{statusIcons[status]}</span>
+                                                  <span className="text-[10px] font-bold text-slate-600">{statusLabels[status]}</span>
+                                                  <span className="text-[10px] font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded-full">{grouped[status].length}</span>
+                                              </div>
+                                          ))}
+                                      </div>
                                       {visibleTickets.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No tickets found</p>}
-                                      {visibleTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
+                                      {orderedGroups.map(status => (
+                                          <div key={status} className="mb-5">
+                                              <div className="flex items-center gap-2 mb-2 px-1">
+                                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(status)}`}>
+                                                      {statusIcons[status]} {statusLabels[status]}
+                                                  </span>
+                                                  <div className="h-px flex-1 bg-slate-200" />
+                                                  <span className="text-[10px] font-bold text-slate-400">{grouped[status].length}</span>
+                                              </div>
+                                              {grouped[status].map(t => <TicketCard key={t.id} ticket={t} />)}
+                                          </div>
+                                      ))}
                                   </div>
                               </div>
-                          </div>
-                      )}
+                          );
+                      })()}
                       {mobileModule === 'reports' && (
                           <div className="h-full overflow-y-auto bg-white">
                               <ReportsModule tickets={tickets} activities={activities} technicians={technicians} sites={sites} />
@@ -1162,22 +1211,22 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               {activeTab === 'home' && (
                   <div className="p-4 space-y-5">
                       {/* Dashboard Status Cards */}
-                      <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => setHomeFilter(homeFilter === 'active' ? 'all' : 'active')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'active' ? 'bg-amber-50 border-amber-400' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-2xl font-bold text-slate-900">{activeJobsCount}</div>
-                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Active Jobs</div>
+                      <div className="grid grid-cols-4 gap-2">
+                          <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'progress' ? 'bg-amber-50 border-amber-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-xl font-bold text-amber-600">{inProgressCount}</div>
+                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">In Progress</div>
                           </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'carry' ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-2xl font-bold text-orange-600">{carryForwardCount}</div>
-                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Carry Forward</div>
+                          <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'carry' ? 'bg-orange-50 border-orange-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-xl font-bold text-orange-600">{carryForwardCount}</div>
+                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">Carry Fwd</div>
                           </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'pending' ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-2xl font-bold text-blue-600">{pendingCount}</div>
-                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Pending</div>
+                          <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'pending' ? 'bg-blue-50 border-blue-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-xl font-bold text-blue-600">{pendingCount}</div>
+                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">Pending</div>
                           </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'progress' ? 'bg-emerald-50 border-emerald-400' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-2xl font-bold text-emerald-600">{inProgressCount}</div>
-                              <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">In Progress</div>
+                          <button onClick={() => setHomeFilter(homeFilter === 'all_history' ? 'all' : 'all_history')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'all_history' ? 'bg-slate-100 border-slate-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                              <div className="text-xl font-bold text-slate-700">{visibleTickets.length}</div>
+                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">All Jobs</div>
                           </button>
                       </div>
 
@@ -1221,14 +1270,31 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           </div>
                       </div>
 
-                      {/* Live Feed */}
+                      {/* Live Feed — Date Grouped */}
                       <div>
-                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-3 px-1 flex items-center justify-between">
-                              {homeFilter === 'all' ? 'Live Feed' : homeFilter === 'active' ? 'Active Jobs' : homeFilter === 'carry' ? 'Carry Forwards' : homeFilter === 'pending' ? 'Pending Jobs' : 'In Progress'}
-                              <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px]">{homeFilteredTickets.length}</span>
-                          </h3>
-                          {homeFilteredTickets.length === 0 && <p className="text-center text-slate-400 text-sm py-8">No tickets found</p>}
-                          {homeFilteredTickets.map(t => <TicketCard key={t.id} ticket={t} />)}
+                          <div className="flex items-center justify-between mb-3 px-1">
+                              <h3 className="text-xs font-bold text-slate-500 uppercase">
+                                  {homeFilter === 'all' ? 'Live Feed' : homeFilter === 'progress' ? 'In Progress' : homeFilter === 'carry' ? 'Carry Forwards' : homeFilter === 'pending' ? 'Pending' : homeFilter === 'all_history' ? 'All Jobs' : 'Live Feed'}
+                              </h3>
+                              <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] font-bold">{homeFilteredTickets.length}</span>
+                          </div>
+                          {homeFilteredTickets.length === 0 && (
+                              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                  <ListTodo size={40} className="text-slate-300 mb-2" />
+                                  <p className="text-sm">No tickets found</p>
+                              </div>
+                          )}
+                          {Object.entries(groupedTickets).map(([dateLabel, ticketsInGroup]) => (
+                              <div key={dateLabel} className="mb-4">
+                                  <div className="flex items-center gap-2 mb-2 px-1">
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">{dateLabel}</span>
+                                      <span className="text-[10px] text-slate-300 font-bold">{ticketsInGroup.length}</span>
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                  </div>
+                                  {ticketsInGroup.map(t => <TicketCard key={t.id} ticket={t} />)}
+                              </div>
+                          ))}
                       </div>
                   </div>
               )}
