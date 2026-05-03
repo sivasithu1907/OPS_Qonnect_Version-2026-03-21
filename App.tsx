@@ -835,8 +835,8 @@ useEffect(() => {
       const isDesktop = window.innerWidth >= 768;
       return NAVIGATION_ITEMS.filter(item => {
           if (!item.roles.includes(currentUser.role)) return false;
-          // Hide mobile portals on desktop for non-Admin roles — Admin keeps access for troubleshooting
-          if (isDesktop && currentUser.role !== Role.ADMIN && (item.id === 'lead_portal' || item.id === 'tech_portal')) return false;
+          // Mobile portals are mobile-only — never show in desktop sidebar
+          if (isDesktop && (item.id === 'lead_portal' || item.id === 'tech_portal')) return false;
           return true;
       });
   }, [currentUser]);
@@ -936,7 +936,7 @@ useEffect(() => {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+    <div className="flex h-screen bg-gradient-to-br from-[#eef2f7] via-[#e8e0f0] to-[#f5e6e0] overflow-hidden font-sans">
         
         {/* Mobile Overlay */}
         {isMobileMenuOpen && (
@@ -947,7 +947,7 @@ useEffect(() => {
         )}
 
         {/* Sidebar - APPLE iOS LIGHT THEME */}
-        <aside className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#E5E7EB] border-r-[3px] border-[#1E293B]/20 text-gray-900 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'}`}>
+        <aside className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-white/40 backdrop-blur-2xl border-r border-white/30 text-gray-900 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'}`}>
             
             {/* Sidebar Header */}
             <div className={`flex items-center border-b border-[#0F172A]/[0.08] transition-all duration-300 ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}>
@@ -996,7 +996,7 @@ useEffect(() => {
                                         }}
                                         className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm font-medium transition-all duration-200 rounded-[10px] border-l-[3px] ${
                                             isActive 
-                                            ? 'border-[#FFCC00] bg-[rgba(255,204,0,0.12)] text-black' 
+                                            ? 'border-amber-400/60 bg-amber-400/15 backdrop-blur-sm text-black' 
                                             : 'border-transparent text-[#111827] hover:bg-black/5'
                                         }`}
                                     >
@@ -1020,9 +1020,9 @@ useEffect(() => {
 
                                         {/* Tooltip for Collapsed Mode */}
                                         {sidebarCollapsed && (
-                                            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 bg-white text-slate-800 text-xs px-3 py-1.5 rounded-md shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap border border-slate-200 z-50 transition-opacity duration-200 font-medium">
+                                            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 bg-white/50 backdrop-blur-xl text-slate-800 text-xs px-3 py-1.5 rounded-md shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap border border-white/40 z-50 transition-opacity duration-200 font-medium">
                                                 {item.label}
-                                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-white border-l border-b border-slate-200 transform rotate-45"></div>
+                                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-white/50 backdrop-blur-xl border-l border-b border-white/30 transform rotate-45"></div>
                                             </div>
                                         )}
                                     </button>
@@ -1036,10 +1036,10 @@ useEffect(() => {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col min-w-0 bg-white relative transition-all duration-300">
+        <main className="flex-1 flex flex-col min-w-0 bg-transparent relative transition-all duration-300">
             
             {/* Top Bar */}
-            <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-4 shrink-0 z-40 relative">
+            <header className="h-16 border-b border-white/30 bg-white/50 backdrop-blur-2xl flex items-center justify-between px-4 shrink-0 z-40 relative">
                 <div className="flex items-center gap-3">
                     {/* Desktop Toggle (Minimizes Sidebar) */}
                     <button 
@@ -1062,7 +1062,7 @@ useEffect(() => {
                 <div className="flex items-center gap-4">
                      {/* Search Bar (Global) */}
                      <div className="relative hidden lg:block z-50">
-                         <div className="flex items-center bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 focus-within:ring-2 focus-within:ring-slate-200 transition-all">
+                         <div className="flex items-center bg-white/40 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/40 focus-within:ring-2 focus-within:ring-amber-300/30 transition-all">
                              <Search size={16} className="text-slate-400" />
                              <input 
                                 type="text" 
@@ -1080,7 +1080,7 @@ useEffect(() => {
 
                          {/* Dropdown Results */}
                          {isGlobalSearchFocused && globalSearchQuery.length >= 2 && (
-                             <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden max-h-[400px] overflow-y-auto">
+                             <div className="absolute top-full left-0 right-0 mt-2 bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/40 overflow-hidden max-h-[400px] overflow-y-auto">
                                  {!hasGlobalResults ? (
                                      <div className="p-4 text-center text-slate-500 text-xs italic">No matching results found.</div>
                                  ) : (
@@ -1089,7 +1089,7 @@ useEffect(() => {
                                              <div className="mb-2">
                                                  <div className="px-3 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tickets</div>
                                                  {globalSearchResults.tickets.map(t => (
-                                                     <div key={t.id} onClick={() => handleGlobalNav('ticket', t.id)} className="px-4 py-2 hover:bg-slate-50 cursor-pointer flex justify-between items-center group">
+                                                     <div key={t.id} onClick={() => handleGlobalNav('ticket', t.id)} className="px-4 py-2 hover:bg-white/40 cursor-pointer flex justify-between items-center group">
                                                          <div>
                                                              <div className="text-sm font-medium text-slate-800">{t.customerName}</div>
                                                              <div className="text-xs text-slate-500">{t.category} • {t.id}</div>
@@ -1103,7 +1103,7 @@ useEffect(() => {
                                              <div className="mb-2">
                                                  <div className="px-3 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customers</div>
                                                  {globalSearchResults.customers.map(c => (
-                                                     <div key={c.id} onClick={() => handleGlobalNav('customer', c.id)} className="px-4 py-2 hover:bg-slate-50 cursor-pointer">
+                                                     <div key={c.id} onClick={() => handleGlobalNav('customer', c.id)} className="px-4 py-2 hover:bg-white/40 cursor-pointer">
                                                          <div className="text-sm font-medium text-slate-800">{c.name}</div>
                                                          <div className="text-xs text-slate-500">{c.phone}</div>
                                                      </div>
@@ -1114,7 +1114,7 @@ useEffect(() => {
                                              <div className="mb-2">
                                                  <div className="px-3 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Team</div>
                                                  {globalSearchResults.team.map(t => (
-                                                     <div key={t.id} onClick={() => handleGlobalNav('team', t.id)} className="px-4 py-2 hover:bg-slate-50 cursor-pointer">
+                                                     <div key={t.id} onClick={() => handleGlobalNav('team', t.id)} className="px-4 py-2 hover:bg-white/40 cursor-pointer">
                                                          <div className="text-sm font-medium text-slate-800">{t.name}</div>
                                                          <div className="text-xs text-slate-500">{t.role}</div>
                                                      </div>
@@ -1125,7 +1125,7 @@ useEffect(() => {
                                              <div>
                                                  <div className="px-3 py-1 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Activities</div>
                                                  {globalSearchResults.activities.map(a => (
-                                                     <div key={a.id} onClick={() => handleGlobalNav('activity', a.id)} className="px-4 py-2 hover:bg-slate-50 cursor-pointer">
+                                                     <div key={a.id} onClick={() => handleGlobalNav('activity', a.id)} className="px-4 py-2 hover:bg-white/40 cursor-pointer">
                                                          <div className="text-sm font-medium text-slate-800">{a.type}</div>
                                                          <div className="text-xs text-slate-500">{a.reference}</div>
                                                      </div>
@@ -1151,9 +1151,9 @@ useEffect(() => {
                          </button>
 
                          {isNotifOpen && (
-                             <div className="absolute right-0 top-10 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                             <div className="absolute right-0 top-10 w-80 bg-white/50 backdrop-blur-xl border border-white/40 rounded-xl shadow-xl z-50 overflow-hidden">
                                  {/* Header */}
-                                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/20">
                                      <span className="text-sm font-bold text-slate-800">Notifications</span>
                                      <div className="flex items-center gap-2">
                                          {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length > 0 && (
@@ -1183,7 +1183,7 @@ useEffect(() => {
                                              return (
                                                  <div
                                                      key={n.id}
-                                                     className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors ${isRead ? 'opacity-50' : ''}`}
+                                                     className={`flex items-start gap-3 px-4 py-3 hover:bg-white/40 transition-colors ${isRead ? 'opacity-50' : ''}`}
                                                  >
                                                      <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${typeColor[n.type] || 'bg-slate-400'}`}></span>
                                                      <div className="flex-1 min-w-0">
@@ -1229,7 +1229,7 @@ useEffect(() => {
                             <div className="text-sm font-bold text-slate-800">{currentUser.name}</div>
                             <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{currentUser.role}</div>
                         </div>
-                        <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-slate-100 border border-white/40 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
                             {currentUser.name.charAt(0)}
                         </div>
                         <button 
