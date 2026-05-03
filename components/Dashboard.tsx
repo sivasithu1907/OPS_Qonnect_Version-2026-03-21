@@ -207,7 +207,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
           case TicketStatus.OPEN: return 'bg-amber-100 text-amber-700 border-amber-200';
           case TicketStatus.IN_PROGRESS: return 'bg-purple-100 text-purple-700 border-purple-200';
           case TicketStatus.RESOLVED: return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-          default: return 'bg-slate-100 text-slate-600 border-slate-200';
+          default: return 'bg-slate-100 text-slate-600 border-white/40';
       }
   };
 
@@ -338,7 +338,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
     <div className="p-8 space-y-8 animate-in fade-in zoom-in duration-300 max-w-[1600px] mx-auto">
       
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start gap-4 border-b border-slate-100 pb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start gap-4 border-b border-white/20 pb-6">
           <div className="space-y-4 w-full md:w-auto relative z-20">
               <div>
                   <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Service Overview</h1>
@@ -361,7 +361,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
 
                   {/* Autocomplete Dropdown */}
                   {isSearchFocused && (
-                      <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-lg shadow-xl border border-slate-100 max-h-[400px] overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="absolute top-full left-0 w-full mt-2 bg-white/50 backdrop-blur-xl rounded-lg shadow-xl border border-white/20 max-h-[400px] overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-100">
                           {searchResults.length > 0 ? (
                               <div className="py-2">
                                   <div className="px-3 pb-2 mb-1 border-b border-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
@@ -374,7 +374,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                                           onClick={() => handleTicketSelect(ticket)}
                                           onMouseEnter={() => setActiveSearchIndex(index)}
                                           className={`w-full text-left px-4 py-3 flex justify-between items-center group transition-colors ${
-                                              activeSearchIndex === index ? 'bg-slate-50' : 'hover:bg-slate-50'
+                                              activeSearchIndex === index ? 'bg-slate-50' : 'hover:bg-white/40'
                                           }`}
                                       >
                                           <div>
@@ -421,7 +421,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
 
           {/* Date Badge */}
           <div className="shrink-0 hidden md:block">
-              <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
+              <div className="inline-flex items-center gap-2 bg-slate-50 border border-white/40 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
                   <Calendar size={16} className="text-slate-500" />
                   {dateBadge}
               </div>
@@ -434,7 +434,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
         <div 
             onClick={() => onNavigate({ description: 'All Tickets' })}
-            className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all group"
+            className="bg-white/50 backdrop-blur-xl p-5 rounded-2xl shadow-sm border border-white/40 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all group"
         >
             <div className="flex justify-between items-start mb-4">
                 <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100 transition-colors">
@@ -451,7 +451,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
             </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-white/50 backdrop-blur-xl p-5 rounded-2xl shadow-sm border border-white/40">
             <div className="flex justify-between items-start mb-4">
                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                     <CheckCircle size={20} />
@@ -472,7 +472,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                 status: [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS],
                 description: 'Pending Inquiries'
             })}
-            className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-amber-200 transition-all group"
+            className="bg-white/50 backdrop-blur-xl p-5 rounded-2xl shadow-sm border border-white/40 cursor-pointer hover:shadow-md hover:border-amber-200 transition-all group"
         >
             <div className="flex justify-between items-start mb-4">
                 <div className="p-2 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-100 transition-colors">
@@ -489,7 +489,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
             </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-white/50 backdrop-blur-xl p-5 rounded-2xl shadow-sm border border-white/40">
             <div className="flex justify-between items-start mb-4">
                 <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
                     <Clock size={20} />
@@ -508,7 +508,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
         <div 
             onClick={() => onNavigate({ aging: 'On Hold', description: 'Overdue Tickets (>3 Days)' })}
             className={`p-5 rounded-xl shadow-sm border cursor-pointer hover:shadow-md transition-all ${
-                metrics.overdue > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-200'
+                metrics.overdue > 0 ? 'bg-red-50 border-red-100' : 'bg-white/50 backdrop-blur-xl border-white/40'
             }`}
         >
             <div className="flex justify-between items-start mb-4">
@@ -537,7 +537,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Status Chart */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+          <div className="bg-white/50 backdrop-blur-xl p-6 rounded-2xl shadow-sm border border-white/40 flex flex-col">
               <h4 className="text-lg font-bold text-slate-800 mb-2">Service Status Overview</h4>
               <p className="text-sm text-slate-500 mb-4">Current distribution of ticket statuses</p>
               
@@ -586,7 +586,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
           </div>
 
           {/* Trend Chart */}
-          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="lg:col-span-2 bg-white/50 backdrop-blur-xl p-6 rounded-2xl shadow-sm border border-white/40">
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h4 className="text-lg font-bold text-slate-800">Ticket Trend</h4>
@@ -643,7 +643,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="bg-white/50 backdrop-blur-xl p-6 rounded-2xl shadow-sm border border-white/40">
               <div className="flex justify-between items-center mb-6">
                 <div>
                     <h4 className="text-lg font-bold text-slate-800">Aging Distribution</h4>
@@ -688,7 +688,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
               </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+          <div className="bg-white/50 backdrop-blur-xl p-6 rounded-2xl shadow-sm border border-white/40 flex flex-col">
                 <div className="flex justify-between items-center mb-5">
                     <h4 className="text-lg font-bold text-slate-800">Recent Activity</h4>
                     <button 
@@ -724,7 +724,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                         return (
                             <div
                                 key={event.id}
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group"
+                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/40 transition-colors cursor-pointer group"
                                 onClick={() => {
                                     const ticket = tickets.find(t => t.id === event.ticketId);
                                     if (ticket && (ticket.status === TicketStatus.RESOLVED || ticket.status === TicketStatus.CANCELLED || ticket.status === 'CARRY_FORWARD' as any)) {
@@ -775,9 +775,9 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
       {/* --- Global Search Modal --- */}
       {activeModalTicket && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col m-4 animate-in zoom-in-95 duration-200">
+              <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col m-4 animate-in zoom-in-95 duration-200">
                   {/* Modal Header */}
-                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                  <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-slate-50 shrink-0">
                       <div className="flex items-center gap-3">
                           <h3 className="font-bold text-lg text-slate-900">{activeModalTicket.id}</h3>
                           <span className={`px-2 py-0.5 rounded text-xs font-bold border uppercase tracking-wide ${getStatusBadgeStyle(activeModalTicket.status)}`}>
@@ -793,7 +793,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                   <div className="flex-1 overflow-y-auto p-6 space-y-6">
                       {/* Customer Info */}
                       <div className="flex items-start gap-4">
-                          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
+                          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center border border-white/40">
                               <UserIcon size={24} className="text-slate-400" />
                           </div>
                           <div>
@@ -806,13 +806,13 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
 
                       {/* Key Attributes */}
                       <div className="grid grid-cols-2 gap-4">
-                           <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                           <div className="p-3 bg-slate-50 rounded-lg border border-white/20">
                                <div className="text-xs text-slate-400 font-bold uppercase mb-1">Category</div>
                                <div className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
                                    <Tag size={14} /> {activeModalTicket.category}
                                </div>
                            </div>
-                           <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                           <div className="p-3 bg-slate-50 rounded-lg border border-white/20">
                                <div className="text-xs text-slate-400 font-bold uppercase mb-1">Priority</div>
                                <div className={`text-sm font-bold flex items-center gap-1.5 ${
                                    activeModalTicket.priority === Priority.URGENT ? 'text-red-600' :
@@ -842,7 +842,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
 
                           {/* Quick Actions Panel */}
                           {onUpdateTicket && (
-                             <div className="border-t border-slate-100 pt-4">
+                             <div className="border-t border-white/20 pt-4">
                                  <div className="text-xs font-bold text-slate-400 uppercase mb-2">Quick Actions</div>
                                  <div className="grid grid-cols-2 gap-3">
                                      {/* Status Update */}
@@ -850,7 +850,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                                          <select 
                                             value={activeModalTicket.status}
                                             onChange={(e) => onUpdateTicket({...activeModalTicket, status: e.target.value as TicketStatus})}
-                                            className="w-full text-xs p-2 rounded-lg bg-white border border-slate-300 focus:ring-2 focus:ring-slate-900 outline-none"
+                                            className="w-full text-xs p-2 rounded-lg bg-white/50 backdrop-blur-xl border border-slate-300 focus:ring-2 focus:ring-slate-900 outline-none"
                                          >
                                              {Object.values(TicketStatus).map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                                          </select>
@@ -862,7 +862,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                                             <select 
                                                 value={activeModalTicket.assignedTechId || ''}
                                                 onChange={(e) => onUpdateTicket({...activeModalTicket, assignedTechId: e.target.value})}
-                                                className="w-full text-xs p-2 rounded-lg bg-white border border-slate-300 focus:ring-2 focus:ring-slate-900 outline-none"
+                                                className="w-full text-xs p-2 rounded-lg bg-white/50 backdrop-blur-xl border border-slate-300 focus:ring-2 focus:ring-slate-900 outline-none"
                                             >
                                                 <option value="" disabled>Assign Engineer</option>
                                                 {technicians.filter(t => t.level === 'TEAM_LEAD').map(t => (
@@ -871,7 +871,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                                             </select>
                                         </div>
                                      ) : (
-                                         <div className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500">
+                                         <div className="flex items-center gap-2 p-2 bg-slate-50 border border-white/40 rounded-lg text-xs text-slate-500">
                                              <UserIcon size={12} />
                                              {technicians.find(t => t.id === activeModalTicket.assignedTechId)?.name || 'Unassigned'}
                                          </div>
@@ -881,9 +881,9 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                           )}
 
                           {/* Description Section */}
-                          <div className="border-t border-slate-100 pt-4">
+                          <div className="border-t border-white/20 pt-4">
                               <div className="text-xs font-bold text-slate-400 uppercase mb-2">Initial Description</div>
-                              <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                              <p className="text-sm text-slate-600 bg-white/20 p-3 rounded-lg border border-white/20">
                                   {activeModalTicket.messages?.[0]?.content || 'No description provided.'}
                               </p>
                           </div>
@@ -894,14 +894,14 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                                 <div className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
                                     <MessageSquare size={12} /> Latest Activity
                                 </div>
-                                <div className={`text-sm p-3 rounded-lg border ${latestMessage.sender === 'AGENT' ? 'bg-blue-50 border-blue-100 text-blue-900' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+                                <div className={`text-sm p-3 rounded-lg border ${latestMessage.sender === 'AGENT' ? 'bg-blue-50 border-blue-100 text-blue-900' : 'bg-slate-50 border-white/20 text-slate-600'}`}>
                                     <p className="font-semibold text-xs mb-1 opacity-75">{latestMessage.sender === 'AGENT' ? 'Support Agent' : 'Customer'}:</p>
                                     {latestMessage.content}
                                 </div>
                              </div>
                           )}
                           
-                          <div className="grid grid-cols-2 gap-4 text-xs text-slate-500 pt-2 border-t border-slate-100">
+                          <div className="grid grid-cols-2 gap-4 text-xs text-slate-500 pt-2 border-t border-white/20">
                                <div>Created: {new Date(activeModalTicket.createdAt).toLocaleDateString()}</div>
                                {activeModalTicket.appointmentTime && (
                                    <div className="text-right font-medium text-emerald-600">
@@ -913,7 +913,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                   </div>
 
                   {/* Modal Footer */}
-                  <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
+                  <div className="px-6 py-4 border-t border-white/20 bg-slate-50 flex justify-end gap-3 shrink-0">
                       <button 
                         onClick={() => setSelectedSearchTicket(null)}
                         className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors"
@@ -946,8 +946,8 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
           const issueText = t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || t.notes || t.ai_summary || '';
           return (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setPreviewTicket(null)}>
-                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                      <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                  <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                      <div className="px-5 py-4 border-b border-white/20 flex justify-between items-center bg-slate-50 shrink-0">
                           <div>
                               <div className="text-[10px] font-mono text-slate-400">{t.id}</div>
                               <h3 className="font-bold text-slate-900">{t.category}</h3>
@@ -958,27 +958,27 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                           </div>
                       </div>
                       <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                          <div className="bg-slate-50 rounded-xl p-3 border border-white/20 space-y-1">
                               <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
                               <div className="text-sm font-bold text-slate-800">{t.customerName}</div>
                               {t.phoneNumber && <div className="text-xs text-slate-500">{t.phoneNumber}</div>}
                           </div>
-                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 grid grid-cols-2 gap-2">
+                          <div className="bg-slate-50 rounded-xl p-3 border border-white/20 grid grid-cols-2 gap-2">
                               <div><span className="text-[10px] text-slate-400 block">Type</span><span className="text-xs font-medium">{t.type || '—'}</span></div>
                               <div><span className="text-[10px] text-slate-400 block">Priority</span><span className="text-xs font-medium">{t.priority}</span></div>
                           </div>
-                          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                          <div className="bg-slate-50 rounded-xl p-3 border border-white/20 space-y-1">
                               <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
                               <div className="flex justify-between text-xs"><span className="text-slate-400">Created</span><span>{fmtDt(t.createdAt)}</span></div>
                               {t.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(t.startedAt)}</span></div>}
                               {t.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(t.completedAt)}</span></div>}
                           </div>
-                          {tech && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div><div className="text-xs font-bold">{tech.name}</div></div>}
-                          {issueText && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{issueText}</p></div>}
+                          {tech && <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div><div className="text-xs font-bold">{tech.name}</div></div>}
+                          {issueText && <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{issueText}</p></div>}
                           {t.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{t.completionNote}</p></div>}
                           {t.carryForwardNote && <div className="bg-amber-50 rounded-xl p-3 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{t.carryForwardNote}</p></div>}
                       </div>
-                      <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0 flex gap-3">
+                      <div className="p-4 border-t border-white/20 bg-slate-50 shrink-0 flex gap-3">
                           <button onClick={() => setPreviewTicket(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl font-bold text-sm">Close</button>
                           <button onClick={() => { setPreviewTicket(null); onNavigate({ ticketId: t.id }); }} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Edit Ticket</button>
                       </div>
