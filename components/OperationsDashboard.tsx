@@ -325,11 +325,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
         
         {/* TOP: KPI & Controls — HIDDEN in TV mode */}
         {!tvMode && (
-        <div className="flex-none bg-white/50 backdrop-blur-xl z-30 shadow-sm">
+        <div className="flex-none bg-white z-30 shadow-sm">
             {/* KPI Row */}
-            <div className="p-4 pb-2 grid grid-cols-6 gap-4 border-b border-white/30">
+            <div className="p-4 pb-2 grid grid-cols-6 gap-4 border-b border-slate-200">
                 {/* KPI Cards */}
-                <div className="p-3 rounded-lg border border-white/40 bg-white/50 backdrop-blur-xl shadow-sm flex flex-col justify-between">
+                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Jobs</span>
                         <ActivityIcon size={14} className="text-blue-500"/>
@@ -343,7 +343,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                     </div>
                 </div>
                 {/* ... KPI Cards ... */}
-                <div className="p-3 rounded-lg border border-white/40 bg-white/50 backdrop-blur-xl shadow-sm flex flex-col justify-between">
+                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teams On-Site</span>
                         <Truck size={14} className="text-indigo-500"/>
@@ -356,7 +356,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <div className="h-full bg-indigo-500" style={{ width: `${(metrics.crewsOnSite/operationsStaff.length)*100}%` }}></div>
                     </div>
                 </div>
-                <div className="p-3 rounded-lg border border-white/40 bg-white/50 backdrop-blur-xl shadow-sm flex flex-col justify-between">
+                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Planned Today</span>
                         <Calendar size={14} className="text-slate-400"/>
@@ -368,7 +368,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <div className="h-full bg-slate-400" style={{ width: '70%' }}></div>
                     </div>
                 </div>
-                <div className={`p-3 rounded-lg border shadow-sm flex flex-col justify-between ${metrics.alertsCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white/50 backdrop-blur-xl border-white/40'}`}>
+                <div className={`p-3 rounded-lg border shadow-sm flex flex-col justify-between ${metrics.alertsCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
                     <div className="flex justify-between items-start">
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${metrics.alertsCount > 0 ? 'text-red-600' : 'text-slate-400'}`}>Alerts</span>
                         <ShieldAlert size={14} className={metrics.alertsCount > 0 ? 'text-red-600 animate-pulse' : 'text-slate-300'}/>
@@ -380,7 +380,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <div className={`h-full ${metrics.alertsCount > 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: metrics.alertsCount > 0 ? '100%' : '0%' }}></div>
                     </div>
                 </div>
-                <div className="p-3 rounded-lg border border-white/40 bg-white/50 backdrop-blur-xl shadow-sm flex flex-col justify-between">
+                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Utilization</span>
                         <Zap size={14} className={metrics.utilization > 80 ? 'text-amber-500' : 'text-slate-300'}/>
@@ -392,7 +392,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <div className={`h-full ${metrics.utilization > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${metrics.utilization}%` }}></div>
                     </div>
                 </div>
-                <div className="p-3 rounded-lg border border-white/40 bg-white/50 backdrop-blur-xl shadow-sm flex flex-col justify-between">
+                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Completed</span>
                         <CheckCircle2 size={14} className="text-emerald-500"/>
@@ -407,7 +407,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
             </div>
 
             {/* Toolbar & Status Pill */}
-            <div className="bg-white/50 backdrop-blur-xl border-b border-white/30 px-4 py-3 flex items-center justify-between gap-4">
+            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-4">
                 
                 {/* Status Pill */}
                 <div className={`flex items-center gap-3 px-4 py-1.5 rounded-full border ${statusConfig.bgColor} ${statusConfig.borderColor} transition-colors`}>
@@ -420,9 +420,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
 
                 {/* Zoom Controls */}
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setZoomLevel(prev => Math.max(60, prev - 20))} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-transparent hover:border-white/40 transition-colors"><ZoomOut size={16}/></button>
+                    <button onClick={() => setZoomLevel(prev => Math.max(60, prev - 20))} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-transparent hover:border-slate-200 transition-colors"><ZoomOut size={16}/></button>
                     <span className="text-[10px] font-mono text-slate-400 min-w-[60px] text-center font-medium">{zoomLevel} px/hr</span>
-                    <button onClick={() => setZoomLevel(prev => Math.min(300, prev + 20))} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-transparent hover:border-white/40 transition-colors"><ZoomIn size={16}/></button>
+                    <button onClick={() => setZoomLevel(prev => Math.min(300, prev + 20))} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-transparent hover:border-slate-200 transition-colors"><ZoomIn size={16}/></button>
                 </div>
             </div>
         </div>
@@ -432,9 +432,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
         <div className={`flex-1 overflow-hidden grid ${tvMode ? 'grid-cols-[220px_minmax(0,1fr)_200px]' : 'grid-cols-[280px_minmax(0,1fr)_240px]'}`}>
             
             {/* COLUMN 1: LEFT TEAMS (Fixed Width) */}
-            <div className="flex flex-col border-r border-white/30 bg-white/50 backdrop-blur-xl relative z-20">
+            <div className="flex flex-col border-r border-slate-200 bg-white relative z-20">
                 {/* Header Row */}
-                <div className="h-10 border-b border-white/30 bg-slate-50 flex items-center px-4 font-bold text-[10px] text-slate-500 uppercase tracking-wider shrink-0">
+                <div className="h-10 border-b border-slate-200 bg-slate-50 flex items-center px-4 font-bold text-[10px] text-slate-500 uppercase tracking-wider shrink-0">
                     Field Operations
                 </div>
                 {/* Vertically Scrollable List (Synced via JS) */}
@@ -482,10 +482,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         const isActiveNow = activeActs.length > 0;
 
                         return (
-                            <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-white/30 p-3 flex flex-col justify-center`}>
+                            <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center`}>
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="relative">
-                                        <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 border border-white/20 object-cover" alt=""/>
+                                        <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 border border-slate-100 object-cover" alt=""/>
                                         <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
                                             isActiveNow ? 'bg-blue-500 animate-pulse' : tech.status === 'AVAILABLE' ? 'bg-emerald-500' : 'bg-slate-300'
                                         }`} />
@@ -553,7 +553,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                     })}
                     {/* Freelancer-only Jobs Row (no internal engineer assigned) */}
                     {unassignedFreelancerActs.length > 0 && (
-                        <div className={`${tvMode ? "h-28" : "h-24"} border-b border-white/30 p-3 flex flex-col justify-center bg-amber-50/30`}>
+                        <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center bg-amber-50/30`}>
                             <div className="flex items-center gap-3 mb-2">
                                 <div className="w-9 h-9 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 text-[10px] font-bold">FL</div>
                                 <div className="min-w-0 flex-1">
@@ -584,7 +584,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                 {/* Header Scroller */}
                 <div 
                     ref={headerScrollRef}
-                    className="h-10 border-b border-white/30 bg-white/50 backdrop-blur-xl overflow-x-auto overflow-y-hidden no-scrollbar shrink-0"
+                    className="h-10 border-b border-slate-200 bg-white overflow-x-auto overflow-y-hidden no-scrollbar shrink-0"
                     onScroll={handleHeaderScroll}
                 >
                     <div className="relative h-full" style={{ width: `${totalGridWidth}px` }}>
@@ -598,7 +598,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             return (
                                 <div 
                                     key={hour} 
-                                    className="absolute top-0 bottom-0 border-l border-white/30 pl-1 flex items-center text-[10px] font-mono font-medium tracking-wide text-slate-500 select-none" 
+                                    className="absolute top-0 bottom-0 border-l border-slate-200 pl-1 flex items-center text-[10px] font-mono font-medium tracking-wide text-slate-500 select-none" 
                                     style={{ left: `${offset}px`, width: `${zoomLevel}px` }}
                                 >
                                     <span>{hh}:00</span>
@@ -642,11 +642,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 return (
                                   <div
                                     key={hour}
-                                    className={`relative h-full flex-shrink-0 border-r border-white/30/80 ${hour % 2 === 0 ? "bg-slate-50/30" : ""}`}
+                                    className={`relative h-full flex-shrink-0 border-r border-slate-200/80 ${hour % 2 === 0 ? "bg-slate-50/30" : ""}`}
                                     style={{ width: `${zoomLevel}px` }}
                                   >
                                     {hour < TIMELINE_END && showHalf && (
-                                        <div className="absolute left-1/2 top-0 bottom-0 border-r border-white/20 pointer-events-none" />
+                                        <div className="absolute left-1/2 top-0 bottom-0 border-r border-slate-100 pointer-events-none" />
                                     )}
                                   </div>
                                 );
@@ -779,7 +779,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             const timelineItems = [...techActivities, ...techTickets];
 
                             return (
-                                <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-white/30 relative w-full hover:bg-slate-100/50 transition-colors`}>
+                                <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full hover:bg-slate-100/50 transition-colors`}>
                                     {timelineItems.map((item: any) => {
                                         const style = getPositionStyle(item.plannedDate, item.durationHours);
                                         const isTicket = item.type === 'ticket';
@@ -794,7 +794,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                     isTicket && item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-300 text-cyan-900 ring-cyan-400' :
                                                     isTicket && item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-300 text-indigo-900 ring-indigo-400' :
                                                     isTicket && item.status === 'ASSIGNED'    ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
-                                                    isTicket                                  ? 'bg-slate-50 border-white/40 text-slate-600' :
+                                                    isTicket                                  ? 'bg-slate-50 border-slate-200 text-slate-600' :
                                                     item.status === 'DONE'        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
                                                     item.status === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-300 text-orange-800 opacity-90' :
                                                     item.status === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-900 ring-blue-400' :
@@ -802,7 +802,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                     item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-200 text-indigo-800 ring-indigo-400' :
                                                     item.escalationLevel > 0      ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
                                                     isPlanned                     ? 'bg-slate-50 border-dashed border-slate-300 text-slate-400 opacity-60' :
-                                                    'bg-white/50 backdrop-blur-xl border-white/40 text-slate-700 hover:border-slate-300'
+                                                    'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                                                 }`}
                                                 style={style}
                                                 onClick={() => handleItemClick(isTicket ? 'ticket' : 'activity', item.id)}
@@ -837,7 +837,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         })}
                         {/* Freelancer-only timeline row */}
                         {unassignedFreelancerActs.length > 0 && (
-                            <div className={`${tvMode ? "h-28" : "h-24"} border-b border-white/30 relative w-full bg-amber-50/20`}>
+                            <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full bg-amber-50/20`}>
                                 {unassignedFreelancerActs.map(a => {
                                     const s = normalizeStatus(a.status);
                                     const actualStart = (a as any).startedAt;
@@ -893,8 +893,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
             </div>
 
             {/* COLUMN 3: RIGHT FEED (Fixed Width) */}
-            <div className="flex flex-col border-l border-white/30 bg-white/50 backdrop-blur-xl z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
-                <div className="h-10 border-b border-white/20 bg-slate-50 flex items-center px-3 justify-between shrink-0">
+            <div className="flex flex-col border-l border-slate-200 bg-white z-20 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.02)]">
+                <div className="h-10 border-b border-slate-100 bg-slate-50 flex items-center px-3 justify-between shrink-0">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                         <History size={12} /> Live Feed
                     </span>
@@ -935,11 +935,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
 
         {/* Details Drawer (Overlay) */}
         {selectedItem && (
-             <div className="absolute top-0 right-0 h-full w-[350px] md:w-[420px] bg-white/50 backdrop-blur-xl shadow-2xl border-l border-white/30 z-50 animate-in slide-in-from-right duration-300 flex flex-col">
-                 <div className="p-4 border-b border-white/20 flex justify-between items-start bg-white/20">
+             <div className="absolute top-0 right-0 h-full w-[350px] md:w-[420px] bg-white shadow-2xl border-l border-slate-200 z-50 animate-in slide-in-from-right duration-300 flex flex-col">
+                 <div className="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                      <div>
                          <div className="flex items-center gap-2 mb-1">
-                             <span className="text-xs font-mono text-slate-400 bg-white/50 backdrop-blur-xl border px-1 rounded">
+                             <span className="text-xs font-mono text-slate-400 bg-white border px-1 rounded">
                                 {selectedItem.type === 'activity' ? (selectedItem.data as Activity).reference : (selectedItem.data as Ticket).id}
                              </span>
                              <span className="text-[10px] font-bold uppercase text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
@@ -955,8 +955,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                  
                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
                      {/* Customer Info Section */}
-                     <div className="p-3 bg-white/50 backdrop-blur-xl rounded-xl border border-white/40 shadow-sm space-y-2">
-                         <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase border-b border-white/20 pb-2 mb-2">
+                     <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-sm space-y-2">
+                         <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase border-b border-slate-100 pb-2 mb-2">
                              <User size={12}/> Customer
                          </div>
                          <div className="flex justify-between items-start">
@@ -1075,7 +1075,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                      {/* Time & Schedule */}
                      <div>
                          <label className="text-[10px] font-bold text-slate-400 uppercase">Timing</label>
-                         <div className="flex items-center gap-2 text-xs font-mono text-slate-700 mt-1 bg-white/20 p-2 rounded border border-white/20">
+                         <div className="flex items-center gap-2 text-xs font-mono text-slate-700 mt-1 bg-slate-50 p-2 rounded border border-slate-100">
                              <Clock size={12} className="text-slate-400" />
                              {(() => {
                                  const d = selectedItem.data as any;
@@ -1214,7 +1214,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                      {/* Description */}
                      <div>
                          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> Description</label>
-                         <p className="text-xs text-slate-600 mt-1 leading-relaxed bg-white/20 p-2 rounded border border-white/20 whitespace-pre-wrap">
+                         <p className="text-xs text-slate-600 mt-1 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 whitespace-pre-wrap">
                              {selectedItem.type === 'activity' ? (selectedItem.data as Activity).description : ((selectedItem.data as any).messages?.find((m: any) => m.sender === "CLIENT")?.content || (selectedItem.data as any).ai_summary || (selectedItem.data as any).category || "No description")}
                          </p>
                      </div>
@@ -1233,7 +1233,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                              <div className="space-y-2">
                                  <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><MessageSquare size={10}/> Notes & Remarks</label>
                                  {remarks && (
-                                     <div className="bg-white/20 p-2 rounded border border-white/20">
+                                     <div className="bg-slate-50 p-2 rounded border border-slate-100">
                                          <div className="text-[9px] font-bold text-slate-400 uppercase mb-0.5">Remarks</div>
                                          <p className="text-xs text-slate-600 whitespace-pre-wrap">{remarks}</p>
                                      </div>
@@ -1273,7 +1273,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                  </div>
 
                  {/* Drawer Footer Actions */}
-                 <div className="p-4 border-t border-white/20 bg-slate-50 flex gap-3">
+                 <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
                      <button 
                         onClick={() => setSelectedItem(null)}
                         className="flex-1 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded transition-colors"
