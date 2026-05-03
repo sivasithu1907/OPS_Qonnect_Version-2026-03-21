@@ -252,7 +252,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           <div 
             onClick={() => setViewingActivity(act)} 
             className={`bg-white rounded-lg shadow-sm border cursor-pointer hover:shadow-md transition-all group ${
-                isDelayed ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'
+                isDelayed ? 'border-red-300 ring-1 ring-red-100' : 'border-white/40'
             } ${isMobileCard ? 'p-4 mb-3 mx-1' : 'p-4'}`}
           >
              <div className="flex justify-between items-start mb-2">
@@ -293,18 +293,18 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
     : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
-      <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50/80 overflow-x-auto">
+    <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+      <div className="flex gap-2 p-3 border-b border-white/20 bg-slate-50/80 overflow-x-auto">
         {statusFilters.map(f => (
           <button key={f} onClick={() => setListFilter(f)}
-            className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${listFilter === f ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+            className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${listFilter === f ? 'bg-slate-900 text-white' : 'bg-white/50 backdrop-blur-xl text-slate-500 border border-white/40 hover:bg-slate-100'}`}>
             {f.replace('_',' ')} ({f === 'ALL' ? activities.length : activities.filter(a => a.status === f).length})
           </button>
         ))}
       </div>
       <div className="overflow-x-auto flex-1 overflow-y-auto">
       <table className="w-full text-sm text-left table-fixed">
-        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
+        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-white/30">
           <tr>
             <th className="px-4 py-4 w-[10%]">Ref</th>
             <th className="px-4 py-4 w-[10%]">Type</th>
@@ -325,7 +325,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             const isDelayed = (act.escalationLevel || 0) > 0;
 
             return (
-              <tr key={act.id} className={`hover:bg-slate-50 group ${isDelayed ? 'bg-red-50/30' : ''}`}>
+              <tr key={act.id} className={`hover:bg-white/40 group ${isDelayed ? 'bg-red-50/30' : ''}`}>
                 <td className="px-4 py-4 font-mono text-xs text-slate-500">
                     <div className="flex items-center gap-2">
                         {act.reference}
@@ -356,7 +356,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <span className={`px-2 py-1 rounded text-[10px] font-bold border ${
                     act.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
                     act.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                    'bg-slate-50 text-slate-600 border-slate-200'
+                    'bg-white/30 text-slate-600 border-white/40'
                   }`}>{act.priority}</span>
                 </td>
                 <td className="px-4 py-4">
@@ -428,15 +428,15 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     return (
       <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-14rem)]">
         {columns.map(status => (
-          <div key={status} className="flex-1 min-w-[280px] flex flex-col bg-slate-100/50 rounded-xl border border-slate-200/60">
-            <div className={`p-4 border-b border-slate-200 flex justify-between items-center ${
+          <div key={status} className="flex-1 min-w-[280px] flex flex-col bg-slate-100/50 rounded-xl border border-white/40/60">
+            <div className={`p-4 border-b border-white/30 flex justify-between items-center ${
               status === 'PLANNED' ? 'bg-amber-50/50' : 
               status === 'IN_PROGRESS' ? 'bg-blue-50/50' : 
               status === 'CARRY_FORWARD' ? 'bg-orange-50/50' :
               status === 'DONE' ? 'bg-emerald-50/50' : 'bg-slate-50'
             }`}>
               <h3 className="font-bold text-slate-700 text-sm">{getActivityStatusLabel(status)}</h3>
-              <span className="bg-white px-2 py-0.5 rounded text-xs font-bold text-slate-400 border border-slate-200">
+              <span className="bg-white/50 backdrop-blur-xl px-2 py-0.5 rounded text-xs font-bold text-slate-400 border border-white/40">
                 {activities.filter(a => a.status === status).length}
               </span>
             </div>
@@ -460,13 +460,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       return (
           <div className="flex flex-col h-full">
               {/* Segmented Control */}
-              <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mb-4 shrink-0 overflow-x-auto">
+              <div className="flex bg-white/50 backdrop-blur-xl p-1 rounded-xl border border-white/40 shadow-sm mb-4 shrink-0 overflow-x-auto">
                   {tabs.map(t => (
                       <button 
                         key={t}
                         onClick={() => setMobileTab(t)}
                         className={`flex-1 py-2 px-3 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all ${
-                            mobileTab === t ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
+                            mobileTab === t ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-white/40'
                         }`}
                       >
                           {getActivityStatusLabel(t)} ({activities.filter(a => a.status === t).length})
@@ -528,9 +528,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     const hasUnassignedActs = activities.some(a => !a.leadTechId && ((a as any).freelancers || []).length > 0);
     
     return (
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+      <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
         {/* Calendar Navigation Bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-white">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/20 bg-white">
             <button onClick={goToPrevWeek} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-800">
                 <ChevronLeft size={18} />
             </button>
@@ -549,12 +549,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             </button>
         </div>
         {/* Header Grid */}
-        <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-50">
-           <div className="p-4 border-r border-slate-200 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center justify-center">
+        <div className="grid grid-cols-8 border-b border-white/30 bg-white/20">
+           <div className="p-4 border-r border-white/30 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center justify-center">
              Engineer / Lead
            </div>
            {days.map(d => (
-             <div key={d.toString()} className="p-3 text-center border-r border-slate-200 last:border-0">
+             <div key={d.toString()} className="p-3 text-center border-r border-white/30 last:border-0">
                <div className="text-xs font-bold text-slate-700 uppercase">{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                <div className={`text-sm font-bold mt-1 ${d.toDateString() === new Date().toDateString() ? 'text-emerald-600 bg-emerald-50 w-8 h-8 rounded-full flex items-center justify-center mx-auto' : 'text-slate-500'}`}>
                  {d.getDate()}
@@ -566,8 +566,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         {/* Body Grid */}
         <div className="overflow-y-auto flex-1 custom-scrollbar">
            {assignableLeads.map(lead => (
-             <div key={lead.id} className="grid grid-cols-8 border-b border-slate-100 min-h-[100px]">
-               <div className="p-4 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center">
+             <div key={lead.id} className="grid grid-cols-8 border-b border-white/20 min-h-[100px]">
+               <div className="p-4 border-r border-white/30 bg-slate-50/30 flex flex-col justify-center">
                  <h4 className="font-bold text-slate-800 text-sm">{lead.name}</h4>
                  <div className="text-[10px] text-slate-500 mt-1">{(lead as any).jobRole || lead.role || lead.systemRole}</div>
                  <div className={`text-[9px] font-bold mt-0.5 ${lead.systemRole === 'TEAM_LEAD' ? 'text-purple-500' : 'text-blue-500'}`}>
@@ -582,7 +582,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  });
                  
                  return (
-                   <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-slate-50/50 transition-colors">
+                   <div key={d.toString()} className="p-2 border-r border-white/20 last:border-0 relative hover:bg-white/40/50 transition-colors">
                       {dayActs.map(act => {
                         const actFreelancers = (act as any).freelancers || [];
                         const actCustomer = customers.find(c => c.id === act.customerId);
@@ -600,7 +600,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                             act.status === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
                             act.status === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200' :
                             act.priority === 'URGENT' ? 'bg-red-50 border-red-200 border-l-4 border-l-red-500' : 
-                            'bg-white border-slate-200 border-l-4 border-l-blue-400'
+                            'bg-white/50 backdrop-blur-xl border-white/40 border-l-4 border-l-blue-400'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-1 mb-0.5">
@@ -653,8 +653,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
            {/* Freelancer / Unassigned Row */}
            {hasUnassignedActs && (
-             <div className="grid grid-cols-8 border-b border-slate-100 min-h-[100px] bg-amber-50/20">
-               <div className="p-4 border-r border-slate-200 bg-amber-50/30 flex flex-col justify-center">
+             <div className="grid grid-cols-8 border-b border-white/20 min-h-[100px] bg-amber-50/20">
+               <div className="p-4 border-r border-white/30 bg-amber-50/30 flex flex-col justify-center">
                  <h4 className="font-bold text-amber-800 text-sm">Freelancer Jobs</h4>
                  <div className="text-[10px] text-amber-600 mt-1">No internal engineer</div>
                </div>
@@ -665,7 +665,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     return !a.leadTechId && ((a as any).freelancers || []).length > 0;
                  });
                  return (
-                   <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-amber-50/30 transition-colors">
+                   <div key={d.toString()} className="p-2 border-r border-white/20 last:border-0 relative hover:bg-amber-50/30 transition-colors">
                       {dayActs.map(act => {
                         const actFreelancers = (act as any).freelancers || [];
                         return (
@@ -696,7 +696,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   };
 
   return (
-    <div className={isMobile ? "p-4 h-full flex flex-col bg-slate-50" : "p-6 h-full flex flex-col"}>
+    <div className={isMobile ? "p-4 h-full flex flex-col bg-white/20" : "p-6 h-full flex flex-col"}>
       {/* Header Toolbar - Hidden on Mobile to save space if needed, or simplified */}
       {!isMobile && (
           <div className="flex justify-between items-center mb-6 shrink-0">
@@ -706,7 +706,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             </div>
             
             <div className="flex items-center gap-3">
-               <div className="bg-white border border-slate-200 rounded-lg p-1 flex">
+               <div className="bg-white/50 backdrop-blur-xl border border-white/40 rounded-lg p-1 flex">
                   <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                     <List size={20} />
                   </button>
@@ -756,9 +756,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-2xl max-h-[90vh] rounded-2xl'} overflow-hidden flex flex-col`}>
-               <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
+            <div className={`bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 ${isMobile ? 'h-full rounded-none' : 'max-w-2xl max-h-[90vh] rounded-2xl'} overflow-hidden flex flex-col`}>
+               <div className="px-4 py-4 border-b border-white/20 flex justify-between items-center bg-white/50 backdrop-blur-xl shrink-0">
                   <h3 className="font-bold text-lg text-slate-900">
                       {editingActivity ? `Edit Activity` : 'Plan New Activity'}
                   </h3>
@@ -846,13 +846,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase">Activity Type</label>
-                          <select name="type" defaultValue={editingActivity?.type || 'Installation'} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                          <select name="type" defaultValue={editingActivity?.type || 'Installation'} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm">
                              {['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'].map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                       </div>
                       <div className="space-y-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase">Priority</label>
-                          <select name="priority" defaultValue={editingActivity?.priority || 'MEDIUM'} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                          <select name="priority" defaultValue={editingActivity?.priority || 'MEDIUM'} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm">
                              {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
                       </div>
@@ -861,12 +861,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {/* Service Category (multi-select) */}
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
-                      <div className="flex flex-wrap gap-2 p-2.5 bg-white border border-slate-300 rounded-lg min-h-[40px]">
+                      <div className="flex flex-wrap gap-2 p-2.5 bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg min-h-[40px]">
                         {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(cat => {
                           const sel = serviceCats.includes(cat);
                           return (
                             <button key={cat} type="button" onClick={() => setServiceCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
-                              className={`text-xs px-3 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                              className={`text-xs px-3 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white/50 backdrop-blur-xl border-white/40 text-slate-500 hover:border-slate-300'}`}>
                               {sel && <span className="mr-1">✓</span>}{cat}
                             </button>
                           );
@@ -875,24 +875,24 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   </div>
                   
                   {/* Location Details */}
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-white/40 space-y-3">
                       <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                           <MapPin size={16} /> Location Details
                       </h4>
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">Location URL</label>
-                              <input type="text" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="text" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">House Number</label>
-                              <input type="text" name="houseNumber" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="text" name="houseNumber" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} placeholder="Villa / Apt No." className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm" />
                           </div>
                       </div>
                   </div>
                   
                   {/* Date & Time Selection (Grouped) */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                  <div className="bg-white/20 p-4 rounded-xl border border-white/40 space-y-3">
                       <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                           <Calendar size={16} /> Planned Date & Time
                       </h4>
@@ -905,7 +905,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               onChange={e => setPlannedDatetime(e.target.value)}
                               required
                               min={new Date().toISOString().slice(0,16)}
-                              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                              className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                           />
                       </div>
                   </div>
@@ -921,13 +921,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               min="0.5" 
                               step="0.5" 
                               required
-                              className="w-1/3 bg-white p-2.5 text-sm outline-none text-center font-medium focus:bg-slate-50" 
+                              className="w-1/3 bg-white p-2.5 text-sm outline-none text-center font-medium focus:bg-white/20" 
                            />
                            <div className="w-px bg-slate-200"></div>
                            <select 
                               value={durationState.unit}
                               onChange={e => setDurationState({...durationState, unit: e.target.value as 'HOURS' | 'DAYS'})}
-                              className="flex-1 bg-slate-50 p-2.5 text-sm font-medium outline-none cursor-pointer hover:bg-slate-100"
+                              className="flex-1 bg-white/20 p-2.5 text-sm font-medium outline-none cursor-pointer hover:bg-slate-100"
                            >
                                <option value="HOURS">Hours</option>
                                <option value="DAYS">Days</option>
@@ -945,12 +945,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         name="odooLink" 
                         defaultValue={editingActivity?.odooLink} 
                         placeholder="https://odoo.crm..." 
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
+                        className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
                        />
                   </div>
                   
                   {/* Resource Allocation Section */}
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-white/40">
                       <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                           <User size={16}/> Resource Allocation
                       </h4>
@@ -961,7 +961,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/>
                                   <label className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sales Lead</label>
                               </div>
-                              <select name="salesLeadId" defaultValue={editingActivity?.salesLeadId || ''} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
+                              <select name="salesLeadId" defaultValue={editingActivity?.salesLeadId || ''} disabled={salesTeam.length === 0} className={`w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
                                   <option value="" disabled hidden>{salesTeam.length === 0 ? 'No Sales Lead available' : 'Select Sales Lead'}</option>
                                   {salesTeam.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
@@ -970,7 +970,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               )}
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-200">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-white/30">
                                 {/* ── Field Engineer ── */}
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2 mb-1">
@@ -982,7 +982,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                       value={selectedLeadTechId}
                                       onChange={e => setSelectedLeadTechId(e.target.value)}
                                       disabled={(teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign}
-                                      className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${
+                                      className={`w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm ${
                                         (teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign
                                           ? "bg-slate-50 text-slate-400 cursor-not-allowed"
                                           : ""
@@ -1034,7 +1034,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500"/>
                                         <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">Supporting Engineers (Optional)</label>
                                     </div>
-                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                    <div className="bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
                                         {[...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).length > 0 ?
                                           [...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).map(t => (
                                             <div key={t.id} className="flex items-center gap-2">
@@ -1059,7 +1059,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <div className="w-1.5 h-1.5 rounded-full bg-teal-500"/>
                                         <label className="text-xs font-bold text-teal-700 uppercase tracking-wider">Technical Associates</label>
                                     </div>
-                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                    <div className="bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
                                         {availableAssociates.length > 0 ? availableAssociates.map(t => (
                                             <div key={t.id} className="flex items-center gap-2">
                                                 <input 
@@ -1081,7 +1081,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                 </div>
 
                                 {/* Freelancers (Optional) — activity-level, no user record */}
-                                <div className="space-y-2 pt-2 border-t border-slate-100 mt-2">
+                                <div className="space-y-2 pt-2 border-t border-white/20 mt-2">
                                     <div className="flex items-center justify-between">
                                         <label className="text-xs font-semibold text-slate-500 uppercase">Freelancers (Optional)</label>
                                         <button
@@ -1096,7 +1096,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <p className="text-[10px] text-slate-400 italic">No freelancers added. Click "+ Add Freelancer" to attach temporary resources.</p>
                                     )}
                                     {freelancers.map((fl, idx) => (
-                                        <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 relative">
+                                        <div key={idx} className="bg-white/30 backdrop-blur-xl border border-white/30 rounded-lg p-3 space-y-2 relative">
                                             <button
                                                 type="button"
                                                 onClick={() => setFreelancers(prev => prev.filter((_, i) => i !== idx))}
@@ -1117,7 +1117,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                                             setFreelancers(updated);
                                                         }}
                                                         placeholder="e.g. Ahmed (Freelancer)"
-                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                        className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-sm"
                                                         required
                                                     />
                                                 </div>
@@ -1130,7 +1130,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                                             updated[idx] = { ...updated[idx], role: e.target.value };
                                                             setFreelancers(updated);
                                                         }}
-                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                        className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-sm"
                                                     >
                                                         <option value="TECHNICAL_ASSOCIATE">Technical Associate</option>
                                                         <option value="FIELD_ENGINEER">Field Engineer</option>
@@ -1148,7 +1148,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                                         setFreelancers(updated);
                                                     }}
                                                     placeholder="+974 XXXX XXXX"
-                                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                    className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-sm"
                                                 />
                                             </div>
                                         </div>
@@ -1161,7 +1161,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {editingActivity && (
                         <div className="space-y-1">
                            <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
-                           <select name="status" defaultValue={editingActivity?.status} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                           <select name="status" defaultValue={editingActivity?.status} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm">
                               {(['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'] as ActivityStatus[])
                                 .map(s => <option key={s} value={s}>{getActivityStatusLabel(s)}</option>)
                               }
@@ -1171,24 +1171,24 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Description / Scope of Work</label>
-                      <textarea name="description" rows={3} defaultValue={editingActivity?.description} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
+                      <textarea name="description" rows={3} defaultValue={editingActivity?.description} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
                   </div>
 
                   {/* General Remarks (separate from carry forward reason) */}
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">General Remarks</label>
-                      <textarea name="remarks" rows={2} defaultValue={(editingActivity as any)?.remarks} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
+                      <textarea name="remarks" rows={2} defaultValue={(editingActivity as any)?.remarks} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
                   </div>
 
                   {editingActivity && (
-                     <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                     <div className="flex justify-between items-center pt-4 border-t border-white/20">
                         <button type="button" onClick={() => { if(confirm('Delete this activity?')) { onDeleteActivity(editingActivity.id); setIsModalOpen(false); } }} className="text-red-500 text-sm hover:text-red-700 flex items-center gap-1">
                             <X size={16} /> Delete Activity
                         </button>
                      </div>
                   )}
 
-                  <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
+                  <div className="pt-4 flex justify-end gap-3 border-t border-white/20 mt-2">
                         <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
                         <button type="submit" className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all flex items-center gap-2">
                             <Save size={18} /> {editingActivity ? 'Update Activity' : 'Plan Activity'}
@@ -1208,9 +1208,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         const assistants = (va.assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
         const fls = va.freelancers || [];
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewingActivity(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm" onClick={() => setViewingActivity(null)}>
+            <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-4 py-4 border-b border-white/20 flex justify-between items-center bg-white/20">
                 <div>
                   <div className="text-xs font-mono text-slate-400">{va.reference}</div>
                   <h3 className="font-bold text-lg text-slate-900">{va.type}</h3>
@@ -1230,7 +1230,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {/* Customer & Location */}
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Customer</span>
                     <span className="font-semibold text-slate-800">{customer?.name || 'Unknown'}</span>
@@ -1241,7 +1241,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {va.locationUrl && <div className="flex justify-between text-sm"><span className="text-slate-400">Map</span><a href={va.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[60%]">Open Map</a></div>}
                 </div>
                 {/* Timing */}
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-2">
                   <div className="flex justify-between text-sm"><span className="text-slate-400">Planned</span><span className="font-semibold text-slate-700">{new Date(va.plannedDate).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span></div>
                   <div className="flex justify-between text-sm"><span className="text-slate-400">Duration</span><span className="text-slate-700">{va.durationHours}h</span></div>
                   <div className="flex justify-between text-sm"><span className="text-slate-400">Priority</span><span className={`font-bold ${va.priority === 'URGENT' ? 'text-red-600' : va.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{va.priority}</span></div>
@@ -1255,12 +1255,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   )}
                 </div>
                 {/* Description */}
-                {va.description && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-xs font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 leading-relaxed">{va.description}</p></div>}
+                {va.description && <div className="bg-slate-50 rounded-xl p-4 border border-white/20"><div className="text-xs font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 leading-relaxed">{va.description}</p></div>}
                 {/* Resources — split into sections */}
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
+                <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-3">
                   {/* Sales Lead — separate section */}
                   {salesLd && (
-                    <div className="pb-2 border-b border-slate-200">
+                    <div className="pb-2 border-b border-white/30">
                       <div className="text-[10px] font-bold text-indigo-600 uppercase mb-1.5">Sales Lead</div>
                       <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLd.name}</span></div>
                     </div>
@@ -1288,7 +1288,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     <div className="text-xs font-bold text-slate-400 uppercase">Completion Photos ({va.photos.length})</div>
                     <div className="grid grid-cols-4 gap-2">
                       {va.photos.map((p: any, i: number) => (
-                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />
+                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-white/40 cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />
                       ))}
                     </div>
                   </div>
@@ -1298,7 +1298,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <div className="space-y-3">
                     <div className="text-xs font-bold text-slate-400 uppercase">Notes & Remarks</div>
                     {va.remarks && va.remarks !== va.completionNote && (
-                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                      <div className="bg-slate-50 rounded-xl p-4 border border-white/20">
                         <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
                         <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{va.remarks}</p>
                       </div>
@@ -1332,7 +1332,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 {(va.visitHistory || []).length > 0 && (
                   <div className="space-y-3">
                     <div className="text-xs font-bold text-slate-400 uppercase">Visit History ({va.visitHistory.length} visit{va.visitHistory.length > 1 ? 's' : ''})</div>
-                    <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
+                    <div className="relative border-l-2 border-white/40 ml-2 space-y-3">
                       {va.visitHistory.map((v: any, i: number) => {
                         const isCF = v.status === 'CARRY_FORWARD'; const isDone = v.status === 'DONE';
                         const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
@@ -1360,7 +1360,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 )}
                 {va.odooLink && <div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Odoo:</span><a href={va.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">{va.odooLink}</a></div>}
               </div>
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <div className="p-4 border-t border-white/20 bg-slate-50 flex gap-3">
                 <button onClick={() => setViewingActivity(null)} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-200 rounded-xl">Close</button>
                 <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Edit Activity</button>
               </div>
