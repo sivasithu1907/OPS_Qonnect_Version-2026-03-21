@@ -301,8 +301,8 @@ onSaveCustomer(data as Customer);
         </div>
 
         {/* Customer List Container */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-sm border border-white/40 overflow-hidden">
+            <div className="p-6 border-b border-white/20 flex justify-between items-center bg-white/20">
                 <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                     <Contact size={20} className="text-slate-500" /> 
                     All Clients
@@ -320,17 +320,17 @@ onSaveCustomer(data as Customer);
                             setShowSuggestions(true);
                         }}
                         onFocus={() => setShowSuggestions(true)}
-                        className={`pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 bg-white ${isMobile ? 'w-full' : 'w-64'}`} 
+                        className={`pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 bg-white/50 backdrop-blur-xl ${isMobile ? 'w-full' : 'w-64'}`} 
                     />
                     
                     {/* Autocomplete Dropdown */}
                     {showSuggestions && searchTerm && suggestions.length > 0 && (
-                        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+                        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-white/40 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
                             {suggestions.map(c => (
                                 <div 
                                     key={c.id} 
                                     onClick={() => handleSuggestionClick(c)}
-                                    className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                    className="p-3 hover:bg-white/40 cursor-pointer border-b border-slate-50 last:border-0"
                                 >
                                     <div className="text-sm font-bold text-slate-800">{c.name}</div>
                                     <div className="text-xs text-slate-500">{formatPhoneDisplay(c.phone)}</div>
@@ -407,7 +407,7 @@ onSaveCustomer(data as Customer);
                                 </tr>
                             ) : (
                                 filteredCustomers.map(cust => (
-                                    <tr key={cust.id} className="hover:bg-slate-50 group">
+                                    <tr key={cust.id} className="hover:bg-white/40 group">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 {cust.avatar ? (
@@ -484,21 +484,21 @@ onSaveCustomer(data as Customer);
 
         {/* Add/Edit Modal */}
         {(modalType === 'add' || modalType === 'edit') && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                 <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-lg'} overflow-hidden flex flex-col`}>
-                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
+                 <div className={`bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 ${isMobile ? 'h-full rounded-none' : 'max-w-lg'} overflow-hidden flex flex-col`}>
+                    <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white/50 backdrop-blur-xl shrink-0">
                          <h3 className="font-bold text-lg text-slate-900">
                              {modalType === 'edit' ? 'Edit Client' : 'New Client'}
                          </h3>
                          <button onClick={closeModal}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                     </div>
                     
-                    <form onSubmit={handleSubmit} className="p-6 space-y-4 bg-white flex-1 overflow-y-auto">
+                    <form onSubmit={handleSubmit} className="p-6 space-y-4 bg-white/50 backdrop-blur-xl flex-1 overflow-y-auto">
                         
                         {/* Avatar Upload */}
                         <div className="flex flex-col items-center mb-4">
                             <div className="relative group cursor-pointer" onClick={() => !readOnly && fileInputRef.current?.click()}>
-                                <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-slate-200 overflow-hidden mb-2">
+                                <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-white/40 overflow-hidden mb-2">
                                     {avatarPreview ? (
                                         <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                                     ) : (
@@ -532,7 +532,7 @@ onSaveCustomer(data as Customer);
                         {/* Fields */}
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
-                            <input name="name" defaultValue={activeItem?.name} required disabled={readOnly} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" placeholder="e.g. John Doe"/>
+                            <input name="name" defaultValue={activeItem?.name} required disabled={readOnly} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" placeholder="e.g. John Doe"/>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -545,7 +545,7 @@ onSaveCustomer(data as Customer);
                                         defaultValue={activeItem?.phone ? activeItem.phone.replace(/^\+974\s?/, '').replace(/^974/, '') : ''}
                                         required 
                                         disabled={readOnly}
-                                        className="rounded-none rounded-r-lg flex-1 bg-white border border-slate-300 p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
+                                        className="rounded-none rounded-r-lg flex-1 bg-white/50 backdrop-blur-xl border border-slate-300 p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
                                         placeholder="3300 0000"
                                     />
                                 </div>
@@ -559,7 +559,7 @@ onSaveCustomer(data as Customer);
                                     defaultValue={activeItem?.email} 
                                     type="email" 
                                     disabled={readOnly}
-                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
+                                    className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
                                     placeholder="email@example.com"
                                 />
                             </div>
@@ -573,7 +573,7 @@ onSaveCustomer(data as Customer);
                                 name="address" 
                                 defaultValue={activeItem?.address} 
                                 disabled={readOnly}
-                                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
+                                className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
                                 placeholder="https://maps.google.com..."
                             />
                         </div>
@@ -586,7 +586,7 @@ onSaveCustomer(data as Customer);
                                 name="buildingNumber" 
                                 defaultValue={activeItem?.buildingNumber} 
                                 disabled={readOnly}
-                                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
+                                className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
                                 placeholder="e.g. Bldg 10, Zone 55"
                             />
                         </div>
@@ -598,7 +598,7 @@ onSaveCustomer(data as Customer);
                         )}
 
                         {!readOnly && (
-                            <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-2">
+                            <div className="pt-4 flex justify-between items-center border-t border-white/20 mt-2">
                                  {activeItem ? (
                                     <button type="button" onClick={(e) => handleDelete(activeItem.id, e)} className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition-colors">
                                         <Trash2 size={16} className="pointer-events-none" /> Delete
@@ -613,7 +613,7 @@ onSaveCustomer(data as Customer);
                             </div>
                         )}
                         {readOnly && (
-                            <div className="pt-4 flex justify-end border-t border-slate-100 mt-2">
+                            <div className="pt-4 flex justify-end border-t border-white/20 mt-2">
                                 <button type="button" onClick={closeModal} className="px-4 py-2 bg-slate-900 text-white rounded-lg font-medium">Close</button>
                             </div>
                         )}
@@ -625,13 +625,13 @@ onSaveCustomer(data as Customer);
 
         {/* View Details & History Modal */}
         {modalType === 'view' && activeItem && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-4xl max-h-[85vh]'} overflow-hidden relative flex flex-col md:flex-row`}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
+                <div className={`bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 ${isMobile ? 'h-full rounded-none' : 'max-w-4xl max-h-[85vh]'} overflow-hidden relative flex flex-col md:flex-row`}>
                     <button onClick={closeModal} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><X size={20}/></button>
                     
                     {/* Left: Profile Panel */}
-                    <div className="w-full md:w-1/3 bg-slate-50 p-8 border-r border-slate-100 flex flex-col items-center overflow-y-auto shrink-0">
-                        <div className="w-32 h-32 rounded-full bg-white border-4 border-white shadow-md mb-6 overflow-hidden">
+                    <div className="w-full md:w-1/3 bg-white/20 p-8 border-r border-white/20 flex flex-col items-center overflow-y-auto shrink-0">
+                        <div className="w-32 h-32 rounded-full bg-white/50 backdrop-blur-xl border-4 border-white shadow-md mb-6 overflow-hidden">
                             {activeItem.avatar ? (
                                 <img src={activeItem.avatar} alt={activeItem.name} className="w-full h-full object-cover" />
                             ) : (
@@ -645,22 +645,22 @@ onSaveCustomer(data as Customer);
                         
                         <div className="w-full space-y-4">
                             <div className="flex items-center gap-3 text-slate-700">
-                                <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><Phone size={18}/></div>
+                                <div className="p-2 bg-white/50 backdrop-blur-xl rounded-lg shadow-sm text-slate-400"><Phone size={18}/></div>
                                 <span className="text-sm font-mono">{formatPhoneDisplay(activeItem.phone)}</span>
                             </div>
                             {activeItem.email && (
                                 <div className="flex items-center gap-3 text-slate-700">
-                                    <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><Mail size={18}/></div>
+                                    <div className="p-2 bg-white/50 backdrop-blur-xl rounded-lg shadow-sm text-slate-400"><Mail size={18}/></div>
                                     <span className="text-sm">{activeItem.email}</span>
                                 </div>
                             )}
                             <div className="flex items-center gap-3 text-slate-700">
-                                <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><MapPin size={18}/></div>
+                                <div className="p-2 bg-white/50 backdrop-blur-xl rounded-lg shadow-sm text-slate-400"><MapPin size={18}/></div>
                                 <span className="text-sm truncate max-w-[200px]" title={activeItem.address}>{activeItem.address || 'No Location URL'}</span>
                             </div>
                             {activeItem.buildingNumber && (
                                 <div className="flex items-center gap-3 text-slate-700">
-                                    <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><Home size={18}/></div>
+                                    <div className="p-2 bg-white/50 backdrop-blur-xl rounded-lg shadow-sm text-slate-400"><Home size={18}/></div>
                                     <span className="text-sm">Bldg: {activeItem.buildingNumber}</span>
                                 </div>
                             )}
@@ -668,7 +668,7 @@ onSaveCustomer(data as Customer);
 
                         {!readOnly && (
                             <div className="mt-auto pt-8 w-full">
-                                <button onClick={() => openModal('edit', activeItem)} className="w-full py-2 bg-white border border-slate-200 rounded-lg text-slate-600 font-medium hover:bg-slate-100 hover:text-emerald-600 transition-colors">
+                                <button onClick={() => openModal('edit', activeItem)} className="w-full py-2 bg-white/50 backdrop-blur-xl border border-white/40 rounded-lg text-slate-600 font-medium hover:bg-slate-100 hover:text-emerald-600 transition-colors">
                                     Edit Profile
                                 </button>
                             </div>
@@ -676,7 +676,7 @@ onSaveCustomer(data as Customer);
                     </div>
 
                     {/* Right: History Panel */}
-                    <div className="w-full md:w-2/3 p-8 flex flex-col bg-white overflow-hidden">
+                    <div className="w-full md:w-2/3 p-8 flex flex-col bg-white/50 backdrop-blur-xl overflow-hidden">
                         <h3 className="font-bold text-xl text-slate-800 mb-4 flex items-center gap-2">
                             <Clock size={20} className="text-slate-400"/>
                             Client History
@@ -705,7 +705,7 @@ onSaveCustomer(data as Customer);
                                     <p>No service history found for this customer.</p>
                                 </div>
                             ) : (
-                                <div className="relative border-l-2 border-slate-100 ml-3 space-y-6 py-2">
+                                <div className="relative border-l-2 border-white/20 ml-3 space-y-6 py-2">
                                     {getCustomerTimeline(activeItem.id).map((item, index) => {
                                         const isTicket = item.kind === 'ticket';
                                         const statusColor = 
@@ -731,7 +731,7 @@ onSaveCustomer(data as Customer);
                                                 </div>
                                                 
                                                 <div className={`rounded-lg p-4 border hover:shadow-md transition-shadow cursor-pointer ${
-                                                    isTicket ? 'bg-purple-50/30 border-purple-100' : 'bg-slate-50 border-slate-100'
+                                                    isTicket ? 'bg-purple-50/30 border-purple-100' : 'bg-slate-50 border-white/20'
                                                 }`} onClick={() => setHistoryPreview(item)}>
                                                     {/* Header Row */}
                                                     <div className="flex justify-between items-start mb-2">
@@ -783,7 +783,7 @@ onSaveCustomer(data as Customer);
 
                                                     {/* Notes Section — Remarks, Completion, Carry Forward */}
                                                     {(item.remarks || item.completionNote || item.carryForwardNote || item.cancellationReason) && (
-                                                        <div className="space-y-1.5 mt-2 pt-2 border-t border-slate-100">
+                                                        <div className="space-y-1.5 mt-2 pt-2 border-t border-white/20">
                                                             {item.remarks && (
                                                                 <div className="flex items-start gap-1.5">
                                                                     <MessageSquare size={10} className="text-slate-400 mt-0.5 shrink-0"/>
@@ -836,8 +836,8 @@ onSaveCustomer(data as Customer);
             const photos = h.photos || [];
             return (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setHistoryPreview(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                    <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-white/20 flex justify-between items-center bg-slate-50 shrink-0">
                             <div>
                                 <div className="flex items-center gap-2 mb-0.5">
                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{isTicket ? 'TICKET' : 'ACTIVITY'}</span>
@@ -853,7 +853,7 @@ onSaveCustomer(data as Customer);
                         </div>
                         <div className="flex-1 overflow-y-auto p-5 space-y-4">
                             {/* Timing */}
-                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                            <div className="bg-slate-50 rounded-xl p-3 border border-white/20 space-y-1.5">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
                                 <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span className="text-slate-700">{h.dateLabel}</span></div>
                                 {h.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(h.startedAt)}</span></div>}
@@ -861,13 +861,13 @@ onSaveCustomer(data as Customer);
                                 {h.startedAt && h.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Duration</span><span className="font-bold text-slate-700">{Math.round((new Date(h.completedAt).getTime() - new Date(h.startedAt).getTime()) / 60000)}m</span></div>}
                             </div>
                             {/* Engineer */}
-                            {h.techName && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div><div className="text-xs font-bold text-slate-700">{h.techName}</div></div>}
+                            {h.techName && <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div><div className="text-xs font-bold text-slate-700">{h.techName}</div></div>}
                             {/* Description */}
-                            {h.description && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.description}</p></div>}
+                            {h.description && <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.description}</p></div>}
                             {/* Completion */}
                             {h.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{h.completionNote}</p></div>}
                             {/* Remarks */}
-                            {h.remarks && h.remarks !== h.completionNote && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.remarks}</p></div>}
+                            {h.remarks && h.remarks !== h.completionNote && <div className="bg-slate-50 rounded-xl p-3 border border-white/20"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.remarks}</p></div>}
                             {/* Carry Forward */}
                             {h.carryForwardNote && <div className="bg-amber-50 rounded-xl p-3 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{h.carryForwardNote}</p>{h.nextPlannedAt && <div className="text-[10px] text-amber-600 mt-1">Re-scheduled: {fmtDt(h.nextPlannedAt)}</div>}</div>}
                             {/* Cancellation */}
@@ -876,10 +876,10 @@ onSaveCustomer(data as Customer);
                             {h.location && <div className="flex items-center gap-2 text-xs text-slate-500"><MapPin size={10}/> {h.location}</div>}
                             {/* Photos */}
                             {photos.length > 0 && (
-                                <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-3 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />)}</div></div>
+                                <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-3 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-white/40 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />)}</div></div>
                             )}
                         </div>
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
+                        <div className="p-4 border-t border-white/20 bg-slate-50 shrink-0">
                             <button onClick={() => setHistoryPreview(null)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Close</button>
                         </div>
                     </div>
