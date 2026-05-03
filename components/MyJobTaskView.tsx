@@ -81,7 +81,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
     return (
       <>
         <div
-          className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/20 shadow-sm overflow-hidden active:scale-[0.99] transition-transform"
+          className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden active:scale-[0.99] transition-transform"
           onClick={() => onSelect?.(ticket)}
         >
           {/* Progress bar — same as activity card */}
@@ -152,11 +152,11 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
             {/* Call customer */}
             {ticket.phoneNumber ? (
               <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
-                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
                 <Phone size={14}/> Call Customer
               </a>
             ) : (
-              <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-400 rounded-xl text-xs mb-4">
+              <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
                 <Phone size={14}/> No phone number
               </div>
             )}
@@ -170,7 +170,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
                         i < currentStep  ? 'bg-emerald-500 border-emerald-500 text-white' :
                         i === currentStep? 'bg-slate-900 border-slate-900 text-white' :
-                        'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
+                        'bg-white border-slate-200 text-slate-400'
                       }`}>{i < currentStep ? '✓' : i+1}</div>
                       <span className={`text-[9px] mt-0.5 font-medium ${i===currentStep?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
                     </div>
@@ -189,14 +189,14 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
 
         {/* Complete modal — only needed if user completes from list (edge case) */}
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm" onClick={()=>setIsModalOpen(false)}>
-            <div className="bg-white/50 backdrop-blur-xl w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={()=>setIsModalOpen(false)}>
+            <div className="bg-white w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-bold text-slate-900">Complete Job</h3>
                 <button onClick={()=>setIsModalOpen(false)} className="p-2 bg-slate-100 rounded-full"><X size={20}/></button>
               </div>
               <textarea value={remark} onChange={e=>setRemark(e.target.value)}
-                className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none mb-4"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none mb-4"
                 placeholder="Describe what was fixed / installed..." rows={4} autoFocus/>
               <div className="flex items-center gap-2 text-[10px] bg-blue-50 p-3 rounded-lg text-blue-700 mb-4">
                 <Clock size={12}/> Customer will receive a WhatsApp notification.
@@ -216,7 +216,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
   // ── FULL-SCREEN DETAIL VIEW (used when job is tapped) ──
   return (
     <>
-      <div className="flex flex-col h-full overflow-y-auto bg-white/20">
+      <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
         {/* Progress bar */}
         <div className="h-1 bg-slate-200 shrink-0">
           <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }}/>
@@ -242,14 +242,14 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
           {/* Call */}
           {ticket.phoneNumber && (
             <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
-              className="flex items-center justify-center gap-2 w-full py-2.5 bg-white/50 backdrop-blur-xl border border-white/40 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
+              className="flex items-center justify-center gap-2 w-full py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
               <Phone size={14}/> Call Customer — {ticket.phoneNumber}
             </a>
           )}
 
           {/* Issue */}
           {issueText && (
-            <div className="bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20">
+            <div className="bg-white rounded-xl p-4 border border-slate-100">
               <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Issue / Scope of Work</div>
               <p className="text-sm text-slate-700 leading-relaxed">{issueText}</p>
             </div>
@@ -289,7 +289,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
           )}
 
           {/* Details grid */}
-          <div className="bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20 space-y-3">
+          <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-slate-400 font-medium">Category</span>
               <span className="font-semibold text-slate-700">{ticket.category}</span>
@@ -317,14 +317,14 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
 
           {/* Steps */}
           {!isCompleted && (
-            <div className="flex items-center justify-between bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20">
+            <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
               {steps.slice(0,4).map((step,i)=>(
                 <React.Fragment key={step.key}>
                   <div className="flex flex-col items-center">
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
                       i<currentStep?'bg-emerald-500 border-emerald-500 text-white':
                       i===currentStep?'bg-slate-900 border-slate-900 text-white':
-                      'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
+                      'bg-white border-slate-200 text-slate-400'
                     }`}>{i<currentStep?'✓':i+1}</div>
                     <span className={`text-[9px] mt-1 font-medium ${i===currentStep?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
                   </div>
@@ -338,7 +338,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
           <div className="grid grid-cols-2 gap-3">
             {ticket.locationUrl ? (
               <a href={ticket.locationUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
-                className="flex flex-col items-center justify-center p-3 bg-white border border-white/40 rounded-xl text-slate-600 hover:bg-white/40 active:scale-95 transition-transform">
+                className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform">
                 <Navigation size={22} className="mb-1 text-blue-500"/>
                 <span className="text-xs font-semibold">Navigate</span>
               </a>
@@ -348,7 +348,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
                 <span className="text-xs font-semibold">Navigate</span>
               </div>
             )}
-            <div className="flex flex-col items-center justify-center p-3 bg-white/50 backdrop-blur-xl border border-white/40 rounded-xl text-slate-600">
+            <div className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600">
               <Camera size={22} className="mb-1"/>
               <span className="text-xs font-semibold">Photos</span>
             </div>
@@ -373,14 +373,14 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
 
       {/* Complete modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm" onClick={()=>setIsModalOpen(false)}>
-          <div className="bg-white/50 backdrop-blur-xl w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={()=>setIsModalOpen(false)}>
+          <div className="bg-white w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-slate-900">Complete Job</h3>
               <button onClick={()=>setIsModalOpen(false)} className="p-2 bg-slate-100 rounded-full"><X size={20}/></button>
             </div>
             <textarea value={remark} onChange={e=>setRemark(e.target.value)}
-              className="w-full bg-white/30 backdrop-blur-xl border border-white/30 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none mb-4"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none mb-4"
               placeholder="Describe what was fixed / installed..." rows={4} autoFocus/>
             <div className="flex items-center gap-2 text-[10px] bg-blue-50 p-3 rounded-lg text-blue-700 mb-4">
               <Clock size={12}/> Customer will receive a WhatsApp notification.
