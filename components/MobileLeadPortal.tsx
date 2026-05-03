@@ -556,7 +556,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       return (
           <div 
             onClick={() => handleTicketCardTap(ticket)}
-            className="bg-white/50 backdrop-blur-xl p-4 rounded-2xl border border-white/40 shadow-sm mb-3 active:scale-[0.98] transition-transform relative overflow-hidden group"
+            className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-3 active:scale-[0.98] transition-transform relative overflow-hidden group"
           >
               {stalled && (
                   <div className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-2 py-1 rounded-bl-lg font-bold z-10 flex items-center gap-1">
@@ -619,7 +619,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       return (
           <div
             onClick={() => handleTicketCardTap(ticket)}
-            className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/20 shadow-sm mb-3 overflow-hidden active:scale-[0.99] transition-transform"
+            className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-3 overflow-hidden active:scale-[0.99] transition-transform"
           >
               {/* Progress bar */}
               <div className="h-1 bg-slate-100">
@@ -676,11 +676,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   {/* Call */}
                   {ticket.phoneNumber ? (
                       <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
-                          className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                          className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
                           <Phone size={13}/> Call Customer
                       </a>
                   ) : (
-                      <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-400 rounded-xl text-xs mb-4">
+                      <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
                           <Phone size={13}/> No phone number
                       </div>
                   )}
@@ -693,7 +693,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
                                           i < currentStep  ? 'bg-emerald-500 border-emerald-500 text-white' :
                                           i === currentStep? 'bg-slate-900 border-slate-900 text-white' :
-                                          'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
+                                          'bg-white border-slate-200 text-slate-400'
                                       }`}>{i < currentStep ? '✓' : i+1}</div>
                                       <span className={`text-[9px] mt-0.5 font-medium ${i===currentStep?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
                                   </div>
@@ -735,7 +735,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     return (
         <div
           onClick={() => setViewActivity(activity)}
-          className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/20 shadow-sm mb-3 overflow-hidden active:scale-[0.99] transition-transform"
+          className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-3 overflow-hidden active:scale-[0.99] transition-transform"
         >
             {/* Progress bar */}
             <div className="h-1 bg-slate-100">
@@ -792,11 +792,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {/* Call */}
                 {actCustomer?.phone ? (
                     <a href={`tel:${actCustomer.phone}`} onClick={(e:any)=>e.stopPropagation()}
-                        className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
+                        className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
                         <Phone size={13}/> Call Customer
                     </a>
                 ) : (
-                    <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-white/40 text-slate-400 rounded-xl text-xs mb-4">
+                    <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
                         <Phone size={13}/> No phone number
                     </div>
                 )}
@@ -809,7 +809,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
                                         i < actStepIdx  ? 'bg-emerald-500 border-emerald-500 text-white' :
                                         i === actStepIdx? 'bg-slate-900 border-slate-900 text-white' :
-                                        'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
+                                        'bg-white border-slate-200 text-slate-400'
                                     }`}>{i < actStepIdx ? '✓' : i+1}</div>
                                     <span className={`text-[9px] mt-0.5 font-medium ${i===actStepIdx?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
                                 </div>
@@ -838,7 +838,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       <div 
                         key={tech.id} 
                         onClick={() => setViewTech(tech)}
-                        className="bg-white/50 backdrop-blur-xl p-4 rounded-2xl border border-white/40 shadow-sm active:scale-95 transition-transform cursor-pointer"
+                        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer"
                       >
                           <div className="flex items-center gap-3 mb-3">
                               <div className="relative">
@@ -861,7 +861,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   <span className="text-lg font-bold text-amber-700 leading-none">{progressCount}</span>
                                   <span className="text-[9px] font-bold text-amber-400 uppercase mt-0.5">In Prog</span>
                               </div>
-                              <div className="flex-1 bg-slate-50 border border-white/20 rounded-lg py-1.5 px-2 flex flex-col items-center">
+                              <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
                                   <span className="text-lg font-bold text-slate-700 leading-none">{activeCount}</span>
                                   <span className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Total</span>
                               </div>
@@ -878,9 +878,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       // 1. Ticket Detail View (Overrides everything)
       if (selectedTicketId && selectedTicket) {
           return (
-              <div className="h-full flex flex-col bg-white/20">
+              <div className="h-full flex flex-col bg-slate-50">
                   {/* Detail Header */}
-                  <div className="bg-white/50 backdrop-blur-xl p-4 border-b border-white/30 flex justify-between items-start shrink-0">
+                  <div className="bg-white p-4 border-b border-slate-200 flex justify-between items-start shrink-0">
                       <div>
                           <button onClick={() => setSelectedTicketId(null)} className="flex items-center gap-1 text-slate-500 text-sm mb-2 font-medium">
                               <ChevronLeft size={16} /> Back
@@ -896,11 +896,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {/* Quick Info */}
                       <div className="flex gap-2">
-                          <div className="flex-1 p-3 bg-white/50 backdrop-blur-xl border border-white/40 rounded-lg shadow-sm">
+                          <div className="flex-1 p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
                               <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Category</span>
                               <span className="text-sm font-bold text-slate-800">{selectedTicket.category}</span>
                           </div>
-                          <div className="flex-1 p-3 bg-white/50 backdrop-blur-xl border border-white/40 rounded-lg shadow-sm">
+                          <div className="flex-1 p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
                               <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Location</span>
                               <span className="text-sm font-bold text-slate-800 truncate block">{selectedTicket.houseNumber || 'N/A'}</span>
                           </div>
@@ -918,11 +918,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       )}
 
                       {/* Issue Log */}
-                      <div className="bg-white/40 backdrop-blur-xl border border-white/40 rounded-2xl p-4 shadow-sm">
+                      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                           <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Issue Log</h3>
                           <div className="space-y-3">
                               {selectedTicket.messages.slice(-3).map(m => (
-                                  <div key={m.id} className={`p-3 rounded-lg text-sm border ${m.sender === 'CLIENT' ? 'bg-slate-50 border-white/40' : 'bg-blue-50 border-blue-100 ml-4'}`}>
+                                  <div key={m.id} className={`p-3 rounded-lg text-sm border ${m.sender === 'CLIENT' ? 'bg-slate-50 border-slate-200' : 'bg-blue-50 border-blue-100 ml-4'}`}>
                                       <div className="text-[10px] font-bold text-slate-400 mb-1">{m.sender}</div>
                                       {m.content}
                                   </div>
@@ -932,14 +932,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                       {/* Tech Assignment */}
                       {selectedTicket.assignedTechId !== currentUserId && (
-                          <div className="bg-white/40 backdrop-blur-xl border border-white/40 rounded-2xl p-4 shadow-sm">
+                          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                               <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">Current Dispatch</h3>
                               <div 
                                   onClick={(e) => handleQuickDispatch(e, selectedTicket)}
                                   className="flex items-center justify-between p-3 bg-slate-50 rounded-lg cursor-pointer active:bg-slate-100"
                               >
                                   <div className="flex items-center gap-3">
-                                      <div className="w-10 h-10 rounded-full bg-white/50 backdrop-blur-xl border border-white/40 flex items-center justify-center overflow-hidden">
+                                      <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center overflow-hidden">
                                           {selectedTicket.assignedTechId ? (
                                               <img src={technicians.find(t=>t.id===selectedTicket.assignedTechId)?.avatar} className="w-full h-full object-cover"/>
                                           ) : <UserPlus size={18} className="text-slate-400"/>}
@@ -958,7 +958,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   </div>
 
                   {/* Bottom Actions */}
-                  <div className="bg-white/50 backdrop-blur-xl border-t border-white/30 p-4 pb-safe flex gap-3 shrink-0">
+                  <div className="bg-white border-t border-slate-200 p-4 pb-safe flex gap-3 shrink-0">
                       <a href={`tel:${selectedTicket.phoneNumber}`} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold flex items-center justify-center gap-2">
                           <Phone size={18} /> Call
                       </a>
@@ -983,8 +983,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       // (Tickets, Reports, Clients open from More tab; Planner kept for legacy)
       if (mobileModule !== 'none') {
           return (
-              <div className="h-full flex flex-col bg-white/20">
-                  <div className="bg-white/60 backdrop-blur-2xl border-b border-white/30">
+              <div className="h-full flex flex-col bg-slate-50">
+                  <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-3 shrink-0 shadow-sm">
                       <button onClick={() => setMobileModule('none')} className="p-1 rounded-full hover:bg-slate-100">
                           <ChevronLeft size={24} className="text-slate-600"/>
                       </button>
@@ -995,7 +995,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   
                   <div className="flex-1 overflow-hidden relative">
                       {mobileModule === 'planner' && (
-                          <div className="h-full w-full bg-white/20">
+                          <div className="h-full w-full bg-slate-50">
                               <PlanningModule 
                                   activities={activities} teams={teams} sites={sites} customers={customers} technicians={technicians}
                                   onAddActivity={onAddActivity!} onUpdateActivity={onUpdateActivity!} onDeleteActivity={onDeleteActivity!} onAddCustomer={onAddCustomer!}
@@ -1013,7 +1013,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                           value={searchTerm}
                                           onChange={(e) => setSearchTerm(e.target.value)}
                                           placeholder="Search by name, phone, or job ID..."
-                                          className="w-full bg-slate-50 border border-white/40 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-amber-400"
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-amber-400"
                                       />
                                   </div>
                                   <div className="space-y-2">
@@ -1048,7 +1048,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               <div className="h-full overflow-y-auto pb-24">
                   <div className="p-4 space-y-6">
                       {/* Profile Card */}
-                      <div className="bg-white/50 backdrop-blur-xl rounded-2xl p-5 border border-white/40 shadow-sm">
+                      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
                           <div className="flex items-center gap-4">
                               <div className="relative">
                                   <img src={currentTech?.avatar || `https://ui-avatars.com/api/?name=TL&background=f59e0b&color=fff`} className="w-16 h-16 rounded-full object-cover ring-2 ring-amber-400" alt="" />
@@ -1064,7 +1064,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       {/* Operations Section */}
                       <div>
                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Operations</h4>
-                          <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm overflow-hidden divide-y divide-white/20">
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
                               <button onClick={() => { setMobileModule('tickets'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
                                   <div className="p-2 bg-amber-50 rounded-lg"><ListTodo size={20} className="text-amber-600" /></div>
                                   <div className="flex-1 text-left">
@@ -1104,7 +1104,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       {/* Notifications Section */}
                       <div>
                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Notifications</h4>
-                          <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm overflow-hidden">
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                               <button onClick={() => setShowNotifications(true)} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
                                   <div className="p-2 bg-amber-50 rounded-lg relative">
                                       <BellRing size={20} className="text-amber-400" />
@@ -1123,7 +1123,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       {/* Account Section */}
                       <div>
                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Account</h4>
-                          <div className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm overflow-hidden divide-y divide-white/20">
+                          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
                               <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
                                   <div className="p-2 bg-slate-100 rounded-lg"><Lock size={20} className="text-slate-400" /></div>
                                   <span className="flex-1 text-left text-slate-900 font-medium">Password & Security</span>
@@ -1163,19 +1163,19 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   <div className="p-4 space-y-5">
                       {/* Dashboard Status Cards */}
                       <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => setHomeFilter(homeFilter === 'active' ? 'all' : 'active')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'active' ? 'bg-amber-500/15 border-amber-400/40 shadow-lg shadow-amber-500/5' : 'bg-white/50 backdrop-blur-xl border-white/40 shadow-sm'}`}>
+                          <button onClick={() => setHomeFilter(homeFilter === 'active' ? 'all' : 'active')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'active' ? 'bg-amber-50 border-amber-400' : 'bg-white border-slate-200 shadow-sm'}`}>
                               <div className="text-2xl font-bold text-slate-900">{activeJobsCount}</div>
                               <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Active Jobs</div>
                           </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'carry' ? 'bg-orange-500/15 border-orange-400/40 shadow-lg shadow-orange-500/5' : 'bg-white/50 backdrop-blur-xl border-white/40 shadow-sm'}`}>
+                          <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'carry' ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 shadow-sm'}`}>
                               <div className="text-2xl font-bold text-orange-600">{carryForwardCount}</div>
                               <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Carry Forward</div>
                           </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'pending' ? 'bg-blue-500/15 border-blue-400/40 shadow-lg shadow-blue-500/5' : 'bg-white/50 backdrop-blur-xl border-white/40 shadow-sm'}`}>
+                          <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'pending' ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200 shadow-sm'}`}>
                               <div className="text-2xl font-bold text-blue-600">{pendingCount}</div>
                               <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">Pending</div>
                           </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'progress' ? 'bg-emerald-500/15 border-emerald-400/40 shadow-lg shadow-emerald-500/5' : 'bg-white/50 backdrop-blur-xl border-white/40 shadow-sm'}`}>
+                          <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-4 rounded-xl border transition-all active:scale-[0.97] ${homeFilter === 'progress' ? 'bg-emerald-50 border-emerald-400' : 'bg-white border-slate-200 shadow-sm'}`}>
                               <div className="text-2xl font-bold text-emerald-600">{inProgressCount}</div>
                               <div className="text-[10px] font-bold text-slate-500 uppercase mt-1">In Progress</div>
                           </button>
@@ -1186,22 +1186,22 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Quick Actions</h3>
                           <div className="grid grid-cols-4 gap-2">
                               {onAddActivity && (
-                                  <button onClick={() => setActiveTab('planner')} className="flex flex-col items-center gap-1.5 p-3 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm active:scale-95 transition-transform">
+                                  <button onClick={() => setActiveTab('planner')} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                       <ActivityIcon size={20} className="text-indigo-400" />
                                       <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Activity</span>
                                   </button>
                               )}
                               {onCreateTicket && (
-                                  <button onClick={() => setShowCreateTicket(true)} className="flex flex-col items-center gap-1.5 p-3 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm active:scale-95 transition-transform">
+                                  <button onClick={() => setShowCreateTicket(true)} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                       <Plus size={20} className="text-amber-400" />
                                       <span className="text-[9px] font-bold text-slate-500 uppercase">Ticket</span>
                                   </button>
                               )}
-                              <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm active:scale-95 transition-transform">
+                              <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                   <BarChart3 size={20} className="text-blue-400" />
                                   <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Export</span>
                               </button>
-                              <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm active:scale-95 transition-transform">
+                              <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                   <Contact size={20} className="text-purple-400" />
                                   <span className="text-[9px] font-bold text-slate-500 uppercase">Clients</span>
                               </button>
@@ -1216,7 +1216,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   value={searchTerm}
                                   onChange={(e) => setSearchTerm(e.target.value)}
                                   placeholder="Search by name, phone, or job ID..."
-                                  className="w-full bg-white/40 backdrop-blur-xl border border-white/40 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-colors shadow-sm"
+                                  className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-colors shadow-sm"
                               />
                           </div>
                       </div>
@@ -1276,7 +1276,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   onClick={() => isAct
                                       ? setViewJob({ type: 'activity', data: job })
                                       : setViewTicket(job)}
-                                  className="bg-white/50 backdrop-blur-xl rounded-2xl border border-white/40 shadow-sm p-4 mb-3 cursor-pointer hover:bg-white/40 active:scale-[0.99] transition-transform">
+                                  className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
                                   <div className="flex justify-between items-start mb-1">
                                       <div>
                                           <div className="text-[10px] font-bold text-slate-500 mb-0.5">{job.reference || job.id}</div>
@@ -1302,7 +1302,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Portal always renders — fullscreen bypass handles device routing
 
   return (
-    <div className="flex h-[100dvh] bg-gradient-to-br from-[#eef2f7] via-[#e8e0f0] to-[#f5e6e0] font-sans overflow-hidden" style={{paddingTop: 'env(safe-area-inset-top)', paddingBottom: 0}}>
+    <div className="flex h-[100dvh] bg-slate-100 font-sans overflow-hidden" style={{paddingTop: 'env(safe-area-inset-top)', paddingBottom: 0}}>
         {/* Theme color meta tag for browser chrome matching */}
         <style dangerouslySetInnerHTML={{__html: `
             body, html { background-color: #f1f5f9 !important; }
@@ -1314,7 +1314,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             
             {/* MOBILE HEADER — always visible */}
             {!selectedTicketId && mobileModule === 'none' && (
-                <div className="bg-white/60 backdrop-blur-2xl border-b border-white/30">
+                <div className="bg-white border-b border-slate-200 px-4 pt-4 pb-3 flex items-center justify-between shrink-0 z-30 shadow-sm">
                     <div>
                         <h2 className="font-bold text-lg leading-none text-slate-900">
                             {activeTab === 'home' ? 'Dashboard' : activeTab === 'my_jobs' ? 'My Jobs' : activeTab === 'team' ? 'Field Team' : activeTab === 'planner' ? 'Planner' : 'More'}
@@ -1344,7 +1344,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             )}
 
             {/* CONTENT BODY */}
-            <div className="flex-1 overflow-hidden relative min-h-0">
+            <div className="flex-1 overflow-hidden relative bg-slate-100 min-h-0">
                 {renderMobileContent()}
             </div>
 
@@ -1352,7 +1352,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             {!selectedTicketId && mobileModule === 'none' && (
                 <div className="absolute bottom-0 left-0 right-0 z-30 px-3" style={{paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))"}}>
                     <div 
-                        className="bg-white/60 backdrop-blur-3xl rounded-[20px] shadow-[0_8px_32px_rgba(0,0,0,0.08)] border border-white/50 flex justify-between px-2 py-1.5"
+                        className="bg-white/90 backdrop-blur-2xl rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-200/60 flex justify-between px-2 py-1.5"
                         onTouchStart={(e) => { (e.currentTarget as any)._touchX = e.touches[0].clientX; }}
                         onTouchEnd={(e) => {
                             const startX = (e.currentTarget as any)._touchX;
@@ -1396,11 +1396,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             {/* --- Ticket Detail Bottom Sheet --- */}
             {viewTicket && (
                 <div 
-                    className="fixed inset-0 z-50 bg-black/20 backdrop-blur-md flex justify-center items-end"
+                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end"
                     onClick={() => setViewTicket(null)}
                 >
                     <div 
-                        className="bg-white/85 backdrop-blur-2xl w-full max-w-lg rounded-t-[2rem] shadow-2xl border-t border-white/40 h-[80vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
+                        className="bg-white w-full max-w-lg rounded-t-[2rem] shadow-2xl h-[80vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Drag Handle */}
@@ -1429,8 +1429,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             {/* Main Info */}
                             <div className="space-y-4">
                                 {/* Customer */}
-                                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-white/20">
-                                    <div className="p-2 bg-white/50 backdrop-blur-xl rounded-lg shadow-sm text-slate-400"><Contact size={20}/></div>
+                                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><Contact size={20}/></div>
                                     <div>
                                         <div className="text-xs font-bold text-slate-400 uppercase mb-0.5">Client</div>
                                         <div className="font-bold text-slate-800">{viewTicket.customerName}</div>
@@ -1439,8 +1439,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                 </div>
 
                                 {/* Location */}
-                                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-white/20">
-                                    <div className="p-2 bg-white/50 backdrop-blur-xl rounded-lg shadow-sm text-slate-400"><MapPin size={20}/></div>
+                                <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><MapPin size={20}/></div>
                                     <div className="flex-1">
                                         <div className="text-xs font-bold text-slate-400 uppercase mb-0.5">Location</div>
                                         <div className="font-bold text-slate-800 text-sm">{viewTicket.houseNumber || 'Location not set'}</div>
@@ -1455,7 +1455,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                 {/* Description */}
                                 <div>
                                     <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Remarks / Description</h4>
-                                    <p className="text-sm text-slate-700 bg-white/20 p-4 rounded-xl border border-white/20 leading-relaxed">
+                                    <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
                                         {viewTicket.messages?.find((m: any) => m.sender === 'CLIENT')?.content
                                             || (viewTicket as any).notes
                                             || (viewTicket as any).ai_summary
@@ -1465,7 +1465,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                                 {/* Your Work Actions — show whenever this ticket is assigned to current user */}
                                 {viewTicket.assignedTechId === currentUserId && (
-                                    <div className="bg-slate-50 border border-white/40 rounded-xl p-4 shadow-sm">
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
                                         <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
                                             <Briefcase size={14}/> Your Work Actions
                                         </h4>
@@ -1484,7 +1484,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <button 
                                                         onClick={() => handleOpenJobAction('job_carry', viewTicket)}
-                                                        className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-xs hover:bg-white/40 active:scale-[0.98]"
+                                                        className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-xs hover:bg-slate-50 active:scale-[0.98]"
                                                     >
                                                         <History size={16}/> Carry Forward
                                                     </button>
@@ -1510,11 +1510,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             setActionNote(viewTicket.assignmentNote || '');
                                         }}
                                         role="button"
-                                        className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-white/20 cursor-pointer active:scale-[0.99]"
+                                        className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer active:scale-[0.99]"
                                         >
 
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-white/50 backdrop-blur-xl border border-white/40 flex items-center justify-center overflow-hidden">
+                                            <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center overflow-hidden">
                                                 {viewTicket.assignedTechId ? (
                                                     <img src={technicians.find(t=>t.id===viewTicket.assignedTechId)?.avatar} className="w-full h-full object-cover"/>
                                                 ) : <UserPlus size={18} className="text-slate-400"/>}
@@ -1533,10 +1533,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                         {/* Actions Footer */}
                         {activeTab !== 'my_jobs' && (
-                            <div className="p-4 border-t border-white/20 flex gap-3 bg-white/50 backdrop-blur-xl shrink-0 pb-safe">
+                            <div className="p-4 border-t border-slate-100 flex gap-3 bg-white shrink-0 pb-safe">
                                 <button 
                                     onClick={() => setViewTicket(null)}
-                                    className="flex-1 py-3 text-slate-500 font-bold hover:bg-white/40 rounded-xl transition-colors"
+                                    className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors"
                                 >
                                     Close
                                 </button>
@@ -1549,10 +1549,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             </div>
                         )}
                         {activeTab === 'my_jobs' && (
-                             <div className="p-4 border-t border-white/20 flex gap-3 bg-white/50 backdrop-blur-xl shrink-0 pb-safe">
+                             <div className="p-4 border-t border-slate-100 flex gap-3 bg-white shrink-0 pb-safe">
                                  <button 
                                     onClick={() => setViewTicket(null)}
-                                    className="w-full py-3 text-slate-500 font-bold hover:bg-white/40 rounded-xl transition-colors"
+                                    className="w-full py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors"
                                 >
                                     Close
                                 </button>
@@ -1564,11 +1564,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 {/* --- Activity Detail Bottom Sheet --- */}
 {viewActivity && (
     <div
-        className="fixed inset-0 z-50 bg-black/20 backdrop-blur-md flex justify-center items-end"
+        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end"
         onClick={() => setViewActivity(null)}
     >
         <div
-            className="bg-white/85 backdrop-blur-2xl w-full max-w-lg rounded-t-[2rem] shadow-2xl border-t border-white/40 h-[70vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
+            className="bg-white w-full max-w-lg rounded-t-[2rem] shadow-2xl h-[70vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
             onClick={e => e.stopPropagation()}
         >
             {/* Drag Handle */}
@@ -1594,7 +1594,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     )}
                 </div>
 
-                <div className="bg-white/20 p-4 rounded-xl border border-white/20 text-sm text-slate-700">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-700">
                     {(viewActivity as any).description || "No description"}
                 </div>
 
@@ -1652,10 +1652,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 )}
             </div>
 
-            <div className="p-4 border-t border-white/20 bg-white/50 backdrop-blur-xl shrink-0 pb-safe">
+            <div className="p-4 border-t border-slate-100 bg-white shrink-0 pb-safe">
                 <button
                     onClick={() => setViewActivity(null)}
-                    className="w-full py-3 text-slate-500 font-bold hover:bg-white/40 rounded-xl transition-colors"
+                    className="w-full py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors"
                 >
                     Close
                 </button>
@@ -1668,17 +1668,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             {/* --- Technician Details Bottom Sheet --- */}
             {viewTech && (
                 <div 
-                    className="fixed inset-0 z-50 bg-black/20 backdrop-blur-md flex justify-center items-end"
+                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end"
                     onClick={() => { setViewTech(null); setViewJob(null); }}
                 >
                     <div 
-                        className="bg-white/85 backdrop-blur-2xl w-full max-w-lg rounded-t-[2rem] shadow-2xl border-t border-white/40 h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
+                        className="bg-white w-full max-w-lg rounded-t-[2rem] shadow-2xl h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
                         onClick={e => e.stopPropagation()}
                     >
                        {viewJob ? (
                             <>
                                 {/* Header */}
-                                <div className="p-4 border-b border-white/20 flex items-center justify-between bg-white/50 backdrop-blur-xl shrink-0">
+                                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
                                     <button
                                         onClick={() => setViewJob(null)}
                                         className="text-sm font-bold text-slate-500 flex items-center gap-1 hover:text-slate-800"
@@ -1701,7 +1701,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                 </div>
 
                                 {/* Scrollable body */}
-                                <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-white/20">
+                                <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50">
 
                                     {/* Status + Reference */}
                                     <div className="flex items-center gap-2">
@@ -1729,7 +1729,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     </div>
 
                                     {/* Description */}
-                                    <div className="bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20">
+                                    <div className="bg-white rounded-xl p-4 border border-slate-100">
                                         <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
                                             {viewJob.type === 'ticket' ? 'Remarks / Description' : 'Scope of Work'}
                                         </div>
@@ -1741,7 +1741,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     </div>
 
                                     {/* Details grid */}
-                                    <div className="bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20 space-y-3">
+                                    <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
                                         {/* Priority */}
                                         <div className="flex justify-between text-sm">
                                             <span className="text-slate-400 font-medium">Priority</span>
@@ -1809,14 +1809,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         ];
                                         const cur = steps.findIndex(s => s.key === viewJob.data.status);
                                         return (
-                                            <div className="flex items-center justify-between bg-white/50 backdrop-blur-xl rounded-xl p-4 border border-white/20">
+                                            <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
                                                 {steps.map((step, i) => (
                                                     <React.Fragment key={step.key}>
                                                         <div className="flex flex-col items-center">
                                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border-2 ${
                                                                 i < cur  ? 'bg-emerald-500 border-emerald-500 text-white' :
                                                                 i === cur? 'bg-slate-900 border-slate-900 text-white' :
-                                                                'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
+                                                                'bg-white border-slate-200 text-slate-400'
                                                             }`}>{i < cur ? '✓' : i + 1}</div>
                                                             <span className={`text-[8px] mt-1 font-medium ${i === cur ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
                                                         </div>
@@ -1838,14 +1838,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         ];
                                         const cur = steps.findIndex(s => s.key === viewJob.data.status);
                                         return (
-                                            <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-white/20">
+                                            <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
                                                 {steps.map((step, i) => (
                                                     <React.Fragment key={step.key}>
                                                         <div className="flex flex-col items-center">
                                                             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold border-2 ${
                                                                 i < cur  ? 'bg-emerald-500 border-emerald-500 text-white' :
                                                                 i === cur? 'bg-slate-900 border-slate-900 text-white' :
-                                                                'bg-white/50 backdrop-blur-xl border-white/40 text-slate-400'
+                                                                'bg-white border-slate-200 text-slate-400'
                                                             }`}>{i < cur ? '✓' : i + 1}</div>
                                                             <span className={`text-[8px] mt-1 font-medium ${i === cur ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
                                                         </div>
@@ -1869,7 +1869,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 </div>
                                             )}
                                             {!hasVisits && (viewJob.data.remarks || viewJob.data.notes) && (viewJob.data.remarks || viewJob.data.notes) !== viewJob.data.completionNote && (
-                                                <div className="bg-slate-50 rounded-xl p-4 border border-white/20">
+                                                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                                                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
                                                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{viewJob.data.remarks || viewJob.data.notes}</p>
                                                 </div>
@@ -1884,7 +1884,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             {hasVisits && (
                                                 <div className="space-y-2">
                                                     <div className="text-[10px] font-bold text-slate-400 uppercase">Visit History ({visits.length} visit{visits.length > 1 ? 's' : ''})</div>
-                                                    <div className="relative border-l-2 border-white/40 ml-2 space-y-3">
+                                                    <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
                                                         {visits.map((v: any, vi: number) => {
                                                             const isCF = v.status === 'CARRY_FORWARD';
                                                             const isDone = v.status === 'DONE';
@@ -1919,13 +1919,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({viewJob.data.photos.length})</div>
                                                     <div className="grid grid-cols-3 gap-2">
                                                         {viewJob.data.photos.map((p: any, i: number) => (
-                                                            <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-white/40 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
+                                                            <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
                                                         ))}
                                                     </div>
                                                 </div>
                                             )}
                                             {(viewJob.data.startedAt || viewJob.data.completedAt) && (
-                                                <div className="bg-slate-50 rounded-xl p-4 border border-white/20 space-y-1">
+                                                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1">
                                                     <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
                                                     {viewJob.data.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-slate-700">{new Date(viewJob.data.startedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
                                                     {viewJob.data.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-slate-700">{new Date(viewJob.data.completedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
@@ -1959,7 +1959,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             {viewJob.data.status === 'IN_PROGRESS' && (
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <button onClick={() => { handleOpenJobAction('job_carry', viewJob.data); setViewJob(null); }}
-                                                        className="py-3.5 bg-white/50 backdrop-blur-xl border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
+                                                        className="py-3.5 bg-white border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
                                                         Carry Forward
                                                     </button>
                                                     <button onClick={() => { handleOpenJobAction('job_done', viewJob.data); setViewJob(null); }}
@@ -2018,7 +2018,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                     </button>
                                                     <div className="grid grid-cols-2 gap-2">
                                                     <button onClick={() => { setModalActivity(viewJob.data); setModalType('activity_job_carry'); setActionNote(''); setNextDate(''); setViewJob(null); }}
-                                                        className="py-3.5 bg-white/50 backdrop-blur-xl border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
+                                                        className="py-3.5 bg-white border border-slate-300 text-slate-700 font-bold rounded-2xl text-xs active:scale-[0.98]">
                                                         Carry Forward
                                                     </button>
                                                     <button onClick={() => { setModalActivity(viewJob.data); setModalType('activity_job_complete'); setActionNote(''); setViewJob(null); }}
@@ -2033,8 +2033,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                 </div>
 
                                 {/* Footer */}
-                                <div className="p-4 border-t border-white/20 flex gap-3 bg-white/50 backdrop-blur-xl shrink-0 pb-safe">
-                                    <button onClick={() => setViewJob(null)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-white/40 rounded-xl transition-colors">Back</button>
+                                <div className="p-4 border-t border-slate-100 flex gap-3 bg-white shrink-0 pb-safe">
+                                    <button onClick={() => setViewJob(null)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">Back</button>
                                 </div>
                             </>
                        ) : (
@@ -2051,7 +2051,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     </div>
                                     <button onClick={() => setViewTech(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 bg-white/10 rounded-full backdrop-blur-sm"><X size={20}/></button>
                                 </div>
-                                <div className="flex-1 overflow-y-auto bg-white/50 backdrop-blur-xl p-4">
+                                <div className="flex-1 overflow-y-auto bg-white p-4">
                                     {(() => {
                                     const jobs = getTechJobs(viewTech.id).all;
 
@@ -2087,7 +2087,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             <div
                                                 key={`${j.type}-${ref}-${idx}`}
                                                 onClick={() => setViewJob(j)}
-                                                className="bg-white/40 backdrop-blur-xl border border-white/40 rounded-2xl p-4 shadow-sm active:scale-[0.98] transition-transform cursor-pointer"
+                                                className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm active:scale-[0.98] transition-transform cursor-pointer"
                                             >
                                                 <div className="flex items-center justify-between mb-2">
                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(status)}`}>
@@ -2117,14 +2117,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             {/* Dispatch Modal */}
             {modalType === 'dispatch' && modalTicket && (
                 <div 
-                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                     onClick={closeModal}
                 >
                     <div 
-                        className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200"
+                        className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-6 border-b border-white/20 flex justify-between items-center">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                             <h3 className="font-bold text-lg text-slate-900">Dispatch Field Engineer</h3>
                             <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
                         </div>
@@ -2135,7 +2135,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           <label className="text-xs font-medium uppercase tracking-wide text-slate-500">
                             Team Lead
                           </label>
-                          <div className="mt-1 w-full rounded-lg border border-white/40 bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                          <div className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700">
                             {assignedTeamLead || "Auto-assigned"}
                           </div>
                         </div>
@@ -2183,11 +2183,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             {/* Cancel Modal */}
             {modalType === 'cancel' && modalTicket && (
                 <div 
-                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                     onClick={closeModal}
                 >
                     <div 
-                        className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+                        className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="p-6 border-b border-red-50 bg-red-50 flex justify-between items-center">
@@ -2205,14 +2205,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             {/* Admin Carry Forward Modal (Simplified for brevity, focusing on job_carry) */}
             {modalType === 'carry' && modalTicket && (
                 <div 
-                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                     onClick={closeModal}
                 >
                     <div 
-                        className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+                        className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-6 border-b border-white/20 flex justify-between items-center">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                             <h3 className="font-bold text-lg text-slate-900">Carry Forward</h3>
                             <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
                         </div>
@@ -2228,14 +2228,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             {/* My Job Complete Modal */}
             {modalType === 'job_complete' && modalTicket && (
                 <div 
-                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                     onClick={closeModal}
                 >
                     <div 
-                        className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+                        className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-6 border-b border-white/20 flex justify-between items-center">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                             <h3 className="font-bold text-lg text-slate-900">Job Completion</h3>
                             <button onClick={closeModal}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                         </div>
@@ -2251,14 +2251,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 {/* Activity Complete Modal */}
 {modalType === 'activity_job_complete' && modalActivity && (
     <div 
-        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
         onClick={closeModal}
     >
         <div 
-            className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="p-6 border-b border-white/20 flex justify-between items-center">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                 <h3 className="font-bold text-lg text-slate-900">Job Completion</h3>
                 <button onClick={closeModal}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
             </div>
@@ -2290,14 +2290,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 {/* My Job Carry Forward Modal (The focus of the update) */}
             {modalType === 'job_carry' && modalTicket && (
                 <div 
-                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
                     onClick={closeModal}
                 >
                     <div 
-                        className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]"
+                        className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-6 border-b border-white/20 flex justify-between items-center shrink-0">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
                             <h3 className="font-bold text-lg text-slate-900">End Day / Carry Forward</h3>
                             <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
                         </div>
@@ -2343,7 +2343,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         }
                                     }}
                                     min={new Date().toISOString().slice(0,16)}
-                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white/50 backdrop-blur-xl transition-all"
+                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
                                 />
                                 {(!nextDate && carryIssue.trim()) && (
                                     <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
@@ -2355,7 +2355,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             <button 
                                 onClick={executeJobCarry}
                                 disabled={!carryIssue.trim() || !nextDate}
-                                className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-white/40 disabled:cursor-not-allowed active:bg-emerald-600/20"
+                                className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed active:bg-emerald-600/20"
                             >
                                 Schedule Visit
                             </button>
@@ -2367,14 +2367,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 {/* Activity Carry Forward Modal */}
 {modalType === 'activity_job_carry' && modalActivity && (
     <div 
-        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
         onClick={closeModal}
     >
         <div 
-            className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]"
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[80vh]"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="p-6 border-b border-white/20 flex justify-between items-center shrink-0">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
                 <h3 className="font-bold text-lg text-slate-900">End Day / Carry Forward</h3>
                 <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
             </div>
@@ -2420,7 +2420,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             }
                         }}
                         min={new Date().toISOString().slice(0,16)}
-                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white/50 backdrop-blur-xl transition-all"
+                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
                     />
                     {(!nextDate && carryIssue.trim()) && (
                         <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
@@ -2472,7 +2472,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         setViewActivity(null);
                     }}
                     disabled={!carryIssue.trim() || !nextDate}
-                    className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-white/40 disabled:cursor-not-allowed active:bg-emerald-600/20"
+                    className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed active:bg-emerald-600/20"
                 >
                     Schedule Visit
                 </button>
@@ -2484,14 +2484,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 {/* Activity Dispatch Team Modal — Team Lead picks primary engineer + supporting crew */}
 {modalType === 'activity_dispatch' && modalActivity && (
     <div 
-        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4"
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
         onClick={closeModal}
     >
         <div 
-            className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
         >
-            <div className="p-5 border-b border-white/20 flex justify-between items-center shrink-0">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
                 <div>
                     <h3 className="font-bold text-lg text-slate-900">Dispatch Team</h3>
                     <p className="text-xs text-slate-400 mt-0.5">{(modalActivity as any).reference} • {(modalActivity as any).type}</p>
@@ -2507,7 +2507,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     <select
                         value={dispatchPrimaryId}
                         onChange={(e) => setDispatchPrimaryId(e.target.value)}
-                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/50 backdrop-blur-xl transition-all"
+                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                     >
                         <option value="" disabled>Select primary engineer</option>
                         <optgroup label="Team Leads">
@@ -2530,7 +2530,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {/* Supporting Team (checkboxes) */}
                 <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Supporting Team</label>
-                    <div className="space-y-1 max-h-[200px] overflow-y-auto rounded-xl border border-white/20 bg-slate-50/50">
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/50">
                         {/* Technical Associates */}
                         {technicians.filter(t => t.level === 'TECHNICAL_ASSOCIATE' && t.status !== 'LEAVE' && t.isActive !== false).length > 0 && (
                             <div className="px-3 pt-2 pb-1">
@@ -2541,7 +2541,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             .filter(t => t.level === 'TECHNICAL_ASSOCIATE' && t.status !== 'LEAVE' && t.isActive !== false)
                             .map(t => (
                                 <label key={t.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
-                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-white/40'
+                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-slate-50'
                                 }`}>
                                     <input
                                         type="checkbox"
@@ -2568,7 +2568,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                         {/* Field Engineers (exclude the primary and admins) */}
                         {technicians.filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.systemRole !== 'ADMIN' && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false).length > 0 && (
-                            <div className="px-3 pt-3 pb-1 border-t border-white/20">
+                            <div className="px-3 pt-3 pb-1 border-t border-slate-100">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase">Field Engineers / Leads</span>
                             </div>
                         )}
@@ -2576,7 +2576,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             .filter(t => (t.level === 'FIELD_ENGINEER' || t.level === 'TEAM_LEAD') && t.systemRole !== 'ADMIN' && t.id !== dispatchPrimaryId && t.status !== 'LEAVE' && t.isActive !== false)
                             .map(t => (
                                 <label key={t.id} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${
-                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-white/40'
+                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-slate-50'
                                 }`}>
                                     <input
                                         type="checkbox"
@@ -2618,7 +2618,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             .map(t => t.id);
                         setDispatchSupportIds(allTechAssociates);
                     }}
-                    className="w-full py-2 text-xs font-bold text-slate-500 bg-slate-50 border border-white/40 rounded-xl hover:bg-slate-100 transition-colors"
+                    className="w-full py-2 text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors"
                 >
                     Select All Technical Associates
                 </button>
@@ -2695,9 +2695,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     const busyForSupport = allTeam.filter((t: any) => t.id !== dispatchPrimaryId && busyIds.has(t.id));
 
     return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 backdrop-blur-md p-4" onClick={closeModal}>
-        <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-white/20 flex justify-between items-center shrink-0">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={closeModal}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
                 <div>
                     <h3 className="font-bold text-lg text-slate-900">Manage Team</h3>
                     <p className="text-xs text-slate-400 mt-0.5">{ma.reference} — In Progress</p>
@@ -2727,7 +2727,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             const engBusy = busyForSupport.filter((t: any) => (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD') && t.level !== 'TECHNICAL_ASSOCIATE');
                             return engAvail.length > 0 ? engAvail.map((t: any) => (
                                 <label key={t.id} className={`flex items-center gap-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
-                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50 border-blue-400' : 'bg-white/50 backdrop-blur-xl border-white/40 hover:border-slate-300'
+                                    dispatchSupportIds.includes(t.id) ? 'bg-blue-50 border-blue-400' : 'bg-white border-slate-200 hover:border-slate-300'
                                 }`}>
                                     <input type="checkbox" checked={dispatchSupportIds.includes(t.id)}
                                         onChange={() => setDispatchSupportIds(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}
@@ -2752,7 +2752,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             const taAvail = availableForSupport.filter((t: any) => t.level === 'TECHNICAL_ASSOCIATE');
                             return taAvail.length > 0 ? taAvail.map((t: any) => (
                                 <label key={t.id} className={`flex items-center gap-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
-                                    dispatchSupportIds.includes(t.id) ? 'bg-teal-50 border-teal-400' : 'bg-white/50 backdrop-blur-xl border-white/40 hover:border-slate-300'
+                                    dispatchSupportIds.includes(t.id) ? 'bg-teal-50 border-teal-400' : 'bg-white border-slate-200 hover:border-slate-300'
                                 }`}>
                                     <input type="checkbox" checked={dispatchSupportIds.includes(t.id)}
                                         onChange={() => setDispatchSupportIds(prev => prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id])}
@@ -2788,7 +2788,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 </div>
                 )}
             </div>
-            <div className="p-4 border-t border-white/20 shrink-0">
+            <div className="p-4 border-t border-slate-100 shrink-0">
                 <button
                     onClick={() => {
                         if (!modalActivity || !onUpdateActivity) return;
@@ -2813,9 +2813,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 })()}
             {showDatePicker && (
                 <div className="fixed inset-0 z-[80] flex items-end justify-center">
-                    <div className="absolute inset-0 bg-black/20 backdrop-blur-md" onClick={() => setShowDatePicker(false)} />
-                    <div className="bg-white/50 backdrop-blur-xl w-full rounded-t-2xl p-4 pb-safe animate-in slide-in-from-bottom duration-300 relative z-10 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
-                        <div className="flex justify-between items-center border-b border-white/20 pb-4 shrink-0">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDatePicker(false)} />
+                    <div className="bg-white w-full rounded-t-2xl p-4 pb-safe animate-in slide-in-from-bottom duration-300 relative z-10 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-4 shrink-0">
                             <button onClick={() => setShowDatePicker(false)} className="text-slate-500 font-bold text-sm">Cancel</button>
                             <h3 className="font-bold text-slate-900">Schedule Visit</h3>
                             <button onClick={confirmDateTime} className="text-emerald-600 font-bold text-sm">Set</button>
@@ -2829,7 +2829,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     value={tempDatetime}
                                     onChange={e => setTempDatetime(e.target.value)}
                                     min={new Date().toISOString().slice(0,16)}
-                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-lg font-bold text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white/50 backdrop-blur-xl transition-all"
+                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-lg font-bold text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
                                 />
                             </div>
                         </div>
@@ -2843,8 +2843,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       {/* ── Change Password Modal ── */}
       {showChangePwd && (
         <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
-            <div className="p-5 border-b border-white/20 flex justify-between items-center">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
               <h3 className="font-bold text-lg text-slate-900">Change Password</h3>
               <button onClick={() => setShowChangePwd(false)} className="text-slate-400 hover:text-slate-600 p-1">✕</button>
             </div>
@@ -2860,20 +2860,20 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Current Password</label>
                     <input type="password" value={cpForm.current} onChange={e => setCpForm(p => ({...p, current: e.target.value}))}
-                      className="w-full bg-slate-50 border border-white/40 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Enter current password"/>
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Enter current password"/>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">New Password</label>
                     <input type="password" value={cpForm.next} onChange={e => setCpForm(p => ({...p, next: e.target.value}))}
-                      className="w-full bg-slate-50 border border-white/40 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Minimum 8 characters"/>
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Minimum 8 characters"/>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase">Confirm New Password</label>
                     <input type="password" value={cpForm.confirm} onChange={e => setCpForm(p => ({...p, confirm: e.target.value}))}
-                      className="w-full bg-slate-50 border border-white/40 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Repeat new password"/>
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="Repeat new password"/>
                   </div>
                   <div className="flex gap-3 pt-1">
-                    <button onClick={() => setShowChangePwd(false)} className="flex-1 py-3 border border-white/40 rounded-xl font-bold text-slate-600 text-sm">Cancel</button>
+                    <button onClick={() => setShowChangePwd(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 text-sm">Cancel</button>
                     <button onClick={() => {
                       setCpError('');
                       if (!cpForm.current) { setCpError('Enter current password'); return; }
@@ -2896,9 +2896,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       {/* Create Ticket Modal */}
       {/* --- Notifications / Activity Log Modal --- */}
       {showNotifications && (
-          <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-md flex items-end sm:items-center justify-center" onClick={() => setShowNotifications(false)}>
-              <div className="bg-white/85 backdrop-blur-2xl rounded-t-3xl sm:rounded-2xl border-t border-white/40 w-full sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="p-4 border-b border-white/20 flex justify-between items-center shrink-0">
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowNotifications(false)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                       <h3 className="font-bold text-lg text-slate-900">Activity Log</h3>
                       <button onClick={() => setShowNotifications(false)}><X size={20} className="text-slate-400" /></button>
                   </div>
@@ -2925,7 +2925,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               <div>
                                   {Object.entries(grouped).map(([dateLabel, items]) => (
                                       <div key={dateLabel}>
-                                          <div className="sticky top-0 bg-slate-50 px-4 py-2 border-b border-white/20 z-10">
+                                          <div className="sticky top-0 bg-slate-50 px-4 py-2 border-b border-slate-100 z-10">
                                               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{dateLabel}</span>
                                           </div>
                                           <div className="divide-y divide-slate-50">
@@ -2933,7 +2933,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                   const dt = new Date(change.updatedAt);
                                                   const timeStr = dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
                                                   return (
-                                                      <div key={`${change.kind}-${change.id}-${idx}`} className="px-4 py-3 hover:bg-white/20">
+                                                      <div key={`${change.kind}-${change.id}-${idx}`} className="px-4 py-3 hover:bg-slate-50">
                                                           <div className="flex items-start gap-3">
                                                               <div className="flex flex-col items-center shrink-0 pt-0.5">
                                                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -2974,9 +2974,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
       {/* --- Create Activity Modal (matches PlanningModule exactly) --- */}
       {showCreateActivity && onAddActivity && (
-          <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-md flex items-end sm:items-center justify-center" onClick={() => setShowCreateActivity(false)}>
-              <div className="bg-white/85 backdrop-blur-2xl rounded-t-3xl sm:rounded-2xl border-t border-white/40 w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="p-4 border-b border-white/20 flex justify-between items-center shrink-0">
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowCreateActivity(false)}>
+              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                       <h3 className="font-bold text-lg text-slate-900">Plan New Activity</h3>
                       <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); }}><X size={20} className="text-slate-400" /></button>
                   </div>
@@ -3007,10 +3007,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                           c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(actCustSearch))
                                       );
                                       return matches.length > 0 ? (
-                                          <div className="mt-1 border border-white/40 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
+                                          <div className="mt-1 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
                                               {matches.slice(0, 5).map(c => (
                                                   <button key={c.id} onClick={() => { setActSelectedCustomer(c); setActCustSearch(c.name); }}
-                                                      className="w-full flex items-center gap-2 p-2.5 hover:bg-white/40 text-left border-b border-white/20 last:border-0">
+                                                      className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
                                                       <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
                                                       <div className="min-w-0">
                                                           <div className="text-sm font-medium text-slate-800 truncate">{c.name}</div>
@@ -3069,12 +3069,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       {/* Service Category — multi-select */}
                       <div>
                           <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
-                          <div className="flex flex-wrap gap-1.5 p-2.5 bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg min-h-[40px] mt-1">
+                          <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-300 rounded-lg min-h-[40px] mt-1">
                               {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(cat => {
                                   const sel = actServiceCats.includes(cat);
                                   return (
                                       <button key={cat} type="button" onClick={() => setActServiceCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
-                                          className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white/50 backdrop-blur-xl border-white/40 text-slate-500'}`}>
+                                          className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}>
                                           {sel && <span className="mr-0.5">\u2713 </span>}{cat}
                                       </button>
                                   );
@@ -3083,7 +3083,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
 
                       {/* Location */}
-                      <div className="p-3 bg-slate-50 rounded-xl border border-white/40 space-y-2">
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                           <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><MapPin size={14} /> Location</h4>
                           <div className="grid grid-cols-2 gap-2">
                               <input value={createActivityForm.locationUrl} onChange={e => setCreateActivityForm(p => ({...p, locationUrl: e.target.value}))}
@@ -3094,7 +3094,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
 
                       {/* Date & Time */}
-                      <div className="p-3 bg-slate-50 rounded-xl border border-white/40 space-y-2">
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                           <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Calendar size={14} /> Planned Date & Time</h4>
                           <input type="datetime-local" value={createActivityForm.plannedDate}
                               onChange={e => setCreateActivityForm(p => ({...p, plannedDate: e.target.value}))}
@@ -3109,8 +3109,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               rows={2} placeholder="Scope of work..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
                       </div>
                   </div>
-                  <div className="p-4 border-t border-white/20 flex gap-3 shrink-0">
-                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-white/40 rounded-xl">Cancel</button>
+                  <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
                       <button onClick={() => {
                           if (!actSelectedCustomer) { alert('Please select a customer'); return; }
                           if (!createActivityForm.type) { alert('Please select an activity type'); return; }
@@ -3142,9 +3142,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
             {/* Create Ticket Modal — Phone-search-first customer flow */}
       {showCreateTicket && onCreateTicket && (
-        <div className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-md flex items-end sm:items-center justify-center" onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}>
-          <div className="bg-white/85 backdrop-blur-2xl rounded-t-3xl sm:rounded-2xl border-t border-white/40 w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="p-4 border-b border-white/20 flex justify-between items-center shrink-0">
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-lg text-slate-900">Create Ticket</h3>
               <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}><X size={20} className="text-slate-400" /></button>
             </div>
@@ -3177,13 +3177,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {ticketPhoneSearch.length >= 3 && !ticketSelectedCustomer && (() => {
                     const matches = (customers || []).filter(c => c.phone && c.phone.includes(ticketPhoneSearch));
                     return matches.length > 0 ? (
-                        <div className="mt-2 border border-white/40 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
+                        <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
                             {matches.slice(0, 5).map(c => (
                                 <button key={c.id} onClick={() => {
                                     setTicketSelectedCustomer(c);
                                     setTicketPhoneSearch(c.phone || ticketPhoneSearch);
                                     setCreateTicketForm(p => ({...p, customerName: c.name, phone: c.phone || ticketPhoneSearch}));
-                                }} className="w-full flex items-center gap-2 p-2.5 hover:bg-white/40 text-left border-b border-white/20 last:border-0">
+                                }} className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
                                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
                                     <div>
                                         <div className="text-sm font-medium text-slate-800">{c.name}</div>
@@ -3229,7 +3229,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         const curr = (createTicketForm.category || '').split(', ').filter(Boolean);
                         const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                         setCreateTicketForm(p => ({...p, category: next.join(', ')}));
-                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white/50 backdrop-blur-xl border-white/40 text-slate-500'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
+                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                     })}
                   </div>
                 </div>
@@ -3275,8 +3275,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   placeholder="e.g. Villa 42" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
               </div>
             </div>
-            <div className="p-4 border-t border-white/20 flex gap-3 shrink-0">
-              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-white/40 rounded-xl">Cancel</button>
+            <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
               <button onClick={async () => {
                 const phone = ticketSelectedCustomer?.phone || createTicketForm.phone.trim();
                 const name = ticketSelectedCustomer?.name || createTicketForm.customerName.trim();
