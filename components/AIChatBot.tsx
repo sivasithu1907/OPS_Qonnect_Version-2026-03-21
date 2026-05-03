@@ -63,7 +63,7 @@ const FormattedMessage: React.FC<{ text: string; isUser: boolean }> = ({ text, i
     else if (trimmed.startsWith('## ')) {
       flushList();
       elements.push(
-        <h3 key={i} className="text-base font-bold text-slate-900 mt-5 mb-2 border-b border-white/20 pb-1">
+        <h3 key={i} className="text-base font-bold text-slate-900 mt-5 mb-2 border-b border-slate-100 pb-1">
           {processInline(trimmed.replace(/^##\s+/, ''))}
         </h3>
       );
@@ -170,9 +170,9 @@ const AIChatBot: React.FC = () => {
       
       {/* Chat Window */}
       {isOpen && (
-        <div className="bg-white/70 backdrop-blur-2xl w-[340px] h-[500px] rounded-2xl shadow-2xl border border-white/40 flex flex-col overflow-hidden mb-4 animate-in slide-in-from-bottom-10 fade-in duration-200">
+        <div className="bg-white w-[340px] h-[500px] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden mb-4 animate-in slide-in-from-bottom-10 fade-in duration-200">
           {/* Header */}
-          <div className="bg-slate-900/80 backdrop-blur-xl p-4 flex justify-between items-center text-white shrink-0 shadow-sm z-10">
+          <div className="bg-slate-900 p-4 flex justify-between items-center text-white shrink-0 shadow-sm z-10">
             <div className="flex items-center gap-3">
               <div className="bg-emerald-500 p-2 rounded-xl shadow-lg shadow-emerald-900/20">
                 <Bot size={20} className="text-white" />
@@ -190,13 +190,13 @@ const AIChatBot: React.FC = () => {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-white/20">
+          <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50">
             {messages.map(msg => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] rounded-2xl p-3.5 shadow-sm ${
                   msg.role === 'user' 
                     ? 'bg-emerald-600 text-white rounded-tr-none' 
-                    : 'bg-white/60 backdrop-blur-xl text-slate-800 border border-white/40 rounded-tl-none'
+                    : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
                 }`}>
                   <FormattedMessage text={msg.text} isUser={msg.role === 'user'} />
                 </div>
@@ -204,7 +204,7 @@ const AIChatBot: React.FC = () => {
             ))}
             {isTyping && (
               <div className="flex justify-start">
-                <div className="bg-white/60 backdrop-blur-xl border border-white/40 rounded-2xl rounded-tl-none p-4 shadow-sm flex gap-1 items-center">
+                <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none p-4 shadow-sm flex gap-1 items-center">
                   <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
                   <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
                   <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
@@ -215,7 +215,7 @@ const AIChatBot: React.FC = () => {
           </div>
 
           {/* Input Area */}
-          <div className="p-3 bg-white/50 backdrop-blur-xl border-t border-white/20 flex items-end gap-2 shrink-0">
+          <div className="p-3 bg-white border-t border-slate-100 flex items-end gap-2 shrink-0">
             <textarea
               ref={textareaRef}
               value={inputValue}
