@@ -110,15 +110,15 @@ const AvatarCropper: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
-      <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-white/20 flex justify-between items-center">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-slate-100 flex justify-between items-center">
           <h3 className="font-bold text-slate-900">Adjust Photo</h3>
           <button onClick={onCancel}><X size={20} className="text-slate-400" /></button>
         </div>
         <div className="p-6 flex flex-col items-center gap-4">
           <p className="text-xs text-slate-400 flex items-center gap-1"><Move size={12} /> Drag to reposition</p>
           <div
-            className="relative rounded-full overflow-hidden border-4 border-white/40 shadow-inner cursor-grab active:cursor-grabbing"
+            className="relative rounded-full overflow-hidden border-4 border-slate-200 shadow-inner cursor-grab active:cursor-grabbing"
             style={{ width: SIZE, height: SIZE, touchAction: 'none' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -158,8 +158,8 @@ const AvatarCropper: React.FC<{
             </button>
           </div>
         </div>
-        <div className="p-4 border-t border-white/20 flex gap-3">
-          <button type="button" onClick={onCancel} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-white/40 rounded-xl transition-colors">Cancel</button>
+        <div className="p-4 border-t border-slate-100 flex gap-3">
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">Cancel</button>
           <button type="button" onClick={handleCrop} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 transition-colors">Save</button>
         </div>
       </div>
@@ -261,8 +261,8 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
   };
 
   const renderTechnicianTable = (techs: Technician[], title: string, Icon: any, colorClass: string) => (
-    <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-sm border border-white/40 overflow-hidden mb-8">
-        <div className="p-6 border-b border-white/20 flex items-center bg-white/20">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+        <div className="p-6 border-b border-slate-100 flex items-center bg-slate-50">
             <div className="flex items-center gap-2">
                 <div className={`p-2 rounded-lg ${colorClass}`}>
                     <Icon size={20} />
@@ -272,7 +272,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
             </div>
         </div>
         <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-white/30">
+            <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
                 <tr>
                     <th className="px-6 py-3 w-[35%]">Name</th>
                     <th className="px-6 py-3 w-[25%]">Phone</th>
@@ -285,11 +285,11 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                 {techs.length === 0 ? (
                     <tr><td colSpan={5} className="p-6 text-center text-slate-400 italic text-sm">No records found</td></tr>
                 ) : techs.map(tech => (
-                    <tr key={tech.id} className="hover:bg-white/40/80 group transition-colors">
+                    <tr key={tech.id} className="hover:bg-slate-50/80 group transition-colors">
                         {/* Name */}
                         <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                                <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 object-cover shrink-0 border border-white/20" alt="" />
+                                <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 object-cover shrink-0 border border-slate-100" alt="" />
                                 <div>
                                     <div className="font-semibold text-slate-800">{tech.name}</div>
                                     <div className="text-[11px] text-slate-400 font-mono mt-0.5">{tech.id}</div>
@@ -309,7 +309,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                     ? 'bg-amber-50 text-amber-700 border border-amber-200' :
                                 tech.status === 'LEAVE'
                                     ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                                    'bg-slate-100 text-slate-500 border border-white/40'
+                                    'bg-slate-100 text-slate-500 border border-slate-200'
                             }`}>
                                 <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
                                     tech.status === 'AVAILABLE' || tech.status === 'ACTIVE' ? 'bg-emerald-500' :
@@ -381,10 +381,10 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
 
         {/* View Modal */}
         {modalType === 'view' && activeTech && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-md overflow-hidden relative">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative">
                     <button onClick={closeModal} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20}/></button>
-                    <div className="bg-white/20 p-6 flex flex-col items-center border-b border-white/20">
+                    <div className="bg-slate-50 p-6 flex flex-col items-center border-b border-slate-100">
                         <img src={activeTech.avatar} alt={activeTech.name} className="w-24 h-24 rounded-full border-4 border-white shadow-md mb-3 object-cover" />
                         <h2 className="text-xl font-bold text-slate-800">{activeTech.name}</h2>
                         <p className="text-slate-500 text-sm">{activeTech.role}</p>
@@ -411,7 +411,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                             </span>
                         </div>
                     </div>
-                    <div className="p-4 bg-slate-50 border-t border-white/20 text-center">
+                    <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
                         <button onClick={closeModal} className="text-sm font-medium text-slate-500 hover:text-slate-800">Close</button>
                     </div>
                 </div>
@@ -420,9 +420,9 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
 
         {/* Edit/Add Modal */}
         {(modalType === 'add' || modalType === 'edit') && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm backdrop-blur-sm animate-in fade-in duration-200">
-                 <div className="bg-white/80 backdrop-blur-2xl rounded-2xl shadow-2xl w-full border border-white/40 max-w-lg overflow-hidden">
-                    <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white">
                          <h3 className="font-bold text-lg text-slate-900">
                              {modalType === 'edit' ? 'Edit Member' : 'New Member'}
                          </h3>
@@ -479,7 +479,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         
                         <div className="flex flex-col items-center mb-4">
                             <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                                <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-white/40 overflow-hidden mb-2">
+                                <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-slate-200 overflow-hidden mb-2">
                                     {avatarPreview ? (
                                         <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
                                     ) : (
@@ -506,7 +506,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
 
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
-                            <input name="name" defaultValue={activeTech?.name} required className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. John Doe"/>
+                            <input name="name" defaultValue={activeTech?.name} required className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. John Doe"/>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -521,7 +521,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                         defaultValue={getLocalPhone(activeTech?.phone)}
                                         required 
                                         type="tel"
-                                        className="rounded-none rounded-r-lg bg-white/50 backdrop-blur-xl border border-slate-300 block flex-1 min-w-0 w-full p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" 
+                                        className="rounded-none rounded-r-lg bg-white border border-slate-300 block flex-1 min-w-0 w-full p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" 
                                         placeholder="3300 0000"
                                     />
                                 </div>
@@ -533,7 +533,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                     defaultValue={activeTech?.email} 
                                     required
                                     type="email" 
-                                    className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" 
+                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" 
                                     placeholder="email@example.com"
                                 />
                             </div>
@@ -542,7 +542,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Job Role</label>
-                                <input name="jobRole" defaultValue={(activeTech as any)?.jobRole || activeTech?.role || ''} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Senior Technician"/>
+                                <input name="jobRole" defaultValue={(activeTech as any)?.jobRole || activeTech?.role || ''} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Senior Technician"/>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Department / Level</label>
@@ -550,7 +550,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                     name="level" 
                                     value={currentLevel} 
                                     onChange={handleLevelChange} 
-                                    className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                 >
                                     <option value="SALES">Sales Team</option>
                                     <option value="TEAM_LEAD">Team Lead</option>
@@ -568,7 +568,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                     disabled={currentLevel === 'TECHNICAL_ASSOCIATE' || currentLevel === 'SALES'}
                                     value={formSystemRole}
                                     onChange={(e) => setFormSystemRole(e.target.value)}
-                                    className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
                                 >
                                     <option value="">{currentLevel === 'TECHNICAL_ASSOCIATE' || currentLevel === 'SALES' ? 'Not Required' : 'Select Role'}</option>
                                     <option value={Role.ADMIN}>Admin</option>
@@ -578,14 +578,14 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Current Status</label>
-                                <select name="status" defaultValue={activeTech?.status || 'AVAILABLE'} className="w-full bg-white/50 backdrop-blur-xl border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none">
+                                <select name="status" defaultValue={activeTech?.status || 'AVAILABLE'} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none">
                                     <option value="AVAILABLE">Active</option>
                                     <option value="LEAVE">On Leave</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div className="pt-4 flex justify-between items-center border-t border-white/20 mt-2">
+                        <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-2">
                             {activeTech ? (
                                 <button type="button" onClick={(e) => handleDelete(activeTech.id, e)} className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition-colors">
                                     <Trash2 size={16} className="pointer-events-none" /> Delete
