@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -397,611 +397,664 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // Simplified container for mobile use (takes full height/width)
   const containerClasses = "w-full h-full bg-slate-900 flex flex-col";
 
+  // --- 4-Tab navigation state ---
+  const [activeTab, setActiveTab] = useState<'home' | 'carry' | 'history' | 'more'>('home');
+  
+  // Date selector for Home tab
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+      const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
+
+  // Generate date range for horizontal date picker (7 days back, 14 days forward)
+  const dateRange = useMemo(() => {
+      const dates: { key: string; day: string; weekday: string; isToday: boolean }[] = [];
+      const today = new Date();
+      for (let i = -7; i <= 14; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() + i);
+          const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          dates.push({
+              key,
+              day: String(d.getDate()),
+              weekday: d.toLocaleDateString('en-US', { weekday: 'short' }),
+              isToday: i === 0
+          });
+      }
+      return dates;
+  }, []);
+
+  // Jobs filtered by selected date (for Home tab)
+  const dateFilteredJobs = useMemo(() => {
+      return myJobs.filter(j => {
+          const jobDate = new Date(j.date);
+          const jKey = `${jobDate.getFullYear()}-${String(jobDate.getMonth()+1).padStart(2,'0')}-${String(jobDate.getDate()).padStart(2,'0')}`;
+          return jKey === selectedDate;
+      });
+  }, [myJobs, selectedDate]);
+
+  // Carry forward jobs
+  const carryForwardJobs = useMemo(() => {
+      return [
+          ...tickets
+            .filter(t => t.assignedTechId === currentTechId && t.status === TicketStatus.CARRY_FORWARD)
+            .map(t => ({ type: 'ticket' as const, data: t, date: t.nextPlannedAt || t.updatedAt || t.createdAt, priority: t.priority, delayed: false })),
+          ...activities
+            .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) && a.status === 'CARRY_FORWARD')
+            .map(a => ({ type: 'activity' as const, data: a, date: a.updatedAt || a.plannedDate || a.createdAt, priority: a.priority, delayed: false }))
+      ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [tickets, activities, currentTechId]);
+
+  // History grouped by date
+  const historyGrouped = useMemo(() => {
+      const groups: Record<string, typeof completedJobs> = {};
+      completedJobs.forEach(item => {
+          const dt = new Date(item.sortDate);
+          const today = new Date();
+          const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+          let label: string;
+          if (dt.toDateString() === today.toDateString()) label = 'Today';
+          else if (dt.toDateString() === yesterday.toDateString()) label = 'Yesterday';
+          else label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          if (!groups[label]) groups[label] = [];
+          groups[label].push(item);
+      });
+      return groups;
+  }, [completedJobs]);
+
+  // Scroll date picker to center on mount
+  const dateScrollRef = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+      if (dateScrollRef.current) {
+          const todayEl = dateScrollRef.current.querySelector('[data-today="true"]');
+          if (todayEl) todayEl.scrollIntoView({ inline: 'center', behavior: 'auto' });
+      }
+  }, [activeTab]);
+
+  // Simplified container for mobile use (takes full height/width)
+  const containerClasses = "w-full h-full bg-slate-100 flex flex-col";
+
+  // Helper: Render a job card (used in Home and Carry Forward tabs)
+  const renderJobCard = (item: typeof myJobs[0], showStartOption = false) => {
+      const isActivity = item.type === 'activity';
+      const job = item.data as any;
+      
+      if (!isActivity) {
+          return <MyJobTaskView key={job.id} ticket={job} onUpdateStatus={handleStatusUpdate} onSelect={() => setSelectedJobId(job.id)} />;
+      }
+
+      const delayed = item.delayed;
+      const isStarted = job.status === 'IN_PROGRESS';
+      const actCust = customers?.find((cu: any) => cu.id === job.customerId);
+      const actSteps5 = ['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE'];
+      const actRawIdx = actSteps5.indexOf(job.status);
+      const actStepIdx = actRawIdx === -1 ? 0 : actRawIdx;
+      const actProgress = job.status === 'DONE' ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps5.length) * 100);
+
+      return (
+          <div 
+              key={job.id} 
+              className={`bg-white rounded-2xl shadow-sm border overflow-hidden active:scale-[0.99] transition-transform relative ${
+                  delayed ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-100'
+              }`}
+              onClick={() => setSelectedJobId(job.id)}
+          >
+              <div className="h-1 bg-slate-100">
+                  <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgress}%` }}/>
+              </div>
+              <div className="p-4">
+                  <div className="flex justify-between items-start mb-2">
+                      <div>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{job.reference || job.id}</div>
+                          <h3 className="text-base font-bold text-slate-900">{actCust?.name || job.type}</h3>
+                          {actCust && <div className="text-xs text-slate-500 mt-0.5">{job.type}{job.serviceCategory ? ` · ${job.serviceCategory}` : ''}</div>}
+                      </div>
+                      <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+                          delayed ? 'bg-red-100 text-red-700' :
+                          isStarted ? 'bg-amber-100 text-amber-700' :
+                          job.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                          job.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                          'bg-purple-100 text-purple-700'
+                      }`}>
+                          {delayed ? 'DELAYED' : job.status.replace(/_/g,' ')}
+                      </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
+                      <MapPin size={12} className="text-slate-400 shrink-0"/>
+                      <span className="truncate flex-1">{job.houseNumber || job.locationUrl || 'No location'}</span>
+                      {job.locationUrl && (
+                          <a href={job.locationUrl} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="shrink-0 flex items-center gap-1 text-[10px] text-blue-600 font-bold px-2 py-0.5 bg-blue-50 rounded-lg">
+                              <Navigation size={10}/> Map
+                          </a>
+                      )}
+                  </div>
+                  {actCust?.phone && (
+                      <a href={`tel:${actCust.phone}`} onClick={e => e.stopPropagation()}
+                          className="flex items-center justify-center gap-2 w-full py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-3 active:bg-slate-100">
+                          <Phone size={12}/> Call Customer
+                      </a>
+                  )}
+                  {/* Step progress */}
+                  {job.status !== 'DONE' && job.status !== 'CANCELLED' && (
+                      <div className="flex items-center justify-between px-1">
+                          {[
+                              { key: 'PLANNED', label: 'Assigned' },
+                              { key: 'ON_MY_WAY', label: 'On Way' },
+                              { key: 'ARRIVED', label: 'Arrived' },
+                              { key: 'IN_PROGRESS', label: 'Working' },
+                          ].map((step, i) => (
+                              <React.Fragment key={step.key}>
+                                  <div className="flex flex-col items-center">
+                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                          i < actStepIdx  ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                          i === actStepIdx? 'bg-slate-900 border-slate-900 text-white' :
+                                          'bg-white border-slate-200 text-slate-400'
+                                      }`}>{i < actStepIdx ? '✓' : i+1}</div>
+                                      <span className={`text-[8px] mt-0.5 font-medium ${i===actStepIdx?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
+                                  </div>
+                                  {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i<actStepIdx?'bg-emerald-500':'bg-slate-200'}`}/>}
+                              </React.Fragment>
+                          ))}
+                      </div>
+                  )}
+                  {delayed && (
+                      <button 
+                          onClick={(e) => { e.stopPropagation(); setReportingDelayActivity(job as Activity); }}
+                          className="w-full mt-2 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center gap-1">
+                          <AlertTriangle size={12} /> Report Reason
+                      </button>
+                  )}
+              </div>
+          </div>
+      );
+  };
+
   return (
     <>
-    <div className="h-full w-full bg-slate-900">
-        {/* Phone Container / Full Screen Container */}
+    <div className="h-full w-full bg-slate-100">
         <div className={containerClasses}>
             
-            {/* Header */}
-            <div className="bg-slate-900 text-white p-4 flex items-center justify-between z-10 shrink-0">
-                {selectedJobId ? (
-                    <button onClick={handleBack}><ChevronLeft size={24} /></button>
-                ) : (
-                    <div className="flex items-center gap-3">
-                        <h1 className="font-bold text-lg">My Jobs</h1>
-                        {onChangePassword && <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 active:scale-95 transition-all" title="Change Password"><KeyRound size={16} className="text-slate-300"/></button>}
-                        {onLogout && <button onClick={onLogout} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 active:scale-95 transition-all" title="Exit Portal"><LogOut size={16} className="text-slate-300"/></button>}
+            {/* Header — only show when no job is selected */}
+            {!selectedJobId && !completionStep && (
+                <div className="bg-white border-b border-slate-200 px-4 pt-4 pb-3 flex items-center justify-between shrink-0 z-30 shadow-sm">
+                    <div>
+                        <h2 className="font-bold text-lg text-slate-900 leading-none">
+                            {activeTab === 'home' ? 'My Schedule' : activeTab === 'carry' ? 'Carry Forward' : activeTab === 'history' ? 'Completed' : 'More'}
+                        </h2>
+                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">Field Engineer Portal</p>
                     </div>
-                )}
-                <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
-                    <span className="text-xs font-medium text-emerald-400">ONLINE</span>
+                    <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
+                        <span className="text-[10px] font-medium text-emerald-600">ONLINE</span>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Content */}
-            <div className="flex-1 bg-slate-50 rounded-t-[2rem] overflow-hidden relative">
+            <div className="flex-1 overflow-hidden relative min-h-0">
                 
-                {/* Job List */}
-                {!selectedJobId && (
-                    <div className="p-4 space-y-4 pt-6 h-full overflow-y-auto no-scrollbar">
-                        <div className="flex items-center justify-between px-2 mb-1">
-                            <p className="text-sm text-slate-500 font-medium">{showHistory ? 'COMPLETED JOBS' : "TODAY'S SCHEDULE"}</p>
-                            <button
-                                onClick={() => setShowHistory(s => !s)}
-                                className={`text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${showHistory ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'}`}
-                            >
-                                {showHistory ? '← Active' : 'History'}
-                            </button>
+                {/* === JOB DETAIL VIEW (overrides everything when a job is tapped) === */}
+                {selectedJobId && !completionStep && (
+                    <div className="h-full flex flex-col">
+                        {/* Detail header with back button */}
+                        <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0 shadow-sm">
+                            <button onClick={handleBack} className="p-1"><ChevronLeft size={24} className="text-slate-600"/></button>
+                            <h2 className="font-bold text-slate-900">Job Details</h2>
                         </div>
-
-                        {/* Active jobs */}
-                        {!showHistory && myJobs.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-                                <CheckCircle2 size={48} className="mb-2"/>
-                                <p>All clear for now!</p>
-                            </div>
-                        ) : !showHistory ? (
-                            myJobs.map(item => {
-                                const isActivity = item.type === 'activity';
-                                const job = item.data as any; // Unified access
-                                
-                                if (!isActivity) {
-                                    return <MyJobTaskView key={job.id} ticket={job} onUpdateStatus={handleStatusUpdate} onSelect={() => setSelectedJobId(job.id)} />;
-                                }
-
-                                const delayed = item.delayed;
-                                const isStarted = job.status === 'IN_PROGRESS';
-                                const actCust = customers?.find((cu: any) => cu.id === job.customerId);
-                                // Unified 5-step flow: Assigned → On the Way → Arrived → Working → Done
-                                const actSteps5 = ['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE'];
-                                const actRawIdx = actSteps5.indexOf(job.status);
-                                const actStepIdx = actRawIdx === -1 ? 0 : actRawIdx;
-                                const actProgress = job.status === 'DONE' ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps5.length) * 100);
-
+                        <div className="flex-1 overflow-y-auto">
+                            {/* Ticket detail */}
+                            {activeJob && activeJobItem?.type !== 'activity' && (
+                                <MyJobTaskView ticket={activeJob as any} onUpdateStatus={handleStatusUpdate} isDetailView={true} />
+                            )}
+                            {/* Activity detail — reuse existing rich view */}
+                            {activeJob && activeJobItem?.type === 'activity' && (() => {
+                                const act = activeJob as Activity;
+                                const actCustomer = (customers as any[]).find((cu: any) => cu.id === act.customerId);
+                                const actStatus = act.status;
+                                const actSteps = [
+                                    { key: 'PLANNED', label: 'Assigned' },
+                                    { key: 'ON_MY_WAY', label: 'On the Way' },
+                                    { key: 'ARRIVED', label: 'Arrived' },
+                                    { key: 'IN_PROGRESS', label: 'Working' },
+                                    { key: 'DONE', label: 'Done' },
+                                ];
+                                const actStep = actSteps.findIndex(s => s.key === actStatus) === -1 ? 0 : actSteps.findIndex(s => s.key === actStatus);
+                                const actProgressVal = actStatus === 'DONE' ? 100 : Math.max(5, ((actStep + 1) / actSteps.length) * 100);
                                 return (
-                                    <div 
-                                        key={job.id} 
-                                        className={`bg-white rounded-2xl shadow-sm border overflow-hidden active:scale-[0.99] transition-transform relative ${
-                                            delayed ? 'border-red-400 ring-2 ring-red-100' : 'border-slate-100'
-                                        }`}
-                                        onClick={() => setSelectedJobId(job.id)}
-                                    >
-                                        {/* Progress bar */}
-                                        <div className="h-1 bg-slate-100">
-                                            <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgress}%` }}/>
-                                        </div>
-
-                                        <div className="p-5">
-                                            {/* Header */}
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{job.reference || job.id}</div>
-                                                    <h3 className="text-lg font-bold text-slate-900">{actCust?.name || job.type}</h3>
-                                                    {actCust && <div className="text-sm text-slate-500 mt-0.5">{job.type} · {job.serviceCategory || 'ELV Systems'}</div>}
-                                                </div>
-                                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
-                                                    delayed             ? 'bg-red-100 text-red-700' :
-                                                    isStarted           ? 'bg-amber-100 text-amber-700' :
-                                                    job.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
-                                                    'bg-purple-100 text-purple-700'
-                                                }`}>
-                                                    {delayed ? 'DELAYED' : job.status.replace('_',' ')}
-                                                </span>
+                                <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
+                                    <div className="h-1 bg-slate-200 shrink-0"><div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgressVal}%` }}/></div>
+                                    <div className="p-5 space-y-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{act.reference || act.id}</div>
+                                                <h2 className="text-xl font-bold text-slate-900">{actCustomer?.name || act.type}</h2>
+                                                {actCustomer && <div className="text-sm text-slate-500 mt-0.5">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>}
                                             </div>
-
-                                            {/* Location */}
-                                            <div className="flex items-center gap-2 text-sm text-slate-600 mb-3">
-                                                <MapPin size={14} className="text-slate-400 shrink-0"/>
-                                                <span className="truncate flex-1">{job.houseNumber || job.locationUrl || 'No location set'}</span>
-                                                {job.locationUrl && (
-                                                    <a href={job.locationUrl} target="_blank" rel="noopener noreferrer"
-                                                        onClick={e => e.stopPropagation()}
-                                                        className="shrink-0 flex items-center gap-1 text-[10px] text-blue-600 font-bold px-2 py-1 bg-blue-50 rounded-lg">
-                                                        <Navigation size={10}/> Map
-                                                    </a>
+                                            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
+                                                (actStatus as any) === 'ON_MY_WAY' ? 'bg-cyan-100 text-cyan-700' :
+                                                (actStatus as any) === 'ARRIVED' ? 'bg-indigo-100 text-indigo-700' :
+                                                actStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
+                                                actStatus === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                                                actStatus === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                                                'bg-purple-100 text-purple-700'
+                                            }`}>{actStatus.replace(/_/g,' ')}</span>
+                                        </div>
+                                        {actCustomer?.phone && (
+                                            <a href={`tel:${actCustomer.phone}`} className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
+                                                <Phone size={14}/> Call Customer — {actCustomer.phone}
+                                            </a>
+                                        )}
+                                        {act.description && (
+                                            <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Scope of Work</div>
+                                                <p className="text-sm text-slate-700 leading-relaxed">{act.description}</p>
+                                            </div>
+                                        )}
+                                        <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
+                                            {act.serviceCategory && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Category</span><span className="font-semibold text-slate-700">{act.serviceCategory}</span></div>}
+                                            <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Priority</span><span className={`font-bold ${act.priority === 'URGENT' ? 'text-red-600' : act.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{act.priority}</span></div>
+                                            {act.plannedDate && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Planned</span><span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString()} {new Date(act.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
+                                            {(act.houseNumber || act.locationUrl) && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Location</span><span className="font-semibold text-slate-700 text-right max-w-[55%] truncate">{act.houseNumber || act.locationUrl}</span></div>}
+                                        </div>
+                                        {/* Step progress */}
+                                        {actStatus !== 'DONE' && actStatus !== 'CARRY_FORWARD' && (
+                                            <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
+                                                {actSteps.slice(0,4).map((step, i) => (
+                                                    <React.Fragment key={step.key}>
+                                                        <div className="flex flex-col items-center">
+                                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                                                i < actStep ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                                i === actStep ? 'bg-slate-900 border-slate-900 text-white' :
+                                                                'bg-white border-slate-200 text-slate-400'
+                                                            }`}>{i < actStep ? '✓' : i + 1}</div>
+                                                            <span className={`text-[9px] mt-1 font-medium ${i === actStep ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
+                                                        </div>
+                                                        {i < 3 && <div className={`flex-1 h-0.5 mx-2 mb-3 ${i < actStep ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {/* Photos */}
+                                        {(act as any).photos?.length > 0 && (
+                                            <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({(act as any).photos.length}/{MAX_PHOTOS})</div>
+                                                <div className="grid grid-cols-4 gap-2">{(act as any).photos.map((p: any, i: number) => (
+                                                    <img key={i} src={p.url || p} alt="" className="w-full aspect-square object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
+                                                ))}</div>
+                                            </div>
+                                        )}
+                                        {/* Action buttons */}
+                                        {actStatus !== 'DONE' && actStatus !== 'CANCELLED' && (
+                                            <div className="space-y-2 pt-2">
+                                                {actStatus === 'PLANNED' || actStatus === 'CARRY_FORWARD' ? (
+                                                    <button onClick={handleActivityOnMyWay} className="w-full py-3.5 rounded-xl bg-cyan-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
+                                                        <Navigation size={16}/> On My Way
+                                                    </button>
+                                                ) : (actStatus as any) === 'ON_MY_WAY' ? (
+                                                    <button onClick={handleActivityArrived} className="w-full py-3.5 rounded-xl bg-indigo-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
+                                                        <MapPin size={16}/> I've Arrived
+                                                    </button>
+                                                ) : (actStatus as any) === 'ARRIVED' ? (
+                                                    <button onClick={handleActivityStartWork} className="w-full py-3.5 rounded-xl bg-amber-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
+                                                        <Play size={16}/> Start Work
+                                                    </button>
+                                                ) : actStatus === 'IN_PROGRESS' ? (
+                                                    <>
+                                                        <button onClick={() => handlePhotoClick(act.id, 'activity')} className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm flex items-center justify-center gap-2 border border-slate-200 active:bg-slate-200">
+                                                            <Camera size={14}/> Add Photo ({(act as any).photos?.length || 0}/{MAX_PHOTOS})
+                                                        </button>
+                                                        <button onClick={() => setCompletionStep(true)} className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
+                                                            <CheckCircle2 size={16}/> Complete Job
+                                                        </button>
+                                                    </>
+                                                ) : null}
+                                                {['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','CARRY_FORWARD'].includes(actStatus) && (
+                                                    <button onClick={handleCarryForwardClick} className="w-full py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 font-bold text-sm active:bg-orange-100 flex items-center justify-center gap-2">
+                                                        <RotateCcw size={14}/> Carry Forward
+                                                    </button>
                                                 )}
                                             </div>
-
-                                            {/* Description */}
-                                            {job.description && (
-                                                <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-700 leading-relaxed line-clamp-2">
-                                                    {job.description}
-                                                </div>
-                                            )}
-
-                                            {/* Call customer if available */}
-                                            {actCust?.phone ? (
-                                                <a href={`tel:${actCust.phone}`} onClick={e => e.stopPropagation()}
-                                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
-                                                    <Phone size={14}/> Call Customer
-                                                </a>
-                                            ) : (
-                                                <div className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs mb-4">
-                                                    <Phone size={14}/> No phone number
-                                                </div>
-                                            )}
-
-                                            {/* 5-step progress — same as ticket */}
-                                            {job.status !== 'DONE' && job.status !== 'CANCELLED' ? (
-                                                <div className="flex items-center justify-between px-1">
-                                                    {[
-                                                        { key: 'PLANNED',     label: 'Assigned' },
-                                                        { key: 'ON_MY_WAY',  label: 'On the Way' },
-                                                        { key: 'ARRIVED',    label: 'Arrived' },
-                                                        { key: 'IN_PROGRESS',label: 'Working' },
-                                                    ].map((step, i) => (
-                                                        <React.Fragment key={step.key}>
-                                                            <div className="flex flex-col items-center">
-                                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
-                                                                    i < actStepIdx  ? 'bg-emerald-500 border-emerald-500 text-white' :
-                                                                    i === actStepIdx? 'bg-slate-900 border-slate-900 text-white' :
-                                                                    'bg-white border-slate-200 text-slate-400'
-                                                                }`}>{i < actStepIdx ? '✓' : i+1}</div>
-                                                                <span className={`text-[9px] mt-0.5 font-medium ${i===actStepIdx?'text-slate-900':'text-slate-400'}`}>{step.label}</span>
-                                                            </div>
-                                                            {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${i<actStepIdx?'bg-emerald-500':'bg-slate-200'}`}/>}
-                                                        </React.Fragment>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center justify-center gap-2 py-2 bg-emerald-50 rounded-xl text-emerald-700 font-bold text-xs">
-                                                    <CheckCircle2 size={14}/> Completed
-                                                </div>
-                                            )}
-
-                                            {/* Report Delay Button */}
-                                            {delayed && (
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); setReportingDelayActivity(job as Activity); }}
-                                                    className="w-full py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 flex items-center justify-center gap-1"
-                                                >
-                                                    <AlertTriangle size={12} /> Report Reason
-                                                </button>
-                                            )}
-                                        </div>
+                                        )}
                                     </div>
-                                );
-                            })
-                        ) : null}
-
-                        {/* History list */}
-                        {showHistory && (
-                            completedJobs.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-                                    <CheckCircle2 size={48} className="mb-2"/>
-                                    <p>No completed jobs yet</p>
                                 </div>
-                            ) : (
-                                completedJobs.map(item => {
-                                    const isAct = item.kind === 'activity';
-                                    const job = item.data as any;
-                                    const label     = isAct ? (job.type || 'Activity') : (job.customerName || job.id);
-                                    const sub       = isAct ? (job.serviceCategory || job.description?.substring(0,40) || '') : (job.category || '');
-                                    const statusVal = job.status || '';
-                                    const dt        = new Date(item.sortDate || job.updatedAt || job.createdAt);
-                                    return (
-                                        <div key={job.id}
-                                            onClick={() => setHistoryDetailJob({ ...job, kind: item.kind })}
-                                            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-3 cursor-pointer active:scale-[0.99] transition-transform"
-                                        >
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div>
-                                                    <div className="text-[10px] font-bold text-slate-400 mb-0.5">{job.reference || job.id}</div>
-                                                    <div className="font-bold text-slate-800">{label}</div>
-                                                </div>
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${statusVal === 'RESOLVED' || statusVal === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
-                                                    {statusVal.replace('_',' ')}
-                                                </span>
-                                            </div>
-                                            {sub && <div className="text-xs text-slate-500 mb-1">{sub}</div>}
-                                            <div className="text-xs text-slate-400">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-                                        </div>
-                                    );
-                                })
-                            )
-                        )}
+                                );
+                            })()}
+                        </div>
                     </div>
                 )}
 
-                {/* Ticket Detail — full screen when ticket tapped */}
-                {activeJob && activeJobItem?.type !== 'activity' && !completionStep && (
-                    <MyJobTaskView
-                        ticket={activeJob as any}
-                        onUpdateStatus={handleStatusUpdate}
-                        isDetailView={true}
-                    />
-                )}
-
-                {/* Activity Detail — rich job view matching ticket layout */}
-                {activeJob && activeJobItem?.type === 'activity' && !completionStep && (() => {
-                    const act = activeJob as Activity;
-                    const actCustomer = (customers as any[]).find((cu: any) => cu.id === act.customerId);
-                    const actStatus = act.status;
-                    // Unified 5-step flow matching tickets
-                    const actSteps = [
-                        { key: 'PLANNED',     label: 'Assigned'   },
-                        { key: 'ON_MY_WAY',   label: 'On the Way' },
-                        { key: 'ARRIVED',     label: 'Arrived'    },
-                        { key: 'IN_PROGRESS', label: 'Working'    },
-                        { key: 'DONE',        label: 'Done'       },
-                    ];
-                    const actStep    = actSteps.findIndex(s => s.key === actStatus) === -1 ? 0 : actSteps.findIndex(s => s.key === actStatus);
-                    const actProgress = actStatus === 'DONE' ? 100 : Math.max(5, ((actStep + 1) / actSteps.length) * 100);
-                    return (
-                    <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
-                        {/* Progress bar */}
-                        <div className="h-1 bg-slate-200 shrink-0">
-                            <div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgress}%` }}/>
+                {/* === COMPLETION STEP === */}
+                {completionStep && (
+                    <div className="h-full flex flex-col bg-white">
+                        <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0 shadow-sm">
+                            <button onClick={() => setCompletionStep(false)} className="p-1"><ChevronLeft size={24} className="text-slate-600"/></button>
+                            <h2 className="font-bold text-slate-900">Complete Job</h2>
                         </div>
-                        <div className="p-5 space-y-4">
-                            {/* Header */}
-                            <div className="flex justify-between items-start">
+                        <div className="p-5 flex-1 flex flex-col overflow-y-auto">
+                            <div className="space-y-4 flex-1">
                                 <div>
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{act.reference || act.id}</div>
-                                    <h2 className="text-xl font-bold text-slate-900">{actCustomer?.name || act.type}</h2>
-                                    {actCustomer && <div className="text-sm text-slate-500 mt-0.5">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>}
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Resolution Notes</label>
+                                    <textarea className={INPUT_STYLES} placeholder="What did you fix?" rows={4} value={completionNotes} onChange={(e) => setCompletionNotes(e.target.value)} />
                                 </div>
-                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
-                                    (actStatus as any) === 'ON_MY_WAY'  ? 'bg-cyan-100 text-cyan-700' :
-                                    (actStatus as any) === 'ARRIVED'    ? 'bg-indigo-100 text-indigo-700' :
-                                    actStatus === 'IN_PROGRESS'         ? 'bg-amber-100 text-amber-700' :
-                                    actStatus === 'DONE'                ? 'bg-emerald-100 text-emerald-700' :
-                                    'bg-purple-100 text-purple-700'
-                                }`}>{actStatus.replace(/_/g,' ')}</span>
-                            </div>
-                            {/* Call customer */}
-                            {actCustomer?.phone && (
-                                <a href={`tel:${actCustomer.phone}`}
-                                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
-                                    <Phone size={14}/> Call Customer — {actCustomer.phone}
-                                </a>
-                            )}
-                            {/* Scope of work */}
-                            {act.description && (
-                                <div className="bg-white rounded-xl p-4 border border-slate-100">
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Scope of Work</div>
-                                    <p className="text-sm text-slate-700 leading-relaxed">{act.description}</p>
-                                </div>
-                            )}
-                            {/* Job details */}
-                            <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
-                                {act.serviceCategory && (
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-400 font-medium">Category</span>
-                                        <span className="font-semibold text-slate-700">{act.serviceCategory}</span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-400 font-medium">Priority</span>
-                                    <span className={`font-bold ${act.priority === 'URGENT' ? 'text-red-600' : act.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{act.priority}</span>
-                                </div>
-                                {act.plannedDate && (
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-400 font-medium">Planned</span>
-                                        <span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString()} {new Date(act.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
-                                    </div>
-                                )}
-                                {(act.houseNumber || act.locationUrl) && (
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-slate-400 font-medium">Location</span>
-                                        <span className="font-semibold text-slate-700 text-right max-w-[55%] truncate">{act.houseNumber || act.locationUrl}</span>
-                                    </div>
-                                )}
-                            </div>
-                            {/* Step progress indicators — 5-step unified flow */}
-                            {actStatus !== 'DONE' && (
-                                <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-slate-100">
-                                    {actSteps.slice(0,4).map((step, i) => (
-                                        <React.Fragment key={step.key}>
-                                            <div className="flex flex-col items-center">
-                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
-                                                    i < actStep   ? 'bg-emerald-500 border-emerald-500 text-white' :
-                                                    i === actStep ? 'bg-slate-900 border-slate-900 text-white' :
-                                                    'bg-white border-slate-200 text-slate-400'
-                                                }`}>{i < actStep ? '✓' : i + 1}</div>
-                                                <span className={`text-[9px] mt-1 font-medium ${i === actStep ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
-                                            </div>
-                                            {i < 3 && <div className={`flex-1 h-0.5 mx-2 mb-3 ${i < actStep ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
-                                        </React.Fragment>
-                                    ))}
-                                </div>
-                            )}
-                            {/* Navigate + Photos */}
-                            <div className="grid grid-cols-2 gap-3">
-                                {act.locationUrl ? (
-                                    <a href={act.locationUrl} target="_blank" rel="noopener noreferrer"
-                                        className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform">
-                                        <Navigation size={22} className="mb-1 text-blue-500"/>
-                                        <span className="text-xs font-semibold">Navigate</span>
-                                    </a>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center p-3 bg-slate-50 rounded-xl text-slate-400">
-                                        <Navigation size={22} className="mb-1"/>
-                                        <span className="text-xs font-semibold">Navigate</span>
-                                    </div>
-                                )}
                                 <button
-                                    onClick={() => handlePhotoClick(act.id, 'activity')}
-                                    disabled={photoUploading}
-                                    className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform disabled:opacity-50">
-                                    <Camera size={22} className="mb-1"/>
-                                    <span className="text-xs font-semibold">{photoUploading && photoJobId === act.id ? 'Saving...' : 'Photos'}</span>
+                                    onClick={() => activeJob && handlePhotoClick((activeJob as any).id, activeJobItem?.type === 'activity' ? 'activity' : 'ticket')}
+                                    className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl bg-slate-50 w-full active:bg-slate-100 transition-colors">
+                                    <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
+                                        <Camera size={20} className="text-slate-500" />
+                                    </div>
+                                    <span className="text-sm font-medium text-slate-600">
+                                        {photoUploading ? 'Saving photo...' : 'Add Proof of Work (tap to photo)'}
+                                    </span>
                                 </button>
                             </div>
-                            {/* Uploaded Photos — visible to engineer */}
-                            {((act as any).photos || []).length > 0 && (
-                                <div className="space-y-2 mb-4">
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Uploaded Photos ({(act as any).photos.length})</div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {(act as any).photos.map((p: any, i: number) => (
-                                            <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
+                            <div className="flex gap-3 pt-4">
+                                <button onClick={() => setCompletionStep(false)} className="flex-1 py-4 text-slate-500 font-bold">Back</button>
+                                <button onClick={handleComplete} className="flex-[2] py-4 rounded-xl bg-emerald-600 text-white font-bold shadow-xl active:bg-emerald-700">Submit & Close</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* === TAB CONTENT (only when no job selected and no completion step) === */}
+                {!selectedJobId && !completionStep && (
+                    <div className="h-full overflow-y-auto pb-24">
+
+                        {/* HOME TAB — Date selector + planned jobs */}
+                        {activeTab === 'home' && (
+                            <div>
+                                {/* Horizontal Date Picker */}
+                                <div className="bg-white border-b border-slate-200 px-2 py-3 shadow-sm">
+                                    <div ref={dateScrollRef} className="flex gap-1.5 overflow-x-auto no-scrollbar px-2">
+                                        {dateRange.map(d => (
+                                            <button
+                                                key={d.key}
+                                                data-today={d.isToday ? "true" : undefined}
+                                                onClick={() => setSelectedDate(d.key)}
+                                                className={`flex flex-col items-center min-w-[44px] py-2 px-1.5 rounded-xl transition-all shrink-0 ${
+                                                    selectedDate === d.key 
+                                                        ? 'bg-slate-900 text-white shadow-lg' 
+                                                        : d.isToday 
+                                                            ? 'bg-amber-50 border border-amber-300 text-slate-900'
+                                                            : 'text-slate-500 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <span className="text-[9px] font-bold uppercase">{d.weekday}</span>
+                                                <span className="text-lg font-bold leading-tight">{d.day}</span>
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
-                            )}
-                            {/* Workflow action buttons — full 5-step flow matching tickets */}
-                            <div className="space-y-3 pb-6">
-                                {(actStatus === 'PLANNED') && (
-                                    <button onClick={handleActivityOnMyWay}
-                                        className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
-                                        <Car size={20}/> On My Way
-                                    </button>
-                                )}
-                                {(actStatus as any) === 'ON_MY_WAY' && (
-                                    <button onClick={handleActivityArrived}
-                                        className="w-full py-4 rounded-2xl bg-indigo-600 text-white font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
-                                        <Home size={20}/> Arrived at Site
-                                    </button>
-                                )}
-                                {(actStatus as any) === 'ARRIVED' && (
-                                    <button onClick={handleActivityStartWork}
-                                        className="w-full py-4 rounded-2xl bg-amber-500 text-white font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
-                                        <Play size={20} className="fill-current"/> Start Work
-                                    </button>
-                                )}
-                                {actStatus === 'IN_PROGRESS' && (
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button onClick={handleCarryForwardClick}
-                                            className="w-full py-4 rounded-2xl bg-slate-200 text-slate-700 font-bold active:bg-slate-300">
-                                            Carry Forward
-                                        </button>
-                                        <button onClick={() => setCompletionStep(true)}
-                                            className="w-full py-4 rounded-2xl bg-emerald-500 text-white font-bold shadow-lg active:bg-emerald-600 flex items-center justify-center gap-2">
-                                            <Check size={20}/> Complete
-                                        </button>
+                                <div className="p-4 space-y-3">
+                                    <div className="flex items-center justify-between px-1">
+                                        <p className="text-xs font-bold text-slate-500 uppercase">
+                                            {selectedDate === dateRange.find(d => d.isToday)?.key ? "Today's Jobs" : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                                        </p>
+                                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{dateFilteredJobs.length}</span>
                                     </div>
-                                )}
-                                {actStatus === 'DONE' && (
-                                    <div className="flex items-center justify-center gap-2 py-4 bg-emerald-50 rounded-2xl text-emerald-700 font-bold">
-                                        <CheckCircle2 size={20}/> Job Completed
-                                    </div>
-                                )}
+                                    {dateFilteredJobs.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                            <CheckCircle2 size={48} className="mb-3 text-slate-300"/>
+                                            <p className="font-medium">No jobs scheduled</p>
+                                            <p className="text-xs text-slate-400 mt-1">Select a different date above</p>
+                                        </div>
+                                    ) : dateFilteredJobs.map(item => renderJobCard(item))}
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                    );
-                })()}
+                        )}
 
-                {/* Completion Screen (Only for Activities) */}
-                {activeJob && completionStep && (
-                    <div className="p-6 pt-10 h-full bg-white flex flex-col">
-                         <h2 className="text-2xl font-bold text-slate-900 mb-6">Job Completion</h2>
-                         
-                         <div className="space-y-4 flex-1">
-                             <div>
-                                 <label className="block text-sm font-medium text-slate-700 mb-1">Resolution Notes</label>
-                                 <textarea className={INPUT_STYLES} placeholder="What did you fix?" rows={4} value={completionNotes} onChange={(e) => setCompletionNotes(e.target.value)} />
-                             </div>
-                             
-                             <button
-                                 onClick={() => activeJob && handlePhotoClick((activeJob as any).id, activeJobItem?.type === 'activity' ? 'activity' : 'ticket')}
-                                 className="flex items-center gap-3 p-4 border border-slate-200 rounded-xl bg-slate-50 w-full active:bg-slate-100 transition-colors">
-                                 <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
-                                     <Camera size={20} className="text-slate-500" />
-                                 </div>
-                                 <span className="text-sm font-medium text-slate-600">
-                                     {photoUploading ? 'Saving photo...' : 'Add Proof of Work (tap to photo)'}
-                                 </span>
-                             </button>
-                         </div>
+                        {/* CARRY FORWARD TAB */}
+                        {activeTab === 'carry' && (
+                            <div className="p-4 space-y-3">
+                                <div className="flex items-center justify-between px-1 mb-2">
+                                    <p className="text-xs font-bold text-slate-500 uppercase">Carry Forward Jobs</p>
+                                    <span className="text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">{carryForwardJobs.length}</span>
+                                </div>
+                                {carryForwardJobs.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                        <RotateCcw size={48} className="mb-3 text-slate-300"/>
+                                        <p className="font-medium">No carry forward jobs</p>
+                                        <p className="text-xs text-slate-400 mt-1">All caught up!</p>
+                                    </div>
+                                ) : carryForwardJobs.map(item => renderJobCard(item, true))}
+                            </div>
+                        )}
 
-                         <div className="flex gap-3">
-                             <button onClick={() => setCompletionStep(false)} className="flex-1 py-4 text-slate-500 font-bold">Back</button>
-                             <button 
-                                onClick={handleComplete}
-                                className="flex-[2] py-4 rounded-xl bg-emerald-600 text-white font-bold shadow-xl active:bg-emerald-700"
-                             >
-                                 Submit & Close
-                             </button>
-                         </div>
-                    </div>
-                )}
-
-                {/* Report Delay Modal */}
-                {reportingDelayActivity && (
-                    <div className="absolute inset-0 z-50 bg-black/50 flex items-end">
-                        <div className="bg-white w-full rounded-t-3xl p-6 animate-in slide-in-from-bottom duration-300">
-                            <h3 className="text-lg font-bold text-slate-900 mb-4">Report Delay Reason</h3>
-                            <p className="text-xs text-slate-500 mb-4">Why is this job delayed?</p>
-                            <form onSubmit={handleDelaySubmit} className="space-y-3">
-                                {['Stuck in traffic', 'Previous job overrun', 'Client not available', 'Waiting for materials', 'Need support', 'Other'].map(r => (
-                                    <label key={r} className="flex items-center gap-3 p-3 border rounded-xl has-[:checked]:bg-blue-50 has-[:checked]:border-blue-200">
-                                        <input type="radio" name="reason" value={r} className="text-blue-600" required />
-                                        <span className="text-sm font-medium text-slate-700">{r}</span>
-                                    </label>
+                        {/* HISTORY TAB — Completed jobs grouped by date */}
+                        {activeTab === 'history' && (
+                            <div className="p-4 space-y-3">
+                                <div className="flex items-center justify-between px-1 mb-2">
+                                    <p className="text-xs font-bold text-slate-500 uppercase">Completed Jobs</p>
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">{completedJobs.length}</span>
+                                </div>
+                                {completedJobs.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                        <History size={48} className="mb-3 text-slate-300"/>
+                                        <p className="font-medium">No completed jobs yet</p>
+                                    </div>
+                                ) : Object.entries(historyGrouped).map(([dateLabel, items]) => (
+                                    <div key={dateLabel} className="mb-3">
+                                        <div className="flex items-center gap-2 mb-2 px-1">
+                                            <div className="h-px flex-1 bg-slate-200" />
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{dateLabel}</span>
+                                            <span className="text-[10px] text-slate-300 font-bold">{items.length}</span>
+                                            <div className="h-px flex-1 bg-slate-200" />
+                                        </div>
+                                        {items.map(item => {
+                                            const isAct = item.kind === 'activity';
+                                            const job = item.data as any;
+                                            const label = isAct ? (job.type || 'Activity') : (job.customerName || job.id);
+                                            const sub = isAct ? (job.serviceCategory || '') : (job.category || '');
+                                            const dt = new Date(item.sortDate);
+                                            return (
+                                                <div key={job.id} onClick={() => setHistoryDetailJob({ ...job, kind: item.kind })}
+                                                    className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-2 cursor-pointer active:scale-[0.99] transition-transform">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <div>
+                                                            <div className="text-[10px] font-bold text-slate-400">{job.reference || job.id}</div>
+                                                            <div className="font-bold text-slate-800 text-sm">{label}</div>
+                                                        </div>
+                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${job.status === 'RESOLVED' || job.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                                            {(job.status || '').replace(/_/g,' ')}
+                                                        </span>
+                                                    </div>
+                                                    {sub && <div className="text-xs text-slate-500">{sub}</div>}
+                                                    <div className="text-[10px] text-slate-400 mt-1">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 ))}
-                                <input name="customReason" placeholder="If Other, please specify..." className={INPUT_STYLES} />
-                                
-                                <div className="flex gap-3 mt-4">
-                                    <button type="button" onClick={() => setReportingDelayActivity(null)} className="flex-1 py-3 text-slate-500 font-bold">Cancel</button>
-                                    <button type="submit" className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg">Report</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )}
-
-                {/* Carry Forward Modal */}
-                {isCarryForwardOpen && (
-                    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setIsCarryForwardOpen(false)}>
-                        <div className="bg-white w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold text-slate-900">Carry Forward</h3>
-                                <button onClick={() => setIsCarryForwardOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-500">
-                                    <X size={20} />
-                                </button>
                             </div>
-                            
-                            <div className="space-y-4">
+                        )}
+
+                        {/* MORE TAB */}
+                        {activeTab === 'more' && (
+                            <div className="p-4 space-y-4">
+                                {/* Account Section */}
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Reason for Carry Forward <span className="text-red-500">*</span></label>
-                                    <textarea 
-                                        value={carryForwardIssue}
-                                        onChange={e => setCarryForwardIssue(e.target.value)}
-                                        className={INPUT_STYLES}
-                                        rows={3}
-                                        placeholder="Why is this job being carried forward?"
-                                    />
+                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Account</h4>
+                                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
+                                        {onChangePassword && (
+                                            <button onClick={() => { setShowChangePwd(true); setCpForm({current:'',next:'',confirm:''}); setCpError(''); setCpSuccess(false); }}
+                                                className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
+                                                <div className="p-2 bg-slate-100 rounded-lg"><KeyRound size={18} className="text-slate-500" /></div>
+                                                <span className="flex-1 text-left text-slate-900 font-medium">Password & Security</span>
+                                                <ChevronRight size={16} className="text-slate-300" />
+                                            </button>
+                                        )}
+                                        {onLogout && (
+                                            <button onClick={onLogout} className="w-full flex items-center gap-3 p-4 active:bg-red-50 transition-colors">
+                                                <div className="p-2 bg-red-50 rounded-lg"><LogOut size={18} className="text-red-400" /></div>
+                                                <span className="flex-1 text-left text-red-500 font-medium">Logout</span>
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                                
+                                {/* Stats summary */}
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Remark / Description</label>
-                                    <textarea 
-                                        value={carryForwardRemark}
-                                        onChange={e => setCarryForwardRemark(e.target.value)}
-                                        className={INPUT_STYLES}
-                                        rows={3}
-                                        placeholder="Additional notes or remarks..."
-                                    />
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Next Date &amp; Time <span className="text-red-500">*</span></label>
-                                    <input
-                                        type="datetime-local"
-                                        value={carryForwardDatetime}
-                                        onChange={e => setCarryForwardDatetime(e.target.value)}
-                                        className={INPUT_STYLES}
-                                        min={new Date().toISOString().slice(0,16)}
-                                    />
-                                </div>
-                                
-                                <div className="pt-4 flex gap-3">
-                                    <button 
-                                        onClick={() => setIsCarryForwardOpen(false)}
-                                        className="flex-1 py-3.5 rounded-xl font-bold text-slate-500 bg-slate-100"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button 
-                                        onClick={handleConfirmCarryForward}
-                                        disabled={!carryForwardIssue.trim() || !carryForwardDatetime}
-                                        className="flex-[2] py-3.5 rounded-xl font-bold text-white bg-slate-900 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Confirm
-                                    </button>
+                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Summary</h4>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                                            <div className="text-xl font-bold text-amber-600">{myJobs.length}</div>
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Active</div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                                            <div className="text-xl font-bold text-orange-600">{carryForwardJobs.length}</div>
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Carry Fwd</div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                                            <div className="text-xl font-bold text-emerald-600">{completedJobs.length}</div>
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Done</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )}
-
-                {/* Toast Notification */}
-                {showToast && (
-                    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] bg-slate-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300">
-                        <CheckCircle2 size={18} className="text-emerald-400" />
-                        <span className="font-bold text-sm">Job Carried Forward</span>
-                    </div>
-                )}
-
-                {/* History Detail Popup */}
-                {historyDetailJob && (() => {
-                    const hj = historyDetailJob;
-                    const isAct = hj.kind === 'activity';
-                    const custName = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.name || 'Unknown') : (hj.customerName || 'Unknown');
-                    const custPhone = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.phone || '') : (hj.phoneNumber || '');
-                    const fmtDt = (iso: string) => iso ? `${new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} ${new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}` : '—';
-                    const photos = hj.photos || [];
-                    return (
-                        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setHistoryDetailJob(null)}>
-                            <div className="bg-white w-full max-w-md rounded-t-[2rem] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-                                <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
-                                    <div>
-                                        <div className="text-[10px] font-mono text-slate-400">{hj.reference || hj.id}</div>
-                                        <h3 className="font-bold text-lg text-slate-900">{isAct ? hj.type : hj.category}</h3>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${hj.status === 'DONE' || hj.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : hj.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-700'}`}>{(hj.status || '').replace(/_/g, ' ')}</span>
-                                        <button onClick={() => setHistoryDetailJob(null)} className="p-1.5 bg-slate-100 rounded-full"><X size={16} className="text-slate-500"/></button>
-                                    </div>
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                                    {/* Customer */}
-                                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
-                                        <div className="text-sm font-bold text-slate-800">{custName}</div>
-                                        {custPhone && <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {custPhone}</div>}
-                                    </div>
-                                    {/* Timing */}
-                                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
-                                        <div className="flex justify-between text-xs"><span className="text-slate-400">{isAct ? 'Planned' : 'Created'}</span><span className="text-slate-700">{fmtDt(isAct ? hj.plannedDate : hj.createdAt)}</span></div>
-                                        {hj.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(hj.startedAt)}</span></div>}
-                                        {hj.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(hj.completedAt)}</span></div>}
-                                        {hj.startedAt && hj.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Duration</span><span className="font-bold text-slate-700">{Math.round((new Date(hj.completedAt).getTime() - new Date(hj.startedAt).getTime()) / 60000)}m</span></div>}
-                                    </div>
-                                    {/* Description */}
-                                    {(hj.description || hj.notes) && (
-                                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div>
-                                            <p className="text-xs text-slate-700 whitespace-pre-wrap">{hj.description || hj.notes}</p>
-                                        </div>
-                                    )}
-                                    {/* Completion Note */}
-                                    {hj.completionNote && (
-                                        <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
-                                            <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div>
-                                            <p className="text-xs text-emerald-800 whitespace-pre-wrap">{hj.completionNote}</p>
-                                        </div>
-                                    )}
-                                    {/* Carry Forward */}
-                                    {hj.carryForwardNote && (
-                                        <div className="bg-amber-50 rounded-xl p-3 border border-amber-200">
-                                            <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div>
-                                            <p className="text-xs text-amber-800 whitespace-pre-wrap">{hj.carryForwardNote}</p>
-                                        </div>
-                                    )}
-                                    {/* Location */}
-                                    {(hj.houseNumber || hj.locationUrl) && (
-                                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 space-y-1">
-                                            <div className="text-[10px] font-bold text-blue-600 uppercase">Location</div>
-                                            {hj.houseNumber && <div className="text-xs text-slate-700">{hj.houseNumber}</div>}
-                                            {hj.locationUrl && <a href={hj.locationUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline">Open Map</a>}
-                                        </div>
-                                    )}
-                                    {/* Photos */}
-                                    {photos.length > 0 && (
-                                        <div className="space-y-2">
-                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Photos ({photos.length})</div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {photos.map((p: any, i: number) => (
-                                                    <img key={i} src={p.url || p} alt={`Photo ${i+1}`} className="w-full h-20 object-cover rounded-lg border border-slate-200" onClick={() => showPhotoLightbox(p.url || p)} />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="p-4 border-t border-slate-100 shrink-0">
-                                    <button onClick={() => setHistoryDetailJob(null)} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold">Close</button>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })()}
-
             </div>
+
+            {/* Floating Bottom Nav — 4 tabs (only when no job selected) */}
+            {!selectedJobId && !completionStep && (
+                <div className="absolute bottom-0 left-0 right-0 z-30 px-3" style={{paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))"}}>
+                    <div className="bg-white/90 backdrop-blur-2xl rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-200/60 flex justify-between px-2 py-1.5">
+                        {[
+                            { key: 'home' as const, icon: Calendar, label: 'Schedule' },
+                            { key: 'carry' as const, icon: RotateCcw, label: 'Carry Fwd', badge: carryForwardJobs.length },
+                            { key: 'history' as const, icon: History, label: 'Completed' },
+                            { key: 'more' as const, icon: Grid, label: 'More' },
+                        ].map(tab => {
+                            const isActive = activeTab === tab.key;
+                            const Icon = tab.icon;
+                            return (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    className={`flex flex-col items-center justify-center py-1.5 flex-1 rounded-xl transition-all duration-200 relative ${isActive ? 'bg-slate-900 text-white scale-105' : 'text-slate-400 active:scale-95'}`}
+                                >
+                                    <div className="relative">
+                                        <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                                        {tab.badge && tab.badge > 0 && (
+                                            <span className={`absolute -top-1.5 -right-2.5 min-w-[16px] h-4 ${isActive ? 'bg-orange-400 text-white' : 'bg-orange-500 text-white'} text-[9px] font-bold rounded-full flex items-center justify-center px-1`}>{tab.badge}</span>
+                                        )}
+                                    </div>
+                                    <span className={`text-[8px] font-bold mt-0.5 uppercase tracking-wide ${isActive ? 'text-white' : 'text-slate-400'}`}>{tab.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Report Delay Modal */}
+            {reportingDelayActivity && (
+                <div className="absolute inset-0 z-50 bg-black/50 flex items-end">
+                    <div className="bg-white w-full rounded-t-3xl p-6 animate-in slide-in-from-bottom duration-300">
+                        <h3 className="text-lg font-bold text-slate-900 mb-4">Report Delay Reason</h3>
+                        <p className="text-xs text-slate-500 mb-4">Why is this job delayed?</p>
+                        <form onSubmit={handleDelaySubmit} className="space-y-3">
+                            {['Stuck in traffic', 'Previous job overrun', 'Client not available', 'Waiting for materials', 'Need support', 'Other'].map(r => (
+                                <label key={r} className="flex items-center gap-3 p-3 border rounded-xl has-[:checked]:bg-blue-50 has-[:checked]:border-blue-200">
+                                    <input type="radio" name="reason" value={r} className="text-blue-600" required />
+                                    <span className="text-sm font-medium text-slate-700">{r}</span>
+                                </label>
+                            ))}
+                            <input name="customReason" placeholder="If Other, please specify..." className={INPUT_STYLES} />
+                            <div className="flex gap-3 mt-4">
+                                <button type="button" onClick={() => setReportingDelayActivity(null)} className="flex-1 py-3 text-slate-500 font-bold">Cancel</button>
+                                <button type="submit" className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg">Report</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Carry Forward Modal */}
+            {isCarryForwardOpen && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setIsCarryForwardOpen(false)}>
+                    <div className="bg-white w-full max-w-md rounded-t-[2rem] p-6 shadow-2xl animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-slate-900">Carry Forward</h3>
+                            <button onClick={() => setIsCarryForwardOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={20} /></button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Reason <span className="text-red-500">*</span></label>
+                                <textarea value={carryForwardIssue} onChange={e => setCarryForwardIssue(e.target.value)} className={INPUT_STYLES} rows={3} placeholder="Why is this job being carried forward?" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Remark / Description</label>
+                                <textarea value={carryForwardRemark} onChange={e => setCarryForwardRemark(e.target.value)} className={INPUT_STYLES} rows={3} placeholder="Additional notes..." />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Next Date & Time <span className="text-red-500">*</span></label>
+                                <input type="datetime-local" value={carryForwardDatetime} onChange={e => setCarryForwardDatetime(e.target.value)} className={INPUT_STYLES} min={new Date().toISOString().slice(0,16)} />
+                            </div>
+                            <div className="pt-4 flex gap-3">
+                                <button onClick={() => setIsCarryForwardOpen(false)} className="flex-1 py-3.5 rounded-xl font-bold text-slate-500 bg-slate-100">Cancel</button>
+                                <button onClick={handleConfirmCarryForward} disabled={!carryForwardIssue.trim() || !carryForwardDatetime}
+                                    className="flex-[2] py-3.5 rounded-xl font-bold text-white bg-slate-900 shadow-lg disabled:opacity-50">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast */}
+            {showToast && (
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] bg-slate-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <CheckCircle2 size={18} className="text-emerald-400" />
+                    <span className="font-bold text-sm">Job Carried Forward</span>
+                </div>
+            )}
+
+            {/* History Detail Popup */}
+            {historyDetailJob && (() => {
+                const hj = historyDetailJob;
+                const isAct = hj.kind === 'activity';
+                const custName = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.name || 'Unknown') : (hj.customerName || 'Unknown');
+                const custPhone = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.phone || '') : (hj.phoneNumber || '');
+                const fmtDt = (iso: string) => iso ? `${new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} ${new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}` : '—';
+                const photos = hj.photos || [];
+                return (
+                    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setHistoryDetailJob(null)}>
+                        <div className="bg-white w-full max-w-md rounded-t-[2rem] max-h-[85vh] flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+                            <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                                <div>
+                                    <div className="text-[10px] font-mono text-slate-400">{hj.reference || hj.id}</div>
+                                    <h3 className="font-bold text-lg text-slate-900">{isAct ? hj.type : hj.category}</h3>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${hj.status === 'DONE' || hj.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : hj.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-700'}`}>{(hj.status || '').replace(/_/g, ' ')}</span>
+                                    <button onClick={() => setHistoryDetailJob(null)} className="p-1.5 bg-slate-100 rounded-full"><X size={16} className="text-slate-500"/></button>
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
+                                    <div className="text-sm font-bold text-slate-800">{custName}</div>
+                                    {custPhone && <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {custPhone}</div>}
+                                </div>
+                                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+                                    <div className="flex justify-between text-xs"><span className="text-slate-400">{isAct ? 'Planned' : 'Created'}</span><span className="text-slate-700">{fmtDt(isAct ? hj.plannedDate : hj.createdAt)}</span></div>
+                                    {hj.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(hj.startedAt)}</span></div>}
+                                    {hj.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(hj.completedAt)}</span></div>}
+                                    {hj.startedAt && hj.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Duration</span><span className="font-bold text-slate-700">{Math.round((new Date(hj.completedAt).getTime() - new Date(hj.startedAt).getTime()) / 60000)}m</span></div>}
+                                </div>
+                                {(hj.description || hj.notes) && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{hj.description || hj.notes}</p></div>}
+                                {hj.completionNote && <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{hj.completionNote}</p></div>}
+                                {hj.carryForwardNote && <div className="bg-amber-50 rounded-xl p-3 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{hj.carryForwardNote}</p></div>}
+                                {(hj.houseNumber || hj.locationUrl) && <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 space-y-1"><div className="text-[10px] font-bold text-blue-600 uppercase">Location</div>{hj.houseNumber && <div className="text-xs text-slate-700">{hj.houseNumber}</div>}{hj.locationUrl && <a href={hj.locationUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline">Open Map</a>}</div>}
+                                {photos.length > 0 && <div className="space-y-2"><div className="text-[10px] font-bold text-slate-400 uppercase">Photos ({photos.length})</div><div className="grid grid-cols-3 gap-2">{photos.map((p: any, i: number) => (<img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200" onClick={() => showPhotoLightbox(p.url || p)} />))}</div></div>}
+                            </div>
+                            <div className="p-4 border-t border-slate-100 shrink-0"><button onClick={() => setHistoryDetailJob(null)} className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold">Close</button></div>
+                        </div>
+                    </div>
+                );
+            })()}
+
         </div>
     </div>
 
