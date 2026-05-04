@@ -613,7 +613,7 @@ function mapTicket(r) {
 // 1. Get all tickets from DB
 app.get("/api/tickets", authenticate, async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC");
+    const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500");
     res.json(result.rows.map(mapTicket));
   } catch (e) {
     console.error("Tickets fetch error:", e);
@@ -1524,7 +1524,7 @@ app.get("/api/sites", authenticate, async (req, res) => {
 // GET Activities
 app.get("/api/activities", authenticate, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC");
+    const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500");
     res.json(rows.map(r => ({
         id: r.id, reference: r.reference, type: r.type, priority: r.priority,
         status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
