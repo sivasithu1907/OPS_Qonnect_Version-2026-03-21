@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { 
-  ChevronLeft, Phone, MapPin, Search, Plus, 
+  ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
   CheckCircle2, History, AlertTriangle, X, UserPlus,
   TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound,
@@ -1171,8 +1171,32 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   customers={customers} activities={activities} tickets={tickets} technicians={technicians} sites={sites}
                                   onSaveCustomer={onSaveCustomer!} onDeleteCustomer={onDeleteCustomer!} readOnly={true}
                                   isMobile={true}
-                                  onCreateTicket={onCreateTicket ? (data) => { onCreateTicket(data); setMobileModule('none'); } : undefined}
-                                  onCreateActivity={onAddActivity ? (data) => { onAddActivity(data); setMobileModule('none'); setActiveTab('planner'); } : undefined}
+                                  onCreateTicket={onCreateTicket ? (data) => {
+                                      // Pre-fill the create ticket form with customer data
+                                      setCreateTicketForm(prev => ({
+                                          ...prev,
+                                          customerName: data.customerName || '',
+                                          phone: data.phoneNumber || '',
+                                          locationUrl: data.locationUrl || '',
+                                          houseNumber: data.houseNumber || ''
+                                      }));
+                                      setTicketPhoneSearch(data.phoneNumber || '');
+                                      setTicketSelectedCustomer(customers?.find((c: any) => c.id === data.customerId) || null);
+                                      setShowCreateTicket(true);
+                                  } : undefined}
+                                  onCreateActivity={onAddActivity ? (data) => {
+                                      // Pre-fill and create activity directly
+                                      onAddActivity({
+                                          ...data,
+                                          type: data.type || 'Installation',
+                                          priority: data.priority || 'MEDIUM',
+                                          status: 'PLANNED',
+                                          plannedDate: new Date().toISOString(),
+                                          leadTechId: currentUserId,
+                                      });
+                                      setMobileModule('none');
+                                      setActiveTab('planner');
+                                  } : undefined}
                               />
                           </div>
                       )}
@@ -1722,107 +1746,146 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 </div>
             )}
 {/* --- Activity Detail Bottom Sheet --- */}
-{viewActivity && (
-    <div
-        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end"
-        onClick={() => setViewActivity(null)}
-    >
-        <div
-            className="bg-white w-full max-w-lg rounded-t-[2rem] shadow-2xl h-[70vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
-            onClick={e => e.stopPropagation()}
-        >
-            {/* Drag Handle */}
-            <div className="h-6 w-full flex justify-center items-center shrink-0">
-                <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-5">
+{viewActivity && (() => {
+    const act = viewActivity as any;
+    const actCust = customers?.find((c: any) => c.id === act.customerId);
+    const leadTech = technicians.find(t => t.id === act.leadTechId);
+    const salesLead = technicians.find(t => t.id === act.salesLeadId);
+    const supportEngineers = (act.assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
+    const actStatus = act.status || 'PLANNED';
+    return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end" onClick={() => setViewActivity(null)}>
+        <div className="bg-white w-full max-w-lg rounded-t-[2rem] shadow-2xl h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+            <div className="h-6 w-full flex justify-center items-center shrink-0"><div className="w-12 h-1.5 bg-slate-200 rounded-full" /></div>
+            <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4">
+                {/* Header */}
                 <div>
                     <div className="flex items-center gap-2 mb-2">
-                        <span className="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            Activity • {((viewActivity as any).status === 'IN_PROGRESS') ? 'IN PROGRESS' : (viewActivity as any).status}
-                        </span>
-                        <span className="text-xs font-mono text-slate-400">#{(viewActivity as any).reference || (viewActivity as any).id}</span>
+                        <span className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${
+                            actStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
+                            actStatus === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                            actStatus === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                            actStatus === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                            'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                        }`}>{actStatus.replace(/_/g, ' ')}</span>
+                        <span className="text-xs font-mono text-slate-400">#{act.reference || act.id}</span>
                     </div>
-
-                    <h2 className="text-xl font-bold text-slate-900 leading-tight">{(viewActivity as any).type || "Activity"}</h2>
-                    {(viewActivity as any).plannedDate && (
-                        <p className="text-xs text-slate-500 mt-1">
-                            Planned {new Date((viewActivity as any).plannedDate).toLocaleDateString()} •{" "}
-                            {new Date((viewActivity as any).plannedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                    )}
+                    <h2 className="text-xl font-bold text-slate-900">{act.type || 'Activity'}</h2>
+                    {act.serviceCategory && <p className="text-sm text-slate-500 mt-0.5">{act.serviceCategory}</p>}
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-sm text-slate-700">
-                    {(viewActivity as any).description || "No description"}
+                {/* Customer Card */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="font-bold text-slate-800">{actCust?.name || 'Unknown'}</div>
+                            {actCust?.phone && <div className="text-xs text-slate-500 mt-0.5">{actCust.phone}</div>}
+                        </div>
+                        {actCust?.phone && (
+                            <a href={`tel:${actCust.phone}`} className="p-2 bg-emerald-50 rounded-lg text-emerald-600 active:bg-emerald-100">
+                                <Phone size={18} />
+                            </a>
+                        )}
+                    </div>
                 </div>
+
+                {/* Location */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Location</div>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            {act.houseNumber && <div className="font-bold text-slate-800 text-sm">{act.houseNumber}</div>}
+                            {!act.houseNumber && !act.locationUrl && <div className="text-sm text-slate-400">Not set</div>}
+                        </div>
+                        {act.locationUrl && (
+                            <a href={act.locationUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 active:bg-blue-100">
+                                <MapPin size={12} /> Open Maps
+                            </a>
+                        )}
+                    </div>
+                </div>
+
+                {/* Job Details */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2.5">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Details</div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-400">Type</span><span className="font-semibold text-slate-700">{act.type}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-400">Priority</span><span className={`font-bold ${act.priority === 'URGENT' ? 'text-red-600' : act.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{act.priority}</span></div>
+                    {act.plannedDate && <div className="flex justify-between text-sm"><span className="text-slate-400">Planned</span><span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString()} {new Date(act.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
+                    {act.startedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Started</span><span className="font-semibold text-emerald-600">{new Date(act.startedAt).toLocaleDateString()} {new Date(act.startedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
+                    {act.completedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Completed</span><span className="font-semibold text-emerald-600">{new Date(act.completedAt).toLocaleDateString()} {new Date(act.completedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
+                </div>
+
+                {/* Team / Resources */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Team</div>
+                    <div className="space-y-2">
+                        {leadTech && <div className="flex items-center gap-2"><img src={leadTech.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/><div><div className="text-sm font-bold text-slate-800">{leadTech.name}</div><div className="text-[10px] text-slate-400">Lead Engineer</div></div></div>}
+                        {salesLead && <div className="flex items-center gap-2"><img src={salesLead.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/><div><div className="text-sm font-bold text-slate-800">{salesLead.name}</div><div className="text-[10px] text-slate-400">Sales Lead</div></div></div>}
+                        {supportEngineers.map((eng: any) => <div key={eng.id} className="flex items-center gap-2"><img src={eng.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/><div><div className="text-sm font-bold text-slate-800">{eng.name}</div><div className="text-[10px] text-slate-400">Support Engineer</div></div></div>)}
+                        {!leadTech && !salesLead && supportEngineers.length === 0 && <div className="text-sm text-slate-400">No team assigned</div>}
+                    </div>
+                </div>
+
+                {/* Description */}
+                {act.description && (
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Scope of Work</div>
+                        <p className="text-sm text-slate-700 leading-relaxed">{act.description}</p>
+                    </div>
+                )}
+
+                {/* Carry Forward Note */}
+                {act.carryForwardNote && (
+                    <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                        <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward Note</div>
+                        <p className="text-sm text-amber-800">{act.carryForwardNote}</p>
+                    </div>
+                )}
 
                 {/* Workflow Actions */}
                 {onUpdateActivity && (
-                    <div className="space-y-3">
-                        {(viewActivity as any).status === 'PLANNED' && (
-                            <button
-                                onClick={() => {
-                                    const a = viewActivity as any;
-                                    setModalActivity(a);
-                                    setDispatchPrimaryId(a.leadTechId || '');
-                                    setDispatchSupportIds(a.assistantTechIds || []);
-                                    setModalType('activity_dispatch');
-                                    setViewActivity(null);
-                                }}
-                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-700"
-                            >
+                    <div className="space-y-2">
+                        {actStatus === 'PLANNED' && (
+                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId(act.leadTechId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
                                 <Users size={18} /> Dispatch Team
                             </button>
                         )}
-
-                        {['ON_MY_WAY','ARRIVED'].includes((viewActivity as any).status) && (
-                            <button
-                                onClick={() => {
-                                    onUpdateActivity({
-                                        ...(viewActivity as any),
-                                        status: 'IN_PROGRESS',
-                                        updatedAt: new Date().toISOString()
-                                    });
-                                    setViewActivity(null);
-                                }}
-                                className="w-full bg-[#FCBF0A] text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-[#e5ad09]"
-                            >
-                                <Play size={18} fill="currentColor" /> Start Work
+                        {['ON_MY_WAY','ARRIVED'].includes(actStatus) && (
+                            <button onClick={() => { onUpdateActivity({ ...act, status: 'IN_PROGRESS', updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                                className="w-full bg-amber-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                <Play size={18}/> Start Work
                             </button>
                         )}
-
-                        {(viewActivity as any).status === 'IN_PROGRESS' && (
-                            <button
-                                onClick={() => {
-                                    onUpdateActivity({
-                                        ...(viewActivity as any),
-                                        status: 'DONE',
-                                        updatedAt: new Date().toISOString()
-                                    });
-                                    setViewActivity(null);
-                                }}
-                                className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700"
-                            >
-                                <CheckSquare size={18} /> Complete Work
+                        {actStatus === 'IN_PROGRESS' && (
+                            <div className="grid grid-cols-2 gap-2">
+                                <button onClick={() => { setModalActivity(act); setModalType('activity_job_carry'); setViewActivity(null); }}
+                                    className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
+                                    <History size={14}/> Carry Forward
+                                </button>
+                                <button onClick={() => { onUpdateActivity({ ...act, status: 'DONE', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                                    className="bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
+                                    <CheckSquare size={14}/> Complete
+                                </button>
+                            </div>
+                        )}
+                        {actStatus === 'CARRY_FORWARD' && (
+                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId(act.leadTechId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                                className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                <RotateCcw size={18} /> Reschedule
                             </button>
                         )}
                     </div>
                 )}
             </div>
-
             <div className="p-4 border-t border-slate-100 bg-white shrink-0 pb-safe">
-                <button
-                    onClick={() => setViewActivity(null)}
-                    className="w-full py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors"
-                >
-                    Close
-                </button>
+                <button onClick={() => setViewActivity(null)} className="w-full py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Close</button>
             </div>
         </div>
     </div>
-)}
+    );
+})()}
 
 
             {/* --- Technician Details Bottom Sheet --- */}
