@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -9,6 +9,7 @@ interface MobileTechPortalProps {
   tickets: Ticket[];
   activities?: Activity[]; // Now accepts activities
   customers?: any[]; // For activity customer name lookup
+  technicians?: any[]; // For current tech name/avatar
   currentTechId: string;
   onUpdateStatus: (ticketId: string, status: TicketStatus) => void;
   onUpdateActivity?: (activity: Activity) => void;
@@ -23,6 +24,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
     tickets, 
     activities = [], 
     customers = [],
+    technicians = [],
     currentTechId, 
     onUpdateStatus, 
     onUpdateActivity,
@@ -405,32 +407,57 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   });
 
-  // Generate date range for horizontal date picker (7 days back, 14 days forward)
+  // Current tech info
+  const currentTech = technicians.find((t: any) => t.id === currentTechId);
+
+  // Generate date range — 2 prev, today center, 2 next (5 total)
   const dateRange = useMemo(() => {
-      const dates: { key: string; day: string; weekday: string; isToday: boolean }[] = [];
+      const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
       const today = new Date();
-      for (let i = -7; i <= 14; i++) {
+      for (let i = -2; i <= 2; i++) {
           const d = new Date(today);
           d.setDate(today.getDate() + i);
           const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
           dates.push({
               key,
-              day: String(d.getDate()),
-              weekday: d.toLocaleDateString('en-US', { weekday: 'short' }),
+              day: String(d.getDate()).padStart(2, '0'),
+              weekday: d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
+              month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
               isToday: i === 0
           });
       }
       return dates;
   }, []);
 
-  // Jobs filtered by selected date (for Home tab)
+  // In-progress count for summary card
+  const inProgressJobs = myJobs.filter(j => {
+      const s = (j.data as any).status;
+      return ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(s);
+  });
+
+  // Jobs filtered by selected date
+  const todayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+  const isPastDate = selectedDate < todayKey;
+  const isFutureDate = selectedDate > todayKey;
+
+  // For past dates: show completed jobs from that day
+  // For today: show active jobs
+  // For future: show planned jobs
   const dateFilteredJobs = useMemo(() => {
+      if (isPastDate) {
+          // Show completed jobs from that date
+          return completedJobs.filter(item => {
+              const dt = new Date(item.sortDate);
+              const dKey = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+              return dKey === selectedDate;
+          }).map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false }));
+      }
       return myJobs.filter(j => {
           const jobDate = new Date(j.date);
           const jKey = `${jobDate.getFullYear()}-${String(jobDate.getMonth()+1).padStart(2,'0')}-${String(jobDate.getDate()).padStart(2,'0')}`;
           return jKey === selectedDate;
       });
-  }, [myJobs, selectedDate]);
+  }, [myJobs, completedJobs, selectedDate, isPastDate]);
 
   // Carry forward jobs
   const carryForwardJobs = useMemo(() => {
@@ -461,14 +488,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       return groups;
   }, [completedJobs]);
 
-  // Scroll date picker to center on mount
+  // Date ref (no scroll needed — only 5 dates)
   const dateScrollRef = React.useRef<HTMLDivElement>(null);
-  useEffect(() => {
-      if (dateScrollRef.current) {
-          const todayEl = dateScrollRef.current.querySelector('[data-today="true"]');
-          if (todayEl) todayEl.scrollIntoView({ inline: 'center', behavior: 'auto' });
-      }
-  }, [activeTab]);
 
   // Simplified container for mobile use (takes full height/width)
   const containerClasses = "w-full h-full bg-slate-100 flex flex-col";
@@ -575,7 +596,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
     <div className="h-full w-full bg-slate-100">
         <div className={containerClasses}>
             
-            {/* Header — only show when no job is selected */}
+            {/* Header with profile pic */}
             {!selectedJobId && !completionStep && (
                 <div className="bg-white border-b border-slate-200 px-4 pt-4 pb-3 flex items-center justify-between shrink-0 z-30 shadow-sm">
                     <div>
@@ -584,9 +605,18 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                         </h2>
                         <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">Field Engineer Portal</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
-                        <span className="text-[10px] font-medium text-emerald-600">ONLINE</span>
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
+                            <span className="text-[10px] font-medium text-emerald-600">ONLINE</span>
+                        </div>
+                        <div className="w-9 h-9 rounded-full ring-2 ring-amber-400 flex items-center justify-center overflow-hidden bg-amber-50">
+                            {currentTech?.avatar ? (
+                                <img src={currentTech.avatar} className="w-full h-full object-cover" alt="" />
+                            ) : (
+                                <span className="font-bold text-xs text-amber-700">{currentTech?.name?.split(' ').map((w: string) => w[0]).join('').slice(0,2) || 'FE'}</span>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -760,43 +790,75 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                 {!selectedJobId && !completionStep && (
                     <div className="h-full overflow-y-auto pb-24">
 
-                        {/* HOME TAB — Date selector + planned jobs */}
+                        {/* HOME TAB — Date selector + summary + jobs */}
                         {activeTab === 'home' && (
                             <div>
-                                {/* Horizontal Date Picker */}
-                                <div className="bg-white border-b border-slate-200 px-2 py-3 shadow-sm">
-                                    <div ref={dateScrollRef} className="flex gap-1.5 overflow-x-auto no-scrollbar px-2">
+                                {/* Date Picker — 5 days centered on today */}
+                                <div className="bg-white border-b border-slate-100 px-4 py-3">
+                                    <div ref={dateScrollRef} className="flex justify-between gap-2">
                                         {dateRange.map(d => (
                                             <button
                                                 key={d.key}
-                                                data-today={d.isToday ? "true" : undefined}
                                                 onClick={() => setSelectedDate(d.key)}
-                                                className={`flex flex-col items-center min-w-[44px] py-2 px-1.5 rounded-xl transition-all shrink-0 ${
+                                                className={`flex-1 flex flex-col items-center py-2.5 rounded-2xl transition-all ${
                                                     selectedDate === d.key 
-                                                        ? 'bg-slate-900 text-white shadow-lg' 
+                                                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105' 
                                                         : d.isToday 
-                                                            ? 'bg-amber-50 border border-amber-300 text-slate-900'
-                                                            : 'text-slate-500 hover:bg-slate-50'
+                                                            ? 'bg-blue-50 text-blue-700 border-2 border-blue-200'
+                                                            : 'bg-slate-50 text-slate-600'
                                                 }`}
                                             >
-                                                <span className="text-[9px] font-bold uppercase">{d.weekday}</span>
-                                                <span className="text-lg font-bold leading-tight">{d.day}</span>
+                                                <span className={`text-[9px] font-bold ${selectedDate === d.key ? 'text-blue-100' : 'text-slate-400'}`}>{d.weekday}</span>
+                                                <span className="text-xl font-bold leading-tight">{d.day}</span>
+                                                <span className={`text-[8px] font-bold ${selectedDate === d.key ? 'text-blue-200' : 'text-slate-400'}`}>{d.month}</span>
                                             </button>
                                         ))}
                                     </div>
                                 </div>
+
+                                {/* Summary Cards — Total Jobs + In Progress */}
+                                <div className="px-4 pt-3 pb-1">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
+                                            <div className="p-2 bg-blue-50 rounded-lg"><Briefcase size={18} className="text-blue-600" /></div>
+                                            <div>
+                                                <div className="text-xl font-bold text-slate-900">{dateFilteredJobs.length}</div>
+                                                <div className="text-[9px] font-bold text-slate-400 uppercase">{isPastDate ? 'Completed' : 'Total Jobs'}</div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
+                                            <div className="p-2 bg-amber-50 rounded-lg"><Clock size={18} className="text-amber-600" /></div>
+                                            <div>
+                                                <div className="text-xl font-bold text-amber-600">{inProgressJobs.length}</div>
+                                                <div className="text-[9px] font-bold text-slate-400 uppercase">In Progress</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* In Progress Section (only if there are in-progress jobs and viewing today) */}
+                                {!isPastDate && !isFutureDate && inProgressJobs.length > 0 && (
+                                    <div className="px-4 pt-3">
+                                        <div className="flex items-center justify-between px-1 mb-2">
+                                            <p className="text-xs font-bold text-amber-600 uppercase flex items-center gap-1"><Clock size={12} /> In Progress</p>
+                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{inProgressJobs.length}</span>
+                                        </div>
+                                        {inProgressJobs.map(item => renderJobCard(item))}
+                                    </div>
+                                )}
+
+                                {/* Scheduled / Completed jobs for selected date */}
                                 <div className="p-4 space-y-3">
                                     <div className="flex items-center justify-between px-1">
                                         <p className="text-xs font-bold text-slate-500 uppercase">
-                                            {selectedDate === dateRange.find(d => d.isToday)?.key ? "Today's Jobs" : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                                            {isPastDate ? 'Completed on this day' : selectedDate === todayKey ? "Today's Schedule" : 'Planned'}
                                         </p>
-                                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{dateFilteredJobs.length}</span>
+                                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{dateFilteredJobs.length}</span>
                                     </div>
                                     {dateFilteredJobs.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                                            <CheckCircle2 size={48} className="mb-3 text-slate-300"/>
-                                            <p className="font-medium">No jobs scheduled</p>
-                                            <p className="text-xs text-slate-400 mt-1">Select a different date above</p>
+                                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                            <CheckCircle2 size={40} className="mb-2 text-slate-300"/>
+                                            <p className="font-medium text-sm">{isPastDate ? 'No jobs on this date' : 'No jobs scheduled'}</p>
                                         </div>
                                     ) : dateFilteredJobs.map(item => renderJobCard(item))}
                                 </div>
@@ -868,9 +930,48 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             </div>
                         )}
 
-                        {/* MORE TAB */}
+                        {/* MORE TAB — Profile + sections like Lead Portal */}
                         {activeTab === 'more' && (
-                            <div className="p-4 space-y-4">
+                            <div className="p-4 space-y-5">
+                                {/* Profile Card */}
+                                <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                                    <div className="flex items-center gap-4">
+                                        <div className="relative">
+                                            {currentTech?.avatar ? (
+                                                <img src={currentTech.avatar} className="w-16 h-16 rounded-full object-cover ring-2 ring-amber-400" alt="" />
+                                            ) : (
+                                                <div className="w-16 h-16 rounded-full bg-amber-50 ring-2 ring-amber-400 flex items-center justify-center">
+                                                    <span className="font-bold text-lg text-amber-700">{currentTech?.name?.split(' ').map((w: string) => w[0]).join('').slice(0,2) || 'FE'}</span>
+                                                </div>
+                                            )}
+                                            <div className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-slate-900 font-bold text-lg">{currentTech?.name || 'Field Engineer'}</h3>
+                                            <p className="text-slate-500 text-sm">Field Engineer</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Summary */}
+                                <div>
+                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Summary</h4>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                                            <div className="text-xl font-bold text-amber-600">{myJobs.length}</div>
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Active</div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                                            <div className="text-xl font-bold text-orange-600">{carryForwardJobs.length}</div>
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Carry Fwd</div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
+                                            <div className="text-xl font-bold text-emerald-600">{completedJobs.length}</div>
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Done</div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* Account Section */}
                                 <div>
                                     <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Account</h4>
@@ -889,24 +990,6 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                 <span className="flex-1 text-left text-red-500 font-medium">Logout</span>
                                             </button>
                                         )}
-                                    </div>
-                                </div>
-                                {/* Stats summary */}
-                                <div>
-                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 px-1">Summary</h4>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
-                                            <div className="text-xl font-bold text-amber-600">{myJobs.length}</div>
-                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Active</div>
-                                        </div>
-                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
-                                            <div className="text-xl font-bold text-orange-600">{carryForwardJobs.length}</div>
-                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Carry Fwd</div>
-                                        </div>
-                                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm text-center">
-                                            <div className="text-xl font-bold text-emerald-600">{completedJobs.length}</div>
-                                            <div className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">Done</div>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
