@@ -929,6 +929,7 @@ useEffect(() => {
           tickets={tickets}
           activities={activities}
           customers={customers}
+          technicians={technicians}
           currentTechId={currentUser.techId || ''}
           onUpdateStatus={(tId, status, note) => {
             const t = tickets.find(x => x.id === tId);
