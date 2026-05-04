@@ -811,25 +811,18 @@ useEffect(() => {
     ]).catch(e => console.error("Initial data load failed:", e));
   }, [currentUser?.id || currentUser?.techId]);
 
+// Lead Portal data readiness — the initial useEffect above loads everything in parallel.
+// Mark ready once tickets (the primary data) are loaded.
 useEffect(() => {
     if (activeView !== 'lead_portal') return;
-
-    const prepareLeadPortal = async () => {
-        setPortalDataReady(false);
-        try {
-            await Promise.all([
-                loadUsers(), loadTickets(), loadActivities(),
-                loadCustomers(), loadTeams(), loadSites()
-            ]);
-        } catch (error) {
-            console.error('Failed to prepare Lead Portal data:', error);
-        } finally {
-            setPortalDataReady(true);
-        }
-    };
-
-    prepareLeadPortal();
-}, [activeView]);
+    if (tickets.length > 0 || activities.length > 0 || technicians.length > 0) {
+        setPortalDataReady(true);
+    } else {
+        // Data not loaded yet — set a timeout fallback so we don't block forever
+        const timer = setTimeout(() => setPortalDataReady(true), 3000);
+        return () => clearTimeout(timer);
+    }
+}, [activeView, tickets.length, activities.length, technicians.length]);
 
   // Auto-refresh — 15s for mobile portals, 30s for desktop
   useEffect(() => {
