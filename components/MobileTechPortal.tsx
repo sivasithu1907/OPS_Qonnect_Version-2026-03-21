@@ -847,20 +847,31 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                     </div>
                                 )}
 
-                                {/* Scheduled / Completed jobs for selected date */}
+                                {/* Scheduled / Completed jobs for selected date (exclude in-progress shown above) */}
                                 <div className="p-4 space-y-3">
-                                    <div className="flex items-center justify-between px-1">
-                                        <p className="text-xs font-bold text-slate-500 uppercase">
-                                            {isPastDate ? 'Completed on this day' : selectedDate === todayKey ? "Today's Schedule" : 'Planned'}
-                                        </p>
-                                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{dateFilteredJobs.length}</span>
-                                    </div>
-                                    {dateFilteredJobs.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                                            <CheckCircle2 size={40} className="mb-2 text-slate-300"/>
-                                            <p className="font-medium text-sm">{isPastDate ? 'No jobs on this date' : 'No jobs scheduled'}</p>
-                                        </div>
-                                    ) : dateFilteredJobs.map(item => renderJobCard(item))}
+                                    {(() => {
+                                        const inProgressIds = new Set(inProgressJobs.map(j => j.data.id));
+                                        const showingInProgress = !isPastDate && !isFutureDate && inProgressJobs.length > 0;
+                                        const scheduleJobs = showingInProgress 
+                                            ? dateFilteredJobs.filter(j => !inProgressIds.has(j.data.id))
+                                            : dateFilteredJobs;
+                                        return (
+                                            <>
+                                                <div className="flex items-center justify-between px-1">
+                                                    <p className="text-xs font-bold text-slate-500 uppercase">
+                                                        {isPastDate ? 'Completed on this day' : selectedDate === todayKey ? "Today's Schedule" : 'Planned'}
+                                                    </p>
+                                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{scheduleJobs.length}</span>
+                                                </div>
+                                                {scheduleJobs.length === 0 ? (
+                                                    <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                                        <CheckCircle2 size={40} className="mb-2 text-slate-300"/>
+                                                        <p className="font-medium text-sm">{isPastDate ? 'No jobs on this date' : showingInProgress ? 'All jobs are in progress' : 'No jobs scheduled'}</p>
+                                                    </div>
+                                                ) : scheduleJobs.map(item => renderJobCard(item))}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
