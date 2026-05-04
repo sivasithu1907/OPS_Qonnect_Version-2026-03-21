@@ -354,26 +354,35 @@ const handleLogout = () => {
   };
 
   const handleCreateTicket = async (data: any) => {
+    const newId = generateTicketId();
+    const now = new Date().toISOString();
+    const optimistic: Ticket = {
+      ...data, id: newId, status: TicketStatus.NEW,
+      createdAt: now, updatedAt: now, messages: [],
+      priority: data.priority || Priority.MEDIUM,
+      unreadCount: 0
+    };
+    // Optimistic: show immediately
+    setTickets(prev => [optimistic, ...prev]);
     try {
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          ...data,
-          id: generateTicketId(),
-          status: TicketStatus.NEW,
-          createdAt: new Date().toISOString(),
-          messages: []
+          ...data, id: newId, status: TicketStatus.NEW,
+          createdAt: now, messages: []
         }),
       });
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(txt || "Ticket create failed");
       }
-
-      await loadTickets();
+      // Background sync to get server-generated fields
+      loadTickets();
     } catch (e) {
       console.error("Failed to create ticket:", e);
+      // Rollback optimistic update
+      setTickets(prev => prev.filter(t => t.id !== newId));
       alert("Failed to create ticket.");
     }
   };
@@ -430,17 +439,28 @@ const handleLogout = () => {
   // Activity Handlers (API-Connected)
   const handleAddActivity = async (act: any) => {
       const newId = generateActivityId();
-      const payload = { ...act, id: newId, reference: newId, status: act.status || 'PLANNED' };
+      const now = new Date().toISOString();
+      const payload = { ...act, id: newId, reference: newId, status: act.status || 'PLANNED', createdAt: now, updatedAt: now };
+      // Optimistic: show immediately
+      setActivities(prev => [payload as Activity, ...prev]);
       try {
           const res = await fetch("/api/activities", {
               method: "POST",
               headers: getAuthHeaders(),
               body: JSON.stringify(payload)
           });
-          if (res.ok) await loadActivities(); // Refresh from DB
-          // Sync location/building to customer if provided
+          if (!res.ok) {
+              // Rollback
+              setActivities(prev => prev.filter(a => a.id !== newId));
+          } else {
+              // Background sync
+              loadActivities();
+          }
           syncActivityLocationToCustomer(act);
-      } catch (e) { console.error("Failed to add activity", e); }
+      } catch (e) {
+          console.error("Failed to add activity", e);
+          setActivities(prev => prev.filter(a => a.id !== newId));
+      }
   };
 
   const handleUpdateActivity = async (updated: Activity) => {
@@ -450,8 +470,7 @@ const handleLogout = () => {
               headers: getAuthHeaders(),
               body: JSON.stringify(updated)
           });
-          if (res.ok) await loadActivities(); // Refresh from DB
-          // Sync location/building to customer if provided
+          if (res.ok) loadActivities(); // Background refresh from DB
           syncActivityLocationToCustomer(updated);
       } catch (e) { console.error("Failed to update activity", e); }
   };
@@ -784,14 +803,13 @@ const loadUsers = async () => {
   }, []);
   
 useEffect(() => {
-    if (!currentUser) return; // wait until logged in before fetching data
-    loadUsers();
-    loadCustomers();
-    loadTickets();
-    loadActivities();
-    loadTeams();
-    loadSites();
-  }, [currentUser?.id || currentUser?.techId]); // re-run when user logs in
+    if (!currentUser) return;
+    // Load ALL data in parallel — not sequentially
+    Promise.all([
+        loadUsers(), loadCustomers(), loadTickets(),
+        loadActivities(), loadTeams(), loadSites()
+    ]).catch(e => console.error("Initial data load failed:", e));
+  }, [currentUser?.id || currentUser?.techId]);
 
 useEffect(() => {
     if (activeView !== 'lead_portal') return;
@@ -800,9 +818,8 @@ useEffect(() => {
         setPortalDataReady(false);
         try {
             await Promise.all([
-                loadUsers(),
-                loadTickets(),
-                loadTeams(),
+                loadUsers(), loadTickets(), loadActivities(),
+                loadCustomers(), loadTeams(), loadSites()
             ]);
         } catch (error) {
             console.error('Failed to prepare Lead Portal data:', error);
@@ -814,20 +831,23 @@ useEffect(() => {
     prepareLeadPortal();
 }, [activeView]);
 
-  // Auto-refresh every 60s — gentle refresh that won't disrupt active editing
+  // Auto-refresh — 15s for mobile portals, 30s for desktop
   useEffect(() => {
+    if (!currentUser) return;
     let isRefreshing = false;
+    const isMobilePortal = activeView === 'lead_portal' || activeView === 'tech_portal';
+    const refreshMs = isMobilePortal ? 15000 : 30000;
     const interval = setInterval(async () => {
-      if (isRefreshing) return;
+      if (isRefreshing || document.hidden) return; // skip if tab is hidden
       isRefreshing = true;
       try {
-        await Promise.all([loadTickets(), loadActivities()]);
+        await Promise.all([loadTickets(), loadActivities(), loadCustomers()]);
       } finally {
         isRefreshing = false;
       }
-    }, 60000);
+    }, refreshMs);
     return () => clearInterval(interval);
-  }, [activeView]);
+  }, [activeView, currentUser]);
   
   // --- Navigation Logic ---
   const filteredNavItems = useMemo(() => {
@@ -1318,6 +1338,8 @@ useEffect(() => {
                         sites={sites}
                         onSaveCustomer={handleUpdateCustomer}
                         onDeleteCustomer={handleDeleteCustomer}
+                        onCreateTicket={(data) => { handleCreateTicket(data); setActiveView('tickets'); }}
+                        onCreateActivity={(data) => { handleAddActivity(data); setActiveView('planning'); }}
                     />
                 )}
                 {activeView === 'reports' && (
