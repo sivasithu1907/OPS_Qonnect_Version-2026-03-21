@@ -395,7 +395,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   }
 
   // Simplified container for mobile use (takes full height/width)
-  const containerClasses = "w-full h-full bg-slate-900 flex flex-col";
+  // Container class defined below in render section
 
   // --- 4-Tab navigation state ---
   const [activeTab, setActiveTab] = useState<'home' | 'carry' | 'history' | 'more'>('home');
