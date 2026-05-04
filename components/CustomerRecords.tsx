@@ -14,6 +14,8 @@ interface CustomerRecordsProps {
   onDeleteCustomer: (id: string) => void;
   readOnly?: boolean;
   isMobile?: boolean;
+  onCreateTicket?: (data: any) => void;
+  onCreateActivity?: (data: any) => void;
 }
 
 const CustomerRecords: React.FC<CustomerRecordsProps> = ({ 
@@ -25,7 +27,9 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
     onSaveCustomer,
     onDeleteCustomer,
     readOnly = false,
-    isMobile = false
+    isMobile = false,
+    onCreateTicket,
+    onCreateActivity
 }) => {
   const showPhotoLightbox = (src: string) => {
     const overlay = document.createElement('div');
@@ -718,6 +722,40 @@ onSaveCustomer(data as Customer);
 
                     {/* Right: History Panel */}
                     <div className="w-full md:w-2/3 p-8 flex flex-col bg-white overflow-hidden">
+                        {/* Quick Create Actions */}
+                        {(onCreateTicket || onCreateActivity) && (
+                            <div className="flex gap-2 mb-4">
+                                {onCreateTicket && (
+                                    <button onClick={() => {
+                                        onCreateTicket({
+                                            customerId: activeItem.id,
+                                            customerName: activeItem.name,
+                                            phoneNumber: activeItem.phone,
+                                            locationUrl: activeItem.address || '',
+                                            houseNumber: (activeItem as any).buildingNumber || ''
+                                        });
+                                        setModalState({ open: false, mode: 'view', item: null });
+                                    }} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 font-bold text-sm hover:bg-amber-100 active:scale-[0.98] transition-all">
+                                        <TicketIcon size={16} />
+                                        Create Ticket
+                                    </button>
+                                )}
+                                {onCreateActivity && (
+                                    <button onClick={() => {
+                                        onCreateActivity({
+                                            customerId: activeItem.id,
+                                            locationUrl: activeItem.address || '',
+                                            houseNumber: (activeItem as any).buildingNumber || ''
+                                        });
+                                        setModalState({ open: false, mode: 'view', item: null });
+                                    }} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-700 font-bold text-sm hover:bg-indigo-100 active:scale-[0.98] transition-all">
+                                        <Calendar size={16} />
+                                        Create Activity
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
                         <h3 className="font-bold text-xl text-slate-800 mb-4 flex items-center gap-2">
                             <Clock size={20} className="text-slate-400"/>
                             Client History
