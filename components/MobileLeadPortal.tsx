@@ -1171,6 +1171,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   customers={customers} activities={activities} tickets={tickets} technicians={technicians} sites={sites}
                                   onSaveCustomer={onSaveCustomer!} onDeleteCustomer={onDeleteCustomer!} readOnly={true}
                                   isMobile={true}
+                                  onCreateTicket={onCreateTicket ? (data) => { onCreateTicket(data); setMobileModule('none'); } : undefined}
+                                  onCreateActivity={onAddActivity ? (data) => { onAddActivity(data); setMobileModule('none'); setActiveTab('planner'); } : undefined}
                               />
                           </div>
                       )}
