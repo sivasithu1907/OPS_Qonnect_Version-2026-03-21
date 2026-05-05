@@ -1333,7 +1333,7 @@ useEffect(() => {
                         onSaveCustomer={handleUpdateCustomer}
                         onDeleteCustomer={handleDeleteCustomer}
                         onCreateTicket={(data) => { handleCreateTicket(data); setActiveView('tickets'); }}
-                        onCreateActivity={(data) => { handleAddActivity(data); setActiveView('planning'); }}
+                        onCreateActivity={(data) => { handleAddActivity({ ...data, type: data.type || 'Installation', priority: data.priority || 'MEDIUM', status: 'PLANNED', plannedDate: data.plannedDate || new Date().toISOString(), leadTechId: currentUser?.techId || '' }); setActiveView('planning'); }}
                     />
                 )}
                 {activeView === 'reports' && (
