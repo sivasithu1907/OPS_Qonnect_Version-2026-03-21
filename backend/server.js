@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 
 dotenv.config();
 const app = express();
+app.use(compression()); // Gzip API responses
 const PORT = process.env.PORT || 8080;
 
 /* ---------- WhatsApp Send Helper ---------- */
