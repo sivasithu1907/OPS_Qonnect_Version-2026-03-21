@@ -1734,8 +1734,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     </p>
                                 </div>
 
-                                {/* Your Work Actions — full step-by-step workflow */}
-                                {viewTicket.assignedTechId === currentUserId && (
+                                {/* Your Work Actions — only for active jobs assigned to current user */}
+                                {viewTicket.assignedTechId === currentUserId && 
+                                 viewTicket.status !== TicketStatus.RESOLVED && 
+                                 viewTicket.status !== TicketStatus.CANCELLED && (
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
                                         <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
                                             <Briefcase size={14}/> Your Work Actions
