@@ -1550,7 +1550,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   }
                                   return <ActivityJobCard key={item.data.id} activity={item.data} />;
                               });
-                              });
                           })()}
                       </div>
                   </div>
