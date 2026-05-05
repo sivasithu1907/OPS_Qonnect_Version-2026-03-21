@@ -52,6 +52,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
+  const [showActOverride, setShowActOverride] = useState(false);
+  const [actOverrideTarget, setActOverrideTarget] = useState<Activity | null>(null);
+  const [actOverrideStatus, setActOverrideStatus] = useState('');
+  const [actOverrideStartedAt, setActOverrideStartedAt] = useState('');
+  const [actOverrideCompletedAt, setActOverrideCompletedAt] = useState('');
+  const [actOverrideNote, setActOverrideNote] = useState('');
   
   // Calendar week navigation state
   const [calendarWeekStart, setCalendarWeekStart] = useState<Date>(() => {
@@ -1368,6 +1374,65 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           </div>
         );
       })()}
+      {/* Admin Override Modal for Activities */}
+      {showActOverride && actOverrideTarget && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowActOverride(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-indigo-600 text-white">
+                      <h3 className="font-bold text-lg">Admin Override</h3>
+                      <p className="text-indigo-200 text-xs mt-0.5">Force status change with custom timestamps</p>
+                  </div>
+                  <div className="p-5 space-y-4">
+                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Activity</div>
+                          <div className="text-sm font-bold text-slate-900">{actOverrideTarget.reference || actOverrideTarget.id} — {actOverrideTarget.type}</div>
+                          <div className="text-xs text-slate-500">Current: {(actOverrideTarget.status || 'PLANNED').replace(/_/g,' ')}</div>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">New Status *</label>
+                          <select value={actOverrideStatus} onChange={e => setActOverrideStatus(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm">
+                              {['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE','CARRY_FORWARD','CANCELLED'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                          </select>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Started At</label>
+                          <input type="datetime-local" value={actOverrideStartedAt} onChange={e => setActOverrideStartedAt(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          <p className="text-[10px] text-slate-400 mt-0.5">When work actually started</p>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Completed At</label>
+                          <input type="datetime-local" value={actOverrideCompletedAt} onChange={e => setActOverrideCompletedAt(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          <p className="text-[10px] text-slate-400 mt-0.5">When the job was actually finished</p>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Admin Note</label>
+                          <textarea value={actOverrideNote} onChange={e => setActOverrideNote(e.target.value)} rows={2} placeholder="Reason for override..."
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                      </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex gap-3">
+                      <button onClick={() => setShowActOverride(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button onClick={() => {
+                          const updates: any = {
+                              ...actOverrideTarget,
+                              status: actOverrideStatus,
+                              updatedAt: new Date().toISOString()
+                          };
+                          if (actOverrideStartedAt) updates.startedAt = new Date(actOverrideStartedAt).toISOString();
+                          if (actOverrideCompletedAt) updates.completedAt = new Date(actOverrideCompletedAt).toISOString();
+                          if (actOverrideNote) updates.completionNote = (actOverrideTarget.completionNote ? actOverrideTarget.completionNote + '\n' : '') + '[Admin Override] ' + actOverrideNote;
+                          onUpdateActivity(updates);
+                          setShowActOverride(false);
+                          setViewingActivity(null);
+                      }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Apply Override</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };
