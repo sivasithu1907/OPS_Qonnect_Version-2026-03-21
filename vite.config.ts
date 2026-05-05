@@ -16,6 +16,24 @@ export default defineConfig(({ mode }) => {
         }
       },
       plugins: [react()],
+      build: {
+        // Chunk splitting — vendor libs separate from app code
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'vendor-react': ['react', 'react-dom'],
+              'vendor-charts': ['recharts'],
+              'vendor-icons': ['lucide-react'],
+            }
+          }
+        },
+        // Increase warning limit
+        chunkSizeWarningLimit: 1000,
+        // Minify aggressively
+        minify: 'esbuild',
+        // Source maps off in prod
+        sourcemap: false,
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
