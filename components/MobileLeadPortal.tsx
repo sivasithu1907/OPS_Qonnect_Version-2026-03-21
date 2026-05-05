@@ -281,23 +281,30 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const myJobsDateFiltered = useMemo(() => {
       const dateKey = myJobsDate;
       const matchDate = (iso: string) => {
+          if (!iso) return false;
           const dt = new Date(iso);
           return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}` === dateKey;
       };
       if (myJobsIsPast) {
-          // Past dates: only completed jobs
+          // Past dates: only completed jobs from that date
           return completedJobs.filter(item => matchDate(item.sortDate))
               .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
       }
-      // Today or future: active jobs + completed jobs from that date
-      const active = myJobs.filter(j => matchDate(j.date));
-      const doneToday = completedJobs.filter(item => matchDate(item.sortDate))
-          .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
-      // Dedupe by ID (in case an item appears in both)
-      const ids = new Set(active.map(j => j.data.id));
-      const merged = [...active, ...doneToday.filter(j => !ids.has(j.data.id))];
-      return merged;
-  }, [myJobs, completedJobs, myJobsDate, myJobsIsPast]);
+      if (dateKey === myJobsTodayKey) {
+          // TODAY: show ALL active jobs (no date filter) + today's completed jobs
+          const active = myJobs.map(j => ({ ...j, type: j.kind as any, date: j.sortDate, priority: (j.data as any).priority || 'MEDIUM', delayed: false }));
+          const doneToday = completedJobs.filter(item => matchDate(item.sortDate))
+              .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
+          const ids = new Set(active.map(j => j.data.id));
+          return [...active, ...doneToday.filter(j => !ids.has(j.data.id))];
+      }
+      // Future dates: filter by planned date
+      const active = myJobs.filter(j => {
+          const jDate = (j as any).sortDate || (j as any).date || '';
+          return matchDate(jDate);
+      });
+      return active;
+  }, [myJobs, completedJobs, myJobsDate, myJobsIsPast, myJobsTodayKey]);
   const myJobsInProgress = myJobs.filter(j => {
       const s = (j.data as any).status;
       return ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(s);
@@ -1232,17 +1239,21 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                       setShowCreateTicket(true);
                                   } : undefined}
                                   onCreateActivity={onAddActivity ? (data) => {
-                                      // Pre-fill and create activity directly
-                                      onAddActivity({
-                                          ...data,
-                                          type: data.type || 'Installation',
-                                          priority: data.priority || 'MEDIUM',
-                                          status: 'PLANNED',
-                                          plannedDate: new Date().toISOString(),
-                                          leadTechId: currentUserId,
-                                      });
+                                      // Pre-fill the create activity modal with this customer
+                                      const cust = customers?.find((c: any) => c.id === data.customerId);
+                                      if (cust) {
+                                          setActSelectedCustomer(cust);
+                                          setActCustSearch(cust.name);
+                                      }
+                                      setCreateActivityForm(prev => ({
+                                          ...prev,
+                                          customerId: data.customerId || '',
+                                          locationUrl: data.locationUrl || '',
+                                          houseNumber: data.houseNumber || ''
+                                      }));
+                                      // Close the clients module first, then show the activity modal
                                       setMobileModule('none');
-                                      setActiveTab('planner');
+                                      setTimeout(() => setShowCreateActivity(true), 100);
                                   } : undefined}
                               />
                           </div>
