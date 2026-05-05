@@ -444,19 +444,20 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // For today: show active jobs
   // For future: show planned jobs
   const dateFilteredJobs = useMemo(() => {
+      const matchDate = (iso: string) => {
+          const dt = new Date(iso);
+          return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}` === selectedDate;
+      };
       if (isPastDate) {
-          // Show completed jobs from that date
-          return completedJobs.filter(item => {
-              const dt = new Date(item.sortDate);
-              const dKey = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-              return dKey === selectedDate;
-          }).map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false }));
+          return completedJobs.filter(item => matchDate(item.sortDate))
+              .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false }));
       }
-      return myJobs.filter(j => {
-          const jobDate = new Date(j.date);
-          const jKey = `${jobDate.getFullYear()}-${String(jobDate.getMonth()+1).padStart(2,'0')}-${String(jobDate.getDate()).padStart(2,'0')}`;
-          return jKey === selectedDate;
-      });
+      // Today or future: active + completed from that date
+      const active = myJobs.filter(j => matchDate(j.date));
+      const doneOnDate = completedJobs.filter(item => matchDate(item.sortDate))
+          .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false }));
+      const ids = new Set(active.map(j => j.data.id));
+      return [...active, ...doneOnDate.filter(j => !ids.has(j.data.id))];
   }, [myJobs, completedJobs, selectedDate, isPastDate]);
 
   // Carry forward jobs
