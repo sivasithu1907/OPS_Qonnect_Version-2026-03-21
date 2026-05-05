@@ -728,7 +728,39 @@ const loadCustomers = async () => {
   }
 };
 
-const loadUsers = async () => {
+// FAST: Single-call init — replaces 6 separate API calls
+  const loadAllData = async () => {
+      try {
+          const res = await fetch("/api/init", { headers: getAuthHeaders() });
+          if (!res.ok) throw new Error('Init failed');
+          const data = await res.json();
+          setTechnicians(data.users);
+          setCustomers(data.customers);
+          setTickets(data.tickets);
+          setActivities(data.activities);
+          setTeams(data.teams);
+          setSites(data.sites);
+      } catch (e) {
+          console.error("Fast init failed, falling back to individual loads:", e);
+          await Promise.all([loadUsers(), loadCustomers(), loadTickets(), loadActivities(), loadTeams(), loadSites()]);
+      }
+  };
+
+  // FAST: Single-call refresh — replaces 3 separate API calls
+  const refreshData = async () => {
+      try {
+          const res = await fetch("/api/refresh", { headers: getAuthHeaders() });
+          if (!res.ok) throw new Error('Refresh failed');
+          const data = await res.json();
+          setTickets(data.tickets);
+          setActivities(data.activities);
+          setCustomers(data.customers);
+      } catch (e) {
+          console.error("Fast refresh failed:", e);
+      }
+  };
+
+  const loadUsers = async () => {
   try {
     const res = await fetch("/api/users", { headers: getAuthHeaders() });
     if (res.status === 401) { handleLogout(); return; }
@@ -804,11 +836,8 @@ const loadUsers = async () => {
   
 useEffect(() => {
     if (!currentUser) return;
-    // Load ALL data in parallel — not sequentially
-    Promise.all([
-        loadUsers(), loadCustomers(), loadTickets(),
-        loadActivities(), loadTeams(), loadSites()
-    ]).catch(e => console.error("Initial data load failed:", e));
+    // Single API call loads everything at once
+    loadAllData();
   }, [currentUser?.id || currentUser?.techId]);
 
 // Lead Portal data readiness — the initial useEffect above loads everything in parallel.
@@ -834,7 +863,7 @@ useEffect(() => {
       if (isRefreshing || document.hidden) return; // skip if tab is hidden
       isRefreshing = true;
       try {
-        await Promise.all([loadTickets(), loadActivities(), loadCustomers()]);
+        await refreshData();
       } finally {
         isRefreshing = false;
       }
