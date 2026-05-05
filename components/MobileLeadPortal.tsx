@@ -147,6 +147,41 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [nextDate, setNextDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showJobHistory, setShowJobHistory] = useState(false);
+  
+  // My Jobs date picker (TechPortal style)
+  const [myJobsDate, setMyJobsDate] = useState<string>(() => {
+      const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
+  const myJobsDateRange = useMemo(() => {
+      const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
+      const today = new Date();
+      for (let i = -2; i <= 2; i++) {
+          const d = new Date(today); d.setDate(today.getDate() + i);
+          const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          dates.push({ key, day: String(d.getDate()).padStart(2,'0'), weekday: d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase(), month: d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(), isToday: i===0 });
+      }
+      return dates;
+  }, []);
+  const myJobsTodayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+  const myJobsIsPast = myJobsDate < myJobsTodayKey;
+  const myJobsDateFiltered = useMemo(() => {
+      if (myJobsIsPast) {
+          return completedJobs.filter(item => {
+              const dt = new Date(item.sortDate);
+              const k = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+              return k === myJobsDate;
+          }).map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
+      }
+      return myJobs.filter(j => {
+          const jd = new Date(j.date);
+          const k = `${jd.getFullYear()}-${String(jd.getMonth()+1).padStart(2,'0')}-${String(jd.getDate()).padStart(2,'0')}`;
+          return k === myJobsDate;
+      });
+  }, [myJobs, completedJobs, myJobsDate, myJobsIsPast]);
+  const myJobsInProgress = myJobs.filter(j => {
+      const s = (j.data as any).status;
+      return ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(s);
+  });
   // Change password state
   const [showChangePwd, setShowChangePwd] = useState(false);
   const [cpForm, setCpForm] = useState({ current: '', next: '', confirm: '' });
@@ -1423,63 +1458,92 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               )}
               
               {activeTab === 'my_jobs' && (
-                  <div className="p-4 space-y-4">
-                      <div className="flex items-center justify-between mb-2 px-1">
-                          <h3 className="text-xs font-bold text-slate-500 uppercase">
-                              {showJobHistory ? 'Completed Jobs' : `My Active Jobs (${myJobs.length})`}
-                          </h3>
-                          <button
-                              onClick={() => setShowJobHistory(s => !s)}
-                              className={`text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${showJobHistory ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'}`}
-                          >
-                              {showJobHistory ? '← Active' : 'History'}
-                          </button>
+                  <div>
+                      {/* Date Picker — TechPortal style */}
+                      <div className="bg-white border-b border-slate-100 px-4 py-3">
+                          <div className="flex justify-between gap-2">
+                              {myJobsDateRange.map(d => (
+                                  <button key={d.key} onClick={() => setMyJobsDate(d.key)}
+                                      className={`flex-1 flex flex-col items-center py-2.5 rounded-2xl transition-all ${
+                                          myJobsDate === d.key ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105' :
+                                          d.isToday ? 'bg-blue-50 text-blue-700 border-2 border-blue-200' : 'bg-slate-50 text-slate-600'
+                                      }`}>
+                                      <span className={`text-[9px] font-bold ${myJobsDate === d.key ? 'text-blue-100' : 'text-slate-400'}`}>{d.weekday}</span>
+                                      <span className="text-xl font-bold leading-tight">{d.day}</span>
+                                      <span className={`text-[8px] font-bold ${myJobsDate === d.key ? 'text-blue-200' : 'text-slate-400'}`}>{d.month}</span>
+                                  </button>
+                              ))}
+                          </div>
                       </div>
 
-                      {/* Active jobs */}
-                      {!showJobHistory && myJobs.length === 0 && (
-                          <div className="flex flex-col items-center justify-center py-16 text-slate-500">
-                              <Briefcase size={48} className="text-slate-300 mb-3" />
-                              <p className="text-sm font-medium">No active jobs assigned to you</p>
-                              <p className="text-xs text-slate-600 mt-1">Jobs will appear here when dispatched</p>
+                      {/* Summary Cards */}
+                      <div className="px-4 pt-3 pb-1">
+                          <div className="grid grid-cols-2 gap-3">
+                              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
+                                  <div className="p-2 bg-blue-50 rounded-lg"><Briefcase size={18} className="text-blue-600" /></div>
+                                  <div><div className="text-xl font-bold text-slate-900">{myJobsDateFiltered.length}</div><div className="text-[9px] font-bold text-slate-400 uppercase">{myJobsIsPast ? 'Completed' : 'Total Jobs'}</div></div>
+                              </div>
+                              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
+                                  <div className="p-2 bg-amber-50 rounded-lg"><Clock size={18} className="text-amber-600" /></div>
+                                  <div><div className="text-xl font-bold text-amber-600">{myJobsInProgress.length}</div><div className="text-[9px] font-bold text-slate-400 uppercase">In Progress</div></div>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* In Progress Section (today only) */}
+                      {myJobsDate === myJobsTodayKey && myJobsInProgress.length > 0 && (
+                          <div className="px-4 pt-3">
+                              <div className="flex items-center justify-between px-1 mb-2">
+                                  <p className="text-xs font-bold text-amber-600 uppercase flex items-center gap-1"><Clock size={12} /> In Progress</p>
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{myJobsInProgress.length}</span>
+                              </div>
+                              {myJobsInProgress.map(item => {
+                                  if (item.kind === 'ticket') return <JobCard key={item.data.id} ticket={item.data} />;
+                                  return <ActivityJobCard key={item.data.id} activity={item.data} />;
+                              })}
                           </div>
                       )}
-                      {!showJobHistory && myJobs.map(item => {
-                          if (item.kind === 'ticket') return <JobCard key={item.data.id} ticket={item.data} />;
-                          return <ActivityJobCard key={item.data.id} activity={item.data} />;
-                      })}
 
-                      {/* History — completed & cancelled jobs */}
-                      {showJobHistory && completedJobs.length === 0 && (
-                          <p className="text-center text-slate-500 text-sm py-8">No completed jobs yet</p>
-                      )}
-                      {showJobHistory && completedJobs.map(item => {
-                          const isAct = item.kind === 'activity';
-                          const job = item.data as any;
-                          const label     = isAct ? (job.type || 'Activity') : (job.customerName || job.id);
-                          const sub       = isAct ? (job.serviceCategory || job.description?.substring(0,40) || '') : (job.category || '');
-                          const statusVal = job.status || '';
-                          const dt        = new Date(item.sortDate || job.updatedAt || job.createdAt);
-                          return (
-                              <div key={job.id}
-                                  onClick={() => isAct
-                                      ? setViewJob({ type: 'activity', data: job })
-                                      : setViewTicket(job)}
-                                  className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-3 cursor-pointer hover:bg-slate-50 active:scale-[0.99] transition-transform">
-                                  <div className="flex justify-between items-start mb-1">
-                                      <div>
-                                          <div className="text-[10px] font-bold text-slate-500 mb-0.5">{job.reference || job.id}</div>
-                                          <span className="font-bold text-slate-800">{label}</span>
-                                      </div>
-                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${statusVal === 'RESOLVED' || statusVal === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
-                                          {statusVal.replace(/_/g,' ')}
-                                      </span>
+                      {/* Jobs for selected date */}
+                      <div className="p-4 space-y-3">
+                          <div className="flex items-center justify-between px-1">
+                              <p className="text-xs font-bold text-slate-500 uppercase">
+                                  {myJobsIsPast ? 'Completed on this day' : myJobsDate === myJobsTodayKey ? "Today's Schedule" : 'Planned'}
+                              </p>
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                                  {(() => {
+                                      const ipIds = new Set(myJobsInProgress.map(j => j.data.id));
+                                      const showing = myJobsDate === myJobsTodayKey ? myJobsDateFiltered.filter(j => !ipIds.has(j.data.id)) : myJobsDateFiltered;
+                                      return showing.length;
+                                  })()}
+                              </span>
+                          </div>
+                          {(() => {
+                              const ipIds = new Set(myJobsInProgress.map(j => j.data.id));
+                              const jobs = myJobsDate === myJobsTodayKey ? myJobsDateFiltered.filter(j => !ipIds.has(j.data.id)) : myJobsDateFiltered;
+                              return jobs.length === 0 ? (
+                                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                                      <Briefcase size={40} className="mb-2 text-slate-300" />
+                                      <p className="font-medium text-sm">{myJobsIsPast ? 'No jobs on this date' : myJobsDate === myJobsTodayKey && myJobsInProgress.length > 0 ? 'All jobs are in progress' : 'No jobs scheduled'}</p>
                                   </div>
-                                  {sub && <div className="text-xs text-slate-400 mb-1">{sub}</div>}
-                                  <div className="text-xs text-slate-500">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-                              </div>
-                          );
-                      })}
+                              ) : jobs.map(item => {
+                                  if ((item as any).kind === 'ticket' || item.type === 'ticket') {
+                                      const job = item.data;
+                                      return (
+                                          <div key={job.id} onClick={() => myJobsIsPast ? setViewTicket(job) : setViewTicket(job)}
+                                              className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-2 cursor-pointer active:scale-[0.99] transition-transform">
+                                              <div className="flex justify-between items-start mb-1">
+                                                  <div><div className="text-[10px] font-mono text-slate-400">{job.id}</div><div className="font-bold text-slate-800 text-sm">{job.customerName || job.category}</div></div>
+                                                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${getStatusColor(job.status)}`}>{job.status.replace(/_/g,' ')}</span>
+                                              </div>
+                                              {job.category && <div className="text-xs text-slate-500">{job.category}</div>}
+                                          </div>
+                                      );
+                                  }
+                                  return <ActivityJobCard key={item.data.id} activity={item.data} />;
+                              });
+                          })()}
+                      </div>
                   </div>
               )}
 
@@ -2031,6 +2095,36 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         })()}
                                     </div>
 
+                                    {/* Customer Contact Card */}
+                                    {(() => {
+                                        const custName = viewJob.type === 'ticket' ? viewJob.data.customerName : ((customers || []).find((c: any) => c.id === viewJob.data.customerId)?.name || 'Unknown');
+                                        const custPhone = viewJob.type === 'ticket' ? viewJob.data.phoneNumber : ((customers || []).find((c: any) => c.id === viewJob.data.customerId)?.phone || '');
+                                        const locUrl = viewJob.data.locationUrl;
+                                        const bldg = viewJob.data.houseNumber;
+                                        return (
+                                            <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+                                                <div className="p-4">
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
+                                                    <div className="font-bold text-slate-900">{custName}</div>
+                                                    {custPhone && <div className="text-xs text-slate-500 mt-0.5">{custPhone}</div>}
+                                                    {bldg && <div className="text-xs text-slate-500 mt-0.5">{bldg}</div>}
+                                                </div>
+                                                <div className="flex border-t border-slate-100 divide-x divide-slate-100">
+                                                    {custPhone && (
+                                                        <a href={`tel:${custPhone}`} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-emerald-600 active:bg-emerald-50 text-xs font-bold">
+                                                            <Phone size={14} /> Call
+                                                        </a>
+                                                    )}
+                                                    {locUrl && (
+                                                        <a href={locUrl} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-blue-600 active:bg-blue-50 text-xs font-bold">
+                                                            <MapPin size={14} /> Open Maps
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
                                     {/* Description */}
                                     <div className="bg-white rounded-xl p-4 border border-slate-100">
                                         <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
@@ -2071,11 +2165,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                                         {/* Location */}
                                         {(viewJob.data.houseNumber || viewJob.data.locationUrl) && (
-                                            <div className="flex justify-between text-sm">
+                                            <div className="flex justify-between items-center text-sm">
                                                 <span className="text-slate-400 font-medium">Location</span>
-                                                <span className="font-semibold text-slate-700 text-right max-w-[55%] truncate">
-                                                    {viewJob.data.houseNumber || viewJob.data.locationUrl}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    {viewJob.data.houseNumber && <span className="font-semibold text-slate-700">{viewJob.data.houseNumber}</span>}
+                                                    {viewJob.data.locationUrl && (
+                                                        <a href={viewJob.data.locationUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                                                            className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                                            Map →
+                                                        </a>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
 
@@ -2254,7 +2354,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 </button>
                                             )}
                                             {viewJob.data.status === 'ARRIVED' && (
-                                                <button onClick={() => { handleTicketOnMyWay(viewJob.data); setViewJob(null); }}
+                                                <button onClick={() => { handleTicketStartWork(viewJob.data); setViewJob(null); }}
                                                     className="w-full bg-amber-500 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
                                                     ▶ Start Work
                                                 </button>
@@ -2276,7 +2376,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     {/* Activity Work Actions — full 5-step flow */}
                                     {viewJob.type === 'activity' && (
                                         <div className="space-y-2 pb-4">
-                                            {(viewJob.data.status === 'PLANNED') && (
+                                            {(viewJob.data.status === 'PLANNED' || viewJob.data.status === 'CARRY_FORWARD') && (
                                                 <button onClick={() => {
                                                     const a = viewJob.data;
                                                     setModalActivity(a);
@@ -2285,8 +2385,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                     setModalType('activity_dispatch');
                                                     setViewJob(null);
                                                 }}
-                                                    className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
-                                                    <Users size={18} /> Dispatch Team
+                                                    className={`w-full text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm ${viewJob.data.status === 'CARRY_FORWARD' ? 'bg-orange-500' : 'bg-blue-600'}`}>
+                                                    {viewJob.data.status === 'CARRY_FORWARD' ? <><RotateCcw size={18} /> Reschedule</> : <><Users size={18} /> Dispatch Team</>}
                                                 </button>
                                             )}
                                             {(viewJob.data.status as any) === 'ON_MY_WAY' && (
