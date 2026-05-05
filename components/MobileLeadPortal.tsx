@@ -1546,19 +1546,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   </div>
                               ) : jobs.map(item => {
                                   if ((item as any).kind === 'ticket' || item.type === 'ticket') {
-                                      const job = item.data;
-                                      return (
-                                          <div key={job.id} onClick={() => myJobsIsPast ? setViewTicket(job) : setViewTicket(job)}
-                                              className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-2 cursor-pointer active:scale-[0.99] transition-transform">
-                                              <div className="flex justify-between items-start mb-1">
-                                                  <div><div className="text-[10px] font-mono text-slate-400">{job.id}</div><div className="font-bold text-slate-800 text-sm">{job.customerName || job.category}</div></div>
-                                                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${getStatusColor(job.status)}`}>{job.status.replace(/_/g,' ')}</span>
-                                              </div>
-                                              {job.category && <div className="text-xs text-slate-500">{job.category}</div>}
-                                          </div>
-                                      );
+                                      return <JobCard key={item.data.id} ticket={item.data as Ticket} />;
                                   }
                                   return <ActivityJobCard key={item.data.id} activity={item.data} />;
+                              });
                               });
                           })()}
                       </div>
