@@ -13,51 +13,6 @@ const app = express();
 app.use(compression()); // Gzip API responses
 const PORT = process.env.PORT || 8080;
 
-
-/* ---------- COMBINED INIT ENDPOINT — single call replaces 6 ---------- */
-app.get("/api/init", authenticate, async (req, res) => {
-    try {
-        const [ticketsR, activitiesR, usersR, customersR, teamsR, sitesR] = await Promise.all([
-            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500"),
-            pool.query("SELECT id, name, email, role AS system_role, phone, avatar, is_active, job_role, level FROM users ORDER BY name"),
-            pool.query("SELECT * FROM customers ORDER BY name LIMIT 200"),
-            pool.query("SELECT * FROM teams ORDER BY name"),
-            pool.query("SELECT * FROM sites ORDER BY name")
-        ]);
-        res.json({
-            tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(r => ({ ...r, visitHistory: r.visit_history })),
-            users: usersR.rows.map(u => ({ ...u, systemRole: u.system_role, isActive: u.is_active, jobRole: u.job_role, avatar: u.avatar || null })),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
-            teams: teamsR.rows.map(r => ({ ...r, leadId: r.lead_id, memberIds: r.member_ids })),
-            sites: sitesR.rows.map(r => ({ ...r, clientName: r.client_name, assignedTeamId: r.assigned_team_id }))
-        });
-    } catch (e) {
-        console.error("Init fetch error:", e);
-        res.status(500).json({ error: "Failed to load initial data" });
-    }
-});
-
-/* ---------- COMBINED REFRESH — just tickets + activities + customers ---------- */
-app.get("/api/refresh", authenticate, async (req, res) => {
-    try {
-        const [ticketsR, activitiesR, customersR] = await Promise.all([
-            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500"),
-            pool.query("SELECT * FROM customers ORDER BY name LIMIT 200")
-        ]);
-        res.json({
-            tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(r => ({ ...r, visitHistory: r.visit_history })),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
-        });
-    } catch (e) {
-        console.error("Refresh error:", e);
-        res.status(500).json({ error: "Failed to refresh data" });
-    }
-});
-
 /* ---------- WhatsApp Send Helper ---------- */
 async function sendWhatsAppText(to, bodyText) {
   if (!process.env.WA_ACCESS_TOKEN || !process.env.WA_PHONE_NUMBER_ID) {
@@ -658,6 +613,51 @@ function mapTicket(r) {
 }
 
 // 1. Get all tickets from DB
+
+/* ---------- COMBINED INIT ENDPOINT — single call replaces 6 ---------- */
+app.get("/api/init", authenticate, async (req, res) => {
+    try {
+        const [ticketsR, activitiesR, usersR, customersR, teamsR, sitesR] = await Promise.all([
+            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500"),
+            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500"),
+            pool.query("SELECT id, name, email, role AS system_role, phone, avatar, is_active, job_role, level FROM users ORDER BY name"),
+            pool.query("SELECT * FROM customers ORDER BY name LIMIT 200"),
+            pool.query("SELECT * FROM teams ORDER BY name"),
+            pool.query("SELECT * FROM sites ORDER BY name")
+        ]);
+        res.json({
+            tickets: ticketsR.rows.map(mapTicket),
+            activities: activitiesR.rows.map(r => ({ ...r, visitHistory: r.visit_history })),
+            users: usersR.rows.map(u => ({ ...u, systemRole: u.system_role, isActive: u.is_active, jobRole: u.job_role, avatar: u.avatar || null })),
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
+            teams: teamsR.rows.map(r => ({ ...r, leadId: r.lead_id, memberIds: r.member_ids })),
+            sites: sitesR.rows.map(r => ({ ...r, clientName: r.client_name, assignedTeamId: r.assigned_team_id }))
+        });
+    } catch (e) {
+        console.error("Init fetch error:", e);
+        res.status(500).json({ error: "Failed to load initial data" });
+    }
+});
+
+/* ---------- COMBINED REFRESH — just tickets + activities + customers ---------- */
+app.get("/api/refresh", authenticate, async (req, res) => {
+    try {
+        const [ticketsR, activitiesR, customersR] = await Promise.all([
+            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500"),
+            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500"),
+            pool.query("SELECT * FROM customers ORDER BY name LIMIT 200")
+        ]);
+        res.json({
+            tickets: ticketsR.rows.map(mapTicket),
+            activities: activitiesR.rows.map(r => ({ ...r, visitHistory: r.visit_history })),
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
+        });
+    } catch (e) {
+        console.error("Refresh error:", e);
+        res.status(500).json({ error: "Failed to refresh data" });
+    }
+});
+
 app.get("/api/tickets", authenticate, async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500");
