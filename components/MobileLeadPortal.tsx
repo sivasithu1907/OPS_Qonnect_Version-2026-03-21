@@ -147,41 +147,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [nextDate, setNextDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showJobHistory, setShowJobHistory] = useState(false);
-  
-  // My Jobs date picker (TechPortal style)
-  const [myJobsDate, setMyJobsDate] = useState<string>(() => {
-      const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  });
-  const myJobsDateRange = useMemo(() => {
-      const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
-      const today = new Date();
-      for (let i = -2; i <= 2; i++) {
-          const d = new Date(today); d.setDate(today.getDate() + i);
-          const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          dates.push({ key, day: String(d.getDate()).padStart(2,'0'), weekday: d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase(), month: d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(), isToday: i===0 });
-      }
-      return dates;
-  }, []);
-  const myJobsTodayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
-  const myJobsIsPast = myJobsDate < myJobsTodayKey;
-  const myJobsDateFiltered = useMemo(() => {
-      if (myJobsIsPast) {
-          return completedJobs.filter(item => {
-              const dt = new Date(item.sortDate);
-              const k = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-              return k === myJobsDate;
-          }).map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
-      }
-      return myJobs.filter(j => {
-          const jd = new Date(j.date);
-          const k = `${jd.getFullYear()}-${String(jd.getMonth()+1).padStart(2,'0')}-${String(jd.getDate()).padStart(2,'0')}`;
-          return k === myJobsDate;
-      });
-  }, [myJobs, completedJobs, myJobsDate, myJobsIsPast]);
-  const myJobsInProgress = myJobs.filter(j => {
-      const s = (j.data as any).status;
-      return ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(s);
-  });
+
   // Change password state
   const [showChangePwd, setShowChangePwd] = useState(false);
   const [cpForm, setCpForm] = useState({ current: '', next: '', confirm: '' });
@@ -295,6 +261,41 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           (a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime()
       );
   }, [tickets, activities, currentUserId]);
+
+  // My Jobs date picker (TechPortal style)
+  const [myJobsDate, setMyJobsDate] = useState<string>(() => {
+      const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
+  const myJobsDateRange = useMemo(() => {
+      const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
+      const today = new Date();
+      for (let i = -2; i <= 2; i++) {
+          const d = new Date(today); d.setDate(today.getDate() + i);
+          const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          dates.push({ key, day: String(d.getDate()).padStart(2,'0'), weekday: d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase(), month: d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(), isToday: i===0 });
+      }
+      return dates;
+  }, []);
+  const myJobsTodayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+  const myJobsIsPast = myJobsDate < myJobsTodayKey;
+  const myJobsDateFiltered = useMemo(() => {
+      if (myJobsIsPast) {
+          return completedJobs.filter(item => {
+              const dt = new Date(item.sortDate);
+              const k = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+              return k === myJobsDate;
+          }).map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
+      }
+      return myJobs.filter(j => {
+          const jd = new Date(j.date);
+          const k = `${jd.getFullYear()}-${String(jd.getMonth()+1).padStart(2,'0')}-${String(jd.getDate()).padStart(2,'0')}`;
+          return k === myJobsDate;
+      });
+  }, [myJobs, completedJobs, myJobsDate, myJobsIsPast]);
+  const myJobsInProgress = myJobs.filter(j => {
+      const s = (j.data as any).status;
+      return ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(s);
+  });
 
   const newTickets = visibleTickets.filter(t => t.status === TicketStatus.NEW);
   const activeOps = visibleTickets.filter(t => 
