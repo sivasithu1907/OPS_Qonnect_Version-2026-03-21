@@ -2472,7 +2472,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     </div>
                                     <button onClick={() => setViewTech(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 bg-white/10 rounded-full backdrop-blur-sm"><X size={20}/></button>
                                 </div>
-                                <div className="flex-1 overflow-y-auto bg-white p-4">
+                                <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
                                     {(() => {
                                     const jobs = getTechJobs(viewTech.id).all;
 
@@ -2484,44 +2484,92 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         );
                                     }
 
-                                    return (
-                                        <div className="space-y-3">
-                                        {jobs.map((j, idx) => {
-                                            const status = j.type === 'ticket' ? j.data.status : j.data.status;
-                                            const ref = j.type === 'ticket' ? `#${j.data.id}` : (j.data.reference || j.data.id);
-                                            const title = j.type === 'ticket' ? j.data.category : (j.data.type || 'Activity');
-                                            
-                                            // Fix for siteName error
-                                            let sub = '';
-                                            if (j.type === 'ticket') {
-                                                sub = j.data.customerName || '';
-                                            } else {
-                                                // Activity
-                                                const act = j.data as Activity;
-                                                const site = sites.find(s => s.id === act.siteId);
-                                                // Fallback to customer name if site not found (since activities can be linked to customers now)
-                                                const customer = customers.find(c => c.id === act.customerId);
-                                                sub = site?.name || customer?.name || act.siteId || '';
-                                            }
+                                    // Group by status sections
+                                    const inProgress = jobs.filter(j => ['IN_PROGRESS','ON_MY_WAY','ARRIVED','STARTED'].includes(j.data.status));
+                                    const planned = jobs.filter(j => ['PLANNED','NEW','OPEN','ASSIGNED'].includes(j.data.status));
+                                    const carryFwd = jobs.filter(j => j.data.status === 'CARRY_FORWARD');
+                                    const done = jobs.filter(j => ['DONE','RESOLVED'].includes(j.data.status));
+                                    const other = jobs.filter(j => !inProgress.includes(j) && !planned.includes(j) && !carryFwd.includes(j) && !done.includes(j));
 
-                                            return (
+                                    const sections = [
+                                        { label: 'In Progress', items: inProgress, color: 'amber', icon: '🔄', emptyHide: true },
+                                        { label: 'Planned', items: planned, color: 'blue', icon: '📋', emptyHide: true },
+                                        { label: 'Carry Forward', items: carryFwd, color: 'orange', icon: '⟲', emptyHide: true },
+                                        { label: 'Completed', items: done, color: 'emerald', icon: '✅', emptyHide: true },
+                                        ...(other.length > 0 ? [{ label: 'Other', items: other, color: 'slate', icon: '📌', emptyHide: false }] : [])
+                                    ].filter(s => !s.emptyHide || s.items.length > 0);
+
+                                    const renderJobItem = (j: any, idx: number) => {
+                                        const status = j.data.status;
+                                        const ref = j.type === 'ticket' ? `#${j.data.id}` : (j.data.reference || j.data.id);
+                                        const title = j.type === 'ticket' ? j.data.category : (j.data.type || 'Activity');
+                                        const custName = j.type === 'ticket' ? j.data.customerName : ((customers || []).find((c: any) => c.id === j.data.customerId)?.name || '');
+                                        const custPhone = j.type === 'ticket' ? j.data.phoneNumber : ((customers || []).find((c: any) => c.id === j.data.customerId)?.phone || '');
+                                        const loc = j.data.houseNumber || '';
+                                        const priority = j.data.priority;
+
+                                        return (
                                             <div
                                                 key={`${j.type}-${ref}-${idx}`}
                                                 onClick={() => setViewJob(j)}
-                                                className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm active:scale-[0.98] transition-transform cursor-pointer"
+                                                className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm active:scale-[0.98] transition-transform cursor-pointer"
                                             >
-                                                <div className="flex items-center justify-between mb-2">
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(status)}`}>
-                                                    {String(status).replace('_', ' ')}
-                                                </span>
-                                                <span className="text-xs font-mono text-slate-400">{ref}</span>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(status)}`}>
+                                                        {String(status).replace(/_/g, ' ')}
+                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        {priority && (
+                                                            <span className={`text-[9px] font-bold ${priority === 'URGENT' ? 'text-red-600' : priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'}`}>
+                                                                {priority}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[10px] font-mono text-slate-400">{ref}</span>
+                                                    </div>
                                                 </div>
-
-                                                <div className="font-bold text-slate-800">{title}</div>
-                                                {sub ? <div className="text-xs text-slate-500 mt-1 truncate">{sub}</div> : null}
+                                                <div className="font-bold text-slate-800 text-sm">{title}</div>
+                                                {custName && (
+                                                    <div className="flex items-center justify-between mt-1.5">
+                                                        <div className="text-xs text-slate-500 flex items-center gap-1">
+                                                            <Users size={11} className="text-slate-400"/> {custName}
+                                                        </div>
+                                                        {custPhone && (
+                                                            <a href={`tel:${custPhone}`} onClick={e => e.stopPropagation()}
+                                                                className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 flex items-center gap-0.5">
+                                                                <Phone size={10}/> Call
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {loc && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><MapPin size={10}/> {loc}</div>}
                                             </div>
-                                            );
-                                        })}
+                                        );
+                                    };
+
+                                    return (
+                                        <div className="space-y-5">
+                                            {/* Summary pills */}
+                                            <div className="flex gap-2 flex-wrap">
+                                                {inProgress.length > 0 && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700">{inProgress.length} In Progress</div>}
+                                                {planned.length > 0 && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-[10px] font-bold text-blue-700">{planned.length} Planned</div>}
+                                                {carryFwd.length > 0 && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-full text-[10px] font-bold text-orange-700">{carryFwd.length} Carry Fwd</div>}
+                                                {done.length > 0 && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-[10px] font-bold text-emerald-700">{done.length} Done</div>}
+                                            </div>
+
+                                            {/* Sectioned lists */}
+                                            {sections.map(section => (
+                                                <div key={section.label}>
+                                                    <div className="flex items-center gap-2 mb-2 px-1">
+                                                        <span className="text-sm">{section.icon}</span>
+                                                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">{section.label}</span>
+                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-${section.color}-100 text-${section.color}-700`}>{section.items.length}</span>
+                                                        <div className="h-px flex-1 bg-slate-200 ml-1"/>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {section.items.map((j, idx) => renderJobItem(j, idx))}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     );
                                     })()}
