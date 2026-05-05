@@ -614,21 +614,47 @@ function mapTicket(r) {
 
 // 1. Get all tickets from DB
 
+/* ---------- Activity row mapper (matches /api/activities format exactly) ---------- */
+function mapActivity(r) {
+    return {
+        id: r.id, reference: r.reference, type: r.type, priority: r.priority,
+        status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
+        siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
+        serviceCategory: r.service_category,
+        durationHours: Number(r.duration_hours || 0), ...(r.details || {}),
+        assistantTechIds: r.assistant_tech_ids, salesLeadId: r.sales_lead_id,
+        locationUrl: r.location_url, houseNumber: r.house_number,
+        escalationLevel: r.escalation_level,
+        carryForwardNote: r.carry_forward_note, nextPlannedAt: r.next_planned_at,
+        odooLink: r.odoo_link, freelancerDetails: r.freelancer_details,
+        photos: r.photos, completionNote: r.completion_note,
+        createdAt: r.created_at, updatedAt: r.updated_at,
+        startedAt: r.started_at || null, completedAt: r.completed_at || null,
+        visitHistory: r.visit_history || [],
+    };
+}
+
 /* ---------- COMBINED INIT ENDPOINT — single call replaces 6 ---------- */
 app.get("/api/init", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, usersR, customersR, teamsR, sitesR] = await Promise.all([
             pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500"),
             pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500"),
-            pool.query("SELECT id, name, email, role AS system_role, phone, avatar, is_active, job_role, level FROM users ORDER BY name"),
+            pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
             pool.query("SELECT * FROM customers ORDER BY name LIMIT 200"),
             pool.query("SELECT * FROM teams ORDER BY name"),
             pool.query("SELECT * FROM sites ORDER BY name")
         ]);
         res.json({
             tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(r => ({ ...r, visitHistory: r.visit_history })),
-            users: usersR.rows.map(u => ({ ...u, systemRole: u.system_role, isActive: u.is_active, jobRole: u.job_role, avatar: u.avatar || null })),
+            activities: activitiesR.rows.map(mapActivity),
+            users: usersR.rows.map(r => ({
+                id: r.id, name: r.name, email: r.email,
+                systemRole: r.systemRole, status: r.status,
+                isActive: r.status === 'ACTIVE' || r.status === 'AVAILABLE',
+                phone: r.phone, avatar: r.avatar || null,
+                jobRole: r.job_role, level: r.level || ''
+            })),
             customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
             teams: teamsR.rows.map(r => ({ ...r, leadId: r.lead_id, memberIds: r.member_ids })),
             sites: sitesR.rows.map(r => ({ ...r, clientName: r.client_name, assignedTeamId: r.assigned_team_id }))
@@ -649,7 +675,7 @@ app.get("/api/refresh", authenticate, async (req, res) => {
         ]);
         res.json({
             tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(r => ({ ...r, visitHistory: r.visit_history })),
+            activities: activitiesR.rows.map(mapActivity),
             customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
         });
     } catch (e) {
