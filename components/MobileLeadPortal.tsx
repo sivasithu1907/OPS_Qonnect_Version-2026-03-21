@@ -279,18 +279,24 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const myJobsTodayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   const myJobsIsPast = myJobsDate < myJobsTodayKey;
   const myJobsDateFiltered = useMemo(() => {
+      const dateKey = myJobsDate;
+      const matchDate = (iso: string) => {
+          const dt = new Date(iso);
+          return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}` === dateKey;
+      };
       if (myJobsIsPast) {
-          return completedJobs.filter(item => {
-              const dt = new Date(item.sortDate);
-              const k = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-              return k === myJobsDate;
-          }).map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
+          // Past dates: only completed jobs
+          return completedJobs.filter(item => matchDate(item.sortDate))
+              .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
       }
-      return myJobs.filter(j => {
-          const jd = new Date(j.date);
-          const k = `${jd.getFullYear()}-${String(jd.getMonth()+1).padStart(2,'0')}-${String(jd.getDate()).padStart(2,'0')}`;
-          return k === myJobsDate;
-      });
+      // Today or future: active jobs + completed jobs from that date
+      const active = myJobs.filter(j => matchDate(j.date));
+      const doneToday = completedJobs.filter(item => matchDate(item.sortDate))
+          .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
+      // Dedupe by ID (in case an item appears in both)
+      const ids = new Set(active.map(j => j.data.id));
+      const merged = [...active, ...doneToday.filter(j => !ids.has(j.data.id))];
+      return merged;
   }, [myJobs, completedJobs, myJobsDate, myJobsIsPast]);
   const myJobsInProgress = myJobs.filter(j => {
       const s = (j.data as any).status;
