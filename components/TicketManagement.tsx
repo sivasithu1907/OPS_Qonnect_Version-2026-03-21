@@ -109,6 +109,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const [agingFilter, setAgingFilter] = useState<'Fresh' | 'Warning' | 'Stalled' | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'ALL'>('ALL');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'ALL'>('ALL');
+  const [showAdminOverride, setShowAdminOverride] = useState(false);
+  const [overrideStatus, setOverrideStatus] = useState('');
+  const [overrideStartedAt, setOverrideStartedAt] = useState('');
+  const [overrideCompletedAt, setOverrideCompletedAt] = useState('');
+  const [overrideNote, setOverrideNote] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState<string | 'ALL'>('ALL');
 
   // --- Create Form State ---
@@ -1108,7 +1113,18 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                   }`}>
                     {toTitleCase(selectedTicket?.status || '')}
                   </span>
-                  <p className="text-[10px] text-slate-400 mt-1">Auto-managed by workflow actions</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-[10px] text-slate-400">Auto-managed by workflow</p>
+                    <button type="button" onClick={() => { 
+                        setShowAdminOverride(true); 
+                        setOverrideStatus(selectedTicket?.status || ''); 
+                        setOverrideStartedAt(selectedTicket?.startedAt ? new Date(new Date(selectedTicket.startedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
+                        setOverrideCompletedAt(selectedTicket?.completedAt ? new Date(new Date(selectedTicket.completedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
+                        setOverrideNote('');
+                    }} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 hover:bg-indigo-100">
+                        Admin Override
+                    </button>
+                  </div>
                 </div>
                 {selectedTicket && selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED && (
                   <div>
