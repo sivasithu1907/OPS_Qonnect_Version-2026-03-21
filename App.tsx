@@ -732,14 +732,25 @@ const loadCustomers = async () => {
   const loadAllData = async () => {
       try {
           const res = await fetch("/api/init", { headers: getAuthHeaders() });
+          if (res.status === 401) { handleLogout(); return; }
           if (!res.ok) throw new Error('Init failed');
           const data = await res.json();
-          setTechnicians(data.users);
-          setCustomers(data.customers);
-          setTickets(data.tickets);
-          setActivities(data.activities);
-          setTeams(data.teams);
-          setSites(data.sites);
+          // Apply the same level derivation as loadUsers
+          const usersWithLevel = (data.users || []).map((u: any) => {
+              let level = u.level || '';
+              if (!level && u.systemRole) {
+                  if (u.systemRole === 'ADMIN') level = 'ADMIN';
+                  else if (u.systemRole === 'TEAM_LEAD') level = 'TEAM_LEAD';
+                  else if (u.systemRole === 'FIELD_ENGINEER') level = 'FIELD_ENGINEER';
+              }
+              return { ...u, level, role: u.systemRole };
+          });
+          if (data.users) setTechnicians(usersWithLevel);
+          if (data.customers) setCustomers(data.customers);
+          if (data.tickets) setTickets(data.tickets);
+          if (data.activities) setActivities(data.activities);
+          if (data.teams) setTeams(data.teams);
+          if (data.sites) setSites(data.sites);
       } catch (e) {
           console.error("Fast init failed, falling back to individual loads:", e);
           await Promise.all([loadUsers(), loadCustomers(), loadTickets(), loadActivities(), loadTeams(), loadSites()]);
@@ -750,11 +761,12 @@ const loadCustomers = async () => {
   const refreshData = async () => {
       try {
           const res = await fetch("/api/refresh", { headers: getAuthHeaders() });
+          if (res.status === 401) return; // Don't wipe data on auth failure
           if (!res.ok) throw new Error('Refresh failed');
           const data = await res.json();
-          setTickets(data.tickets);
-          setActivities(data.activities);
-          setCustomers(data.customers);
+          if (data.tickets) setTickets(data.tickets);
+          if (data.activities) setActivities(data.activities);
+          if (data.customers) setCustomers(data.customers);
       } catch (e) {
           console.error("Fast refresh failed:", e);
       }
