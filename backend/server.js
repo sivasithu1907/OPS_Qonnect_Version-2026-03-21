@@ -1598,16 +1598,7 @@ app.get("/api/sites", authenticate, async (req, res) => {
 app.get("/api/activities", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500");
-    res.json(rows.map(r => ({
-        id: r.id, reference: r.reference, type: r.type, priority: r.priority,
-        status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
-        siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
-        durationHours: Number(r.duration_hours), ...r.details,
-        createdAt: r.created_at, updatedAt: r.updated_at,
-        startedAt:   r.started_at   || null,
-        completedAt: r.completed_at || null,
-        visitHistory: r.visit_history || [],
-    })));
+    res.json(rows.map(mapActivity));
   } catch (e) { res.status(500).json({error: "Failed to load activities"}); }
 });
 
