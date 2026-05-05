@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { 
-  ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, 
+  ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
   CheckCircle2, History, AlertTriangle, X, UserPlus,
   TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound,
@@ -443,16 +443,21 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       closeModal();
   };
 
-  const handleStartWork = (ticket: Ticket) => {
+  // Step-by-step ticket workflow matching TechPortal: ASSIGNED → ON_MY_WAY → ARRIVED → IN_PROGRESS
+  const handleTicketOnMyWay = (ticket: Ticket) => {
       if (onUpdateTicket) {
-          onUpdateTicket({
-              ...ticket,
-              status: TicketStatus.IN_PROGRESS,
-              startedAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-          });
+          onUpdateTicket({ ...ticket, status: TicketStatus.ON_MY_WAY, updatedAt: new Date().toISOString() });
       }
-      setViewTicket(null); // ✅ closes the My Jobs bottom sheet automatically
+  };
+  const handleTicketArrived = (ticket: Ticket) => {
+      if (onUpdateTicket) {
+          onUpdateTicket({ ...ticket, status: TicketStatus.ARRIVED, updatedAt: new Date().toISOString() });
+      }
+  };
+  const handleTicketStartWork = (ticket: Ticket) => {
+      if (onUpdateTicket) {
+          onUpdateTicket({ ...ticket, status: TicketStatus.IN_PROGRESS, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      }
   };
 
   const handleOpenJobAction = (type: 'job_carry' | 'job_complete', ticket: Ticket) => {
@@ -1647,38 +1652,99 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     </p>
                                 </div>
 
-                                {/* Your Work Actions — show whenever this ticket is assigned to current user */}
+                                {/* Your Work Actions — full step-by-step workflow */}
                                 {viewTicket.assignedTechId === currentUserId && (
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
                                         <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
                                             <Briefcase size={14}/> Your Work Actions
                                         </h4>
                                         
-                                        <div className="space-y-3">
-                                            {(viewTicket.status === TicketStatus.OPEN || viewTicket.status === TicketStatus.ASSIGNED) && (
+                                        {/* Step progress indicator */}
+                                        <div className="flex items-center justify-between mb-4 px-1">
+                                            {[
+                                                { key: TicketStatus.ASSIGNED, label: 'Assigned' },
+                                                { key: TicketStatus.ON_MY_WAY, label: 'On Way' },
+                                                { key: TicketStatus.ARRIVED, label: 'Arrived' },
+                                                { key: TicketStatus.IN_PROGRESS, label: 'Working' },
+                                            ].map((step, i) => {
+                                                const stepsOrder = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.ON_MY_WAY, TicketStatus.ARRIVED, TicketStatus.IN_PROGRESS];
+                                                const currentIdx = stepsOrder.indexOf(viewTicket.status);
+                                                const stepIdx = stepsOrder.indexOf(step.key);
+                                                const isDone = currentIdx > stepIdx;
+                                                const isCurrent = currentIdx === stepIdx || (i === 0 && currentIdx <= 2);
+                                                return (
+                                                    <React.Fragment key={step.key}>
+                                                        <div className="flex flex-col items-center">
+                                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                                                                isDone ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                                                isCurrent ? 'bg-slate-900 border-slate-900 text-white' :
+                                                                'bg-white border-slate-200 text-slate-400'
+                                                            }`}>{isDone ? '✓' : i + 1}</div>
+                                                            <span className={`text-[8px] mt-0.5 font-medium ${isCurrent ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</span>
+                                                        </div>
+                                                        {i < 3 && <div className={`flex-1 h-0.5 mx-1 mb-3 ${isDone ? 'bg-emerald-500' : 'bg-slate-200'}`}/>}
+                                                    </React.Fragment>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {/* OPEN / ASSIGNED / NEW → On My Way */}
+                                            {[TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED].includes(viewTicket.status) && (
                                                 <button 
-                                                    onClick={() => handleStartWork(viewTicket)}
-                                                    className="w-full bg-[#FCBF0A] text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors hover:bg-[#e5ad09] active:scale-[0.98] shadow-sm"
+                                                    onClick={() => handleTicketOnMyWay(viewTicket)}
+                                                    className="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
                                                 >
-                                                    <Play size={18} fill="currentColor"/> Start Work
+                                                    <Navigation size={16}/> On My Way
                                                 </button>
                                             )}
 
+                                            {/* ON_MY_WAY → Arrived */}
+                                            {viewTicket.status === TicketStatus.ON_MY_WAY && (
+                                                <button 
+                                                    onClick={() => handleTicketArrived(viewTicket)}
+                                                    className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
+                                                >
+                                                    <MapPin size={16}/> I've Arrived
+                                                </button>
+                                            )}
+
+                                            {/* ARRIVED → Start Work */}
+                                            {viewTicket.status === TicketStatus.ARRIVED && (
+                                                <button 
+                                                    onClick={() => handleTicketStartWork(viewTicket)}
+                                                    className="w-full bg-amber-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
+                                                >
+                                                    <Play size={18}/> Start Work
+                                                </button>
+                                            )}
+
+                                            {/* IN_PROGRESS → Carry Forward / Complete */}
                                             {viewTicket.status === TicketStatus.IN_PROGRESS && (
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-2 gap-2">
                                                     <button 
                                                         onClick={() => handleOpenJobAction('job_carry', viewTicket)}
-                                                        className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-xs hover:bg-slate-50 active:scale-[0.98]"
+                                                        className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]"
                                                     >
-                                                        <History size={16}/> Carry Forward
+                                                        <History size={14}/> Carry Forward
                                                     </button>
                                                     <button 
                                                         onClick={() => handleOpenJobAction('job_complete', viewTicket)}
-                                                        className="bg-[#FCBF0A] text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-xs hover:bg-[#e5ad09] active:scale-[0.98] shadow-sm"
+                                                        className="bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98] shadow-sm"
                                                     >
-                                                        <CheckSquare size={16}/> Complete Work
+                                                        <CheckSquare size={14}/> Complete
                                                     </button>
                                                 </div>
+                                            )}
+
+                                            {/* CARRY_FORWARD → Reschedule (On My Way again) */}
+                                            {viewTicket.status === TicketStatus.CARRY_FORWARD && (
+                                                <button 
+                                                    onClick={() => handleTicketOnMyWay(viewTicket)}
+                                                    className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] shadow-sm"
+                                                >
+                                                    <Navigation size={16}/> Resume — On My Way
+                                                </button>
                                             )}
                                         </div>
                                     </div>
@@ -1847,13 +1913,27 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {onUpdateActivity && (
                     <div className="space-y-2">
                         {actStatus === 'PLANNED' && (
-                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId(act.leadTechId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
-                                className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
-                                <Users size={18} /> Dispatch Team
+                            <div className="space-y-2">
+                                <button onClick={() => { setModalActivity(act); setDispatchPrimaryId(act.leadTechId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                    <Users size={18} /> Dispatch Team
+                                </button>
+                                {act.leadTechId === currentUserId && (
+                                    <button onClick={() => { onUpdateActivity({ ...act, status: 'ON_MY_WAY', updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                                        className="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                        <Navigation size={18} /> On My Way
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {actStatus === 'ON_MY_WAY' && (
+                            <button onClick={() => { onUpdateActivity({ ...act, status: 'ARRIVED', updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                                className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                <MapPin size={18}/> I've Arrived
                             </button>
                         )}
-                        {['ON_MY_WAY','ARRIVED'].includes(actStatus) && (
-                            <button onClick={() => { onUpdateActivity({ ...act, status: 'IN_PROGRESS', updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                        {actStatus === 'ARRIVED' && (
+                            <button onClick={() => { onUpdateActivity({ ...act, status: 'IN_PROGRESS', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setViewActivity(null); }}
                                 className="w-full bg-amber-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
                                 <Play size={18}/> Start Work
                             </button>
@@ -2162,7 +2242,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     {viewJob.type === 'ticket' && viewJob.data.assignedTechId === currentUserId && (
                                         <div className="space-y-2 pb-4">
                                             {(viewJob.data.status === 'OPEN' || viewJob.data.status === 'ASSIGNED' || viewJob.data.status === 'NEW') && (
-                                                <button onClick={() => { handleStartWork(viewJob.data); setViewJob(null); }}
+                                                <button onClick={() => { handleTicketOnMyWay(viewJob.data); setViewJob(null); }}
                                                     className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
                                                     🚗 On My Way
                                                 </button>
@@ -2174,7 +2254,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 </button>
                                             )}
                                             {viewJob.data.status === 'ARRIVED' && (
-                                                <button onClick={() => { handleStartWork(viewJob.data); setViewJob(null); }}
+                                                <button onClick={() => { handleTicketOnMyWay(viewJob.data); setViewJob(null); }}
                                                     className="w-full bg-amber-500 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
                                                     ▶ Start Work
                                                 </button>
