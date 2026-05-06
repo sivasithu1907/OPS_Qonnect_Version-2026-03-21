@@ -366,7 +366,7 @@ onSaveCustomer(data as Customer);
                                             {cust.avatar ? (
                                                 <img src={cust.avatar} className="w-12 h-12 rounded-full bg-slate-200 object-cover ring-2 ring-slate-100" alt="" />
                                             ) : (
-                                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center text-sm font-bold text-white ring-2 ring-slate-100">
+                                                <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white ring-2 ring-slate-100" style={{background: `hsl(${cust.name.split('').reduce((a,c) => a + c.charCodeAt(0), 0) % 360}, 55%, 55%)`}}>
                                                     {cust.name.split(' ').map(w => w[0]).join('').slice(0, 2)}
                                                 </div>
                                             )}
