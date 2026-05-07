@@ -360,7 +360,7 @@ const handleLogout = useCallback(() => {
           console.error("Failed to update ticket:", e);
           // Keep optimistic update on failure
       }
-  };
+  }, []);
 
   const handleCreateTicket = async (data: any) => {
     const newId = generateTicketId();
