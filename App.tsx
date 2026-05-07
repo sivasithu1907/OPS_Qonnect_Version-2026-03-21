@@ -1,32 +1,41 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  APP_NAME, NAVIGATION_ITEMS
-} from './constants';
-import { 
-  User, Role, Ticket, Technician, Activity, Team, Site, 
-  TicketStatus, TicketFilter, MessageSender, Customer 
-} from './types';
-import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import TicketManagement from './components/TicketManagement';
-import OperationsDashboard from './components/OperationsDashboard';
-import PlanningModule from './components/PlanningModule';
-import ReportsModule from './components/ReportsModule';
-import UserManagement from './components/UserManagement';
-import TeamCRM from './components/TeamCRM';
-import { MobileLeadPortal } from './components/MobileLeadPortal';
-import MobileTechPortal from './components/MobileTechPortal';
-import CustomerRecords from './components/CustomerRecords';
-import AIChatBot from './components/AIChatBot';
-import SystemDataTools from './components/SystemDataTools';
-import WhatsAppMonitor from './components/WhatsAppMonitor';
-import TVDisplayMode from './components/TVDisplayMode';
-import CompletedJobSummary from './components/CompletedJobSummary';
-import MasterDashboard from './components/MasterDashboard';
-import { Menu, Bell, Search, LogOut, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { generateActivityId, generateTicketId } from './utils/idUtils';
+import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
+import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
+import { APP_NAME, NAVIGATION_ITEMS } from './constants';
+import {
+  Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2
+} from 'lucide-react';
 
-// Logo Component — actual Qonnect SVG logo
+// Login loads eagerly (needed immediately)
+import Login from './components/Login';
+
+// Everything else loads lazily (only when needed)
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const TicketManagement = lazy(() => import('./components/TicketManagement'));
+const OperationsDashboard = lazy(() => import('./components/OperationsDashboard'));
+const PlanningModule = lazy(() => import('./components/PlanningModule'));
+const ReportsModule = lazy(() => import('./components/ReportsModule'));
+const UserManagement = lazy(() => import('./components/UserManagement'));
+const TeamCRM = lazy(() => import('./components/TeamCRM'));
+const MobileLeadPortal = lazy(() => import('./components/MobileLeadPortal').then(m => ({ default: m.MobileLeadPortal || m.default })));
+const MobileTechPortal = lazy(() => import('./components/MobileTechPortal'));
+const CustomerRecords = lazy(() => import('./components/CustomerRecords'));
+const AIChatBot = lazy(() => import('./components/AIChatBot'));
+const SystemDataTools = lazy(() => import('./components/SystemDataTools'));
+const WhatsAppMonitor = lazy(() => import('./components/WhatsAppMonitor'));
+const TVDisplayMode = lazy(() => import('./components/TVDisplayMode'));
+const CompletedJobSummary = lazy(() => import('./components/CompletedJobSummary'));
+const MasterDashboard = lazy(() => import('./components/MasterDashboard'));
+
+// Loading fallback component
+const LoadingFallback = () => (
+    <div className="flex items-center justify-center h-full py-20">
+        <div className="text-center">
+            <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-sm text-slate-500">Loading...</p>
+        </div>
+    </div>
+);
+
 const QonnectLogo = ({ className, size = 30 }: { className?: string; size?: number }) => (
   <svg viewBox="0 0 578 578" xmlns="http://www.w3.org/2000/svg" className={className} width={size} height={size}>
     <path d="M409.18,407.51a113.86,113.86,0,1,0-225.35,32.32l45-36.75a69.77,69.77,0,0,1,135.75,4.43Z" transform="translate(-8.5 -132)" fill="#fdbb40"/>
@@ -289,7 +298,7 @@ const handleLogin = async (email: string, pass: string) => {
       }
   };
 
-const handleLogout = () => {
+const handleLogout = useCallback(() => {
       localStorage.removeItem('qonnect_token');
       localStorage.removeItem('qonnect_user');
       setCurrentUser(null);
@@ -311,7 +320,7 @@ const handleLogout = () => {
       } catch (e) { console.error("Failed to auto-open ticket:", e); }
   };
 
-  const handleUpdateTicket = async (updated: Ticket) => {
+  const handleUpdateTicket = useCallback(async (updated: Ticket) => {
       // Optimistic UI update immediately
       setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
       try {
@@ -437,7 +446,7 @@ const handleLogout = () => {
   };
 
   // Activity Handlers (API-Connected)
-  const handleAddActivity = async (act: any) => {
+  const handleAddActivity = useCallback(async (act: any) => {
       const newId = generateActivityId();
       const now = new Date().toISOString();
       const payload = { ...act, id: newId, reference: newId, status: act.status || 'PLANNED', createdAt: now, updatedAt: now };
@@ -461,9 +470,9 @@ const handleLogout = () => {
           console.error("Failed to add activity", e);
           setActivities(prev => prev.filter(a => a.id !== newId));
       }
-  };
+  }, []);
 
-  const handleUpdateActivity = async (updated: Activity) => {
+  const handleUpdateActivity = useCallback(async (updated: Activity) => {
       try {
           const res = await fetch(`/api/activities/${updated.id}`, {
               method: "PUT",
@@ -473,7 +482,7 @@ const handleLogout = () => {
           if (res.ok) loadActivities(); // Background refresh from DB
           syncActivityLocationToCustomer(updated);
       } catch (e) { console.error("Failed to update activity", e); }
-  };
+  }, []);
 
   // When an activity has a customer + location/building, update the customer record if its fields are empty
   const syncActivityLocationToCustomer = async (act: any) => {
@@ -921,19 +930,11 @@ useEffect(() => {
   // ── Fullscreen Portal Mode ─────────────────────────────────────────────
   // Bypasses entire desktop layout — no sidebar, no header, no AI bot
   if (activeView === 'lead_portal') {
-	if (!portalDataReady) {
-	  return (
-	    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-100">
-	      <div className="text-center">
-	        <div className="text-lg font-semibold text-slate-700">Loading Lead Portal...</div>
-	        <div className="text-sm text-slate-500 mt-2">Please wait</div>
-	      </div>
-	    </div>
-	  );
-	}
+// Portal renders immediately — no blocking gate. Components handle their own loading states.
 
     return (
       <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
+        <Suspense fallback={<LoadingFallback />}>
         <MobileLeadPortal
           tickets={tickets}
           technicians={technicians}
@@ -959,6 +960,7 @@ useEffect(() => {
           focusedTicketId={focusedTicketId}
           currentUserId={currentUser.techId}
         />
+        </Suspense>
       </div>
     );
   }
@@ -966,6 +968,7 @@ useEffect(() => {
   if (activeView === 'tech_portal') {
     return (
       <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
+        <Suspense fallback={<LoadingFallback />}>
         <MobileTechPortal
           tickets={tickets}
           activities={activities}
