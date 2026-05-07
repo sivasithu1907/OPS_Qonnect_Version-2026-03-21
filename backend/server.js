@@ -1732,7 +1732,8 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
             startedAtClause = ", started_at = NOW()";
         }
         if (status === 'ON_MY_WAY' && prevStatus === 'PLANNED') {
-            startedAtClause = ", started_at = NOW()";
+            // ON_MY_WAY is travel time — do NOT set started_at here
+            // started_at should only be set when actual work begins (IN_PROGRESS)
         }
         if (status === 'DONE' && prevStatus !== 'DONE') {
             completedAtClause = ", completed_at = NOW()";
