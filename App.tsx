@@ -303,7 +303,7 @@ const handleLogout = useCallback(() => {
       localStorage.removeItem('qonnect_user');
       setCurrentUser(null);
       setActiveView('dashboard');
-  };
+  }, []);
 
   // --- Data Handlers ---
   // Auto-transition NEW → OPEN when a ticket is first opened/viewed on desktop
