@@ -1304,6 +1304,7 @@ useEffect(() => {
 
             {/* View Container */}
             <div className="flex-1 overflow-auto bg-slate-50 relative">
+              <Suspense fallback={<LoadingFallback />}>
                 {activeView === 'dashboard' && (
                     <Dashboard 
                         tickets={tickets} 
@@ -1444,9 +1445,11 @@ useEffect(() => {
                         onLogout={handleLogout}
                     />
                 )}
+              </Suspense>
               </div>
 
           {/* AI Assistant Chat Bubble (Global) */}
+          <Suspense fallback={null}>
           <AIChatBot 
             context={{
               tickets,
@@ -1457,8 +1460,10 @@ useEffect(() => {
             }}
             currentUser={currentUser}
           />
+          </Suspense>
 
           {/* Completed Job Summary Popup (Global) */}
+          <Suspense fallback={null}>
           {completedSummary && (
             <CompletedJobSummary
               type={completedSummary.type}
@@ -1468,6 +1473,7 @@ useEffect(() => {
               onClose={() => setCompletedSummary(null)}
             />
           )}
+          </Suspense>
 
         </main>
     </div>
