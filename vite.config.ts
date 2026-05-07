@@ -17,7 +17,6 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       build: {
-        // Chunk splitting — vendor libs separate from app code
         rollupOptions: {
           output: {
             manualChunks: {
@@ -27,11 +26,8 @@ export default defineConfig(({ mode }) => {
             }
           }
         },
-        // Increase warning limit
         chunkSizeWarningLimit: 1000,
-        // Minify aggressively
         minify: 'esbuild',
-        // Source maps off in prod
         sourcemap: false,
       },
       define: {
