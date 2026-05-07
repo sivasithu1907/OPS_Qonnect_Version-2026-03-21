@@ -989,6 +989,7 @@ useEffect(() => {
           onLogout={handleLogout}
           onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
         />
+        </Suspense>
       </div>
     );
   }
