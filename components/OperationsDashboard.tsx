@@ -718,7 +718,18 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             return Math.max(0.25, (new Date(actualEnd).getTime() - new Date(actualStart).getTime()) / 3600000);
                                         }
                                         if ((s === 'IN_PROGRESS' || s === 'ON_MY_WAY' || s === 'ARRIVED') && actualStart) {
-                                            return Math.max(0.25, (Date.now() - new Date(actualStart).getTime()) / 3600000);
+                                            // Bar must stop at current time (the red NOW line)
+                                            const now = new Date();
+                                            const start = new Date(actualStart);
+                                            const nowHour = now.getHours() + now.getMinutes() / 60;
+                                            const startHour = start.getHours() + start.getMinutes() / 60;
+                                            // If started today, duration = now - start in hours-of-day
+                                            // If started on a previous day, cap at now hour - timeline start
+                                            if (start.toDateString() === now.toDateString()) {
+                                                return Math.max(0.25, nowHour - startHour);
+                                            }
+                                            // Started on a previous day — show bar from timeline start to now
+                                            return Math.max(0.25, nowHour - TIMELINE_START);
                                         }
                                         return a.durationHours || 2;
                                     })(),
@@ -754,7 +765,14 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             return Math.max(0.25, (new Date(tCompleted).getTime() - new Date(tStarted).getTime()) / 3600000);
                                         }
                                         if (tStatus === 'IN_PROGRESS' && tStarted) {
-                                            return Math.max(0.25, (Date.now() - new Date(tStarted).getTime()) / 3600000);
+                                            const now = new Date();
+                                            const start = new Date(tStarted);
+                                            const nowHour = now.getHours() + now.getMinutes() / 60;
+                                            const startHour = start.getHours() + start.getMinutes() / 60;
+                                            if (start.toDateString() === now.toDateString()) {
+                                                return Math.max(0.25, nowHour - startHour);
+                                            }
+                                            return Math.max(0.25, nowHour - TIMELINE_START);
                                         }
                                         return 2;
                                     })();
