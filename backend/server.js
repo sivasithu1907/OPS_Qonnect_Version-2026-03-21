@@ -448,6 +448,15 @@ await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_sessions_phone ON sessions(phone);
         CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
         CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_phone ON whatsapp_logs(phone);
+        
+        -- Performance indexes (Phase 1 optimization)
+        CREATE INDEX IF NOT EXISTS idx_activities_lead_tech ON activities(lead_tech_id);
+        CREATE INDEX IF NOT EXISTS idx_activities_customer ON activities(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_activities_planned ON activities(planned_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_tickets_assigned ON tickets(assigned_tech_id);
+        CREATE INDEX IF NOT EXISTS idx_users_email ON users(LOWER(email));
+        CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at DESC);
     `).catch(() => {}); // Non-fatal if indexes already exist
 
     console.log("✅ DB initialized with Tickets and Customers");
@@ -2700,7 +2709,16 @@ Return ONLY the reply text, no JSON, no markdown.`;
 }  // end handleIncomingMessage
 
 initDb().then(() => {
-  app.listen(PORT, () => {
+  // Graceful shutdown
+const shutdown = async () => {
+    console.log('\nGraceful shutdown initiated...');
+    try { await pool.end(); } catch(e) {}
+    process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+app.listen(PORT, () => {
     console.log(`✅ Backend server running on http://localhost:${PORT}`);
   });
 });
