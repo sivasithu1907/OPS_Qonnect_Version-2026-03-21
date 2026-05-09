@@ -1322,4 +1322,4 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   );
 };
 
-export default OperationsDashboard;
+export default React.memo(OperationsDashboard);
