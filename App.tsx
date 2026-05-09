@@ -387,8 +387,8 @@ const handleLogout = useCallback(() => {
         const txt = await res.text();
         throw new Error(txt || "Ticket create failed");
       }
-      // Background sync to get server-generated fields
-      loadTickets();
+      // Background sync — delay to ensure DB has committed
+      setTimeout(() => loadTickets(), 2000);
     } catch (e) {
       console.error("Failed to create ticket:", e);
       // Rollback optimistic update
@@ -463,8 +463,8 @@ const handleLogout = useCallback(() => {
               // Rollback
               setActivities(prev => prev.filter(a => a.id !== newId));
           } else {
-              // Background sync
-              loadActivities();
+              // Background sync — delay to ensure DB has committed
+              setTimeout(() => loadActivities(), 2000);
           }
           syncActivityLocationToCustomer(act);
       } catch (e) {
