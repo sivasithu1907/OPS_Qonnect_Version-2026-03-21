@@ -677,8 +677,8 @@ function mapTicket(r) {
     updatedAt: r.updated_at,
     unreadCount: 0,
     // Workflow fields
-    startedAt: r.started_at || undefined,
-    completedAt: r.completed_at || undefined,
+    startedAt: r.started_at || (r.details || {}).startedAt || undefined,
+    completedAt: r.completed_at || (r.details || {}).completedAt || undefined,
     carryForwardNote: r.carry_forward_note || undefined,
     nextPlannedAt: r.next_planned_at || undefined,
     assignmentNote: r.assignment_note || undefined,
@@ -722,6 +722,81 @@ function mapActivity(r) {
         visitHistory: r.visit_history || [],
     };
 }
+
+
+/* ---------- MOBILE LIGHTWEIGHT APIs (Performance Optimization) ---------- */
+
+// Lead Portal — only data the lead needs
+app.get("/api/mobile/lead", authenticate, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const today = new Date().toISOString().slice(0, 10);
+        const [ticketsR, activitiesR, techsR, customersR] = await Promise.all([
+            pool.query(`SELECT * FROM tickets WHERE (assigned_tech_id = $1 OR assigned_tech_id IS NOT NULL) 
+                        AND status NOT IN ('RESOLVED','CANCELLED') 
+                        ORDER BY updated_at DESC LIMIT 100`, [userId]),
+            pool.query(`SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' 
+                        AND status NOT IN ('DONE','CANCELLED')
+                        ORDER BY planned_date DESC LIMIT 100`),
+            pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users WHERE is_active = true'),
+            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200")
+        ]);
+        res.json({
+            tickets: ticketsR.rows.map(mapTicket),
+            activities: activitiesR.rows.map(mapActivity),
+            technicians: techsR.rows.map(r => ({
+                id: r.id, name: r.name, email: r.email, systemRole: r.systemRole, 
+                status: r.status, isActive: true, phone: r.phone, avatar: r.avatar || null,
+                jobRole: r.job_role, level: r.level || '', role: r.systemRole
+            })),
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
+        });
+    } catch (e) {
+        console.error("Mobile lead API error:", e);
+        res.status(500).json({ error: "Failed" });
+    }
+});
+
+// Tech Portal — only the engineer's own jobs
+app.get("/api/mobile/tech", authenticate, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const [ticketsR, activitiesR, customersR] = await Promise.all([
+            pool.query("SELECT * FROM tickets WHERE assigned_tech_id = $1 ORDER BY updated_at DESC LIMIT 50", [userId]),
+            pool.query(`SELECT * FROM activities WHERE (lead_tech_id = $1 OR assistant_tech_ids::text LIKE $2) 
+                        AND type != 'WHATSAPP_SUPPORT' ORDER BY planned_date DESC LIMIT 50`, [userId, `%${userId}%`]),
+            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200")
+        ]);
+        res.json({
+            tickets: ticketsR.rows.map(mapTicket),
+            activities: activitiesR.rows.map(mapActivity),
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
+        });
+    } catch (e) {
+        console.error("Mobile tech API error:", e);
+        res.status(500).json({ error: "Failed" });
+    }
+});
+
+// Lightweight refresh — incremental updates only (changed since timestamp)
+app.get("/api/refresh-lite", authenticate, async (req, res) => {
+    try {
+        const since = req.query.since || new Date(Date.now() - 60000).toISOString();
+        const [ticketsR, activitiesR] = await Promise.all([
+            pool.query("SELECT * FROM tickets WHERE updated_at > $1 ORDER BY updated_at DESC", [since]),
+            pool.query("SELECT * FROM activities WHERE updated_at > $1 AND type != 'WHATSAPP_SUPPORT' ORDER BY updated_at DESC", [since])
+        ]);
+        res.json({
+            tickets: ticketsR.rows.map(mapTicket),
+            activities: activitiesR.rows.map(mapActivity),
+            hasChanges: ticketsR.rows.length > 0 || activitiesR.rows.length > 0,
+            timestamp: new Date().toISOString()
+        });
+    } catch (e) {
+        console.error("Refresh-lite error:", e);
+        res.status(500).json({ error: "Failed" });
+    }
+});
 
 /* ---------- COMBINED INIT ENDPOINT — single call replaces 6 ---------- */
 app.get("/api/init", authenticate, async (req, res) => {
@@ -1695,6 +1770,8 @@ app.get("/api/activities", authenticate, async (req, res) => {
 app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
     try {
         let { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
+        // Server controls timestamps — remove from client-sent details
+        delete details.startedAt; delete details.completedAt; delete details.createdAt; delete details.updatedAt;
         // Remove timestamp fields — server controls these
         delete details.startedAt;
         delete details.completedAt;
@@ -1737,6 +1814,7 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
 app.put("/api/activities/:id", authenticate, async (req, res) => {
     try {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
+        delete details.startedAt; delete details.completedAt; delete details.createdAt; delete details.updatedAt;
         // Remove timestamp fields from details — server controls these via NOW()
         delete details.startedAt;
         delete details.completedAt;
