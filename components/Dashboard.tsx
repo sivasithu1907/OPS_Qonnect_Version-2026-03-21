@@ -990,4 +990,4 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
   );
 };
 
-export default Dashboard;
+export default React.memo(Dashboard);
