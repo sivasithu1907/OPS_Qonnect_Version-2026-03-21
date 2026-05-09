@@ -1437,4 +1437,4 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   );
 };
 
-export default PlanningModule;
+export default React.memo(PlanningModule);
