@@ -3780,4 +3780,4 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   );
 };
 
-export default MobileLeadPortal;
+export default React.memo(MobileLeadPortal);
