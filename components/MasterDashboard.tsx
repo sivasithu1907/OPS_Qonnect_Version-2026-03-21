@@ -675,4 +675,4 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   );
 };
 
-export default MasterDashboard;
+export default React.memo(MasterDashboard);
