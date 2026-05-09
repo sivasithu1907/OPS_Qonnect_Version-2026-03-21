@@ -1498,4 +1498,4 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   );
 };
 
-export default TicketManagement;
+export default React.memo(TicketManagement);
