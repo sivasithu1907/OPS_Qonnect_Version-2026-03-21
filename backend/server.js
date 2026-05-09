@@ -11,7 +11,73 @@ import bcrypt from 'bcryptjs';
 dotenv.config();
 const app = express();
 app.use(compression()); // Gzip API responses
+
+// --- Security Headers (Phase 3) ---
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+});
+
+// --- Request Timeout (30s) ---
+app.use((req, res, next) => {
+    req.setTimeout(30000, () => {
+        if (!res.headersSent) {
+            res.status(408).json({ error: 'Request timeout' });
+        }
+    });
+    next();
+});
+
+// --- Request Logging (Phase 3) ---
+app.use((req, res, next) => {
+    const start = Date.now();
+    const originalEnd = res.end;
+    res.end = function(...args) {
+        const duration = Date.now() - start;
+        const logLevel = res.statusCode >= 500 ? 'ERROR' : res.statusCode >= 400 ? 'WARN' : 'INFO';
+        if (req.url !== '/api/health' && req.url !== '/api/refresh' && req.url !== '/api/init') {
+            console.log(JSON.stringify({
+                level: logLevel,
+                method: req.method,
+                url: req.url,
+                status: res.statusCode,
+                duration: `${duration}ms`,
+                user: req.user?.email || 'anonymous',
+                timestamp: new Date().toISOString()
+            }));
+        }
+        return originalEnd.apply(this, args);
+    };
+    next();
+});
 const PORT = process.env.PORT || 8080;
+
+// --- Write Rate Limiter (Phase 3) — 60 writes/minute per user ---
+const writeRateMap = new Map();
+const writeRateLimit = (req, res, next) => {
+    const key = req.user?.email || req.ip;
+    const now = Date.now();
+    const window = 60000; // 1 minute
+    const max = 60;
+    const attempts = writeRateMap.get(key) || [];
+    const recent = attempts.filter(t => t > now - window);
+    if (recent.length >= max) {
+        return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+    }
+    recent.push(now);
+    writeRateMap.set(key, recent);
+    // Cleanup old entries every 5 minutes
+    if (Math.random() < 0.01) {
+        for (const [k, v] of writeRateMap.entries()) {
+            if (v.every(t => t < now - window)) writeRateMap.delete(k);
+        }
+    }
+    next();
+};
 
 /* ---------- WhatsApp Send Helper ---------- */
 async function sendWhatsAppText(to, bodyText) {
@@ -716,7 +782,7 @@ app.get("/api/tickets", authenticate, async (req, res) => {
 });
 
 // 2. Create a new ticket in DB (Fixed for Foreign Key sync)
-app.post("/api/tickets", authenticate, async (req, res) => {
+app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
   const client = await pool.connect();
   try {
     let { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber } = req.body;
@@ -1084,7 +1150,7 @@ app.get("/api/customers", authenticate, async (req, res) => {
 });
 
 // Create customer (with duplicate phone prevention)
-app.post("/api/customers", authenticate, async (req, res) => {
+app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
   try {
     const { name, phone, email, address, notes, is_active, buildingNumber } = req.body || {};
 
@@ -1624,7 +1690,7 @@ app.get("/api/activities", authenticate, async (req, res) => {
 });
 
 // POST Activity (Create)
-app.post("/api/activities", authenticate, async (req, res) => {
+app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
     try {
         let { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
         
@@ -2710,7 +2776,24 @@ Return ONLY the reply text, no JSON, no markdown.`;
 }  // end handleIncomingMessage
 
 initDb().then(() => {
-  // Graceful shutdown
+  // --- Uncaught Error Handlers (Phase 3) ---
+process.on('uncaughtException', (err) => {
+    console.error(JSON.stringify({ level: 'FATAL', type: 'uncaughtException', error: err.message, stack: err.stack, timestamp: new Date().toISOString() }));
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error(JSON.stringify({ level: 'ERROR', type: 'unhandledRejection', error: String(reason), timestamp: new Date().toISOString() }));
+});
+
+// --- Global Express Error Handler (Phase 3) ---
+app.use((err, req, res, next) => {
+    console.error(JSON.stringify({ level: 'ERROR', type: 'expressError', url: req.url, method: req.method, error: err.message, timestamp: new Date().toISOString() }));
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Graceful shutdown
 const shutdown = async () => {
     console.log('\nGraceful shutdown initiated...');
     try { await pool.end(); } catch(e) {}
