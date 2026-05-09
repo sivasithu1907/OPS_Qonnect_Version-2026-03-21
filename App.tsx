@@ -5,8 +5,9 @@ import {
   Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2
 } from 'lucide-react';
 
-// Login loads eagerly (needed immediately)
+// Login + ErrorBoundary load eagerly (needed immediately)
 import Login from './components/Login';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Everything else loads lazily (only when needed)
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -934,6 +935,7 @@ useEffect(() => {
 
     return (
       <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
+        <ErrorBoundary name='LeadPortal'>
         <Suspense fallback={<LoadingFallback />}>
         <MobileLeadPortal
           tickets={tickets}
@@ -961,6 +963,7 @@ useEffect(() => {
           currentUserId={currentUser.techId}
         />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -968,6 +971,7 @@ useEffect(() => {
   if (activeView === 'tech_portal') {
     return (
       <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
+        <ErrorBoundary name='TechPortal'>
         <Suspense fallback={<LoadingFallback />}>
         <MobileTechPortal
           tickets={tickets}
@@ -990,6 +994,7 @@ useEffect(() => {
           onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
         />
         </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
@@ -1304,6 +1309,7 @@ useEffect(() => {
 
             {/* View Container */}
             <div className="flex-1 overflow-auto bg-slate-50 relative">
+              <ErrorBoundary name='MainContent'>
               <Suspense fallback={<LoadingFallback />}>
                 {activeView === 'dashboard' && (
                     <Dashboard 
@@ -1446,6 +1452,7 @@ useEffect(() => {
                     />
                 )}
               </Suspense>
+              </ErrorBoundary>
               </div>
 
           {/* AI Assistant Chat Bubble (Global) */}
