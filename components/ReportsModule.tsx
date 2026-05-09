@@ -986,4 +986,4 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
   );
 };
 
-export default ReportsModule;
+export default React.memo(ReportsModule);
