@@ -1,17 +1,15 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: qonnect
-      POSTGRES_USER: qonnect
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-qonnect_pass}
+      POSTGRES_DB: fieldops
+      POSTGRES_USER: fieldops
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fieldops_pass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qonnect"]
+      test: ["CMD-SHELL", "pg_isready -U fieldops -d fieldops"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,9 +24,9 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: qonnect
-      DB_PASSWORD: ${DB_PASSWORD:-qonnect_pass}
-      DB_NAME: qonnect
+      DB_USER: ${DB_USER:-fieldops}
+      DB_PASSWORD: ${DB_PASSWORD:-fieldops_pass}
+      DB_NAME: ${DB_NAME:-fieldops}
       JWT_SECRET: ${JWT_SECRET}
       API_KEY: ${API_KEY}
       WA_ACCESS_TOKEN: ${WA_ACCESS_TOKEN:-}
