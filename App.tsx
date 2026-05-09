@@ -90,6 +90,7 @@ function App() {
   const [isTVMode, setIsTVMode] = useState(() => window.location.hash === '#tv');
 
   // Completed Job Summary — unified popup for completed tickets/activities
+  const [showChatBot, setShowChatBot] = useState(false);
   const [completedSummary, setCompletedSummary] = useState<{ type: 'ticket' | 'activity', item: any } | null>(null);
 
   // Listen for hash changes (TV mode toggle)
@@ -1456,19 +1457,23 @@ useEffect(() => {
               </ErrorBoundary>
               </div>
 
-          {/* AI Assistant Chat Bubble (Global) */}
-          <Suspense fallback={null}>
-          <AIChatBot 
-            context={{
-              tickets,
-              activities,
-              customers,
-              technicians,
-              sites
-            }}
-            currentUser={currentUser}
-          />
-          </Suspense>
+          {/* AI Assistant — loads only when clicked */}
+          {showChatBot ? (
+              <Suspense fallback={null}>
+                  <AIChatBot 
+                      context={{ tickets, activities, customers, technicians, sites }}
+                      currentUser={currentUser}
+                  />
+              </Suspense>
+          ) : (
+              <button
+                  onClick={() => setShowChatBot(true)}
+                  className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-slate-900 text-white shadow-xl flex items-center justify-center hover:bg-slate-800 active:scale-95 transition-all z-50"
+                  title="AI Assistant"
+              >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </button>
+          )}
 
           {/* Completed Job Summary Popup (Global) */}
           <Suspense fallback={null}>
