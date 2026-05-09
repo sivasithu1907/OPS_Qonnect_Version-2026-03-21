@@ -1252,4 +1252,4 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   );
 };
 
-export default MobileTechPortal;
+export default React.memo(MobileTechPortal);
