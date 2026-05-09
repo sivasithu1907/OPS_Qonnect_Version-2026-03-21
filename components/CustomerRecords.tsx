@@ -970,4 +970,4 @@ onSaveCustomer(data as Customer);
   );
 };
 
-export default CustomerRecords;
+export default React.memo(CustomerRecords);
