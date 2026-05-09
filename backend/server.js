@@ -35,8 +35,7 @@ app.use((req, res, next) => {
 // --- Request Logging (Phase 3) ---
 app.use((req, res, next) => {
     const start = Date.now();
-    const originalEnd = res.end;
-    res.end = function(...args) {
+    res.on('finish', () => {
         const duration = Date.now() - start;
         const logLevel = res.statusCode >= 500 ? 'ERROR' : res.statusCode >= 400 ? 'WARN' : 'INFO';
         if (req.url !== '/api/health' && req.url !== '/api/refresh' && req.url !== '/api/init') {
@@ -50,8 +49,7 @@ app.use((req, res, next) => {
                 timestamp: new Date().toISOString()
             }));
         }
-        return originalEnd.apply(this, args);
-    };
+    });
     next();
 });
 const PORT = process.env.PORT || 8080;
