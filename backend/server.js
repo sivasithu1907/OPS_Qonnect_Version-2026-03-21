@@ -613,9 +613,12 @@ app.get('/api/tv-data', async (req, res) => {
             id: r.id, reference: r.reference, type: r.type, priority: r.priority,
             status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
             siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
-            durationHours: Number(r.duration_hours), ...r.details,
+            durationHours: Number(r.duration_hours),
+            ...r.details,
+            // Column values MUST override JSONB details (details may have stale frontend timestamps)
+            startedAt: r.started_at || (r.details || {}).startedAt || null,
+            completedAt: r.completed_at || (r.details || {}).completedAt || null,
             createdAt: r.created_at, updatedAt: r.updated_at,
-            startedAt: r.started_at || null, completedAt: r.completed_at || null,
         }));
 
         const technicians = usersRes.rows.map(r => ({
@@ -714,7 +717,8 @@ function mapActivity(r) {
         supportingEngineerIds: d.supportingEngineerIds || [],
         currentVisitRemark: d.currentVisitRemark || '',
         createdAt: r.created_at, updatedAt: r.updated_at,
-        startedAt: r.started_at || null, completedAt: r.completed_at || null,
+        startedAt: r.started_at || (r.details || {}).startedAt || null,
+        completedAt: r.completed_at || (r.details || {}).completedAt || null,
         visitHistory: r.visit_history || [],
     };
 }
@@ -1691,6 +1695,11 @@ app.get("/api/activities", authenticate, async (req, res) => {
 app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
     try {
         let { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
+        // Remove timestamp fields — server controls these
+        delete details.startedAt;
+        delete details.completedAt;
+        delete details.createdAt;
+        delete details.updatedAt;
         
         if (!type) {
             return res.status(400).json({ error: "Activity type is required" });
@@ -1728,6 +1737,11 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
 app.put("/api/activities/:id", authenticate, async (req, res) => {
     try {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
+        // Remove timestamp fields from details — server controls these via NOW()
+        delete details.startedAt;
+        delete details.completedAt;
+        delete details.createdAt;
+        delete details.updatedAt;
 
         // Fetch current row to detect transitions and merge details
         const current = await pool.query("SELECT status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id FROM activities WHERE id=$1", [req.params.id]);
