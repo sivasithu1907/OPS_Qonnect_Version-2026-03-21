@@ -454,12 +454,19 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
               .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false }));
       }
       if (selectedDate === todayKey) {
-          // TODAY: show ALL active jobs + today's completed
-          const active = myJobs.map(j => ({ ...j }));
+          // TODAY: jobs planned for today + jobs currently in progress + completed today
+          const inProgressStatuses = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED', 'STARTED'];
+          const todayPlanned = myJobs.filter(j => {
+              const status = (j.data as any).status;
+              // Always show in-progress jobs on today (regardless of planned date)
+              if (inProgressStatuses.includes(status)) return true;
+              // Show jobs planned/scheduled for today
+              return matchDate(j.date);
+          });
           const doneToday = completedJobs.filter(item => matchDate(item.sortDate))
               .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false }));
-          const ids = new Set(active.map(j => j.data.id));
-          return [...active, ...doneToday.filter(j => !ids.has(j.data.id))];
+          const ids = new Set(todayPlanned.map(j => j.data.id));
+          return [...todayPlanned, ...doneToday.filter(j => !ids.has(j.data.id))];
       }
       // Future: filter by date
       return myJobs.filter(j => matchDate(j.date));
