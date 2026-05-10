@@ -291,12 +291,18 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
       }
       if (dateKey === myJobsTodayKey) {
-          // TODAY: show ALL active jobs (no date filter) + today's completed jobs
-          const active = myJobs.map(j => ({ ...j, type: j.kind as any, date: j.sortDate, priority: (j.data as any).priority || 'MEDIUM', delayed: false }));
+          // TODAY: jobs planned for today + in-progress (any date) + completed today
+          const inProgressStatuses = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'];
+          const todayJobs = myJobs.filter(j => {
+              const status = (j.data as any).status;
+              if (inProgressStatuses.includes(status)) return true;
+              const jDate = (j as any).sortDate || '';
+              return matchDate(jDate);
+          }).map(j => ({ ...j, type: j.kind as any, date: j.sortDate, priority: (j.data as any).priority || 'MEDIUM', delayed: false }));
           const doneToday = completedJobs.filter(item => matchDate(item.sortDate))
               .map(item => ({ type: item.kind as any, data: item.data, date: item.sortDate, priority: (item.data as any).priority || 'MEDIUM', delayed: false, kind: item.kind }));
-          const ids = new Set(active.map(j => j.data.id));
-          return [...active, ...doneToday.filter(j => !ids.has(j.data.id))];
+          const ids = new Set(todayJobs.map(j => j.data.id));
+          return [...todayJobs, ...doneToday.filter(j => !ids.has(j.data.id))];
       }
       // Future dates: filter by planned date
       const active = myJobs.filter(j => {
