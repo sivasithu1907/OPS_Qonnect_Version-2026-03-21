@@ -476,15 +476,26 @@ const handleLogout = useCallback(() => {
   }, []);
 
   const handleUpdateActivity = useCallback(async (updated: Activity) => {
+      // Optimistic UI update immediately — so buttons reflect new status instantly
+      setActivities(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
       try {
           const res = await fetch(`/api/activities/${updated.id}`, {
               method: "PUT",
               headers: getAuthHeaders(),
               body: JSON.stringify(updated)
           });
-          if (res.ok) loadActivities(); // Background refresh from DB
+          if (res.ok) {
+              // Background sync after delay to get server-generated fields
+              setTimeout(() => loadActivities(), 2000);
+          } else {
+              // Rollback on failure — reload from server
+              loadActivities();
+          }
           syncActivityLocationToCustomer(updated);
-      } catch (e) { console.error("Failed to update activity", e); }
+      } catch (e) {
+          console.error("Failed to update activity", e);
+          loadActivities(); // Rollback
+      }
   }, []);
 
   // When an activity has a customer + location/building, update the customer record if its fields are empty
