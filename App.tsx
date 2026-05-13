@@ -875,30 +875,51 @@ useEffect(() => {
     loadAllData();
   }, [currentUser?.id || currentUser?.techId]);
 
-// Lead Portal data readiness — the initial useEffect above loads everything in parallel.
-// Mark ready once tickets (the primary data) are loaded.
+// Lead Portal — render immediately, no blocking gate
 useEffect(() => {
-    if (activeView !== 'lead_portal') return;
-    if (tickets.length > 0 || activities.length > 0 || technicians.length > 0) {
-        setPortalDataReady(true);
-    } else {
-        // Data not loaded yet — set a timeout fallback so we don't block forever
-        const timer = setTimeout(() => setPortalDataReady(true), 3000);
-        return () => clearTimeout(timer);
-    }
-}, [activeView, tickets.length, activities.length, technicians.length]);
+    if (activeView === 'lead_portal') setPortalDataReady(true);
+}, [activeView]);
 
   // Auto-refresh — 15s for mobile portals, 30s for desktop
   useEffect(() => {
     if (!currentUser) return;
     let isRefreshing = false;
     const isMobilePortal = activeView === 'lead_portal' || activeView === 'tech_portal';
-    const refreshMs = isMobilePortal ? 15000 : 30000;
+    const refreshMs = isMobilePortal ? 20000 : 45000; // Slower polling — less server load
+    let lastRefreshTime = new Date().toISOString();
     const interval = setInterval(async () => {
-      if (isRefreshing || document.hidden) return; // skip if tab is hidden
+      if (isRefreshing || document.hidden) return;
       isRefreshing = true;
       try {
-        await refreshData();
+        // Use incremental refresh — only fetch records changed since last poll
+        const res = await fetch(`/api/refresh-lite?since=${encodeURIComponent(lastRefreshTime)}`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.hasChanges) {
+            // Merge changed records into existing state (don't replace everything)
+            if (data.tickets?.length > 0) {
+              setTickets(prev => {
+                const updated = new Map(prev.map(t => [t.id, t]));
+                data.tickets.forEach((t: any) => updated.set(t.id, t));
+                return Array.from(updated.values()).sort((a: any, b: any) => 
+                  new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+                );
+              });
+            }
+            if (data.activities?.length > 0) {
+              setActivities(prev => {
+                const updated = new Map(prev.map(a => [a.id, a]));
+                data.activities.forEach((a: any) => updated.set(a.id, a));
+                return Array.from(updated.values()).sort((a: any, b: any) => 
+                  new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+                );
+              });
+            }
+          }
+          lastRefreshTime = data.timestamp || new Date().toISOString();
+        }
+      } catch(e) {
+        console.error("Refresh error:", e);
       } finally {
         isRefreshing = false;
       }
