@@ -802,8 +802,8 @@ app.get("/api/refresh-lite", authenticate, async (req, res) => {
 app.get("/api/init", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, usersR, customersR, teamsR, sitesR] = await Promise.all([
-            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500"),
+            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 200"),
+            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200"),
             pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
             pool.query("SELECT * FROM customers ORDER BY name LIMIT 200"),
             pool.query("SELECT * FROM teams ORDER BY name"),
@@ -833,8 +833,8 @@ app.get("/api/init", authenticate, async (req, res) => {
 app.get("/api/refresh", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, customersR] = await Promise.all([
-            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500"),
+            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 200"),
+            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200"),
             pool.query("SELECT * FROM customers ORDER BY name LIMIT 200")
         ]);
         res.json({
@@ -850,7 +850,7 @@ app.get("/api/refresh", authenticate, async (req, res) => {
 
 app.get("/api/tickets", authenticate, async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 500");
+    const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 200");
     res.json(result.rows.map(mapTicket));
   } catch (e) {
     console.error("Tickets fetch error:", e);
@@ -1761,7 +1761,7 @@ app.get("/api/sites", authenticate, async (req, res) => {
 // GET Activities
 app.get("/api/activities", authenticate, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 500");
+    const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200");
     res.json(rows.map(mapActivity));
   } catch (e) { res.status(500).json({error: "Failed to load activities"}); }
 });
