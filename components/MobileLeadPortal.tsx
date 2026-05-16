@@ -1035,6 +1035,78 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
                   );
               })}
+              
+              {/* Freelancer Field Engineers — shown as their own team cards */}
+              {(() => {
+                  // Extract unique FE freelancers from ALL active activities (not just today)
+                  const feMap = new Map<string, { name: string; phone: string; activities: any[] }>();
+                  (activities || []).forEach((a: any) => {
+                      if (a.status === 'CANCELLED' || a.status === 'DONE' || a.status === 'RESOLVED') return;
+                      const freelancers = a.freelancers || [];
+                      if (freelancers.length === 0) return;
+                      (freelancers as any[]).forEach(fl => {
+                          if (fl.role === 'FIELD_ENGINEER' && fl.name) {
+                              const key = fl.name.trim().toLowerCase();
+                              if (!feMap.has(key)) feMap.set(key, { name: fl.name, phone: fl.phone || '', activities: [] });
+                              feMap.get(key)!.activities.push(a);
+                          }
+                      });
+                  });
+                  const feList = Array.from(feMap.values());
+                  if (feList.length === 0) return null;
+                  return (
+                      <>
+                          <h3 className="font-bold text-orange-700 text-sm mt-4 mb-2 flex items-center gap-2">
+                              <span className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-[10px] font-bold text-orange-700">FL</span>
+                              Freelancers
+                          </h3>
+                          {feList.map((fe, i) => {
+                              const progressCount = fe.activities.filter(a => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status)).length;
+                              const pendingCount = fe.activities.filter(a => ['PLANNED','ASSIGNED'].includes(a.status)).length;
+                              // TA freelancers under this FE
+                              const taFreelancers = fe.activities.flatMap(a => (a.freelancers || []).filter((fl: any) => fl.role !== 'FIELD_ENGINEER'));
+                              return (
+                                  <div key={`fl-${i}`} className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm mb-3">
+                                      <div className="flex items-center gap-3 mb-3">
+                                          <div className="w-12 h-12 rounded-full bg-orange-100 border-2 border-orange-300 flex items-center justify-center">
+                                              <span className="text-orange-700 font-bold text-sm">{fe.name.split(' ').map(w => w[0]).join('').slice(0,2)}</span>
+                                          </div>
+                                          <div className="flex-1">
+                                              <h4 className="font-bold text-slate-800">{fe.name}</h4>
+                                              <div className="flex items-center gap-1.5 text-xs text-orange-600">
+                                                  <span className="font-bold">Freelancer</span>
+                                                  {fe.phone && <span>· {fe.phone}</span>}
+                                              </div>
+                                          </div>
+                                          {fe.phone && <a href={`tel:${fe.phone}`} className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><Phone size={16}/></a>}
+                                      </div>
+                                      {taFreelancers.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mb-2">
+                                              {Array.from(new Map(taFreelancers.map((t: any) => [t.name, t])).values()).map((ta: any, j: number) => (
+                                                  <span key={j} className="text-[9px] font-medium bg-teal-50 text-teal-700 border border-teal-200 px-1.5 py-0.5 rounded">{ta.name} (TA)</span>
+                                              ))}
+                                          </div>
+                                      )}
+                                      <div className="flex gap-2">
+                                          <div className="flex-1 bg-blue-50 border border-blue-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
+                                              <span className="text-lg font-bold text-blue-700">{pendingCount}</span>
+                                              <span className="text-[9px] font-bold text-blue-400 uppercase">Pending</span>
+                                          </div>
+                                          <div className="flex-1 bg-amber-50 border border-amber-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
+                                              <span className="text-lg font-bold text-amber-700">{progressCount}</span>
+                                              <span className="text-[9px] font-bold text-amber-400 uppercase">In Prog</span>
+                                          </div>
+                                          <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg py-1.5 px-2 flex flex-col items-center">
+                                              <span className="text-lg font-bold text-slate-700">{fe.activities.length}</span>
+                                              <span className="text-[9px] font-bold text-slate-500 uppercase">Total</span>
+                                          </div>
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </>
+                  );
+              })()}
           </div>
       );
   };
@@ -3269,6 +3341,25 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         })()}
                     </div>
                 </div>
+                {/* Current Freelancers */}
+                {((modalActivity as any)?.freelancers || []).length > 0 && (
+                    <div>
+                        <label className="text-xs font-bold text-orange-600 uppercase tracking-wider block mb-2">Freelancers (from Activity Planner)</label>
+                        <div className="space-y-1.5 rounded-xl border border-orange-100 bg-orange-50/30 p-2">
+                            {((modalActivity as any).freelancers || []).map((fl: any, i: number) => (
+                                <div key={i} className="flex items-center gap-2 p-2 bg-white rounded-lg">
+                                    <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center text-[10px] font-bold text-orange-700">{fl.name?.charAt(0)}</div>
+                                    <div className="flex-1">
+                                        <span className="text-sm font-medium text-slate-800">{fl.name}</span>
+                                        <span className="text-[10px] text-orange-500 ml-1">{fl.role === 'FIELD_ENGINEER' ? 'FE' : 'TA'}</span>
+                                    </div>
+                                    {fl.phone && <a href={`tel:${fl.phone}`} className="text-[10px] text-emerald-600 font-bold">Call</a>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div>
                     <label className="text-xs font-bold text-teal-600 uppercase tracking-wider block mb-2">Technical Associates</label>
                     <div className="space-y-1.5 max-h-36 overflow-y-auto">
