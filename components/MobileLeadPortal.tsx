@@ -1969,7 +1969,18 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         {leadTech && <div className="flex items-center gap-2"><img src={leadTech.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/><div><div className="text-sm font-bold text-slate-800">{leadTech.name}</div><div className="text-[10px] text-slate-400">Lead Engineer</div></div></div>}
                         {salesLead && <div className="flex items-center gap-2"><img src={salesLead.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/><div><div className="text-sm font-bold text-slate-800">{salesLead.name}</div><div className="text-[10px] text-slate-400">Sales Lead</div></div></div>}
                         {supportEngineers.map((eng: any) => <div key={eng.id} className="flex items-center gap-2"><img src={eng.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt=""/><div><div className="text-sm font-bold text-slate-800">{eng.name}</div><div className="text-[10px] text-slate-400">Support Engineer</div></div></div>)}
-                        {!leadTech && !salesLead && supportEngineers.length === 0 && <div className="text-sm text-slate-400">No team assigned</div>}
+                        {/* Freelancers */}
+                        {((act as any).freelancers || []).map((fl: any, i: number) => (
+                            <div key={`fl-${i}`} className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center text-[10px] font-bold text-orange-700">{fl.name?.charAt(0) || 'F'}</div>
+                                <div>
+                                    <div className="text-sm font-bold text-slate-800">{fl.name}</div>
+                                    <div className="text-[10px] text-orange-500">{fl.role === 'FIELD_ENGINEER' ? 'Freelancer (FE)' : 'Freelancer (TA)'}</div>
+                                </div>
+                                {fl.phone && <a href={`tel:${fl.phone}`} className="ml-auto text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-bold">Call</a>}
+                            </div>
+                        ))}
+                        {!leadTech && !salesLead && supportEngineers.length === 0 && ((act as any).freelancers || []).length === 0 && <div className="text-sm text-slate-400">No team assigned</div>}
                     </div>
                 </div>
 
@@ -2140,6 +2151,29 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             </div>
                                         );
                                     })()}
+
+                                    {/* Freelancers (for activities) */}
+                                    {viewJob.type === 'activity' && ((viewJob.data as any).freelancers || []).length > 0 && (
+                                        <div className="bg-white rounded-xl p-4 border border-orange-100">
+                                            <div className="text-[10px] font-bold text-orange-500 uppercase mb-2">Freelancers</div>
+                                            <div className="space-y-2">
+                                                {((viewJob.data as any).freelancers || []).map((fl: any, i: number) => (
+                                                    <div key={i} className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center text-[10px] font-bold text-orange-700">{fl.name?.charAt(0)}</div>
+                                                            <div>
+                                                                <div className="text-sm font-medium text-slate-800">{fl.name}</div>
+                                                                <div className="text-[10px] text-orange-500">{fl.role === 'FIELD_ENGINEER' ? 'Field Engineer' : 'Technical Associate'}</div>
+                                                            </div>
+                                                        </div>
+                                                        {fl.phone && (
+                                                            <a href={`tel:${fl.phone}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">Call</a>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Description */}
                                     <div className="bg-white rounded-xl p-4 border border-slate-100">
@@ -2976,7 +3010,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         onChange={(e) => setDispatchPrimaryId(e.target.value)}
                         className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                     >
-                        <option value="" disabled>Select primary engineer</option>
+                        <option value="">— Unassigned —</option>
                         <optgroup label="Team Leads">
                             {technicians
                                 .filter(t => t.level === 'TEAM_LEAD' && t.systemRole !== 'ADMIN' && t.status !== 'LEAVE' && t.isActive !== false)
@@ -3076,6 +3110,29 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     )}
                 </div>
 
+                {/* Freelancers Section */}
+                <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Freelancers</label>
+                    {((modalActivity as any)?.freelancers || []).length > 0 ? (
+                        <div className="space-y-1 rounded-xl border border-orange-100 bg-orange-50/30 p-3">
+                            {((modalActivity as any).freelancers || []).map((fl: any, i: number) => (
+                                <div key={i} className="flex items-center gap-2 py-1">
+                                    <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center text-[10px] font-bold text-orange-700">
+                                        {fl.name?.charAt(0) || 'F'}
+                                    </div>
+                                    <div>
+                                        <span className="text-sm font-medium text-slate-800">{fl.name}</span>
+                                        <span className="text-[10px] text-orange-600 ml-1.5">{fl.role === 'FIELD_ENGINEER' ? 'Field Engineer' : 'Technical Associate'}</span>
+                                    </div>
+                                    {fl.phone && <a href={`tel:${fl.phone}`} className="ml-auto text-[10px] text-emerald-600 font-bold">Call</a>}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-slate-400 italic">No freelancers assigned. Add via Activity Planner.</p>
+                    )}
+                </div>
+
                 {/* Entire Team Shortcut */}
                 <button
                     type="button"
@@ -3108,22 +3165,22 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 {/* Confirm Button */}
                 <button
                     onClick={() => {
-                        if (!modalActivity || !onUpdateActivity || !dispatchPrimaryId) return;
+                        if (!modalActivity || !onUpdateActivity) return;
                         const a = modalActivity as any;
                         onUpdateActivity({
                             ...a,
-                            status: 'ON_MY_WAY',
-                            primaryEngineerId: dispatchPrimaryId,
+                            status: dispatchPrimaryId ? 'ON_MY_WAY' : a.status, // Only change status if engineer assigned
+                            primaryEngineerId: dispatchPrimaryId || null,
                             supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
-                            leadTechId: a.leadTechId || dispatchPrimaryId,
+                            leadTechId: dispatchPrimaryId || a.leadTechId || null,
+                            assistantTechIds: dispatchSupportIds,
                             updatedAt: new Date().toISOString()
                         });
                         closeModal();
                         setViewActivity(null);
                         setViewJob(null);
                     }}
-                    disabled={!dispatchPrimaryId}
-                    className="w-full py-3.5 bg-blue-600 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold rounded-xl shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                    className="w-full py-3.5 bg-blue-600 disabled:text-slate-500 text-white font-bold rounded-xl shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
                 >
                     <Users size={18} /> Confirm Dispatch
                 </button>
