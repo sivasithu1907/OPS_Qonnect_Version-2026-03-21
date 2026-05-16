@@ -129,6 +129,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   
   // Detail Sheets State
   const [viewTech, setViewTech] = useState<Technician | null>(null);
+  const [viewFreelancer, setViewFreelancer] = useState<{ name: string; phone: string; activities: any[] } | null>(null);
   const [viewTicket, setViewTicket] = useState<Ticket | null>(null); 
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [viewJob, setViewJob] = useState<{ type: 'ticket' | 'activity', data: any } | null>(null);
@@ -1066,7 +1067,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               // TA freelancers under this FE
                               const taFreelancers = fe.activities.flatMap(a => (a.freelancers || []).filter((fl: any) => fl.role !== 'FIELD_ENGINEER'));
                               return (
-                                  <div key={`fl-${i}`} className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm mb-3">
+                                  <div key={`fl-${i}`} onClick={() => setViewFreelancer(fe)} className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm mb-3 active:scale-[0.98] transition-transform cursor-pointer">
                                       <div className="flex items-center gap-3 mb-3">
                                           <div className="w-12 h-12 rounded-full bg-orange-100 border-2 border-orange-300 flex items-center justify-center">
                                               <span className="text-orange-700 font-bold text-sm">{fe.name.split(' ').map(w => w[0]).join('').slice(0,2)}</span>
@@ -2132,6 +2133,107 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
 
             {/* --- Technician Details Bottom Sheet --- */}
+            {/* Freelancer Detail Bottom Sheet */}
+            {viewFreelancer && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end" onClick={() => setViewFreelancer(null)}>
+                    <div className="bg-white w-full max-w-lg rounded-t-[2rem] shadow-2xl h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-5 text-white relative shrink-0">
+                            <button onClick={() => setViewFreelancer(null)} className="absolute top-4 right-4 text-white/70 hover:text-white p-2 bg-white/10 rounded-full backdrop-blur-sm"><X size={20}/></button>
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center">
+                                    <span className="text-white font-bold text-lg">{viewFreelancer.name.split(' ').map(w => w[0]).join('').slice(0,2)}</span>
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-xl">{viewFreelancer.name}</h3>
+                                    <p className="text-orange-100 text-sm">Freelancer · Field Engineer</p>
+                                </div>
+                            </div>
+                            {viewFreelancer.phone && (
+                                <a href={`tel:${viewFreelancer.phone}`} className="mt-3 flex items-center justify-center gap-2 bg-white/20 backdrop-blur-sm rounded-xl py-2 text-sm font-bold">
+                                    <Phone size={14}/> {viewFreelancer.phone}
+                                </a>
+                            )}
+                        </div>
+
+                        {/* Job list */}
+                        <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
+                            {(() => {
+                                const jobs = viewFreelancer.activities;
+                                const inProgress = jobs.filter(j => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(j.status));
+                                const planned = jobs.filter(j => ['PLANNED','NEW','OPEN','ASSIGNED'].includes(j.status));
+                                const carryFwd = jobs.filter(j => j.status === 'CARRY_FORWARD');
+
+                                const sections = [
+                                    { label: 'In Progress', items: inProgress, color: 'amber', icon: '🔄' },
+                                    { label: 'Planned', items: planned, color: 'blue', icon: '📋' },
+                                    { label: 'Carry Forward', items: carryFwd, color: 'orange', icon: '⟲' },
+                                ].filter(s => s.items.length > 0);
+
+                                if (sections.length === 0) return <p className="text-center text-slate-400 py-10">No active jobs</p>;
+
+                                return (
+                                    <div className="space-y-4">
+                                        {/* Summary pills */}
+                                        <div className="flex gap-2 flex-wrap">
+                                            {inProgress.length > 0 && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-bold text-amber-700">{inProgress.length} In Progress</div>}
+                                            {planned.length > 0 && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-[10px] font-bold text-blue-700">{planned.length} Planned</div>}
+                                            {carryFwd.length > 0 && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-full text-[10px] font-bold text-orange-700">{carryFwd.length} Carry Fwd</div>}
+                                        </div>
+
+                                        {sections.map(section => (
+                                            <div key={section.label}>
+                                                <div className="flex items-center gap-2 mb-2 px-1">
+                                                    <span className="text-sm">{section.icon}</span>
+                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">{section.label}</span>
+                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-${section.color}-100 text-${section.color}-700`}>{section.items.length}</span>
+                                                    <div className="h-px flex-1 bg-slate-200 ml-1"/>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {section.items.map((a: any) => {
+                                                        const custName = (customers || []).find((c: any) => c.id === a.customerId)?.name || '';
+                                                        const custPhone = (customers || []).find((c: any) => c.id === a.customerId)?.phone || '';
+                                                        return (
+                                                            <div key={a.id} onClick={() => setViewActivity(a)} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm active:scale-[0.98] transition-transform cursor-pointer">
+                                                                <div className="flex items-center justify-between mb-1.5">
+                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(a.status)}`}>
+                                                                        {String(a.status).replace(/_/g, ' ')}
+                                                                    </span>
+                                                                    <span className="text-[10px] font-mono text-slate-400">{a.reference || a.id}</span>
+                                                                </div>
+                                                                <div className="font-bold text-slate-800 text-sm">{a.type || 'Activity'}</div>
+                                                                {a.serviceCategory && <div className="text-xs text-slate-500">{a.serviceCategory}</div>}
+                                                                {custName && (
+                                                                    <div className="flex items-center justify-between mt-1.5">
+                                                                        <div className="text-xs text-slate-500 flex items-center gap-1">
+                                                                            <Users size={11} className="text-slate-400"/> {custName}
+                                                                        </div>
+                                                                        {custPhone && (
+                                                                            <a href={`tel:${custPhone}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 flex items-center gap-0.5">
+                                                                                <Phone size={10}/> Call
+                                                                            </a>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                                {a.houseNumber && <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><MapPin size={10}/> {a.houseNumber}</div>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 shrink-0">
+                            <button onClick={() => setViewFreelancer(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {viewTech && (
                 <div 
                     className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end"
