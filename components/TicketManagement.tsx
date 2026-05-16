@@ -1150,7 +1150,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         {suggestTechAssign && <span className="text-[10px] text-amber-700 flex items-center gap-1 font-bold animate-pulse"><Wrench size={10}/> AI Suggested</span>}
                     </label>
                     <select value={getFormValue('assignedTechId') as string} onChange={(e) => updateField('assignedTechId', e.target.value)} className={INPUT_STYLES}>
-                        <option value="" disabled>Unassigned</option>
+                        <option value="">— Unassigned —</option>
 
                         <optgroup label="Team Leads">
                             {teamLeads.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -1450,7 +1450,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             onChange={(e) => setCreateForm({...createForm, assignedTechId: e.target.value})}
                             className={INPUT_STYLES}
                         >
-                          <option value="" disabled>Unassigned</option>
+                          <option value="">— Unassigned —</option>
 
                              <optgroup label="Team Leads">
                                {teamLeads.map(t => (
