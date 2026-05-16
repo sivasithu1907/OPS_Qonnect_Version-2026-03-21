@@ -107,7 +107,16 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
         date: new Date(workDate),
         dateLabel: new Date(workDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }),
         techId: (a as any).primaryEngineerId || a.leadTechId,
-        techName: technicians.find(tc => tc.id === ((a as any).primaryEngineerId || a.leadTechId))?.name || 'Unassigned',
+        techName: (() => {
+            const internalName = technicians.find(tc => tc.id === ((a as any).primaryEngineerId || a.leadTechId))?.name;
+            if (internalName) return internalName;
+            // Check freelancers — use FE freelancer name if no internal engineer
+            const feFreelancer = ((a as any).freelancers || []).find((fl: any) => fl.role === 'FIELD_ENGINEER');
+            if (feFreelancer) return `${feFreelancer.name} (FL)`;
+            const anyFreelancer = ((a as any).freelancers || [])[0];
+            if (anyFreelancer) return `${anyFreelancer.name} (FL)`;
+            return 'Unassigned';
+        })(),
         customerId: a.customerId, raw: a,
       };
     });
