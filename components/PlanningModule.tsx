@@ -968,7 +968,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                   <label className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sales Lead</label>
                               </div>
                               <select name="salesLeadId" defaultValue={editingActivity?.salesLeadId || ''} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
-                                  <option value="" disabled hidden>{salesTeam.length === 0 ? 'No Sales Lead available' : 'Select Sales Lead'}</option>
+                                  <option value="">— Unassigned —</option>
                                   {salesTeam.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
                               {salesTeam.length === 0 && (
@@ -995,9 +995,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                       }`}
                                     >
                                       {/* Placeholder: show when empty, NOT selectable, NOT listed */}
-                                      <option value="" disabled hidden>
-                                        Unassigned
-                                      </option>
+                                      <option value="">— Unassigned —</option>
 
                                       {/* Team Leads */}
                                       {(canSelfAssign || teamLeads.length > 0) && (
