@@ -217,18 +217,51 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   }, [technicians]);
 
   // Activities with freelancers but no internal engineer assigned — need their own row
+  // Split into: FE freelancers get their own row, TA freelancers show as "unassigned"
+  const freelancerEngineers = useMemo(() => {
+      const today = new Date().toDateString();
+      const feMap = new Map<string, { name: string; phone: string; activities: Activity[] }>();
+      
+      activities.forEach(a => {
+          if (a.status === 'CANCELLED') return;
+          const freelancers = (a as any).freelancers || [];
+          if (freelancers.length === 0) return;
+          
+          // Check if this is a today/active activity
+          const d = new Date(a.plannedDate || a.createdAt);
+          const isToday = d.toDateString() === today;
+          const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
+          if (!isToday && !isActive) return;
+          
+          // Find FE freelancers — they get their own row
+          freelancers.forEach((fl: any) => {
+              if (fl.role === 'FIELD_ENGINEER' && fl.name) {
+                  const key = fl.name.trim().toLowerCase();
+                  if (!feMap.has(key)) {
+                      feMap.set(key, { name: fl.name, phone: fl.phone || '', activities: [] });
+                  }
+                  feMap.get(key)!.activities.push(a);
+              }
+          });
+      });
+      
+      return Array.from(feMap.values());
+  }, [activities]);
+
   const unassignedFreelancerActs = useMemo(() => {
       const today = new Date().toDateString();
       return activities.filter(a => {
           if (a.status === 'CANCELLED') return false;
-          // Must have freelancers
           if (!(a as any).freelancers || (a as any).freelancers.length === 0) return false;
-          // Must NOT have an internal engineer (no leadTechId and no primaryEngineerId)
+          // Must NOT have an internal engineer AND no FE freelancer
           const hasInternalLead = a.leadTechId || (a as any).primaryEngineerId;
           if (hasInternalLead) return false;
+          // Check if any freelancer is FE (they have their own row)
+          const hasFEFreelancer = ((a as any).freelancers || []).some((fl: any) => fl.role === 'FIELD_ENGINEER');
+          if (hasFEFreelancer) return false; // Handled by freelancerEngineers rows
           // Today's activities only
           const d = new Date(a.plannedDate || a.createdAt);
-          if (a.status === 'IN_PROGRESS' || a.status === 'ON_MY_WAY' || a.status === 'ARRIVED') return true; // always show active
+          if (a.status === 'IN_PROGRESS' || a.status === 'ON_MY_WAY' || a.status === 'ARRIVED') return true;
           return d.toDateString() === today;
       });
   }, [activities]);
@@ -551,6 +584,46 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             </div>
                         );
                     })}
+                    {/* Freelancer Field Engineers — their own row with TA freelancers as supporting */}
+                    {freelancerEngineers.map((fe, feIdx) => {
+                        const feActs = fe.activities;
+                        const isActiveNow = feActs.some(a => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status));
+                        // Find TA freelancers on the same activities
+                        const taFreelancers = feActs.flatMap(a => ((a as any).freelancers || []).filter((fl: any) => fl.role !== 'FIELD_ENGINEER'));
+                        const uniqueTAs = Array.from(new Map(taFreelancers.map((t: any) => [t.name, t])).values());
+                        
+                        return (
+                            <div key={`fe-fl-${feIdx}`} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center bg-orange-50/20`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="relative">
+                                        <div className="w-9 h-9 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-700 text-xs font-bold">
+                                            {fe.name.split(' ').map(w => w[0]).join('').slice(0,2)}
+                                        </div>
+                                        <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${isActiveNow ? 'bg-blue-500 animate-pulse' : 'bg-orange-400'}`} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-slate-800 text-xs truncate">{fe.name}</span>
+                                            <span className="text-[8px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">FREELANCER</span>
+                                            {isActiveNow && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">LIVE</span>}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500">{feActs.length} job{feActs.length > 1 ? 's' : ''} today</div>
+                                    </div>
+                                </div>
+                                <div className="flex flex-wrap gap-1 mb-1">
+                                    {uniqueTAs.map((ta: any, i: number) => (
+                                        <span key={`fta-${i}`} className="px-1.5 py-0.5 bg-teal-50 text-[9px] font-medium text-teal-700 rounded flex items-center gap-1 border border-teal-200">
+                                            <Users size={8} className="text-teal-400" /> {ta.name} <span className="text-[7px] opacity-60">TA</span>
+                                        </span>
+                                    ))}
+                                    {uniqueTAs.length === 0 && <span className="text-[9px] text-slate-300 italic">Solo</span>}
+                                </div>
+                                <div className="h-1 w-full bg-orange-100 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full bg-orange-400" style={{ width: `${Math.min(100, (feActs.length / 3) * 100)}%` }} />
+                                </div>
+                            </div>
+                        );
+                    })}
                     {/* Freelancer-only Jobs Row (no internal engineer assigned) */}
                     {unassignedFreelancerActs.length > 0 && (
                         <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center bg-amber-50/30`}>
@@ -853,6 +926,46 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 </div>
                             );
                         })}
+                        {/* Freelancer Field Engineer timeline rows */}
+                        {freelancerEngineers.map((fe, feIdx) => (
+                            <div key={`fe-tl-${feIdx}`} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full bg-orange-50/10`}>
+                                {fe.activities.map(a => {
+                                    const s = normalizeStatus(a.status);
+                                    const actualStart = (a as any).startedAt;
+                                    const actualEnd = (a as any).completedAt;
+                                    const startTime = (() => {
+                                        if (actualStart && ['DONE','IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status)) return actualStart;
+                                        return a.plannedDate || a.createdAt || new Date().toISOString();
+                                    })();
+                                    const duration = (() => {
+                                        if (s === 'DONE' && actualStart && actualEnd) return Math.max(0.25, (new Date(actualEnd).getTime() - new Date(actualStart).getTime()) / 3600000);
+                                        if (['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status) && actualStart) {
+                                            const now = new Date();
+                                            const start = new Date(actualStart);
+                                            const nowHour = now.getHours() + now.getMinutes() / 60;
+                                            const startHour = start.getHours() + start.getMinutes() / 60;
+                                            if (start.toDateString() === now.toDateString()) return Math.max(0.25, nowHour - startHour);
+                                            return Math.max(0.25, nowHour - TIMELINE_START);
+                                        }
+                                        return a.durationHours || 2;
+                                    })();
+                                    const style = getPositionStyle(startTime, duration);
+                                    const custName = customers.find((c: any) => c.id === a.customerId)?.name || '';
+                                    return (
+                                        <div key={a.id} className={`absolute top-3 bottom-3 rounded border shadow-sm p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-md transition-all z-10 overflow-hidden ${
+                                            s === 'DONE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
+                                            s === 'IN_PROGRESS' ? 'bg-orange-50 border-orange-300 text-orange-900' :
+                                            s === 'ON_MY_WAY' ? 'bg-cyan-50 border-cyan-200 text-cyan-800' :
+                                            'bg-orange-50 border-dashed border-orange-300 text-orange-700 opacity-70'
+                                        }`} style={style} onClick={() => handleItemClick('activity', a.id)}>
+                                            <span className="text-[9px] font-bold truncate">{a.reference || a.id}</span>
+                                            <span className="text-[8px] truncate opacity-80">{custName}</span>
+                                            <span className="text-[7px] truncate opacity-60">{a.type}{a.serviceCategory ? ` · ${a.serviceCategory}` : ''}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
                         {/* Freelancer-only timeline row */}
                         {unassignedFreelancerActs.length > 0 && (
                             <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full bg-amber-50/20`}>
