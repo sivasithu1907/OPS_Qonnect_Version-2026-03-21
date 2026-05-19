@@ -199,7 +199,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
               // Skip the activity being edited
               if (editingActivity && act.id === editingActivity.id) return false;
               // Skip completed/cancelled/carry-forwarded — they're done
-              if (['DONE', 'CANCELLED', 'CARRY_FORWARD'].includes(act.status)) return false;
+              if (['DONE', 'CANCELLED'].includes(act.status)) return false;
               
               // Is this TA assigned to this activity in ANY role?
               const isAssigned = 
@@ -1364,9 +1364,53 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 )}
                 {va.odooLink && <div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Odoo:</span><a href={va.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">{va.odooLink}</a></div>}
               </div>
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
-                <button onClick={() => setViewingActivity(null)} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-200 rounded-xl">Close</button>
-                <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Edit Activity</button>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-2">
+                {/* Admin action buttons */}
+                <div className="flex gap-2">
+                    {/* Edit */}
+                    <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 text-sm">
+                        Edit Activity
+                    </button>
+                    {/* Admin Override — force status + timestamps */}
+                    <button onClick={() => {
+                        setActOverrideTarget(va);
+                        setActOverrideStatus(va.status || 'PLANNED');
+                        setActOverrideStartedAt(va.startedAt ? new Date(new Date(va.startedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
+                        setActOverrideCompletedAt(va.completedAt ? new Date(new Date(va.completedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
+                        setActOverrideNote('');
+                        setShowActOverride(true);
+                    }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 text-sm">
+                        Admin Override
+                    </button>
+                </div>
+                {/* Reschedule — for carry-forward or any status */}
+                {(va.status === 'CARRY_FORWARD' || va.status === 'PLANNED' || va.status === 'DONE' || va.status === 'IN_PROGRESS') && (
+                    <button onClick={() => {
+                        // Reschedule = set new planned date + reset to PLANNED status
+                        const newDate = prompt('Enter new date & time (YYYY-MM-DD HH:MM):', 
+                            new Date(Date.now() + 24*60*60*1000).toISOString().slice(0,16).replace('T',' '));
+                        if (newDate && newDate.trim()) {
+                            const isoDate = new Date(newDate.trim().replace(' ','T')).toISOString();
+                            onUpdateActivity({
+                                ...va,
+                                status: 'PLANNED',
+                                plannedDate: isoDate,
+                                nextPlannedAt: null,
+                                carryForwardNote: va.carryForwardNote ? va.carryForwardNote + '\n[Rescheduled to ' + newDate.trim() + ']' : '[Rescheduled to ' + newDate.trim() + ']',
+                                updatedAt: new Date().toISOString()
+                            });
+                            setViewingActivity(null);
+                        }
+                    }} className={`w-full py-2.5 font-bold rounded-xl text-sm flex items-center justify-center gap-2 ${
+                        va.status === 'CARRY_FORWARD' 
+                            ? 'bg-orange-500 text-white hover:bg-orange-600' 
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                    }`}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 009 9 9.75 9.75 0 006.74-2.74L21 16"/><path d="M21 12a9 9 0 00-9-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M21 21v-5h-5"/></svg>
+                        {va.status === 'CARRY_FORWARD' ? 'Reschedule (Carry Forward)' : 'Reschedule to New Date'}
+                    </button>
+                )}
+                <button onClick={() => setViewingActivity(null)} className="w-full py-2 text-slate-400 font-medium hover:bg-slate-100 rounded-xl text-sm">Close</button>
               </div>
             </div>
           </div>
@@ -1394,16 +1438,23 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           </select>
                       </div>
                       <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Planned Date & Time</label>
+                          <input type="datetime-local" value={actOverrideTarget?.plannedDate ? new Date(new Date(actOverrideTarget.plannedDate).getTime() + 3*60*60*1000).toISOString().slice(0,16) : ''} 
+                              onChange={e => { if (actOverrideTarget) setActOverrideTarget({...actOverrideTarget, plannedDate: new Date(e.target.value).toISOString()} as any); }}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          <p className="text-[10px] text-slate-400 mt-0.5">Modify the scheduled date/time</p>
+                      </div>
+                      <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Started At</label>
                           <input type="datetime-local" value={actOverrideStartedAt} onChange={e => setActOverrideStartedAt(e.target.value)}
                               className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
-                          <p className="text-[10px] text-slate-400 mt-0.5">When work actually started</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">When work actually started (even retroactively)</p>
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Completed At</label>
                           <input type="datetime-local" value={actOverrideCompletedAt} onChange={e => setActOverrideCompletedAt(e.target.value)}
                               className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
-                          <p className="text-[10px] text-slate-400 mt-0.5">When the job was actually finished</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">When the job was actually finished (even past dates)</p>
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Admin Note</label>
@@ -1417,6 +1468,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           const updates: any = {
                               ...actOverrideTarget,
                               status: actOverrideStatus,
+                              plannedDate: actOverrideTarget?.plannedDate || undefined,
                               updatedAt: new Date().toISOString()
                           };
                           if (actOverrideStartedAt) updates.startedAt = new Date(actOverrideStartedAt).toISOString();
