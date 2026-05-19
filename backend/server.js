@@ -1041,7 +1041,7 @@ app.delete("/api/tickets/:id", authenticate, async (req, res) => {
 // 4. Update Ticket Status & Trigger Review Message
 app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
     try {
-        const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt, completionNote } = req.body;
+        const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt, completionNote, startedAt: adminStartedAt, completedAt: adminCompletedAt } = req.body;
         const ticketId = req.params.id;
 
         // Fetch current status to detect transitions for timestamp tracking
@@ -1049,20 +1049,23 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
         const prevStatus = current.rows[0]?.status;
         const alreadyStarted = current.rows[0]?.started_at;
 
-        // Build timestamp clauses based on status transition
+        // Build timestamp clauses — admin-provided values take priority
         let startedAtClause = "";
         let completedAtClause = "";
 
-        if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
-            // First time entering IN_PROGRESS — record actual start time
+        if (adminStartedAt) {
+            startedAtClause = `, started_at = '${new Date(adminStartedAt).toISOString()}'`;
+        } else if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
             startedAtClause = ", started_at = NOW()";
         }
-        if (status === 'RESOLVED' && prevStatus !== 'RESOLVED') {
-            // Engineer pressed Complete — record actual completion time
+
+        if (adminCompletedAt) {
+            completedAtClause = `, completed_at = '${new Date(adminCompletedAt).toISOString()}'`;
+        } else if (status === 'RESOLVED' && prevStatus !== 'RESOLVED') {
             completedAtClause = ", completed_at = NOW()";
         }
+
         if (status === 'CANCELLED') {
-            // Reset both on cancellation
             startedAtClause  = ", started_at = NULL";
             completedAtClause = ", completed_at = NULL";
         }
@@ -1815,7 +1818,10 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
     try {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
         delete details.startedAt; delete details.completedAt; delete details.createdAt; delete details.updatedAt;
-        // Remove timestamp fields from details — server controls these via NOW()
+        // Save admin-provided timestamps BEFORE deleting from details
+        const adminStartedAt = details.startedAt || req.body.startedAt || null;
+        const adminCompletedAt = details.completedAt || req.body.completedAt || null;
+        // Remove timestamp fields from details JSONB — timestamps go in dedicated columns
         delete details.startedAt;
         delete details.completedAt;
         delete details.createdAt;
@@ -1884,14 +1890,16 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
         let completedAtClause = "";
         let visitHistoryClause = "";
 
-        if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
+        // Admin-provided timestamps take priority over auto-generated NOW()
+        if (adminStartedAt) {
+            startedAtClause = `, started_at = '${new Date(adminStartedAt).toISOString()}'`;
+        } else if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
             startedAtClause = ", started_at = NOW()";
         }
-        if (status === 'ON_MY_WAY' && prevStatus === 'PLANNED') {
-            // ON_MY_WAY is travel time — do NOT set started_at here
-            // started_at should only be set when actual work begins (IN_PROGRESS)
-        }
-        if (status === 'DONE' && prevStatus !== 'DONE') {
+
+        if (adminCompletedAt) {
+            completedAtClause = `, completed_at = '${new Date(adminCompletedAt).toISOString()}'`;
+        } else if (status === 'DONE' && prevStatus !== 'DONE') {
             completedAtClause = ", completed_at = NOW()";
             // Record the completed visit in history
             const visitRecord = {
