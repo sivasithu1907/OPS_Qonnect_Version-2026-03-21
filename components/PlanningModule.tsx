@@ -581,10 +581,18 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  </div>
                </div>
                {days.map(d => {
+                 const today = new Date();
+                 const isToday = d.toDateString() === today.toDateString();
                  const dayActs = activities.filter(a => {
                     if (!a.plannedDate) return false;
-                    if (new Date(a.plannedDate).toDateString() !== d.toDateString()) return false;
-                    return a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                    if (!isAssigned) return false;
+                    
+                    // Active jobs (IN_PROGRESS, ON_MY_WAY, ARRIVED) should show on TODAY regardless of planned date
+                    if (isToday && ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status)) return true;
+                    
+                    // All others: show on their planned date
+                    return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
                  
                  return (
@@ -665,10 +673,14 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  <div className="text-[10px] text-amber-600 mt-1">No internal engineer</div>
                </div>
                {days.map(d => {
+                 const today = new Date();
+                 const isToday = d.toDateString() === today.toDateString();
                  const dayActs = activities.filter(a => {
                     if (!a.plannedDate) return false;
-                    if (new Date(a.plannedDate).toDateString() !== d.toDateString()) return false;
-                    return !a.leadTechId && ((a as any).freelancers || []).length > 0;
+                    const isFreelancerOnly = !a.leadTechId && ((a as any).freelancers || []).length > 0;
+                    if (!isFreelancerOnly) return false;
+                    if (isToday && ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status)) return true;
+                    return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
                  return (
                    <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-amber-50/30 transition-colors">
