@@ -2078,7 +2078,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     <div className="space-y-2">
                         {actStatus === 'PLANNED' && (
                             <div className="space-y-2">
-                                <button onClick={() => { setModalActivity(act); setDispatchPrimaryId(act.leadTechId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                                <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
                                     className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
                                     <Users size={18} /> Dispatch Team
                                 </button>
@@ -2115,7 +2115,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             </div>
                         )}
                         {actStatus === 'CARRY_FORWARD' && (
-                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId(act.leadTechId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
                                 className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
                                 <RotateCcw size={18} /> Reschedule
                             </button>
@@ -3346,7 +3346,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             status: dispatchPrimaryId ? 'ON_MY_WAY' : a.status, // Only change status if engineer assigned
                             primaryEngineerId: dispatchPrimaryId || null,
                             supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
-                            leadTechId: dispatchPrimaryId || a.leadTechId || null,
+                            leadTechId: a.leadTechId || null, // Keep original leadTechId — don't override with dispatch primary
                             assistantTechIds: dispatchSupportIds,
                             updatedAt: new Date().toISOString()
                         });
