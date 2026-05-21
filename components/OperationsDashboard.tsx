@@ -227,6 +227,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
           const freelancers = (a as any).freelancers || [];
           if (freelancers.length === 0) return;
           
+          // Skip if this activity already has an internal engineer — it's shown under their row
+          const hasInternalEngineer = a.leadTechId && operationsStaff.some(s => s.id === a.leadTechId);
+          if (hasInternalEngineer) return;
+          
           // Check if this is a today/active activity
           const d = new Date(a.plannedDate || a.createdAt);
           const isToday = d.toDateString() === today;
@@ -744,12 +748,23 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             const techActivities = activities.filter(a => {
                                 const isExecutionPhase = ['IN_PROGRESS','DONE','ON_MY_WAY','ARRIVED','CARRY_FORWARD'].includes(a.status);
                                 const hasPrimaryEngineer = !!(a as any).primaryEngineerId;
+                                const hasFreelancers = ((a as any).freelancers || []).length > 0;
+                                const hasFEFreelancer = ((a as any).freelancers || []).some((fl: any) => fl.role === 'FIELD_ENGINEER');
                                 
                                 // Check if this tech is involved in ANY capacity
                                 const isPrimary = hasPrimaryEngineer && (a as any).primaryEngineerId === tech.id;
                                 const isLead = a.leadTechId === tech.id;
                                 const isSupporting = ((a as any).supportingEngineerIds || []).includes(tech.id);
                                 const isTA = (a.assistantTechIds || []).includes(tech.id);
+                                
+                                // If activity has FE freelancers and this engineer is NOT explicitly the primary,
+                                // don't show under this engineer's row (it shows under the freelancer row instead)
+                                if (hasFEFreelancer && !isPrimary && !isSupporting && !isTA) {
+                                    // Only show if this engineer is explicitly the primaryEngineerId
+                                    // Don't show just because leadTechId matches (that was auto-set)
+                                    return false;
+                                }
+                                
                                 const isInvolved = isPrimary || isLead || isSupporting || isTA;
 
                                 if (!isInvolved) return false;
