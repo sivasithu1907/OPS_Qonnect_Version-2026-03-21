@@ -587,9 +587,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     if (!a.plannedDate) return false;
                     const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
                     if (!isAssigned) return false;
+                    const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
                     
-                    // Active jobs (IN_PROGRESS, ON_MY_WAY, ARRIVED) should show on TODAY regardless of planned date
-                    if (isToday && ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status)) return true;
+                    // Active jobs show ONLY on today — not on their old planned date
+                    if (isActive) return isToday;
                     
                     // All others: show on their planned date
                     return new Date(a.plannedDate).toDateString() === d.toDateString();
@@ -679,7 +680,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     if (!a.plannedDate) return false;
                     const isFreelancerOnly = !a.leadTechId && ((a as any).freelancers || []).length > 0;
                     if (!isFreelancerOnly) return false;
-                    if (isToday && ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status)) return true;
+                    const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
+                    if (isActive) return isToday;
                     return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
                  return (
