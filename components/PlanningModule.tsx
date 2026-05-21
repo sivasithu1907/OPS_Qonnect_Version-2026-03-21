@@ -1375,8 +1375,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     <button onClick={() => {
                         setActOverrideTarget(va);
                         setActOverrideStatus(va.status || 'PLANNED');
-                        setActOverrideStartedAt(va.startedAt ? new Date(new Date(va.startedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
-                        setActOverrideCompletedAt(va.completedAt ? new Date(new Date(va.completedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
+                        setActOverrideStartedAt(va.startedAt ? new Date(va.startedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
+                        setActOverrideCompletedAt(va.completedAt ? new Date(va.completedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
                         setActOverrideNote('');
                         setShowActOverride(true);
                     }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 text-sm">
@@ -1439,7 +1439,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Planned Date & Time</label>
-                          <input type="datetime-local" value={actOverrideTarget?.plannedDate ? new Date(new Date(actOverrideTarget.plannedDate).getTime() + 3*60*60*1000).toISOString().slice(0,16) : ''} 
+                          <input type="datetime-local" value={actOverrideTarget?.plannedDate ? new Date(actOverrideTarget.plannedDate).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : ''} 
                               onChange={e => { if (actOverrideTarget) setActOverrideTarget({...actOverrideTarget, plannedDate: new Date(e.target.value).toISOString()} as any); }}
                               className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
                           <p className="text-[10px] text-slate-400 mt-0.5">Modify the scheduled date/time</p>
@@ -1472,7 +1472,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               updatedAt: new Date().toISOString()
                           };
                           if (actOverrideStartedAt) updates.startedAt = new Date(actOverrideStartedAt).toISOString();
-                          if (actOverrideCompletedAt) updates.completedAt = new Date(actOverrideCompletedAt).toISOString();
+                          if (actOverrideCompletedAt) { updates.completedAt = new Date(actOverrideCompletedAt + '+03:00').toISOString(); }
                           if (actOverrideNote) updates.completionNote = (actOverrideTarget.completionNote ? actOverrideTarget.completionNote + '\n' : '') + '[Admin Override] ' + actOverrideNote;
                           onUpdateActivity(updates);
                           setShowActOverride(false);
