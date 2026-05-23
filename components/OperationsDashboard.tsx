@@ -794,7 +794,17 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     supportCount,
                                     // Timeline start position
                                     plannedDate: (() => {
-                                        if (actualStart && (s === 'DONE' || s === 'IN_PROGRESS' || s === 'ON_MY_WAY' || s === 'ARRIVED')) return actualStart;
+                                        if (actualStart && (s === 'DONE' || s === 'IN_PROGRESS' || s === 'ON_MY_WAY' || s === 'ARRIVED')) {
+                                            const start = new Date(actualStart);
+                                            const now = new Date();
+                                            // If started on a previous day, show bar from 08:00 today
+                                            if (start.toDateString() !== now.toDateString()) {
+                                                const today8am = new Date(now);
+                                                today8am.setHours(8, 0, 0, 0);
+                                                return today8am.toISOString();
+                                            }
+                                            return actualStart;
+                                        }
                                         if (s === 'IN_PROGRESS' && a.updatedAt) return a.updatedAt;
                                         return a.plannedDate || a.createdAt || new Date().toISOString();
                                     })(),
