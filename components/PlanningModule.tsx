@@ -583,29 +583,46 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                {days.map(d => {
                  const today = new Date();
                  const isToday = d.toDateString() === today.toDateString();
-                 const dayActs = activities.filter(a => {
+                 
+                 // Current activities for this day
+                 const currentDayActs = activities.filter(a => {
                     if (!a.plannedDate) return false;
                     const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
                     if (!isAssigned) return false;
                     const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
-                    
-                    // Active jobs show ONLY on today — not on their old planned date
                     if (isActive) return isToday;
-                    
-                    // All others: show on their planned date
                     return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
+                 
+                 // Also show visit history entries for this day (carry-forwarded visits)
+                 const historyCards = !isToday ? activities.filter(a => {
+                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                    if (!isAssigned) return false;
+                    return ((a as any).visitHistory || []).some((v: any) => 
+                        v.date && new Date(v.date).toDateString() === d.toDateString()
+                    );
+                 }).map(a => {
+                    const visit = ((a as any).visitHistory || []).find((v: any) => 
+                        v.date && new Date(v.date).toDateString() === d.toDateString()
+                    );
+                    // Return a virtual activity card with the visit's status
+                    return { ...a, _isHistoryEntry: true, _visitStatus: visit?.status || 'CARRY_FORWARD', _visitDate: visit?.date };
+                 }).filter(a => !currentDayActs.some(ca => ca.id === a.id)) : []; // Don't duplicate if already showing
+                 
+                 const dayActs = [...currentDayActs, ...historyCards];
                  
                  return (
                    <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-slate-50/50 transition-colors">
                       {dayActs.map(act => {
+                        const isHistoryEntry = (act as any)._isHistoryEntry;
+                        const displayStatus = isHistoryEntry ? (act as any)._visitStatus : act.status;
                         const actFreelancers = (act as any).freelancers || [];
                         const actCustomer = customers.find(c => c.id === act.customerId);
                         const actTAs = (act.assistantTechIds || []).map(id => technicians.find(t => t.id === id)).filter(Boolean);
                         const actSupport = ((act as any).supportingEngineerIds || [])
-                            .filter((id: string) => !(act.assistantTechIds || []).includes(id)) // exclude TAs already shown
+                            .filter((id: string) => !(act.assistantTechIds || []).includes(id))
                             .map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
-                        const statusColor = act.status === 'DONE' ? 'bg-emerald-500' : act.status === 'IN_PROGRESS' ? 'bg-blue-500' : act.status === 'CARRY_FORWARD' ? 'bg-orange-500' : act.status === 'CANCELLED' ? 'bg-slate-400' : 'bg-slate-400';
+                        const statusColor = displayStatus === 'DONE' ? 'bg-emerald-500' : displayStatus === 'IN_PROGRESS' ? 'bg-blue-500' : displayStatus === 'CARRY_FORWARD' ? 'bg-orange-500' : displayStatus === 'CANCELLED' ? 'bg-slate-400' : 'bg-slate-400';
                         return (
                         <div 
                           key={act.id} 
@@ -684,13 +701,20 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     if (isActive) return isToday;
                     return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
+                 // Add visit history entries for freelancer activities too
+                 const flHistoryCards = !isToday ? activities.filter(a => {
+                    const isFL = !a.leadTechId && ((a as any).freelancers || []).length > 0;
+                    if (!isFL) return false;
+                    return ((a as any).visitHistory || []).some((v: any) => v.date && new Date(v.date).toDateString() === d.toDateString());
+                 }).filter(a => !dayActs.some(da => da.id === a.id)) : [];
+                 const allDayActs = [...dayActs, ...flHistoryCards];
                  return (
                    <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-amber-50/30 transition-colors">
-                      {dayActs.map(act => {
+                      {allDayActs.map(act => {
                         const actFreelancers = (act as any).freelancers || [];
                         return (
                           <div 
-                            key={act.id} 
+                            key={act.id + '-' + d.toISOString()} 
                             onClick={() => setViewingActivity(act)}
                             className="mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all bg-amber-50 border-amber-200 border-l-4 border-l-amber-400"
                           >
