@@ -757,11 +757,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 const isSupporting = ((a as any).supportingEngineerIds || []).includes(tech.id);
                                 const isTA = (a.assistantTechIds || []).includes(tech.id);
                                 
-                                // If activity has FE freelancers and this engineer is NOT explicitly the primary,
-                                // don't show under this engineer's row (it shows under the freelancer row instead)
-                                if (hasFEFreelancer && !isPrimary && !isSupporting && !isTA) {
-                                    // Only show if this engineer is explicitly the primaryEngineerId
-                                    // Don't show just because leadTechId matches (that was auto-set)
+                                // If activity has freelancers and this engineer is only the leadTechId
+                                // (not explicitly primary/supporting/TA), skip — it belongs to freelancer row
+                                if (hasFreelancers && isLead && !isPrimary && !isSupporting && !isTA) {
                                     return false;
                                 }
                                 
