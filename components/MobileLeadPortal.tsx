@@ -3337,7 +3337,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             status: dispatchPrimaryId ? 'ON_MY_WAY' : a.status, // Only change status if engineer assigned
                             primaryEngineerId: dispatchPrimaryId || null,
                             supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
-                            leadTechId: a.leadTechId || null, // Keep original leadTechId — don't override with dispatch primary
+                            leadTechId: dispatchPrimaryId || null, // Update leadTechId to match dispatch selection (null if unassigned)
                             assistantTechIds: dispatchSupportIds,
                             updatedAt: new Date().toISOString()
                         });
