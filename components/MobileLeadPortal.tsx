@@ -3106,42 +3106,33 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
                 <button 
                     onClick={() => {
-                        if (!modalActivity || !onUpdateActivity || !onAddActivity || !nextDate) return;
+                        if (!modalActivity || !onUpdateActivity || !nextDate) return;
                         const a: any = modalActivity as any;
                         const cfNote = carryIssue ? `Reason: ${carryIssue}${actionNote ? '\nRemark: ' + actionNote : ''}` : actionNote;
                         
-                        // 1. Mark ORIGINAL activity as CARRY_FORWARD (stays on original date)
+                        // Carry forward = update the SAME activity
+                        // Backend handles: recording visit history, setting status to CARRY_FORWARD, 
+                        // then when rescheduled it resets to PLANNED with new date
                         onUpdateActivity({
                             ...a,
                             status: 'CARRY_FORWARD',
                             carryForwardNote: cfNote,
-                            remarks: cfNote + (a.remarks ? '\n---\n' + a.remarks : ''),
+                            currentVisitRemark: actionNote || '',
                             updatedAt: new Date().toISOString()
                         });
                         
-                        // 2. Create NEW activity for the rescheduled date (inherits all details)
-                        const newAct = {
-                            type: a.type,
-                            serviceCategory: a.serviceCategory,
-                            customerId: a.customerId,
-                            priority: a.priority,
-                            status: 'PLANNED',
-                            plannedDate: nextDate,
-                            durationHours: a.durationHours,
-                            durationUnit: a.durationUnit,
-                            description: a.description,
-                            odooLink: a.odooLink,
-                            locationUrl: a.locationUrl,
-                            houseNumber: a.houseNumber,
-                            salesLeadId: a.salesLeadId,
-                            leadTechId: a.leadTechId,
-                            assistantTechIds: a.assistantTechIds,
-                            freelancers: a.freelancers,
-                            siteId: a.siteId,
-                            remarks: `Follow-up from ${a.reference} (${new Date(a.plannedDate).toLocaleDateString('en-GB', {day:'2-digit', month:'short'})})\n${cfNote}`,
-                            previousActivityRef: a.reference,
-                        };
-                        onAddActivity(newAct);
+                        // After a short delay, reschedule to the new date (reset to PLANNED)
+                        setTimeout(() => {
+                            onUpdateActivity({
+                                ...a,
+                                status: 'PLANNED',
+                                plannedDate: nextDate,
+                                carryForwardNote: cfNote,
+                                startedAt: null,
+                                completedAt: null,
+                                updatedAt: new Date().toISOString()
+                            });
+                        }, 1000);
                         
                         closeModal();
                         setViewActivity(null);
