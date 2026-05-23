@@ -1892,8 +1892,15 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
         // Admin-provided timestamps take priority over auto-generated NOW()
         if (adminStartedAt) {
             startedAtClause = `, started_at = '${new Date(adminStartedAt).toISOString()}'`;
-        } else if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
+        } else if (status === 'IN_PROGRESS' && (prevStatus === 'PLANNED' || prevStatus === 'CARRY_FORWARD' || prevStatus === 'ARRIVED' || prevStatus === 'ON_MY_WAY')) {
+            // ALWAYS set started_at when entering IN_PROGRESS — even if there's an old stale value from a previous visit
             startedAtClause = ", started_at = NOW()";
+        }
+
+        // When rescheduling (going back to PLANNED), clear started_at and completed_at
+        if (status === 'PLANNED' && prevStatus !== 'PLANNED') {
+            startedAtClause = ", started_at = NULL";
+            completedAtClause = ", completed_at = NULL";
         }
 
         if (adminCompletedAt) {
