@@ -1837,11 +1837,10 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
 
         // Merge execution fields into details JSONB
         const mergedDetails = { ...existingDetails, ...details };
-        if (primaryEngineerId) {
-            mergedDetails.primaryEngineerId = primaryEngineerId;
-        }
+        // ALWAYS overwrite team assignments — even if null/empty (to clear old members)
+        mergedDetails.primaryEngineerId = primaryEngineerId || null;
         if (supportingEngineerIds !== undefined) {
-            mergedDetails.supportingEngineerIds = supportingEngineerIds;
+            mergedDetails.supportingEngineerIds = supportingEngineerIds || [];
         }
         // Validate freelancers array if present
         if (mergedDetails.freelancers && Array.isArray(mergedDetails.freelancers)) {
