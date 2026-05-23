@@ -199,7 +199,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
               // Skip the activity being edited
               if (editingActivity && act.id === editingActivity.id) return false;
               // Skip completed/cancelled/carry-forwarded — they're done
-              if (['DONE', 'CANCELLED'].includes(act.status)) return false;
+              if (['CANCELLED'].includes(act.status)) return false;
               
               // Is this TA assigned to this activity in ANY role?
               const isAssigned = 
@@ -586,11 +586,16 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  
                  // Current activities for this day
                  const currentDayActs = activities.filter(a => {
-                    if (!a.plannedDate) return false;
+                    if (!a.plannedDate && a.status !== 'DONE') return false;
                     const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
                     if (!isAssigned) return false;
                     const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
                     if (isActive) return isToday;
+                    // DONE activities show on their completed date
+                    if (a.status === 'DONE') {
+                        const completedDate = new Date((a as any).completedAt || a.updatedAt || a.plannedDate);
+                        return completedDate.toDateString() === d.toDateString();
+                    }
                     return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
                  
@@ -694,11 +699,15 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  const today = new Date();
                  const isToday = d.toDateString() === today.toDateString();
                  const dayActs = activities.filter(a => {
-                    if (!a.plannedDate) return false;
+                    if (!a.plannedDate && a.status !== 'DONE') return false;
                     const isFreelancerOnly = !a.leadTechId && ((a as any).freelancers || []).length > 0;
                     if (!isFreelancerOnly) return false;
                     const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
                     if (isActive) return isToday;
+                    if (a.status === 'DONE') {
+                        const completedDate = new Date((a as any).completedAt || a.updatedAt || a.plannedDate);
+                        return completedDate.toDateString() === d.toDateString();
+                    }
                     return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
                  // Add visit history entries for freelancer activities too
