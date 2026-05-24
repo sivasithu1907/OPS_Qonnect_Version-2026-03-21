@@ -591,16 +591,21 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     if (!isAssigned) return false;
                     const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
                     if (isActive) return isToday;
-                    // DONE activities show on their completed date
                     if (a.status === 'DONE') {
                         const completedDate = new Date((a as any).completedAt || a.updatedAt || a.plannedDate);
                         return completedDate.toDateString() === d.toDateString();
                     }
+                    // Check if this date has a visit history entry — if so, let the history card handle it
+                    const hasVisitOnThisDay = ((a as any).visitHistory || []).some((v: any) => 
+                        v.date && new Date(v.date).toDateString() === d.toDateString()
+                    );
+                    if (hasVisitOnThisDay) return false; // History card will show with correct visit status
+                    
                     return new Date(a.plannedDate).toDateString() === d.toDateString();
                  });
                  
-                 // Also show visit history entries for this day (carry-forwarded visits)
-                 const historyCards = !isToday ? activities.filter(a => {
+                 // Show visit history entries on their respective dates
+                 const historyCards = activities.filter(a => {
                     const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
                     if (!isAssigned) return false;
                     return ((a as any).visitHistory || []).some((v: any) => 
@@ -612,7 +617,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     );
                     // Return a virtual activity card with the visit's status
                     return { ...a, _isHistoryEntry: true, _visitStatus: visit?.status || 'CARRY_FORWARD', _visitDate: visit?.date };
-                 }).filter(a => !currentDayActs.some(ca => ca.id === a.id)) : []; // Don't duplicate if already showing
+                 }).filter(a => !currentDayActs.some(ca => ca.id === a.id)); // Don't duplicate if already showing
                  
                  const dayActs = [...currentDayActs, ...historyCards];
                  
@@ -634,8 +639,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           onClick={() => setViewingActivity(act)}
                           className={`mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all ${
                             (act.escalationLevel || 0) > 0 ? 'bg-red-50 border-red-400 border-l-4' :
-                            act.status === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
-                            act.status === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200' :
+                            displayStatus === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
+                            displayStatus === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200 border-l-4 border-l-orange-400' :
+                            displayStatus === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 border-l-4 border-l-blue-500' :
                             act.priority === 'URGENT' ? 'bg-red-50 border-red-200 border-l-4 border-l-red-500' : 
                             'bg-white border-slate-200 border-l-4 border-l-blue-400'
                           }`}
