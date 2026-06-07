@@ -871,8 +871,15 @@ const loadCustomers = async () => {
   
 useEffect(() => {
     if (!currentUser) return;
-    // Single API call loads everything at once
-    loadAllData();
+    // Use lightweight mobile API for portals, full init for desktop
+    const view = activeView;
+    if (view === 'lead_portal') {
+        loadMobileData('lead');
+    } else if (view === 'tech_portal') {
+        loadMobileData('tech');
+    } else {
+        loadAllData();
+    }
   }, [currentUser?.id || currentUser?.techId]);
 
 // Lead Portal — render immediately, no blocking gate
