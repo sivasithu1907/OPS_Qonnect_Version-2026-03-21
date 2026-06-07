@@ -691,6 +691,39 @@ function mapTicket(r) {
 // 1. Get all tickets from DB
 
 /* ---------- Activity row mapper (matches /api/activities format exactly) ---------- */
+// Lite version — excludes photos for list endpoints (saves 99% bandwidth)
+function mapActivityLite(r) {
+    const d = r.details || {};
+    return {
+        id: r.id, reference: r.reference, type: r.type, priority: r.priority,
+        status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
+        siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
+        serviceCategory: d.serviceCategory || r.service_category || '',
+        durationHours: Number(r.duration_hours || 0),
+        durationUnit: d.durationUnit || 'HOURS',
+        assistantTechIds: d.assistantTechIds || r.assistant_tech_ids || [],
+        salesLeadId: d.salesLeadId || r.sales_lead_id || null,
+        locationUrl: d.locationUrl || r.location_url || '',
+        houseNumber: d.houseNumber || r.house_number || '',
+        escalationLevel: d.escalationLevel || r.escalation_level || '',
+        carryForwardNote: d.carryForwardNote || r.carry_forward_note || '',
+        nextPlannedAt: d.nextPlannedAt || r.next_planned_at || null,
+        odooLink: d.odooLink || r.odoo_link || '',
+        freelancerDetails: d.freelancerDetails || r.freelancer_details || null,
+        freelancers: d.freelancers || [],
+        photos: ((d.photos || r.photos || []).length > 0) ? ['HAS_PHOTOS'] : [],
+        completionNote: d.completionNote || r.completion_note || '',
+        remarks: d.remarks || '',
+        primaryEngineerId: d.primaryEngineerId || null,
+        supportingEngineerIds: d.supportingEngineerIds || [],
+        currentVisitRemark: d.currentVisitRemark || '',
+        createdAt: r.created_at, updatedAt: r.updated_at,
+        startedAt: r.started_at || (d).startedAt || null,
+        completedAt: r.completed_at || (d).completedAt || null,
+        visitHistory: r.visit_history || [],
+    };
+}
+
 function mapActivity(r) {
     const d = r.details || {};
     return {
@@ -729,27 +762,26 @@ function mapActivity(r) {
 // Lead Portal — only data the lead needs
 app.get("/api/mobile/lead", authenticate, async (req, res) => {
     try {
-        const userId = req.user.id;
-        const today = new Date().toISOString().slice(0, 10);
-        const [ticketsR, activitiesR, techsR, customersR] = await Promise.all([
-            pool.query(`SELECT * FROM tickets WHERE (assigned_tech_id = $1 OR assigned_tech_id IS NOT NULL) 
-                        AND status NOT IN ('RESOLVED','CANCELLED') 
-                        ORDER BY updated_at DESC LIMIT 100`, [userId]),
-            pool.query(`SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' 
-                        AND status NOT IN ('DONE','CANCELLED')
-                        ORDER BY planned_date DESC LIMIT 100`),
-            pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users WHERE is_active = true'),
-            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200")
+        const [ticketsR, activitiesR, techsR, customersR, teamsR, sitesR] = await Promise.all([
+            pool.query("SELECT * FROM tickets WHERE status NOT IN ('RESOLVED','CANCELLED') ORDER BY updated_at DESC LIMIT 100"),
+            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' AND status NOT IN ('DONE','CANCELLED') ORDER BY planned_date DESC LIMIT 100"),
+            pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
+            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200"),
+            pool.query("SELECT * FROM teams ORDER BY name"),
+            pool.query("SELECT * FROM sites ORDER BY name")
         ]);
         res.json({
             tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(mapActivity),
+            activities: activitiesR.rows.map(mapActivityLite),
             technicians: techsR.rows.map(r => ({
                 id: r.id, name: r.name, email: r.email, systemRole: r.systemRole, 
-                status: r.status, isActive: true, phone: r.phone, avatar: r.avatar || null,
+                status: r.status, isActive: r.status === 'ACTIVE' || r.status === 'AVAILABLE' || r.status !== 'INACTIVE',
+                phone: r.phone, avatar: r.avatar || null,
                 jobRole: r.job_role, level: r.level || '', role: r.systemRole
             })),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
+            teams: teamsR.rows.map(r => ({ ...r, leadId: r.lead_id, memberIds: r.member_ids })),
+            sites: sitesR.rows.map(r => ({ ...r, clientName: r.client_name, assignedTeamId: r.assigned_team_id }))
         });
     } catch (e) {
         console.error("Mobile lead API error:", e);
@@ -763,13 +795,13 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
         const userId = req.user.id;
         const [ticketsR, activitiesR, customersR] = await Promise.all([
             pool.query("SELECT * FROM tickets WHERE assigned_tech_id = $1 ORDER BY updated_at DESC LIMIT 50", [userId]),
-            pool.query(`SELECT * FROM activities WHERE (lead_tech_id = $1 OR assistant_tech_ids::text LIKE $2) 
-                        AND type != 'WHATSAPP_SUPPORT' ORDER BY planned_date DESC LIMIT 50`, [userId, `%${userId}%`]),
+            pool.query(`SELECT * FROM activities WHERE (lead_tech_id = $1 OR details->>'primaryEngineerId' = $1) 
+                        AND type != 'WHATSAPP_SUPPORT' ORDER BY planned_date DESC LIMIT 50`, [userId]),
             pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200")
         ]);
         res.json({
             tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(mapActivity),
+            activities: activitiesR.rows.map(mapActivityLite),
             customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
         });
     } catch (e) {
@@ -811,7 +843,7 @@ app.get("/api/init", authenticate, async (req, res) => {
         ]);
         res.json({
             tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(mapActivity),
+            activities: activitiesR.rows.map(mapActivityLite),
             users: usersR.rows.map(r => ({
                 id: r.id, name: r.name, email: r.email,
                 systemRole: r.systemRole, status: r.status,
@@ -839,7 +871,7 @@ app.get("/api/refresh", authenticate, async (req, res) => {
         ]);
         res.json({
             tickets: ticketsR.rows.map(mapTicket),
-            activities: activitiesR.rows.map(mapActivity),
+            activities: activitiesR.rows.map(mapActivityLite),
             customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
         });
     } catch (e) {
@@ -1762,10 +1794,19 @@ app.get("/api/sites", authenticate, async (req, res) => {
 });
 
 // GET Activities
+// Get full activity with photos (for detail view only)
+app.get("/api/activities/:id/full", authenticate, async (req, res) => {
+    try {
+        const { rows } = await pool.query("SELECT * FROM activities WHERE id = $1", [req.params.id]);
+        if (rows.length === 0) return res.status(404).json({ error: "Not found" });
+        res.json(mapActivity(rows[0]));
+    } catch (e) { res.status(500).json({ error: "Failed" }); }
+});
+
 app.get("/api/activities", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200");
-    res.json(rows.map(mapActivity));
+    res.json(rows.map(mapActivityLite));
   } catch (e) { res.status(500).json({error: "Failed to load activities"}); }
 });
 
