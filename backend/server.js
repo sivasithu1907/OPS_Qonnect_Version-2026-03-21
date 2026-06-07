@@ -1919,7 +1919,7 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
 
             // Update activity: set status to CARRY_FORWARD, record completed_at as NOW, store visit history
             await pool.query(
-                `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=$4, site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW() WHERE id=$11`,
+                `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW() WHERE id=$11`,
                 [type, priority, current.rows[0].planned_date, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
             );
             return res.json({ok: true, visitRecorded: true});
@@ -1973,7 +1973,7 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
         }
 
         await pool.query(
-            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=$5, site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause}${visitHistoryClause} WHERE id=$11`,
+            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause}${visitHistoryClause} WHERE id=$11`,
             [type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), req.params.id]
         );
         res.json({ok: true});
