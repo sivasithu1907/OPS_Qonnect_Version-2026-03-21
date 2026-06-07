@@ -341,6 +341,7 @@ const handleLogout = useCallback(() => {
               })
           });
           // Also persist full ticket fields (category, type, priority, location etc.)
+          // NOTE: Do NOT send customerId/customerName here — status updates should NEVER overwrite customer
           await fetch(`/api/tickets/${updated.id}`, {
               method: "PUT",
               headers: getAuthHeaders(),
@@ -351,8 +352,6 @@ const handleLogout = useCallback(() => {
                   locationUrl: updated.locationUrl,
                   houseNumber: updated.houseNumber,
                   odooLink: updated.odooLink,
-                  customerId: updated.customerId,
-                  customerName: updated.customerName,
                   assignedTechId: updated.assignedTechId || null,
                   appointmentTime: updated.appointmentTime || null,
               })
