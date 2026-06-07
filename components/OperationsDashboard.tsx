@@ -811,7 +811,21 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     // Duration
                                     durationHours: (() => {
                                         if (s === 'DONE' && actualStart && actualEnd) {
-                                            return Math.max(0.25, (new Date(actualEnd).getTime() - new Date(actualStart).getTime()) / 3600000);
+                                            const start = new Date(actualStart);
+                                            const end = new Date(actualEnd);
+                                            const today = new Date();
+                                            const endHour = end.getHours() + end.getMinutes() / 60;
+                                            const startHour = start.getHours() + start.getMinutes() / 60;
+                                            // Both same day — simple diff
+                                            if (start.toDateString() === end.toDateString()) {
+                                                return Math.max(0.25, endHour - startHour);
+                                            }
+                                            // Started on previous day, completed today — bar from 08:00 to completedAt
+                                            if (end.toDateString() === today.toDateString()) {
+                                                return Math.max(0.25, endHour - 8);
+                                            }
+                                            // Both on previous days — use original hours
+                                            return Math.max(0.25, endHour - startHour > 0 ? endHour - startHour : endHour - 8);
                                         }
                                         if ((s === 'IN_PROGRESS' || s === 'ON_MY_WAY' || s === 'ARRIVED') && actualStart) {
                                             // Bar must stop at current time (the red NOW line)
@@ -824,8 +838,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             if (start.toDateString() === now.toDateString()) {
                                                 return Math.max(0.25, nowHour - startHour);
                                             }
-                                            // Started on a previous day — show bar from timeline start to now
-                                            return Math.max(0.25, nowHour - TIMELINE_START);
+                                            // Started on a previous day — show bar from 08:00 to now
+                                            return Math.max(0.25, nowHour - 8);
                                         }
                                         return a.durationHours || 2;
                                     })(),
@@ -858,7 +872,14 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     })();
                                     const tDuration = (() => {
                                         if (tStatus === 'RESOLVED' && tCompleted && tStarted) {
-                                            return Math.max(0.25, (new Date(tCompleted).getTime() - new Date(tStarted).getTime()) / 3600000);
+                                            const start = new Date(tStarted);
+                                            const end = new Date(tCompleted);
+                                            const today = new Date();
+                                            const endHour = end.getHours() + end.getMinutes() / 60;
+                                            const startHour = start.getHours() + start.getMinutes() / 60;
+                                            if (start.toDateString() === end.toDateString()) return Math.max(0.25, endHour - startHour);
+                                            if (end.toDateString() === today.toDateString()) return Math.max(0.25, endHour - 8);
+                                            return Math.max(0.25, endHour - startHour > 0 ? endHour - startHour : 2);
                                         }
                                         if (tStatus === 'IN_PROGRESS' && tStarted) {
                                             const now = new Date();
@@ -868,7 +889,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             if (start.toDateString() === now.toDateString()) {
                                                 return Math.max(0.25, nowHour - startHour);
                                             }
-                                            return Math.max(0.25, nowHour - TIMELINE_START);
+                                            return Math.max(0.25, nowHour - 8);
                                         }
                                         return 2;
                                     })();
@@ -968,7 +989,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             const nowHour = now.getHours() + now.getMinutes() / 60;
                                             const startHour = start.getHours() + start.getMinutes() / 60;
                                             if (start.toDateString() === now.toDateString()) return Math.max(0.25, nowHour - startHour);
-                                            return Math.max(0.25, nowHour - TIMELINE_START);
+                                            return Math.max(0.25, nowHour - 8);
                                         }
                                         return a.durationHours || 2;
                                     })();
