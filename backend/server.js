@@ -2897,6 +2897,45 @@ app.use((err, req, res, next) => {
     }
 });
 
+// --- AUTO CARRY-FORWARD CRON (runs at 10 PM Qatar / 7 PM UTC daily) ---
+const runAutoCarryForward = async () => {
+    try {
+        const result = await pool.query(`
+            UPDATE activities 
+            SET status = 'CARRY_FORWARD',
+                carry_forward_note = COALESCE(carry_forward_note, '') || 
+                    E'\n[Auto carry-forward] Not completed by end of day',
+                completed_at = NOW(),
+                updated_at = NOW()
+            WHERE status IN ('IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED')
+            AND planned_date::date < (NOW() AT TIME ZONE 'Asia/Qatar')::date
+            RETURNING reference, lead_tech_id
+        `);
+        if (result.rows.length > 0) {
+            console.log(JSON.stringify({
+                level: 'WARN',
+                type: 'auto_carry_forward',
+                message: 'Activities auto carry-forwarded (not completed by EOD)',
+                count: result.rows.length,
+                activities: result.rows.map(r => r.reference),
+                assignedTo: result.rows.map(r => r.lead_tech_id).filter(Boolean),
+                timestamp: new Date().toISOString()
+            }));
+        }
+    } catch (e) {
+        console.error('Auto carry-forward error:', e.message);
+    }
+};
+
+// Check every 15 minutes — only act at 10 PM Qatar time (19:00 UTC)
+setInterval(() => {
+    const now = new Date();
+    const qatarHour = (now.getUTCHours() + 3) % 24;
+    if (qatarHour === 22 && now.getUTCMinutes() < 15) {
+        runAutoCarryForward();
+    }
+}, 15 * 60 * 1000);
+
 // Graceful shutdown
 const shutdown = async () => {
     console.log('\nGraceful shutdown initiated...');
