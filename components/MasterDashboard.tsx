@@ -68,7 +68,18 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     const ids = new Set<string>();
     tickets.forEach(t => { if (t.assignedTechId) ids.add(t.assignedTechId); });
     activities.forEach(a => { if (a.leadTechId) ids.add(a.leadTechId); if ((a as any).primaryEngineerId) ids.add((a as any).primaryEngineerId); });
-    return Array.from(ids).map(id => technicians.find(t => t.id === id)).filter(Boolean) as any[];
+    const internal = Array.from(ids).map(id => technicians.find(t => t.id === id)).filter(Boolean) as any[];
+    // Add freelancer Field Engineers
+    const flNames = new Set<string>();
+    activities.forEach((a: any) => {
+        ((a as any).freelancers || []).forEach((fl: any) => {
+            if (fl.role === 'FIELD_ENGINEER' && fl.name && !flNames.has(fl.name)) {
+                flNames.add(fl.name);
+            }
+        });
+    });
+    const freelancerEntries = Array.from(flNames).map(name => ({ id: 'FL:' + name, name: name + ' (FL)', isFreelancer: true }));
+    return [...internal, ...freelancerEntries];
   }, [tickets, activities, technicians]);
 
   // Normalize all jobs
@@ -141,7 +152,15 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       j.kind === 'ticket' || selectedActTypes.some(t => j.subtitle?.toLowerCase() === t.toLowerCase() || j.activityType?.toLowerCase() === t.toLowerCase())
     );
 
-    if (assignedFilter !== 'ALL') combined = combined.filter(j => j.techId === assignedFilter);
+    if (assignedFilter !== 'ALL') {
+      if (assignedFilter.startsWith('FL:')) {
+        // Freelancer filter — match by name
+        const flName = assignedFilter.replace('FL:', '') + ' (FL)';
+        combined = combined.filter(j => j.techName === flName);
+      } else {
+        combined = combined.filter(j => j.techId === assignedFilter);
+      }
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
