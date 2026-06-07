@@ -751,6 +751,38 @@ const loadCustomers = async () => {
   }
 };
 
+// FAST: Mobile-specific lightweight data load
+  const loadMobileData = async (portal: 'lead' | 'tech') => {
+      try {
+          const endpoint = portal === 'lead' ? '/api/mobile/lead' : '/api/mobile/tech';
+          const res = await fetch(endpoint, { headers: getAuthHeaders() });
+          if (res.status === 401) { handleLogout(); return; }
+          if (!res.ok) throw new Error('Mobile load failed');
+          const data = await res.json();
+          if (data.tickets) setTickets(data.tickets);
+          if (data.activities) setActivities(data.activities);
+          if (data.technicians) {
+              const usersWithLevel = data.technicians.map((u: any) => {
+                  let level = u.level || '';
+                  if (!level && (u.systemRole || u.role)) {
+                      const r = u.systemRole || u.role;
+                      if (r === 'ADMIN') level = 'ADMIN';
+                      else if (r === 'TEAM_LEAD') level = 'TEAM_LEAD';
+                      else if (r === 'FIELD_ENGINEER') level = 'FIELD_ENGINEER';
+                  }
+                  return { ...u, level, role: u.systemRole || u.role };
+              });
+              setTechnicians(usersWithLevel);
+          }
+          if (data.customers) setCustomers(data.customers);
+          if (data.teams) setTeams(data.teams);
+          if (data.sites) setSites(data.sites);
+      } catch (e) {
+          console.error("Mobile load failed, using full init:", e);
+          await loadAllData();
+      }
+  };
+
 // FAST: Single-call init — replaces 6 separate API calls
   const loadAllData = async () => {
       try {
