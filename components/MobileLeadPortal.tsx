@@ -1324,14 +1324,22 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                           setActSelectedCustomer(cust);
                                           setActCustSearch(cust.name);
                                       }
+                                      // Pre-fill from customer data + find existing odoo link
+                                      const existingAct = (activities || []).find((a: any) => 
+                                          a.customerId === data.customerId && a.odooLink
+                                      );
                                       setCreateActivityForm(prev => ({
                                           ...prev,
                                           customerId: data.customerId || '',
-                                          locationUrl: data.locationUrl || '',
-                                          houseNumber: data.houseNumber || ''
+                                          locationUrl: data.locationUrl || cust?.address || '',
+                                          houseNumber: data.houseNumber || (cust as any)?.buildingNumber || '',
+                                          odooLink: existingAct?.odooLink || ''
                                       }));
                                       // Close the clients module first, then show the activity modal
                                       setMobileModule('none');
+                                      // Reset form before opening
+                                      setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' });
+                                      setActServiceCats([]);
                                       setTimeout(() => setShowCreateActivity(true), 100);
                                   } : undefined}
                               />
@@ -3110,29 +3118,18 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         const a: any = modalActivity as any;
                         const cfNote = carryIssue ? `Reason: ${carryIssue}${actionNote ? '\nRemark: ' + actionNote : ''}` : actionNote;
                         
-                        // Carry forward = update the SAME activity
-                        // Backend handles: recording visit history, setting status to CARRY_FORWARD, 
-                        // then when rescheduled it resets to PLANNED with new date
+                        // Carry forward = ONE update to the SAME activity
+                        // Sets CARRY_FORWARD status + new planned date + records visit history
+                        // Does NOT create a duplicate, does NOT send a second update
                         onUpdateActivity({
                             ...a,
                             status: 'CARRY_FORWARD',
+                            plannedDate: nextDate,
                             carryForwardNote: cfNote,
                             currentVisitRemark: actionNote || '',
+                            nextPlannedAt: nextDate,
                             updatedAt: new Date().toISOString()
                         });
-                        
-                        // After a short delay, reschedule to the new date (reset to PLANNED)
-                        setTimeout(() => {
-                            onUpdateActivity({
-                                ...a,
-                                status: 'PLANNED',
-                                plannedDate: nextDate,
-                                carryForwardNote: cfNote,
-                                startedAt: null,
-                                completedAt: null,
-                                updatedAt: new Date().toISOString()
-                            });
-                        }, 1000);
                         
                         closeModal();
                         setViewActivity(null);
