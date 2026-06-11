@@ -4,7 +4,7 @@ import { Technician, Role, Team } from '../types';
 import { 
   Plus, Search, Edit, Trash2, Shield, Briefcase, 
   CheckCircle2, XCircle, Mail, Phone, Lock, UserCog,
-  Eye, EyeOff, KeyRound, Wrench, X, ZoomIn, ZoomOut, Move, Camera
+  Eye, EyeOff, KeyRound, Wrench, X, ZoomIn, ZoomOut, Move, Camera, TrendingUp
 } from 'lucide-react';
 import { generateTechId } from '../utils/idUtils';
 
@@ -199,6 +199,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
     let level: Technician['level'] = 'FIELD_ENGINEER';
     if (data.systemRole === Role.TEAM_LEAD) level = 'TEAM_LEAD';
     if (data.systemRole === Role.ADMIN) level = 'TEAM_LEAD'; // Admins default to Lead level visibility
+    if (data.systemRole === Role.SALES) level = 'SALES';
 
     // Construct User Object
     const phoneRaw = (data.phone || '').replace(/\D/g, '').replace(/^974/, '');
@@ -240,6 +241,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
           case Role.FIELD_ENGINEER:
           case 'FIELD_ENGINEER':
               return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600"><Wrench size={10} /> Field Engineer</span>;
+          case Role.SALES:
+          case 'SALES':
+              return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700"><TrendingUp size={10} /> Sales</span>;
           default:
               return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600"><UserCog size={10} /> {role || 'User'}</span>;
       }
@@ -335,6 +339,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const admins = filteredUsers.filter(u => u.systemRole === Role.ADMIN);
   const teamLeads = filteredUsers.filter(u => u.systemRole === Role.TEAM_LEAD);
   const fieldEngineers = filteredUsers.filter(u => u.systemRole === Role.FIELD_ENGINEER);
+  const salesUsers = filteredUsers.filter(u => u.systemRole === Role.SALES);
 
   return (
     <div className="p-8 space-y-6 animate-in fade-in duration-300">
@@ -373,6 +378,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             {renderUserGroup(admins, "Admin", Shield, "bg-slate-100 text-slate-600")}
             {renderUserGroup(teamLeads, "Team Lead", Briefcase, "bg-purple-100 text-purple-600")}
             {renderUserGroup(fieldEngineers, "Field Engineers", Wrench, "bg-blue-100 text-blue-600")}
+            {renderUserGroup(salesUsers, "Sales", TrendingUp, "bg-amber-100 text-amber-700")}
         </div>
 
         {/* Modal */}
@@ -446,6 +452,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                     <option value={Role.ADMIN}>Admin</option>
                                     <option value={Role.TEAM_LEAD}>Team Lead</option>
                                     <option value={Role.FIELD_ENGINEER}>Field Engineer</option>
+                                    <option value={Role.SALES}>Sales</option>
                                 </select>
                             </div>
                             <div className="space-y-1">
