@@ -744,6 +744,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       const act = activity as any;
       const actStatus = act.status || 'PLANNED';
       const actCustomer = customers?.find((c: any) => c.id === act.customerId);
+      const displayName  = actCustomer?.name  || (act as any).customerName  || act.type || 'Activity';
+      const displayPhone = actCustomer?.phone || (act as any).customerPhone || '';
       const statusColor =
           actStatus === 'IN_PROGRESS' ? 'bg-amber-500 text-white' :
           actStatus === 'ON_MY_WAY'   ? 'bg-cyan-500 text-white' :
@@ -767,7 +769,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">ACTIVITY</span>
                   </div>
               </div>
-              <h4 className="font-bold text-slate-800 text-sm mb-0.5">{actCustomer?.name || act.type || 'Activity'}</h4>
+              <h4 className="font-bold text-slate-800 text-sm mb-0.5">{displayName}</h4>
               <div className="text-xs text-slate-500 mb-1">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>
               <div className="flex items-center gap-1 text-xs text-slate-500">
                   <MapPin size={12} />
@@ -906,6 +908,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     const act = activity as any;
     const actStatus = act.status || 'PLANNED';
     const actCustomer = customers?.find((c: any) => c.id === act.customerId);
+    const actDisplayName  = actCustomer?.name  || (act as any).customerName  || act.type || 'Activity';
+    const actDisplayPhone = actCustomer?.phone || (act as any).customerPhone || '';
     const isCompleted = actStatus === 'DONE' || actStatus === 'CANCELLED';
     const actSteps5 = ['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE'];
     const actStepIdx = Math.max(0, actSteps5.indexOf(actStatus));
@@ -937,7 +941,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 <div className="flex justify-between items-start mb-3">
                     <div>
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{act.reference || act.id}</div>
-                        <h3 className="text-base font-bold text-slate-900">{actCustomer?.name || act.type || 'Activity'}</h3>
+                        <h3 className="text-base font-bold text-slate-900">{actDisplayName}</h3>
                         <div className="text-sm text-slate-500 mt-0.5">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>
                     </div>
                     <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${actStatusColor}`}>
@@ -981,8 +985,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     </div>
                 )}
                 {/* Call */}
-                {actCustomer?.phone ? (
-                    <a href={`tel:${actCustomer.phone}`} onClick={(e:any)=>e.stopPropagation()}
+                {actDisplayPhone ? (
+                    <a href={`tel:${actDisplayPhone}`} onClick={(e:any)=>e.stopPropagation()}
                         className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs mb-4 hover:bg-slate-100 transition-colors">
                         <Phone size={13}/> Call Customer
                     </a>
@@ -2047,6 +2051,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 {viewActivity && (() => {
     const act = viewActivity as any;
     const actCust = customers?.find((c: any) => c.id === act.customerId);
+    const actCustName  = actCust?.name  || (act as any).customerName  || '';
+    const actCustPhone = actCust?.phone || (act as any).customerPhone || '';
     const leadTech = technicians.find(t => t.id === act.leadTechId);
     const salesLead = technicians.find(t => t.id === act.salesLeadId);
     const supportEngineers = (act.assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
@@ -2077,11 +2083,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
                     <div className="flex items-center justify-between">
                         <div>
-                            <div className="font-bold text-slate-800">{actCust?.name || 'Unknown'}</div>
-                            {actCust?.phone && <div className="text-xs text-slate-500 mt-0.5">{actCust.phone}</div>}
+                            <div className="font-bold text-slate-800">{actCustName || 'Unknown'}</div>
+                            {actCustPhone && <div className="text-xs text-slate-500 mt-0.5">{actCustPhone}</div>}
                         </div>
-                        {actCust?.phone && (
-                            <a href={`tel:${actCust.phone}`} className="p-2 bg-emerald-50 rounded-lg text-emerald-600 active:bg-emerald-100">
+                        {actCustPhone && (
+                            <a href={`tel:${actCustPhone}`} className="p-2 bg-emerald-50 rounded-lg text-emerald-600 active:bg-emerald-100">
                                 <Phone size={18} />
                             </a>
                         )}
