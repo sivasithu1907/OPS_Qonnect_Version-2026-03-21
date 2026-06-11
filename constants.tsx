@@ -1,7 +1,12 @@
 import { TicketStatus, Role, ActivityStatus } from './types';
-import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList } from 'lucide-react';
 
 export const APP_NAME = "Qonnect";
+
+// --- SHARED DATA CONSTANTS (reused by Planner + Sales Requests) ---
+export const ACTIVITY_TYPES = ['Installation', 'Troubleshooting', 'Inspection', 'Survey', 'Service', 'Maintenance'] as const;
+export const SALES_ACTIVITY_TYPES = ['Installation', 'Troubleshooting', 'Inspection', 'Survey'] as const;
+export const SERVICE_CATEGORIES = ['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'ELV Systems', 'Other'] as const;
 
 // --- STATUS LABELS (DB-safe values, UI-friendly text) ---
 export const ACTIVITY_STATUS_LABELS: Record<ActivityStatus, string> = {
@@ -67,7 +72,7 @@ export const NAVIGATION_ITEMS = [
     id: 'operations', 
     label: 'Operations Monitor', 
     icon: <ActivityIcon size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.TEAM_LEAD, Role.SALES],
     category: 'Operations'
   },
   { 
@@ -131,6 +136,15 @@ export const NAVIGATION_ITEMS = [
     icon: <Smartphone size={20} />, 
     roles: [Role.ADMIN, Role.FIELD_ENGINEER],
     category: 'Portals & Tools'
+  },
+
+  // --- Sales ---
+  {
+    id: 'sales_requests',
+    label: 'Sales Appointment Requests',
+    icon: <ClipboardList size={20} />,
+    roles: [Role.ADMIN, Role.TEAM_LEAD, Role.SALES],
+    category: 'Sales'
   },
 ];
 
