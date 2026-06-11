@@ -82,12 +82,14 @@ export const NAVIGATION_ITEMS = [
     roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'Operations'
   },
+
+  // --- Sales ---
   {
     id: 'sales_requests',
     label: 'Sales Appointment Requests',
     icon: <ClipboardList size={20} />,
     roles: [Role.ADMIN, Role.TEAM_LEAD, Role.SALES],
-    category: 'Operations'
+    category: 'Sales'
   },
 
   // --- General ---
