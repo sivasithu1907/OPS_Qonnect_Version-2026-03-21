@@ -1858,10 +1858,9 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
 app.put("/api/activities/:id", authenticate, async (req, res) => {
     try {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
-        delete details.startedAt; delete details.completedAt; delete details.createdAt; delete details.updatedAt;
         // Save admin-provided timestamps BEFORE deleting from details
-        const adminStartedAt = details.startedAt || req.body.startedAt || null;
-        const adminCompletedAt = details.completedAt || req.body.completedAt || null;
+        const adminStartedAt = req.body.startedAt || null;
+        const adminCompletedAt = req.body.completedAt || null;
         // Remove timestamp fields from details JSONB — timestamps go in dedicated columns
         delete details.startedAt;
         delete details.completedAt;
@@ -1869,12 +1868,14 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
         delete details.updatedAt;
 
         // Fetch current row to detect transitions and merge details
-        const current = await pool.query("SELECT status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id FROM activities WHERE id=$1", [req.params.id]);
+        const current = await pool.query("SELECT status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id, customer_id FROM activities WHERE id=$1", [req.params.id]);
         if (!current.rows[0]) return res.status(404).json({ error: "Activity not found" });
         const prevStatus = current.rows[0]?.status;
         const alreadyStarted = current.rows[0]?.started_at;
         const existingDetails = current.rows[0]?.details || {};
         const existingHistory = current.rows[0]?.visit_history || [];
+        // PROTECT: Always use existing customer_id — never overwrite from status updates
+        const safeCustomerId = current.rows[0].customer_id;
 
         // Merge execution fields into details JSONB
         const mergedDetails = { ...existingDetails, ...details };
@@ -1920,7 +1921,7 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
             // Update activity: set status to CARRY_FORWARD, record completed_at as NOW, store visit history
             await pool.query(
                 `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW() WHERE id=$11`,
-                [type, priority, current.rows[0].planned_date, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
+                [type, priority, current.rows[0].planned_date, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
             );
             return res.json({ok: true, visitRecorded: true});
         }
@@ -1974,7 +1975,7 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
 
         await pool.query(
             `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause}${visitHistoryClause} WHERE id=$11`,
-            [type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), req.params.id]
+            [type, priority, status, plannedDate, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), req.params.id]
         );
         res.json({ok: true});
     } catch(e) { console.error(e); res.status(500).json({error: "Failed to update activity"}); }
