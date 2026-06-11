@@ -213,15 +213,18 @@ export interface Activity {
   // Location Details
   siteId?: string; // Optional/Legacy
   customerId?: string; // Link to Customer
+  customerName?: string;  // Denormalised from customer row (set on creation for SAR-created activities)
+  customerPhone?: string; // Denormalised phone for Call button fallback
   locationUrl?: string;
   houseNumber?: string;
-  
+
   // External Refs
   odooLink?: string;
 
   // Resource Allocation
   assignedTeamId?: string; // Kept for Dashboard compatibility
   salesLeadId?: string; // Reference to Sales Technician
+  salesLeadName?: string; // Denormalised for display in activity details
   leadTechId?: string; // Specific Engineer
   assistantTechIds?: string[]; // Specific Associates
 
