@@ -199,9 +199,15 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
       
       const level = tech?.level || 'FIELD_ENGINEER';
       setCurrentLevel(level);
-      // For SALES and TECHNICAL_ASSOCIATE, system role is usually empty/none
-      const isNoSystemRoleLevel = level === 'SALES' || level === 'TECHNICAL_ASSOCIATE';
-      setFormSystemRole(tech?.systemRole || (isNoSystemRoleLevel ? '' : Role.FIELD_ENGINEER));
+      // SALES: system role is 'SALES' (they can log in)
+      // TECHNICAL_ASSOCIATE: no system role (no login access)
+      if (level === 'SALES') {
+          setFormSystemRole(tech?.systemRole || Role.SALES);
+      } else if (level === 'TECHNICAL_ASSOCIATE') {
+          setFormSystemRole('');
+      } else {
+          setFormSystemRole(tech?.systemRole || Role.FIELD_ENGINEER);
+      }
 
       if (tech?.avatar) {
           setAvatarPreview(tech.avatar);
@@ -251,12 +257,12 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
   const handleLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const lvl = e.target.value;
       setCurrentLevel(lvl);
-      // Disable system role for Technical Associates AND Sales Team
-      if (lvl === 'TECHNICAL_ASSOCIATE' || lvl === 'SALES') {
-          setFormSystemRole('');
-      } else if (!formSystemRole) {
-          // If switching from Associate/Sales to something else, reset role to a sensible default if it was empty
-          setFormSystemRole(Role.FIELD_ENGINEER);
+      if (lvl === 'TECHNICAL_ASSOCIATE') {
+          setFormSystemRole('');           // TAs have no login
+      } else if (lvl === 'SALES') {
+          setFormSystemRole(Role.SALES);   // Sales always gets SALES role
+      } else if (!formSystemRole || formSystemRole === Role.SALES || formSystemRole === '') {
+          setFormSystemRole(Role.FIELD_ENGINEER); // reset to sensible default
       }
   };
 
@@ -438,11 +444,18 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                         const fullPhone = phoneRaw ? `+974${phoneRaw}` : '';
                         
                         // Handle potential empty system role
-                        // SALES and TECHNICAL_ASSOCIATE have the system role dropdown disabled,
-                        // so rawData.systemRole will be absent (disabled fields aren't in FormData).
-                        // The backend needs a role value — use level-based default when empty.
+                        // SALES have their own system role for login auth.
+                        // TECHNICAL_ASSOCIATE have no system role (no login).
                         const levelVal = rawData.level || currentLevel;
-                        const finalSystemRole = rawData.systemRole || undefined;
+                        const isSalesLevel = levelVal === 'SALES';
+                        const isTALevel   = levelVal === 'TECHNICAL_ASSOCIATE';
+                        // SALES members get role='SALES' so they can log in and be routed correctly.
+                        // TECHNICAL_ASSOCIATE get no role (disabled select not submitted in FormData).
+                        const finalSystemRole = isSalesLevel
+                            ? 'SALES'
+                            : isTALevel
+                            ? undefined
+                            : (rawData.systemRole || undefined);
 
                         const data: any = {
                             ...rawData,
@@ -450,8 +463,8 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                             systemRole: finalSystemRole,
                             // jobRole = job title text (e.g. "Senior Technician"), separate from systemRole
                             jobRole: rawData.jobRole || '',
-                            // role = systemRole for DB (login permission), NOT job title
-                            // For SALES/TECHNICAL_ASSOCIATE, role will be null — backend defaults to 'NONE'
+                            // role = systemRole for DB (login permission)
+                            // SALES → 'SALES' (can log in), TECHNICAL_ASSOCIATE → undefined (no login)
                             role: finalSystemRole || undefined,
                             // level = department/team e.g. "SALES", "FIELD_ENGINEER"
                             level: levelVal,
@@ -570,11 +583,23 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                     onChange={(e) => setFormSystemRole(e.target.value)}
                                     className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
                                 >
-                                    <option value="">{currentLevel === 'TECHNICAL_ASSOCIATE' || currentLevel === 'SALES' ? 'Not Required' : 'Select Role'}</option>
+                                    <option value="">
+                                        {currentLevel === 'TECHNICAL_ASSOCIATE'
+                                            ? 'No Login Access'
+                                            : currentLevel === 'SALES'
+                                            ? 'Sales (auto-assigned)'
+                                            : 'Select Role'}
+                                    </option>
                                     <option value={Role.ADMIN}>Admin</option>
                                     <option value={Role.TEAM_LEAD}>Team Lead</option>
                                     <option value={Role.FIELD_ENGINEER}>Field Engineer</option>
                                 </select>
+                                {currentLevel === 'SALES' && (
+                                    <p className="text-[10px] text-amber-600 mt-0.5">Sales role auto-assigned — can log in to Sales portal</p>
+                                )}
+                                {currentLevel === 'TECHNICAL_ASSOCIATE' && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5">Technical Associates cannot log in</p>
+                                )}
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Current Status</label>
