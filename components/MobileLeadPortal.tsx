@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { 
   ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
@@ -10,6 +10,7 @@ import {
 import ReportsModule from './ReportsModule';
 import PlanningModule from './PlanningModule';
 import CustomerRecords from './CustomerRecords';
+const SalesAppointmentRequests = lazy(() => import('./SalesAppointmentRequests'));
 import { INPUT_STYLES, SEARCH_INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -111,7 +112,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   // State
   const [activeTab, setActiveTab] = useState<'home' | 'my_jobs' | 'team' | 'planner' | 'more'>('home'); 
-  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients' | 'tickets'>('none');
+  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients' | 'tickets' | 'sales_requests'>('none');
   const [homeFilter, setHomeFilter] = useState<'all'|'progress'|'carry'|'pending'|'all_history'>('all'); 
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1251,7 +1252,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           <ChevronLeft size={24} className="text-slate-600"/>
                       </button>
                       <h2 className="font-bold text-lg text-slate-900 capitalize">
-                          {mobileModule}
+                          {mobileModule === 'sales_requests' ? 'Sales Appointment Requests' : mobileModule}
                       </h2>
                   </div>
                   
@@ -1368,12 +1369,31 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               />
                           </div>
                       )}
+                      {mobileModule === 'sales_requests' && (
+                          <div className="h-full overflow-y-auto bg-slate-50">
+                              <Suspense fallback={
+                                <div className="flex items-center justify-center h-32 text-slate-400 text-sm gap-2">
+                                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                                  Loading…
+                                </div>
+                              }>
+                                <SalesAppointmentRequests
+                                  currentUser={{
+                                    id:    currentUserId || '',
+                                    techId: currentUserId,
+                                    name:  currentTech?.name || 'Team Lead',
+                                    email: currentTech?.email || '',
+                                    role:  (currentTech?.systemRole as Role) || Role.TEAM_LEAD,
+                                  }}
+                                  technicians={technicians}
+                                />
+                              </Suspense>
+                          </div>
+                      )}
                   </div>
               </div>
           );
       }
-
-      // 3. More Menu Tab
       if (activeTab === 'more') {
           return (
               <div className="h-full overflow-y-auto pb-24">
@@ -1414,7 +1434,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   <ChevronRight size={16} className="text-slate-500" />
                               </button>
                               <button
-                                onClick={() => onNavigateToSalesRequests ? onNavigateToSalesRequests() : undefined}
+                                onClick={() => setMobileModule('sales_requests')}
                                 className="w-full flex items-center gap-3 p-4 active:bg-amber-50 transition-colors"
                               >
                                   <div className="relative p-2 bg-amber-50 rounded-lg">
@@ -1548,12 +1568,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                       <span className="text-[9px] font-bold text-slate-500 uppercase">Ticket</span>
                                   </button>
                               )}
-                              <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
-                                  <BarChart3 size={20} className="text-blue-400" />
-                                  <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Reports</span>
-                              </button>
                               <button
-                                onClick={() => onNavigateToSalesRequests ? onNavigateToSalesRequests() : undefined}
+                                onClick={() => setMobileModule('sales_requests')}
                                 className="relative flex flex-col items-center gap-1.5 p-3 bg-amber-50 rounded-xl border border-amber-200 shadow-sm active:scale-95 transition-transform"
                               >
                                 <ClipboardList size={20} className="text-amber-500" />
