@@ -1,14 +1,16 @@
 export enum Role {
   ADMIN = 'ADMIN',
   TEAM_LEAD = 'TEAM_LEAD',
-  FIELD_ENGINEER = 'FIELD_ENGINEER'
+  FIELD_ENGINEER = 'FIELD_ENGINEER',
+  SALES = 'SALES'
 }
 
-export const ROLE_VALUES = [Role.ADMIN, Role.TEAM_LEAD, Role.FIELD_ENGINEER];
+export const ROLE_VALUES = [Role.ADMIN, Role.TEAM_LEAD, Role.FIELD_ENGINEER, Role.SALES];
 
 export const isAdmin = (role: Role) => role === Role.ADMIN;
 export const isTeamLead = (role: Role) => role === Role.TEAM_LEAD;
 export const isFieldEngineer = (role: Role) => role === Role.FIELD_ENGINEER;
+export const isSales = (role: Role) => role === Role.SALES;
 
 export enum TicketStatus {
   NEW = 'NEW',
@@ -248,4 +250,39 @@ export interface Activity {
   visitHistory?: VisitRecord[];
   carryForwardNote?: string;
   previousActivityRef?: string; // Reference to the activity this was carried forward from
+}
+
+// --- Sales Appointment Request ---
+
+export enum SalesRequestStatus {
+  PENDING_SCHEDULING = 'PENDING_SCHEDULING',
+  SCHEDULED = 'SCHEDULED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  DONE = 'DONE',
+  CANCELLED = 'CANCELLED'
+}
+
+export interface SalesAppointmentRequest {
+  id: string;
+  customerId?: string;
+  customerName: string;
+  contactNumber: string;
+  locationUrl: string;
+  houseNumber: string;
+  odooReference: string;
+  activityType: string;          // Installation | Troubleshooting | Inspection | Survey
+  serviceCategory: string;       // multi-value joined string (same pattern as Activity)
+  salesLeadUserId: string;
+  salesLeadName: string;
+  remarks?: string;
+  status: SalesRequestStatus;
+  scheduledDate?: string | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
+  assignedFieldEngineerId?: string | null;
+  linkedActivityId?: string | null;  // populated after scheduling converts to activity
+  createdBy: string;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
 }
