@@ -9,7 +9,7 @@ import {
   AlertCircle, CheckCircle, Clock, Activity, TrendingUp, 
   FileText, ArrowUpRight, AlertTriangle, ArrowDownRight, ArrowUp,
   ChevronRight, Zap, Search, Calendar, X, MapPin, Phone, User as UserIcon,
-  Tag, Link as LinkIcon, Home, History, ArrowRight, MessageSquare, ClipboardList
+  Tag, Link as LinkIcon, Home, History, ArrowRight, MessageSquare
 } from 'lucide-react';
 import { SEARCH_INPUT_STYLES } from '../constants';
 
@@ -210,26 +210,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
           default: return 'bg-slate-100 text-slate-600 border-slate-200';
       }
   };
-
-  // ── Pending Sales Requests (for ADMIN / TEAM_LEAD dashboard card) ──
-  const [pendingSalesRequests, setPendingSalesRequests] = useState<any[]>([]);
-  const [pendingSalesCount, setPendingSalesCount] = useState(0);
-  const isScheduler = currentUser?.role === Role.ADMIN || currentUser?.role === Role.TEAM_LEAD;
-  useEffect(() => {
-    if (!isScheduler) return;
-    const token = localStorage.getItem('qonnect_token');
-    fetch('/api/dashboard/pending-sales-requests', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) {
-          setPendingSalesRequests(data.requests?.slice(0, 5) || []);
-          setPendingSalesCount(data.count || 0);
-        }
-      })
-      .catch(() => {});
-  }, [isScheduler]);
 
   // Metrics (Always use full 'tickets' prop)
   const metrics = useMemo(() => {
@@ -556,47 +536,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── Pending Sales Requests Card (ADMIN / TEAM_LEAD only) ── */}
-          {isScheduler && (
-            <div className={`lg:col-span-3 bg-white rounded-xl shadow-sm border overflow-hidden ${pendingSalesCount > 0 ? 'border-amber-300' : 'border-slate-200'}`}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${pendingSalesCount > 0 ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-400'}`}>
-                    <ClipboardList size={18} />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-bold text-slate-800">Pending Sales Appointment Requests</h4>
-                    <p className="text-xs text-slate-500">Awaiting schedule confirmation</p>
-                  </div>
-                </div>
-                <span className={`text-2xl font-bold ${pendingSalesCount > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
-                  {pendingSalesCount}
-                </span>
-              </div>
-              {pendingSalesRequests.length === 0 ? (
-                <div className="px-6 py-8 text-center text-slate-400 text-sm">No pending requests</div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {pendingSalesRequests.map((r: any) => (
-                    <div key={r.id} className="flex items-center gap-4 px-6 py-3 hover:bg-amber-50/40 transition-colors">
-                      <div className="flex-1 min-w-0">
-                        <span className="font-semibold text-slate-800 text-sm">{r.customerName}</span>
-                        <span className="ml-2 text-xs text-slate-500">{r.activityType}</span>
-                        {r.serviceCategory && <span className="ml-2 text-xs text-amber-600">{r.serviceCategory}</span>}
-                      </div>
-                      <div className="text-xs text-slate-500 shrink-0">{r.salesLeadName}</div>
-                      <div className="text-xs text-slate-400 shrink-0 font-mono">{r.id}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {pendingSalesCount > 5 && (
-                <div className="px-6 py-3 border-t border-slate-100 text-xs text-slate-400 text-center">
-                  +{pendingSalesCount - 5} more pending — view all in Sales Appointment Requests
-                </div>
-              )}
-            </div>
-          )}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
               <h4 className="text-lg font-bold text-slate-800 mb-2">Service Status Overview</h4>
               <p className="text-sm text-slate-500 mb-4">Current distribution of ticket statuses</p>
