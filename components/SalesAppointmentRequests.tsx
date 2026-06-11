@@ -16,7 +16,7 @@ import {
   MapPin, Phone, FileText, Tag, ChevronDown, ChevronUp,
   CheckCircle2, AlertCircle, Loader2, Edit2, Eye,
   ClipboardList, RefreshCw, Filter, Building, ExternalLink,
-  CalendarCheck, Users, ArrowRight, Inbox
+  CalendarCheck, Users, ArrowRight, Inbox, Trash2
 } from 'lucide-react';
 import { Role, SalesAppointmentRequest, SalesRequestStatus, Technician } from '../types';
 import { INPUT_STYLES, SEARCH_INPUT_STYLES, SALES_ACTIVITY_TYPES, SERVICE_CATEGORIES } from '../constants';
@@ -116,6 +116,10 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 
   // Detail drawer
   const [detailItem, setDetailItem]   = useState<SalesAppointmentRequest | null>(null);
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<SalesAppointmentRequest | null>(null);
+  const [deleting, setDeleting]         = useState(false);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
@@ -293,8 +297,26 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
     return Object.keys(errs).length === 0;
   };
 
-  const handleSchedule = async () => {
-    if (!scheduleTarget || !validateSchedule()) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/sales-appointment-requests/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      setDetailItem(null);
+      fetchRequests();
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete request');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const canDelete = (r: SalesAppointmentRequest) =>
+    isScheduler ||
+    (isSales && r.createdBy === myId && r.status === SalesRequestStatus.PENDING_SCHEDULING);
+
+  const handleSchedule = async () => {    if (!scheduleTarget || !validateSchedule()) return;
     setScheduling(true);
     try {
       await api.post(`/api/sales-appointment-requests/${scheduleTarget.id}/schedule`, {
@@ -448,10 +470,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
                 key={r.id}
                 request={r}
                 canEdit={canEdit(r)}
+                canDelete={canDelete(r)}
                 isScheduler={isScheduler}
                 onEdit={() => openEdit(r)}
                 onSchedule={() => openSchedule(r)}
                 onView={() => setDetailItem(r)}
+                onDelete={() => setDeleteTarget(r)}
                 technicians={technicians}
               />
             ))}
@@ -492,6 +516,43 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
         />
       )}
 
+      {/* ── Delete Confirmation Modal ── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
+                <Trash2 size={18} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900">Delete Request?</h3>
+                <p className="text-sm text-slate-500 mt-0.5">This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="bg-slate-50 rounded-xl px-4 py-3 mb-5 text-sm">
+              <p className="font-semibold text-slate-800">{deleteTarget.customerName}</p>
+              <p className="text-slate-500 text-xs mt-0.5">{deleteTarget.activityType} · {deleteTarget.id}</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-xl transition-colors"
+              >
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Detail Drawer ── */}
       {detailItem && (
         <DetailDrawer
@@ -499,9 +560,11 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
           technicians={technicians}
           onClose={() => setDetailItem(null)}
           canEdit={canEdit(detailItem)}
+          canDelete={canDelete(detailItem)}
           isScheduler={isScheduler}
           onEdit={() => { setDetailItem(null); openEdit(detailItem); }}
           onSchedule={() => { setDetailItem(null); openSchedule(detailItem); }}
+          onDelete={() => { setDetailItem(null); setDeleteTarget(detailItem); }}
         />
       )}
     </div>
@@ -513,14 +576,16 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 interface CardProps {
   request: SalesAppointmentRequest;
   canEdit: boolean;
+  canDelete: boolean;
   isScheduler: boolean;
   onEdit: () => void;
   onSchedule: () => void;
   onView: () => void;
+  onDelete: () => void;
   technicians: Technician[];
 }
 
-const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, isScheduler, onEdit, onSchedule, onView, technicians }) => {
+const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, canDelete, isScheduler, onEdit, onSchedule, onView, onDelete, technicians }) => {
   const engineer = technicians.find(t => t.id === r.assignedFieldEngineerId);
   const isPending = r.status === SalesRequestStatus.PENDING_SCHEDULING;
 
@@ -586,6 +651,14 @@ const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, isScheduler, on
           {canEdit && (
             <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
               <Edit2 size={12} /> Edit
+            </button>
+          )}
+          {canDelete && (
+            <button
+              onClick={e => { e.stopPropagation(); onDelete(); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+            >
+              <Trash2 size={12} /> Delete
             </button>
           )}
           {isScheduler && isPending && (
@@ -993,13 +1066,15 @@ interface DetailDrawerProps {
   request: SalesAppointmentRequest;
   technicians: Technician[];
   canEdit: boolean;
+  canDelete: boolean;
   isScheduler: boolean;
   onClose: () => void;
   onEdit: () => void;
   onSchedule: () => void;
+  onDelete: () => void;
 }
 
-const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, canEdit, isScheduler, onClose, onEdit, onSchedule }) => {
+const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, canEdit, canDelete, isScheduler, onClose, onEdit, onSchedule, onDelete }) => {
   const engineer = technicians.find(t => t.id === r.assignedFieldEngineerId);
   const isPending = r.status === SalesRequestStatus.PENDING_SCHEDULING;
 
@@ -1064,6 +1139,11 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
             {canEdit && (
               <button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
                 <Edit2 size={13} /> Edit
+              </button>
+            )}
+            {canDelete && (
+              <button onClick={onDelete} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors">
+                <Trash2 size={13} /> Delete
               </button>
             )}
             {isScheduler && isPending && (
