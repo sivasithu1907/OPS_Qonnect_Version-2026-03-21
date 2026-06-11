@@ -107,7 +107,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
   const [schedForm, setSchedForm] = useState({
     scheduledDate: '',
     scheduledStartTime: '',
-    scheduledEndTime: '',
+    assistantTechIds: [] as string[],
     assignedFieldEngineerId: '',
     durationHours: '2',
   });
@@ -280,7 +280,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
     setSchedForm({
       scheduledDate:            r.scheduledDate?.slice(0, 10) || '',
       scheduledStartTime:       r.scheduledStartTime || '',
-      scheduledEndTime:         r.scheduledEndTime || '',
+      assistantTechIds:         [],
       assignedFieldEngineerId:  r.assignedFieldEngineerId || '',
       durationHours:            '2',
     });
@@ -291,7 +291,6 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
     const errs: Record<string, string> = {};
     if (!schedForm.scheduledDate)           errs.scheduledDate  = 'Date is required';
     if (!schedForm.scheduledStartTime)      errs.scheduledStartTime = 'Start time is required';
-    if (!schedForm.scheduledEndTime)        errs.scheduledEndTime   = 'End time is required';
     if (!schedForm.assignedFieldEngineerId) errs.assignedFieldEngineerId = 'Assign a field engineer';
     setSchedErrors(errs);
     return Object.keys(errs).length === 0;
@@ -322,8 +321,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
       await api.post(`/api/sales-appointment-requests/${scheduleTarget.id}/schedule`, {
         scheduledDate:           schedForm.scheduledDate,
         scheduledStartTime:      schedForm.scheduledStartTime,
-        scheduledEndTime:        schedForm.scheduledEndTime,
         assignedFieldEngineerId: schedForm.assignedFieldEngineerId,
+        assistantTechIds:        schedForm.assistantTechIds,
         durationHours:           Number(schedForm.durationHours) || 2,
       });
       setScheduleTarget(null);
@@ -344,6 +343,13 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
     () => technicians.filter(t =>
       t.isActive &&
       (t.level === 'FIELD_ENGINEER' || t.systemRole === Role.FIELD_ENGINEER || t.role === Role.FIELD_ENGINEER)
+    ),
+    [technicians]
+  );
+
+  const technicalAssociates = useMemo(
+    () => technicians.filter(t =>
+      t.isActive && t.level === 'TECHNICAL_ASSOCIATE'
     ),
     [technicians]
   );
@@ -510,7 +516,14 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
           schedErrors={schedErrors}
           scheduling={scheduling}
           fieldEngineers={fieldEngineers}
+          technicalAssociates={technicalAssociates}
           onFieldChange={(f, v) => setSchedForm(p => ({ ...p, [f]: v }))}
+          onToggleAssistant={(id) => setSchedForm(p => ({
+            ...p,
+            assistantTechIds: p.assistantTechIds.includes(id)
+              ? p.assistantTechIds.filter(x => x !== id)
+              : [...p.assistantTechIds, id]
+          }))}
           onClose={() => setScheduleTarget(null)}
           onSubmit={handleSchedule}
         />
@@ -919,18 +932,20 @@ const FormModal: React.FC<FormModalProps> = ({
 
 interface ScheduleModalProps {
   request: SalesAppointmentRequest;
-  schedForm: { scheduledDate: string; scheduledStartTime: string; scheduledEndTime: string; assignedFieldEngineerId: string; durationHours: string };
+  schedForm: { scheduledDate: string; scheduledStartTime: string; assistantTechIds: string[]; assignedFieldEngineerId: string; durationHours: string };
   schedErrors: Record<string, string>;
   scheduling: boolean;
   fieldEngineers: Technician[];
+  technicalAssociates: Technician[];
   onFieldChange: (f: string, v: string) => void;
+  onToggleAssistant: (id: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 }
 
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
-  request: r, schedForm, schedErrors, scheduling, fieldEngineers,
-  onFieldChange, onClose, onSubmit
+  request: r, schedForm, schedErrors, scheduling, fieldEngineers, technicalAssociates,
+  onFieldChange, onToggleAssistant, onClose, onSubmit
 }) => (
   <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
     <div
@@ -983,32 +998,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           <FieldError msg={schedErrors.scheduledDate} />
         </div>
 
-        {/* Times */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Start Time <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="time"
-              value={schedForm.scheduledStartTime}
-              onChange={e => onFieldChange('scheduledStartTime', e.target.value)}
-              className={`${INPUT_STYLES} ${schedErrors.scheduledStartTime ? 'border-red-400' : ''}`}
-            />
-            <FieldError msg={schedErrors.scheduledStartTime} />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              End Time <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="time"
-              value={schedForm.scheduledEndTime}
-              onChange={e => onFieldChange('scheduledEndTime', e.target.value)}
-              className={`${INPUT_STYLES} ${schedErrors.scheduledEndTime ? 'border-red-400' : ''}`}
-            />
-            <FieldError msg={schedErrors.scheduledEndTime} />
-          </div>
+        {/* Start Time only */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            Start Time <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="time"
+            value={schedForm.scheduledStartTime}
+            onChange={e => onFieldChange('scheduledStartTime', e.target.value)}
+            className={`${INPUT_STYLES} ${schedErrors.scheduledStartTime ? 'border-red-400' : ''}`}
+          />
+          <FieldError msg={schedErrors.scheduledStartTime} />
         </div>
 
         {/* Assign Field Engineer */}
@@ -1027,6 +1028,39 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             ))}
           </select>
           <FieldError msg={schedErrors.assignedFieldEngineerId} />
+        </div>
+
+        {/* Technical Associates (optional multi-select) */}
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            Technical Associates
+            <span className="ml-1.5 text-xs font-normal text-slate-400">(optional)</span>
+          </label>
+          {technicalAssociates.length === 0 ? (
+            <p className="text-xs text-slate-400 py-2">No technical associates available</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {technicalAssociates.map(t => {
+                const selected = schedForm.assistantTechIds.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => onToggleAssistant(t.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                      selected
+                        ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'
+                    }`}
+                  >
+                    <Users size={11} />
+                    {t.name}
+                    {selected && <CheckCircle2 size={11} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Duration */}
