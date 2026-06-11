@@ -244,6 +244,23 @@ function App() {
               type: 'assigned',
               ticketId: t.id
             }));
+      } else if (currentUser.role === Role.SALES) {
+          // Sales users: show when their own requests get scheduled (status changed from PENDING)
+          // This is driven from the activities list — look for recently created activities
+          // linked back to their requests (created within last 24h)
+          const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          const myId = (currentUser as any).techId || (currentUser as any).id;
+          activities
+            .filter(a =>
+              a.details?.salesLeadId === myId &&
+              new Date(a.createdAt) > since24h
+            )
+            .forEach(a => notifs.push({
+              id: `sales-sched-${a.id}`,
+              message: `Your appointment request has been scheduled: ${a.reference} — ${a.customerName || ''}`,
+              time: new Date(a.createdAt),
+              type: 'sales_scheduled',
+            }));
       }
 
       // Sort newest first
@@ -1321,6 +1338,7 @@ useEffect(() => {
                                                  carry_forward: 'bg-amber-500',
                                                  status_change: 'bg-blue-500',
                                                  assigned: 'bg-purple-500',
+                                                 sales_scheduled: 'bg-amber-400',
                                              };
                                              return (
                                                  <div
