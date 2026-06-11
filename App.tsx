@@ -27,6 +27,7 @@ const WhatsAppMonitor = lazy(() => import('./components/WhatsAppMonitor'));
 const TVDisplayMode = lazy(() => import('./components/TVDisplayMode'));
 const CompletedJobSummary = lazy(() => import('./components/CompletedJobSummary'));
 const MasterDashboard = lazy(() => import('./components/MasterDashboard'));
+const SalesAppointmentRequests = lazy(() => import('./components/SalesAppointmentRequests'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -289,6 +290,8 @@ const handleLogin = async (email: string, pass: string) => {
           setLoginError('');
           if (data.user.role === Role.FIELD_ENGINEER) {
               setActiveView('tech_portal');
+          } else if (data.user.role === Role.SALES) {
+              setActiveView('sales_requests');
           } else if (data.user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
               setActiveView('lead_portal');
           } else {
@@ -662,8 +665,8 @@ const handleDeleteCustomer = async (id: string) => {
           const exists = technicians.find(x => x.id === u.id);
           if (exists) {
               // Update existing user
-              // When level is SALES or TECHNICAL_ASSOCIATE, clear systemRole to NONE
-              const isNonLoginLevel = u.level === 'SALES' || u.level === 'TECHNICAL_ASSOCIATE';
+              // SALES gets its own system role for auth; TECHNICAL_ASSOCIATE stays NONE
+              const isNonLoginLevel = u.level === 'TECHNICAL_ASSOCIATE';
               const effectiveRole = isNonLoginLevel ? 'NONE' : (u.systemRole || null);
               const res = await fetch(`/api/users/${u.id}`, {
                   method: "PUT",
@@ -841,7 +844,8 @@ const loadCustomers = async () => {
                 if (u.systemRole === 'TEAM_LEAD')      level = 'TEAM_LEAD';
                 else if (u.systemRole === 'ADMIN')      level = 'TEAM_LEAD'; // Admins appear with Team Leads
                 else if (u.systemRole === 'FIELD_ENGINEER') level = 'FIELD_ENGINEER';
-                else if (u.systemRole === 'NONE')       level = ''; // SALES/TA — should have level set in DB
+                else if (u.systemRole === 'SALES')      level = 'SALES';
+                else if (u.systemRole === 'NONE')       level = ''; // TA — should have level set in DB
                 else                                     level = 'FIELD_ENGINEER'; // safe default
             }
             return {
@@ -888,6 +892,8 @@ const loadCustomers = async () => {
         // Auto-route based on role and device
         if (user.role === Role.FIELD_ENGINEER) {
           setActiveView('tech_portal');
+        } else if (user.role === Role.SALES) {
+          setActiveView('sales_requests');
         } else if (user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
           setActiveView('lead_portal');
         }
@@ -1383,6 +1389,20 @@ useEffect(() => {
             <div className="flex-1 overflow-auto bg-slate-50 relative">
               <ErrorBoundary name='MainContent'>
               <Suspense fallback={<LoadingFallback />}>
+                {/* ── SALES route guard: redirect to allowed view ── */}
+                {currentUser.role === Role.SALES && activeView !== 'sales_requests' && activeView !== 'operations' && (
+                  <div className="flex flex-col items-center justify-center h-full py-32 gap-4 text-slate-400">
+                    <div className="text-5xl">🔒</div>
+                    <p className="font-semibold text-slate-600">Access Restricted</p>
+                    <p className="text-sm">This page is not available for your role.</p>
+                    <button
+                      onClick={() => setActiveView('sales_requests')}
+                      className="mt-2 px-4 py-2 bg-amber-400 text-slate-900 rounded-xl font-semibold text-sm"
+                    >
+                      Go to Sales Requests
+                    </button>
+                  </div>
+                )}
                 {activeView === 'dashboard' && (
                     <Dashboard 
                         tickets={tickets} 
@@ -1503,6 +1523,21 @@ useEffect(() => {
                 )}
                 {activeView === 'whatsapp_monitor' && (
                     <WhatsAppMonitor />
+                )}
+
+                {activeView === 'sales_requests' && (
+                    <SalesAppointmentRequests
+                        currentUser={currentUser}
+                        technicians={technicians}
+                        onActivityCreated={() => {
+                            // Refresh activities so planner/ops monitor shows the new planned activity
+                            const token = localStorage.getItem('qonnect_token');
+                            fetch('/api/refresh', { headers: { Authorization: `Bearer ${token}` } })
+                                .then(r => r.json())
+                                .then((data: any) => { if (data.activities) setActivities(data.activities); })
+                                .catch(() => {});
+                        }}
+                    />
                 )}
 
                 {activeView === 'tech_portal' && (
