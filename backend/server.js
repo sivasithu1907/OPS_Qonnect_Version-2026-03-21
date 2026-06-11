@@ -728,12 +728,15 @@ function mapActivityLite(r) {
     return {
         id: r.id, reference: r.reference, type: r.type, priority: r.priority,
         status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
+        customerName: r.customer_name || d.customerName || '',
+        customerPhone: d.customerPhone || '',
         siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
         serviceCategory: d.serviceCategory || r.service_category || '',
         durationHours: Number(r.duration_hours || 0),
         durationUnit: d.durationUnit || 'HOURS',
         assistantTechIds: d.assistantTechIds || r.assistant_tech_ids || [],
         salesLeadId: d.salesLeadId || r.sales_lead_id || null,
+        salesLeadName: d.salesLeadName || '',
         locationUrl: d.locationUrl || r.location_url || '',
         houseNumber: d.houseNumber || r.house_number || '',
         escalationLevel: d.escalationLevel || r.escalation_level || '',
@@ -760,12 +763,15 @@ function mapActivity(r) {
     return {
         id: r.id, reference: r.reference, type: r.type, priority: r.priority,
         status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
+        customerName: r.customer_name || d.customerName || '',
+        customerPhone: d.customerPhone || '',
         siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
         serviceCategory: d.serviceCategory || r.service_category || '',
         durationHours: Number(r.duration_hours || 0),
         durationUnit: d.durationUnit || 'HOURS',
         assistantTechIds: d.assistantTechIds || r.assistant_tech_ids || [],
         salesLeadId: d.salesLeadId || r.sales_lead_id || null,
+        salesLeadName: d.salesLeadName || '',
         locationUrl: d.locationUrl || r.location_url || '',
         houseNumber: d.houseNumber || r.house_number || '',
         escalationLevel: d.escalationLevel || r.escalation_level || '',
@@ -2395,9 +2401,20 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (re
         if (!current.rows[0]) return res.status(404).json({ error: 'Request not found' });
         const sar = current.rows[0];
 
-        // Fetch engineer
+        // Fetch engineer name
         const engRow = await pool.query('SELECT id, name FROM users WHERE id = $1', [assignedFieldEngineerId]);
         if (!engRow.rows[0]) return res.status(400).json({ error: 'Assigned engineer not found' });
+
+        // Fetch sales lead name
+        const salesLeadRow = await pool.query('SELECT name FROM users WHERE id = $1', [sar.sales_lead_user_id]);
+        const salesLeadName = salesLeadRow.rows[0]?.name || sar.sales_lead_name || '';
+
+        // Fetch customer phone so Call button works in the portal
+        let customerPhone = sar.contact_number || '';
+        if (sar.customer_id) {
+            const custRow = await pool.query('SELECT phone FROM customers WHERE id = $1', [sar.customer_id]);
+            if (custRow.rows[0]?.phone) customerPhone = custRow.rows[0].phone;
+        }
 
         // Build the planned date/time string (combine scheduledDate + scheduledStartTime)
         const plannedDate = `${scheduledDate}T${scheduledStartTime}:00+03:00`; // Qatar timezone offset
@@ -2408,13 +2425,20 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (re
         const lastActNum = parseInt(lastActId.replace('QNC-ACT-', ''), 10) || 0;
         const actId      = `QNC-ACT-${String(lastActNum + 1).padStart(6, '0')}`;
 
-        // Build activity details JSONB
+        // Build activity details JSONB — match exactly what mapActivityLite / PlanningModule expect
         const actDetails = {
+            // ── Sales request back-reference (internal only) ──
             salesRequestId:      id,
+            salesRequestRef:     id,
+            // ── Display fields used by planner / ops monitor / team card ──
+            customerName:        sar.customer_name,
+            customerPhone:       customerPhone,
             salesLeadId:         sar.sales_lead_user_id,
+            salesLeadName:       salesLeadName,
             serviceCategory:     sar.service_category,
             locationUrl:         sar.location_url,
             houseNumber:         sar.house_number,
+            // odooLink stored here so Edit Activity shows it
             odooLink:            sar.odoo_reference,
             remarks:             sar.remarks || '',
             scheduledStartTime:  scheduledStartTime,
@@ -2422,18 +2446,22 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (re
             freelancers:         [],
         };
 
-        // Insert Activity (PLANNED status — appears in planner/ops monitor)
+        // Clean description — no SAR prefix, just like a manually created activity
+        const cleanDescription = sar.remarks?.trim() || '';
+
+        // Insert Activity — set customer_name column directly so all portal views show the client
         await pool.query(
             `INSERT INTO activities
-               (id, reference, type, priority, status, planned_date, customer_id,
+               (id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 lead_tech_id, description, duration_hours, details)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
             [
                 actId, actId, sar.activity_type, 'MEDIUM', 'PLANNED',
                 plannedDate,
                 sar.customer_id || null,
+                sar.customer_name,
                 assignedFieldEngineerId,
-                `[Sales Request ${id}] ${sar.customer_name} — ${sar.activity_type} (${sar.service_category})`,
+                cleanDescription,
                 Number(durationHours) || 2,
                 JSON.stringify(actDetails),
             ]
