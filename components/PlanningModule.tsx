@@ -143,6 +143,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 unit: editingActivity.durationUnit || 'HOURS'
             });
             setSelectedCustomerId(editingActivity.customerId || '');
+            // For SAR-created activities that have customerName in details but no customerId matched,
+            // we just leave the selector at the found ID; the customer was created at schedule time.
             setLocationUrl(editingActivity.locationUrl || '');
             setHouseNumber(editingActivity.houseNumber || '');
             setFreelancers((editingActivity as any).freelancers || []);
@@ -327,6 +329,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             const customer = customers.find(c => c.id === act.customerId);
             const lead = technicians.find(t => t.id === act.leadTechId);
             const salesLead = technicians.find(t => t.id === act.salesLeadId);
+            const salesLeadDisplayName = salesLead?.name || (act as any).salesLeadName || '';
+            const customerDisplayName = customer?.name || (act as any).customerName || 'Unknown';
             const helpersCount = act.assistantTechIds?.length || 0;
             const isDelayed = (act.escalationLevel || 0) > 0;
 
@@ -348,7 +352,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     {act.serviceCategory && <div className="text-[10px] text-slate-500 font-normal">{act.serviceCategory}</div>}
                 </td>
                 <td className="px-4 py-4">
-                  <div className="font-medium text-slate-900 truncate">{customer?.name || 'Unknown'}</div>
+                  <div className="font-medium text-slate-900 truncate">{customerDisplayName}</div>
                   <div className="text-xs text-slate-500 flex items-center gap-1 truncate">
                       <MapPin size={10} className="shrink-0" /> {getDisplayLocation(act)}
                   </div>
@@ -391,10 +395,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                          </div>
                        ) : <span className="text-slate-400 italic text-[10px]">No Eng.</span>}
                        
-                       {salesLead && (
+                       {salesLeadDisplayName && (
                          <div className="flex items-center gap-2 text-xs text-indigo-600">
                             <span className="w-2 h-2 rounded-full bg-indigo-500"/>
-                            <span>{salesLead.name.split(' ')[0]} (Sales)</span>
+                            <span>{salesLeadDisplayName.split(' ')[0]} (Sales)</span>
                          </div>
                        )}
 
@@ -1262,6 +1266,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         const customer = customers.find(c => c.id === va.customerId);
         const lead = technicians.find(t => t.id === va.leadTechId);
         const salesLd = technicians.find(t => t.id === va.salesLeadId);
+        const salesLdName = salesLd?.name || (va as any).salesLeadName || '';
+        const vaCustomerName = customer?.name || (va as any).customerName || 'Unknown';
+        const vaCustomerPhone = customer?.phone || (va as any).customerPhone || '';
         const assistants = (va.assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
         const fls = va.freelancers || [];
         return (
@@ -1290,9 +1297,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Customer</span>
-                    <span className="font-semibold text-slate-800">{customer?.name || 'Unknown'}</span>
+                    <span className="font-semibold text-slate-800">{vaCustomerName}</span>
                   </div>
-                  {customer?.phone && <div className="flex justify-between text-sm"><span className="text-slate-400">Phone</span><span className="text-slate-700">{customer.phone}</span></div>}
+                  {vaCustomerPhone && <div className="flex justify-between text-sm"><span className="text-slate-400">Phone</span><span className="text-slate-700">{vaCustomerPhone}</span></div>}
                   {va.houseNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">House / Villa</span><span className="text-slate-700">{va.houseNumber}</span></div>}
                   {customer?.buildingNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">Building</span><span className="text-slate-700">{customer.buildingNumber}</span></div>}
                   {va.locationUrl && <div className="flex justify-between text-sm"><span className="text-slate-400">Map</span><a href={va.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[60%]">Open Map</a></div>}
@@ -1316,10 +1323,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 {/* Resources — split into sections */}
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
                   {/* Sales Lead — separate section */}
-                  {salesLd && (
+                  {salesLdName && (
                     <div className="pb-2 border-b border-slate-200">
                       <div className="text-[10px] font-bold text-indigo-600 uppercase mb-1.5">Sales Lead</div>
-                      <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLd.name}</span></div>
+                      <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLdName}</span></div>
                     </div>
                   )}
                   {/* Assigned Team */}
