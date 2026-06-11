@@ -164,6 +164,7 @@ export const api = {
         list:     ()           => api.get('/api/sales-appointment-requests'),
         create:   (data: any)  => api.post('/api/sales-appointment-requests', data),
         update:   (id: string, data: any) => api.put(`/api/sales-appointment-requests/${id}`, data),
+        delete:   (id: string) => api.delete(`/api/sales-appointment-requests/${id}`),
         schedule: (id: string, data: any) => api.post(`/api/sales-appointment-requests/${id}/schedule`, data),
         pendingDashboard: () => api.get('/api/dashboard/pending-sales-requests'),
     },
