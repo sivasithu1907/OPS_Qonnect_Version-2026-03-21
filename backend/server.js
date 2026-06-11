@@ -523,6 +523,37 @@ await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at DESC);
     `).catch(() => {}); // Non-fatal if indexes already exist
 
+    // ── Sales Appointment Requests Table ──────────────────────────────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sales_appointment_requests (
+        id                        TEXT PRIMARY KEY,
+        customer_id               TEXT,
+        customer_name             TEXT NOT NULL,
+        contact_number            TEXT NOT NULL,
+        location_url              TEXT NOT NULL,
+        house_number              TEXT NOT NULL,
+        odoo_reference            TEXT NOT NULL,
+        activity_type             TEXT NOT NULL,
+        service_category          TEXT NOT NULL,
+        sales_lead_user_id        TEXT NOT NULL,
+        sales_lead_name           TEXT NOT NULL,
+        remarks                   TEXT,
+        status                    TEXT NOT NULL DEFAULT 'PENDING_SCHEDULING',
+        scheduled_date            DATE,
+        scheduled_start_time      TEXT,
+        scheduled_end_time        TEXT,
+        assigned_field_engineer_id TEXT,
+        linked_activity_id        TEXT,
+        created_by                TEXT NOT NULL,
+        updated_by                TEXT,
+        created_at                TIMESTAMPTZ DEFAULT now(),
+        updated_at                TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_sar_status       ON sales_appointment_requests(status);
+      CREATE INDEX IF NOT EXISTS idx_sar_sales_lead   ON sales_appointment_requests(sales_lead_user_id);
+      CREATE INDEX IF NOT EXISTS idx_sar_created      ON sales_appointment_requests(created_at DESC);
+    `);
+
     console.log("✅ DB initialized with Tickets and Customers");
   } catch (err) {
     console.error("❌ DB initialization failed:", err);
@@ -2070,6 +2101,303 @@ Return JSON only.
     return "GENERAL";
   }
 }
+
+// ==============================
+// Sales Appointment Requests
+// ==============================
+
+/* ── Helper: map DB row → API shape ── */
+function mapSAR(r) {
+    return {
+        id:                       r.id,
+        customerId:               r.customer_id,
+        customerName:             r.customer_name,
+        contactNumber:            r.contact_number,
+        locationUrl:              r.location_url,
+        houseNumber:              r.house_number,
+        odooReference:            r.odoo_reference,
+        activityType:             r.activity_type,
+        serviceCategory:          r.service_category,
+        salesLeadUserId:          r.sales_lead_user_id,
+        salesLeadName:            r.sales_lead_name,
+        remarks:                  r.remarks,
+        status:                   r.status,
+        scheduledDate:            r.scheduled_date ? r.scheduled_date.toISOString().slice(0, 10) : null,
+        scheduledStartTime:       r.scheduled_start_time,
+        scheduledEndTime:         r.scheduled_end_time,
+        assignedFieldEngineerId:  r.assigned_field_engineer_id,
+        linkedActivityId:         r.linked_activity_id,
+        createdBy:                r.created_by,
+        updatedBy:                r.updated_by,
+        createdAt:                r.created_at,
+        updatedAt:                r.updated_at,
+    };
+}
+
+/* ── GET /api/sales-appointment-requests ── */
+app.get('/api/sales-appointment-requests', authenticate, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT * FROM sales_appointment_requests ORDER BY created_at DESC LIMIT 500`
+        );
+        res.json(rows.map(mapSAR));
+    } catch (e) {
+        console.error('SAR GET error:', e);
+        res.status(500).json({ error: 'Failed to fetch sales appointment requests' });
+    }
+});
+
+/* ── GET /api/dashboard/pending-sales-requests ── */
+app.get('/api/dashboard/pending-sales-requests', authenticate, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT * FROM sales_appointment_requests WHERE status = 'PENDING_SCHEDULING' ORDER BY created_at DESC LIMIT 20`
+        );
+        res.json({ count: rows.length, requests: rows.map(mapSAR) });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to fetch pending requests' });
+    }
+});
+
+/* ── POST /api/sales-appointment-requests ── */
+app.post('/api/sales-appointment-requests', authenticate, async (req, res) => {
+    try {
+        const role = req.user.role;
+        const userId = req.user.id;
+
+        // Determine caller identity
+        const userRow = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
+        if (!userRow.rows[0]) return res.status(401).json({ error: 'User not found' });
+        const userName = userRow.rows[0].name;
+
+        const {
+            customerId,
+            customerName, contactNumber, locationUrl, houseNumber, odooReference,
+            activityType, serviceCategory, remarks,
+        } = req.body;
+
+        // Mandatory field validation
+        const missing = [];
+        if (!customerName?.trim())   missing.push('customerName');
+        if (!contactNumber?.trim())  missing.push('contactNumber');
+        if (!locationUrl?.trim())    missing.push('locationUrl');
+        if (!houseNumber?.trim())    missing.push('houseNumber');
+        if (!odooReference?.trim())  missing.push('odooReference');
+        if (!activityType?.trim())   missing.push('activityType');
+        if (!serviceCategory?.trim()) missing.push('serviceCategory');
+        if (missing.length) return res.status(400).json({ error: 'Missing required fields', fields: missing });
+
+        // SALES users: force status=PENDING_SCHEDULING and set salesLead to themselves
+        const isSalesRole = role === 'SALES';
+        const salesLeadUserId = isSalesRole ? userId : (req.body.salesLeadUserId || userId);
+        const salesLeadName   = isSalesRole ? userName : (req.body.salesLeadName || userName);
+        const status = 'PENDING_SCHEDULING'; // Always starts PENDING regardless of role
+
+        // Validate activityType
+        const allowedTypes = ['Installation', 'Troubleshooting', 'Inspection', 'Survey', 'Service', 'Maintenance'];
+        if (!allowedTypes.includes(activityType)) {
+            return res.status(400).json({ error: 'Invalid activityType' });
+        }
+
+        // Generate ID
+        const idRes = await pool.query(
+            `SELECT id FROM sales_appointment_requests ORDER BY created_at DESC LIMIT 1`
+        );
+        const lastId  = idRes.rows[0]?.id || 'SAR-00000';
+        const lastNum = parseInt(lastId.replace('SAR-', ''), 10) || 0;
+        const newId   = `SAR-${String(lastNum + 1).padStart(5, '0')}`;
+
+        const { rows } = await pool.query(
+            `INSERT INTO sales_appointment_requests
+               (id, customer_id, customer_name, contact_number, location_url, house_number,
+                odoo_reference, activity_type, service_category, sales_lead_user_id,
+                sales_lead_name, remarks, status, created_by, updated_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
+             RETURNING *`,
+            [
+                newId, customerId || null, customerName.trim(), contactNumber.trim(),
+                locationUrl.trim(), houseNumber.trim(), odooReference.trim(),
+                activityType.trim(), serviceCategory.trim(), salesLeadUserId,
+                salesLeadName, remarks?.trim() || null, status, userId
+            ]
+        );
+        res.status(201).json(mapSAR(rows[0]));
+    } catch (e) {
+        console.error('SAR POST error:', e);
+        res.status(500).json({ error: 'Failed to create sales appointment request' });
+    }
+});
+
+/* ── PUT /api/sales-appointment-requests/:id ── */
+app.put('/api/sales-appointment-requests/:id', authenticate, async (req, res) => {
+    try {
+        const role   = req.user.role;
+        const userId = req.user.id;
+        const { id } = req.params;
+
+        const current = await pool.query(
+            'SELECT * FROM sales_appointment_requests WHERE id = $1', [id]
+        );
+        if (!current.rows[0]) return res.status(404).json({ error: 'Request not found' });
+        const row = current.rows[0];
+
+        // Permission check
+        if (role === 'SALES') {
+            if (row.created_by !== userId) {
+                return res.status(403).json({ error: 'You can only edit your own requests' });
+            }
+            if (row.status !== 'PENDING_SCHEDULING') {
+                return res.status(403).json({ error: 'Request can no longer be edited (already scheduled or in progress)' });
+            }
+        }
+        if (role === 'FIELD_ENGINEER') {
+            return res.status(403).json({ error: 'Field engineers cannot edit sales requests' });
+        }
+
+        const {
+            customerName, contactNumber, locationUrl, houseNumber, odooReference,
+            activityType, serviceCategory, remarks, customerId,
+        } = req.body;
+
+        // For SALES: only allow editing the non-scheduling fields
+        // For ADMIN/TEAM_LEAD: also allow editing everything except scheduled fields (those go via /schedule)
+        const updated = await pool.query(
+            `UPDATE sales_appointment_requests SET
+               customer_id      = COALESCE($1,  customer_id),
+               customer_name    = COALESCE($2,  customer_name),
+               contact_number   = COALESCE($3,  contact_number),
+               location_url     = COALESCE($4,  location_url),
+               house_number     = COALESCE($5,  house_number),
+               odoo_reference   = COALESCE($6,  odoo_reference),
+               activity_type    = COALESCE($7,  activity_type),
+               service_category = COALESCE($8,  service_category),
+               remarks          = COALESCE($9,  remarks),
+               updated_by       = $10,
+               updated_at       = now()
+             WHERE id = $11
+             RETURNING *`,
+            [
+                customerId || null,
+                customerName?.trim()    || null,
+                contactNumber?.trim()   || null,
+                locationUrl?.trim()     || null,
+                houseNumber?.trim()     || null,
+                odooReference?.trim()   || null,
+                activityType?.trim()    || null,
+                serviceCategory?.trim() || null,
+                remarks !== undefined ? (remarks?.trim() || null) : null,
+                userId,
+                id,
+            ]
+        );
+        res.json(mapSAR(updated.rows[0]));
+    } catch (e) {
+        console.error('SAR PUT error:', e);
+        res.status(500).json({ error: 'Failed to update sales appointment request' });
+    }
+});
+
+/* ── POST /api/sales-appointment-requests/:id/schedule ── */
+// Only TEAM_LEAD or ADMIN may call this endpoint.
+// Validates required scheduling fields, updates the request to SCHEDULED,
+// then creates a corresponding planned Activity so it appears in
+// Activity Planner and Operations Monitor immediately.
+app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (req, res) => {
+    try {
+        const role   = req.user.role;
+        const userId = req.user.id;
+
+        if (role !== 'TEAM_LEAD' && role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Only Team Lead or Admin can schedule appointments' });
+        }
+
+        const { id } = req.params;
+        const { scheduledDate, scheduledStartTime, scheduledEndTime, assignedFieldEngineerId, durationHours } = req.body;
+
+        // Validate
+        if (!scheduledDate)            return res.status(400).json({ error: 'scheduledDate is required' });
+        if (!scheduledStartTime)       return res.status(400).json({ error: 'scheduledStartTime is required' });
+        if (!scheduledEndTime)         return res.status(400).json({ error: 'scheduledEndTime is required' });
+        if (!assignedFieldEngineerId)  return res.status(400).json({ error: 'assignedFieldEngineerId is required' });
+
+        // Fetch request
+        const current = await pool.query(
+            'SELECT * FROM sales_appointment_requests WHERE id = $1', [id]
+        );
+        if (!current.rows[0]) return res.status(404).json({ error: 'Request not found' });
+        const sar = current.rows[0];
+
+        // Fetch engineer
+        const engRow = await pool.query('SELECT id, name FROM users WHERE id = $1', [assignedFieldEngineerId]);
+        if (!engRow.rows[0]) return res.status(400).json({ error: 'Assigned engineer not found' });
+
+        // Build the planned date/time string (combine scheduledDate + scheduledStartTime)
+        const plannedDate = `${scheduledDate}T${scheduledStartTime}:00+03:00`; // Qatar timezone offset
+
+        // Generate Activity ID
+        const maxAct = await pool.query("SELECT id FROM activities ORDER BY id DESC LIMIT 1");
+        const lastActId  = maxAct.rows[0]?.id || 'QNC-ACT-000000';
+        const lastActNum = parseInt(lastActId.replace('QNC-ACT-', ''), 10) || 0;
+        const actId      = `QNC-ACT-${String(lastActNum + 1).padStart(6, '0')}`;
+
+        // Build activity details JSONB
+        const actDetails = {
+            salesRequestId:      id,
+            salesLeadId:         sar.sales_lead_user_id,
+            serviceCategory:     sar.service_category,
+            locationUrl:         sar.location_url,
+            houseNumber:         sar.house_number,
+            odooLink:            sar.odoo_reference,
+            remarks:             sar.remarks || '',
+            scheduledStartTime:  scheduledStartTime,
+            scheduledEndTime:    scheduledEndTime,
+            assistantTechIds:    [],
+            freelancers:         [],
+        };
+
+        // Insert Activity (PLANNED status — appears in planner/ops monitor)
+        await pool.query(
+            `INSERT INTO activities
+               (id, reference, type, priority, status, planned_date, customer_id,
+                lead_tech_id, description, duration_hours, details)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [
+                actId, actId, sar.activity_type, 'MEDIUM', 'PLANNED',
+                plannedDate,
+                sar.customer_id || null,
+                assignedFieldEngineerId,
+                `[Sales Request ${id}] ${sar.customer_name} — ${sar.activity_type} (${sar.service_category})`,
+                Number(durationHours) || 2,
+                JSON.stringify(actDetails),
+            ]
+        );
+
+        // Update the SAR to SCHEDULED
+        const updated = await pool.query(
+            `UPDATE sales_appointment_requests SET
+               status                     = 'SCHEDULED',
+               scheduled_date             = $1,
+               scheduled_start_time       = $2,
+               scheduled_end_time         = $3,
+               assigned_field_engineer_id = $4,
+               linked_activity_id         = $5,
+               updated_by                 = $6,
+               updated_at                 = now()
+             WHERE id = $7
+             RETURNING *`,
+            [scheduledDate, scheduledStartTime, scheduledEndTime, assignedFieldEngineerId, actId, userId, id]
+        );
+
+        res.json({
+            ok: true,
+            request: mapSAR(updated.rows[0]),
+            activityId: actId,
+        });
+    } catch (e) {
+        console.error('SAR schedule error:', e);
+        res.status(500).json({ error: 'Failed to schedule appointment', detail: e.message });
+    }
+});
 
 // ==============================
 // WhatsApp Webhook & Logs Integration
