@@ -2334,6 +2334,38 @@ app.put('/api/sales-appointment-requests/:id', authenticate, async (req, res) =>
     }
 });
 
+/* ── DELETE /api/sales-appointment-requests/:id ── */
+app.delete('/api/sales-appointment-requests/:id', authenticate, async (req, res) => {
+    try {
+        const role   = req.user.role;
+        const userId = req.user.id;
+        const { id } = req.params;
+
+        const current = await pool.query(
+            'SELECT * FROM sales_appointment_requests WHERE id = $1', [id]
+        );
+        if (!current.rows[0]) return res.status(404).json({ error: 'Request not found' });
+        const row = current.rows[0];
+
+        // SALES: can only delete their own PENDING_SCHEDULING requests
+        if (role === 'SALES') {
+            if (row.created_by !== userId)
+                return res.status(403).json({ error: 'You can only delete your own requests' });
+            if (row.status !== 'PENDING_SCHEDULING')
+                return res.status(403).json({ error: 'Only pending requests can be deleted' });
+        } else if (role === 'FIELD_ENGINEER') {
+            return res.status(403).json({ error: 'Field engineers cannot delete sales requests' });
+        }
+        // ADMIN / TEAM_LEAD: can delete any
+
+        await pool.query('DELETE FROM sales_appointment_requests WHERE id = $1', [id]);
+        res.json({ ok: true, id });
+    } catch (e) {
+        console.error('SAR DELETE error:', e);
+        res.status(500).json({ error: 'Failed to delete sales appointment request' });
+    }
+});
+
 /* ── POST /api/sales-appointment-requests/:id/schedule ── */
 // Only TEAM_LEAD or ADMIN may call this endpoint.
 // Validates required scheduling fields, updates the request to SCHEDULED,
