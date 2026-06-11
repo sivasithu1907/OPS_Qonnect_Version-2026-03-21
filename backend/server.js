@@ -2381,12 +2381,11 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (re
         }
 
         const { id } = req.params;
-        const { scheduledDate, scheduledStartTime, scheduledEndTime, assignedFieldEngineerId, durationHours } = req.body;
+        const { scheduledDate, scheduledStartTime, assignedFieldEngineerId, durationHours, assistantTechIds } = req.body;
 
         // Validate
         if (!scheduledDate)            return res.status(400).json({ error: 'scheduledDate is required' });
         if (!scheduledStartTime)       return res.status(400).json({ error: 'scheduledStartTime is required' });
-        if (!scheduledEndTime)         return res.status(400).json({ error: 'scheduledEndTime is required' });
         if (!assignedFieldEngineerId)  return res.status(400).json({ error: 'assignedFieldEngineerId is required' });
 
         // Fetch request
@@ -2419,8 +2418,7 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (re
             odooLink:            sar.odoo_reference,
             remarks:             sar.remarks || '',
             scheduledStartTime:  scheduledStartTime,
-            scheduledEndTime:    scheduledEndTime,
-            assistantTechIds:    [],
+            assistantTechIds:    Array.isArray(assistantTechIds) ? assistantTechIds : [],
             freelancers:         [],
         };
 
@@ -2447,14 +2445,13 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (re
                status                     = 'SCHEDULED',
                scheduled_date             = $1,
                scheduled_start_time       = $2,
-               scheduled_end_time         = $3,
-               assigned_field_engineer_id = $4,
-               linked_activity_id         = $5,
-               updated_by                 = $6,
+               assigned_field_engineer_id = $3,
+               linked_activity_id         = $4,
+               updated_by                 = $5,
                updated_at                 = now()
-             WHERE id = $7
+             WHERE id = $6
              RETURNING *`,
-            [scheduledDate, scheduledStartTime, scheduledEndTime, assignedFieldEngineerId, actId, userId, id]
+            [scheduledDate, scheduledStartTime, assignedFieldEngineerId, actId, userId, id]
         );
 
         res.json({
