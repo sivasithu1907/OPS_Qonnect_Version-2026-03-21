@@ -31,7 +31,8 @@ interface MobileLeadPortalProps {
   onSaveCustomer?: (customer: Customer) => void;
   onDeleteCustomer?: (id: string) => void;
   onCreateTicket?: (data: any) => void;
-  
+  onNavigateToSalesRequests?: () => void; // desktop nav callback for Sales Requests
+
   isStandalone?: boolean;
   onLogout?: () => void;
   onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -77,7 +78,7 @@ const engineerTeamMap: Record<string, string> = {
 // --- MAIN COMPONENT ---
 export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({ 
     tickets, technicians, activities = [], teams = [], sites = [], customers = [],
-    onUpdateTicket, onUpdateActivity, onAddActivity, onDeleteActivity, onAddCustomer, onSaveCustomer, onDeleteCustomer, onCreateTicket,
+    onUpdateTicket, onUpdateActivity, onAddActivity, onDeleteActivity, onAddCustomer, onSaveCustomer, onDeleteCustomer, onCreateTicket, onNavigateToSalesRequests,
     isStandalone = false, onLogout, onChangePassword, focusedTicketId, currentUserId
 }) => {
   // --- Responsive Check ---
@@ -207,6 +208,28 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   const stalledCount = tickets.filter(isStalled).length;
   const newTicketsCount = tickets.filter(t => t.status === TicketStatus.NEW).length;
+
+  // ── Pending Sales Appointment Requests count (for quick action badge) ──
+  const [pendingSARCount, setPendingSARCount] = useState(0);
+  useEffect(() => {
+    const token = localStorage.getItem('qonnect_token');
+    fetch('/api/dashboard/pending-sales-requests', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setPendingSARCount(data.count || 0); })
+      .catch(() => {});
+    // Refresh every 60s
+    const interval = setInterval(() => {
+      fetch('/api/dashboard/pending-sales-requests', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setPendingSARCount(data.count || 0); })
+        .catch(() => {});
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Filtered Tickets
   const visibleTickets = useMemo(() => {
@@ -1390,6 +1413,26 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   </div>
                                   <ChevronRight size={16} className="text-slate-500" />
                               </button>
+                              <button
+                                onClick={() => onNavigateToSalesRequests ? onNavigateToSalesRequests() : undefined}
+                                className="w-full flex items-center gap-3 p-4 active:bg-amber-50 transition-colors"
+                              >
+                                  <div className="relative p-2 bg-amber-50 rounded-lg">
+                                    <ClipboardList size={20} className="text-amber-500" />
+                                    {pendingSARCount > 0 && (
+                                      <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] flex items-center justify-center bg-red-500 text-white text-[8px] font-bold rounded-full px-0.5 border border-white">
+                                        {pendingSARCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-slate-900 font-medium block">Sales Appointment Requests</span>
+                                      <span className="text-[10px] text-slate-500">
+                                        {pendingSARCount > 0 ? `${pendingSARCount} pending scheduling` : 'View all requests'}
+                                      </span>
+                                  </div>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
                               <button onClick={() => { setMobileModule('clients'); }} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
                                   <div className="p-2 bg-purple-50 rounded-lg"><Contact size={20} className="text-purple-400" /></div>
                                   <div className="flex-1 text-left">
@@ -1507,7 +1550,19 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               )}
                               <button onClick={() => { setMobileModule('reports'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                   <BarChart3 size={20} className="text-blue-400" />
-                                  <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Export</span>
+                                  <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Reports</span>
+                              </button>
+                              <button
+                                onClick={() => onNavigateToSalesRequests ? onNavigateToSalesRequests() : undefined}
+                                className="relative flex flex-col items-center gap-1.5 p-3 bg-amber-50 rounded-xl border border-amber-200 shadow-sm active:scale-95 transition-transform"
+                              >
+                                <ClipboardList size={20} className="text-amber-500" />
+                                <span className="text-[9px] font-bold text-amber-700 uppercase leading-tight text-center">Sales Req.</span>
+                                {pendingSARCount > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full px-1 border-2 border-white">
+                                    {pendingSARCount}
+                                  </span>
+                                )}
                               </button>
                               <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                   <Contact size={20} className="text-purple-400" />
