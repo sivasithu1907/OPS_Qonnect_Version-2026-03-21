@@ -133,17 +133,19 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
-  // ── Customer search (debounced) ────────────────────────────────────────────
+  // ── Customer search by phone number (debounced) ───────────────────────────
   useEffect(() => {
-    if (!custSearch.trim() || custSearch.length < 2) { setCustResults([]); return; }
+    if (!custSearch.trim() || custSearch.length < 4) { setCustResults([]); return; }
     const t = setTimeout(async () => {
       setCustLoading(true);
       try {
         const all = await api.get('/api/customers');
-        const q = custSearch.toLowerCase();
+        // Normalise both sides: strip spaces, dashes, leading +974
+        const normalise = (v: string) => v.replace(/[\s\-\+]/g, '').replace(/^974/, '');
+        const q = normalise(custSearch);
         setCustResults(
           (all as any[]).filter((c: any) =>
-            c.name?.toLowerCase().includes(q) || c.phone?.includes(q)
+            normalise(c.phone || '').includes(q)
           ).slice(0, 8)
         );
       } catch { /* silent */ }
@@ -198,7 +200,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
       remarks:        r.remarks || '',
     });
     setSelectedCustomerId(r.customerId);
-    setCustSearch(r.customerName);
+    setCustSearch(r.contactNumber);   // phone-first — seed search from contact number
     setCustResults([]);
     setFormErrors({});
     setShowForm(true);
@@ -206,7 +208,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 
   const selectCustomer = (c: any) => {
     setSelectedCustomerId(c.id);
-    setCustSearch(c.name);
+    setCustSearch(c.phone || '');   // keep search state in sync with phone
     setCustResults([]);
     setFormData(prev => ({
       ...prev,
@@ -464,10 +466,9 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
           formData={formData}
           formErrors={formErrors}
           submitting={submitting}
-          custSearch={custSearch}
           custResults={custResults}
           custLoading={custLoading}
-          onCustSearchChange={v => { setCustSearch(v); setFormData(p => ({ ...p, customerName: v })); setSelectedCustomerId(undefined); }}
+          onCustSearchChange={v => { setCustSearch(v); }}
           onSelectCustomer={selectCustomer}
           onToggleServiceCat={toggleServiceCat}
           onFieldChange={(field, value) => setFormData(p => ({ ...p, [field]: value }))}
@@ -610,7 +611,6 @@ interface FormModalProps {
   formData: typeof EMPTY_FORM;
   formErrors: Record<string, string>;
   submitting: boolean;
-  custSearch: string;
   custResults: any[];
   custLoading: boolean;
   salesLeadName: string;
@@ -624,7 +624,7 @@ interface FormModalProps {
 
 const FormModal: React.FC<FormModalProps> = ({
   editing, formData, formErrors, submitting,
-  custSearch, custResults, custLoading, salesLeadName,
+  custResults, custLoading, salesLeadName,
   onCustSearchChange, onSelectCustomer, onToggleServiceCat, onFieldChange,
   onClose, onSubmit
 }) => (
@@ -666,17 +666,22 @@ const FormModal: React.FC<FormModalProps> = ({
           <p className="mt-1 text-xs text-slate-400">Automatically set to your account</p>
         </div>
 
-        {/* Customer search */}
+        {/* Contact number — primary customer lookup field */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Customer Name <span className="text-red-500">*</span>
+            Contact Number <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <input
-              value={custSearch}
-              onChange={e => onCustSearchChange(e.target.value)}
-              placeholder="Search existing client or type new name…"
-              className={`${INPUT_STYLES} ${formErrors.customerName ? 'border-red-400' : ''}`}
+              value={formData.contactNumber}
+              onChange={e => {
+                const v = e.target.value;
+                onFieldChange('contactNumber', v);
+                // Drive customer search from contact number
+                onCustSearchChange(v);
+              }}
+              placeholder="+974 XXXX XXXX — type to search existing clients"
+              className={`${INPUT_STYLES} ${formErrors.contactNumber ? 'border-red-400' : ''}`}
             />
             {custLoading && (
               <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
@@ -690,28 +695,31 @@ const FormModal: React.FC<FormModalProps> = ({
                     className="w-full text-left px-4 py-3 hover:bg-amber-50 text-sm border-b border-slate-100 last:border-0 transition-colors"
                   >
                     <span className="font-semibold text-slate-800">{c.name}</span>
-                    <span className="ml-2 text-slate-500">{c.phone}</span>
+                    <span className="ml-2 text-amber-600 font-mono">{c.phone}</span>
                     {c.address && <span className="ml-2 text-slate-400 text-xs truncate">{c.address}</span>}
                   </button>
                 ))}
               </div>
             )}
           </div>
-          <FieldError msg={formErrors.customerName} />
+          <p className="mt-1 text-xs text-slate-400">
+            Search by phone number — matching clients appear above. If none found, a new client will be created.
+          </p>
+          <FieldError msg={formErrors.contactNumber} />
         </div>
 
-        {/* Contact number */}
+        {/* Customer Name — auto-filled from client lookup, or enter manually for new client */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Contact Number <span className="text-red-500">*</span>
+            Customer Name <span className="text-red-500">*</span>
           </label>
           <input
-            value={formData.contactNumber}
-            onChange={e => onFieldChange('contactNumber', e.target.value)}
-            placeholder="+974 XXXX XXXX"
-            className={`${INPUT_STYLES} ${formErrors.contactNumber ? 'border-red-400' : ''}`}
+            value={formData.customerName}
+            onChange={e => onFieldChange('customerName', e.target.value)}
+            placeholder="Auto-filled from existing client, or enter new client name"
+            className={`${INPUT_STYLES} ${formErrors.customerName ? 'border-red-400' : ''}`}
           />
-          <FieldError msg={formErrors.contactNumber} />
+          <FieldError msg={formErrors.customerName} />
         </div>
 
         {/* Location URL */}
@@ -742,15 +750,15 @@ const FormModal: React.FC<FormModalProps> = ({
           <FieldError msg={formErrors.houseNumber} />
         </div>
 
-        {/* Odoo Reference */}
+        {/* Odoo CRM Link */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Odoo Reference <span className="text-red-500">*</span>
+            Odoo CRM Link <span className="text-red-500">*</span>
           </label>
           <input
             value={formData.odooReference}
             onChange={e => onFieldChange('odooReference', e.target.value)}
-            placeholder="SO-XXXX or Quote ref"
+            placeholder="https://odoo.qonnect.com/web#id=XXXX&model=crm.lead"
             className={`${INPUT_STYLES} ${formErrors.odooReference ? 'border-red-400' : ''}`}
           />
           <FieldError msg={formErrors.odooReference} />
@@ -1033,7 +1041,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
             {row('Service Category', r.serviceCategory)}
             {row('Contact Number', r.contactNumber)}
             {row('House / Building', r.houseNumber)}
-            {row('Odoo Reference', r.odooReference)}
+            {row('Odoo CRM Link', r.odooReference, r.odooReference)}
             {row('Location URL', r.locationUrl, r.locationUrl)}
             {row('Sales Lead', r.salesLeadName)}
             {row('Remarks', r.remarks)}
