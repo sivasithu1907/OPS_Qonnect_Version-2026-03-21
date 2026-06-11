@@ -2207,6 +2207,43 @@ app.post('/api/sales-appointment-requests', authenticate, async (req, res) => {
         const lastNum = parseInt(lastId.replace('SAR-', ''), 10) || 0;
         const newId   = `SAR-${String(lastNum + 1).padStart(5, '0')}`;
 
+        // ── Auto-upsert customer record ──────────────────────────────────────
+        // If no customerId supplied, check by normalised phone. If still no match,
+        // create a new customer so the client appears in the Clients section.
+        let resolvedCustomerId = customerId || null;
+        if (!resolvedCustomerId && contactNumber?.trim()) {
+            const normPhone = contactNumber.trim().replace(/[\s\-]/g, '');
+            const existingCust = await pool.query(
+                `SELECT id FROM customers WHERE REPLACE(REPLACE(phone,' ',''),'-','') = $1 LIMIT 1`,
+                [normPhone]
+            );
+            if (existingCust.rows[0]) {
+                resolvedCustomerId = existingCust.rows[0].id;
+            } else {
+                // Create new customer
+                const custId = `CUST-${Date.now()}`;
+                const custRes = await pool.query(
+                    `INSERT INTO customers (id, name, phone, address, building_number, is_active)
+                     VALUES ($1, $2, $3, $4, $5, true)
+                     ON CONFLICT DO NOTHING
+                     RETURNING id`,
+                    [custId, customerName.trim(), normPhone,
+                     locationUrl?.trim() || null, houseNumber?.trim() || null]
+                );
+                if (custRes.rows[0]) resolvedCustomerId = custRes.rows[0].id;
+            }
+        } else if (resolvedCustomerId) {
+            // Customer exists — update address/building if provided
+            await pool.query(
+                `UPDATE customers SET
+                   address          = COALESCE(NULLIF($1,''), address),
+                   building_number  = COALESCE(NULLIF($2,''), building_number)
+                 WHERE id = $3`,
+                [locationUrl?.trim() || '', houseNumber?.trim() || '', resolvedCustomerId]
+            );
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         const { rows } = await pool.query(
             `INSERT INTO sales_appointment_requests
                (id, customer_id, customer_name, contact_number, location_url, house_number,
@@ -2215,7 +2252,7 @@ app.post('/api/sales-appointment-requests', authenticate, async (req, res) => {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
              RETURNING *`,
             [
-                newId, customerId || null, customerName.trim(), contactNumber.trim(),
+                newId, resolvedCustomerId, customerName.trim(), contactNumber.trim(),
                 locationUrl.trim(), houseNumber.trim(), odooReference.trim(),
                 activityType.trim(), serviceCategory.trim(), salesLeadUserId,
                 salesLeadName, remarks?.trim() || null, status, userId
