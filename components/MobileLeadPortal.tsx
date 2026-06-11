@@ -1673,12 +1673,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     </div>
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => setActiveTab('home')}
+                            onClick={() => setShowNotifications(true)}
                             className="relative p-1.5 rounded-full hover:bg-slate-100 transition-colors"
-                            title={stalledCount > 0 ? `${stalledCount} stalled ticket(s) — click to view` : 'Dashboard'}
+                            title={recentChanges.length > 0 ? `${recentChanges.length} recent update(s)` : 'Activity Log'}
                         >
-                            <Bell size={20} className={stalledCount > 0 ? 'text-red-500' : 'text-slate-400'} />
-                            {stalledCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-white" />}
+                            <Bell size={20} className={stalledCount > 0 ? 'text-red-500' : recentChanges.length > 0 ? 'text-amber-500' : 'text-slate-400'} />
+                            {(stalledCount > 0 || recentChanges.length > 0) && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-white" />}
                         </button>
                         <div className="w-9 h-9 rounded-full bg-amber-50 ring-2 ring-amber-400 flex items-center justify-center overflow-hidden">
                             {currentTech?.avatar ? (
