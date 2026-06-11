@@ -157,7 +157,16 @@ export const api = {
     // WhatsApp
     whatsapp: {
         logs: () => api.get('/api/whatsapp/logs'),
-    }
+    },
+
+    // Sales Appointment Requests
+    salesRequests: {
+        list:     ()           => api.get('/api/sales-appointment-requests'),
+        create:   (data: any)  => api.post('/api/sales-appointment-requests', data),
+        update:   (id: string, data: any) => api.put(`/api/sales-appointment-requests/${id}`, data),
+        schedule: (id: string, data: any) => api.post(`/api/sales-appointment-requests/${id}/schedule`, data),
+        pendingDashboard: () => api.get('/api/dashboard/pending-sales-requests'),
+    },
 };
 
 export default api;
