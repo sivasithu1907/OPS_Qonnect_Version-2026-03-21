@@ -1051,6 +1051,7 @@ useEffect(() => {
           onSaveCustomer={handleUpdateCustomer}
           onDeleteCustomer={handleDeleteCustomer}
           onCreateTicket={handleCreateTicket}
+          onNavigateToSalesRequests={() => setActiveView('sales_requests')}
           isStandalone={true}
 	  onLogout={handleLogout}
           onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
