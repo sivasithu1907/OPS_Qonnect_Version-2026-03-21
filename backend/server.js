@@ -1,4 +1,3 @@
-
 import express from 'express';
 import compression from 'compression';
 import cors from 'cors';
@@ -554,6 +553,18 @@ await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_sar_created      ON sales_appointment_requests(created_at DESC);
     `);
 
+    // ── Self-healing: fix SALES-level users who have role=NULL or role='NONE' ──
+    // This handles users created in TeamCRM before the SALES role was introduced.
+    const salesFix = await pool.query(`
+        UPDATE users
+        SET role = 'SALES'
+        WHERE level = 'SALES'
+          AND (role IS NULL OR role = 'NONE' OR role = '')
+    `);
+    if (salesFix.rowCount > 0) {
+        console.log(`✅ Fixed ${salesFix.rowCount} SALES-level user(s) missing system role`);
+    }
+
     console.log("✅ DB initialized with Tickets and Customers");
   } catch (err) {
     console.error("❌ DB initialization failed:", err);
@@ -652,11 +663,15 @@ app.get('/api/tv-data', async (req, res) => {
             createdAt: r.created_at, updatedAt: r.updated_at,
         }));
 
-        const technicians = usersRes.rows.map(r => ({
-            id: r.id, name: r.name, systemRole: r.role, status: r.status || 'AVAILABLE',
-            avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name)}&background=random`,
-            level: r.level || r.role, isActive: true, email: '', role: r.role, phone: r.phone,
-        }));
+        const technicians = usersRes.rows.map(r => {
+            // Normalise: SALES-level users with no DB role get systemRole='SALES'
+            const sysRole = (r.level === 'SALES' && (!r.role || r.role === 'NONE')) ? 'SALES' : r.role;
+            return {
+                id: r.id, name: r.name, systemRole: sysRole, status: r.status || 'AVAILABLE',
+                avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name)}&background=random`,
+                level: r.level || r.role, isActive: true, email: '', role: sysRole, phone: r.phone,
+            };
+        });
 
         const teams = teamsRes.rows.map(r => ({
             id: r.id, name: r.name, leadId: r.lead_id,
@@ -1597,20 +1612,24 @@ app.get("/api/me", authenticate, async (req, res) => {
 app.get("/api/users", authenticate, async (req, res) => {
     try {
         const result = await pool.query("SELECT id, name, email, role as \"systemRole\", status, phone, avatar, job_role, level FROM users");
-        res.json(result.rows.map(r => ({
-            id: r.id,
-            name: r.name,
-            email: r.email,
-            systemRole: r.systemRole,
-            status: r.status,
-            // Treat AVAILABLE same as ACTIVE — legacy rows may have AVAILABLE status
-            isActive: r.status === 'ACTIVE' || r.status === 'AVAILABLE',
-            status: (r.status === 'AVAILABLE') ? 'ACTIVE' : (r.status || 'ACTIVE'), // normalise on read
-            phone: r.phone || '',
-            jobRole: r.job_role || '',
-            level:   r.level   || '',
-            avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'U')}&background=random&color=fff&bold=true&size=128`
-        })));
+        res.json(result.rows.map(r => {
+            // If a SALES-level user has no system role set (created before the SALES role fix),
+            // normalise it so User Management shows them correctly.
+            let sysRole = r.systemRole;
+            if (r.level === 'SALES' && (!sysRole || sysRole === 'NONE')) sysRole = 'SALES';
+            return {
+                id: r.id,
+                name: r.name,
+                email: r.email,
+                systemRole: sysRole,
+                isActive: r.status === 'ACTIVE' || r.status === 'AVAILABLE',
+                status: (r.status === 'AVAILABLE') ? 'ACTIVE' : (r.status || 'ACTIVE'),
+                phone: r.phone || '',
+                jobRole: r.job_role || '',
+                level:   r.level   || '',
+                avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'U')}&background=random&color=fff&bold=true&size=128`
+            };
+        }));
     } catch (e) {
         res.status(500).json({ error: "Failed to fetch users" });
     }
