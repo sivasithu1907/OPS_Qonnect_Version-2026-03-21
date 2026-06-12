@@ -595,7 +595,7 @@ const TeamCRM: React.FC<TeamCRMProps> = ({
                                     <option value={Role.FIELD_ENGINEER}>Field Engineer</option>
                                 </select>
                                 {currentLevel === 'SALES' && (
-                                    <p className="text-[10px] text-amber-600 mt-0.5">Sales role auto-assigned — can log in to Sales portal</p>
+                                    <p className="text-[10px] text-amber-600 mt-0.5">Sales role auto-assigned — logs in to the same platform, sees Sales pages only</p>
                                 )}
                                 {currentLevel === 'TECHNICAL_ASSOCIATE' && (
                                     <p className="text-[10px] text-slate-400 mt-0.5">Technical Associates cannot log in</p>
