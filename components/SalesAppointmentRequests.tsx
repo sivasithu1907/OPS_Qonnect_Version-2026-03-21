@@ -449,7 +449,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
                 New Request
               </button>
             )}
-            {/* Avatar — opens account panel */}
+            {/* Password change */}
             <button
               onClick={() => {
                 setShowAccountPanel(true);
@@ -458,16 +458,10 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
                 setPwForm({ current: '', next: '', confirm: '' });
                 setShowPw({ current: false, next: false, confirm: false });
               }}
-              className="ml-1 shrink-0 focus:outline-none"
-              title={currentUser.name}
+              className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Change Password"
             >
-              {currentUser.avatar ? (
-                <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border-2 border-amber-300 shadow-sm" />
-              ) : (
-                <div className="w-9 h-9 rounded-full bg-amber-200 flex items-center justify-center font-bold text-amber-800 text-sm border-2 border-amber-300">
-                  {currentUser.name.charAt(0)}
-                </div>
-              )}
+              <KeyRound size={16} />
             </button>
           </div>
         </div>
@@ -611,89 +605,63 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
         />
       )}
 
-      {/* ── Account Side Panel ── */}
+      {/* ── Change Password Modal ── */}
       {showAccountPanel && (
-        <div className="fixed inset-0 z-50 flex">
-          {/* Backdrop */}
-          <div className="flex-1 bg-black/30" onClick={() => setShowAccountPanel(false)} />
-          {/* Panel */}
-          <div className="w-80 max-w-full bg-white h-full shadow-2xl flex flex-col">
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-5 py-5 border-b border-slate-100">
-              <span className="font-bold text-slate-900 text-base">My Account</span>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowAccountPanel(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
+                  <KeyRound size={16} className="text-slate-600" />
+                </div>
+                <h3 className="font-bold text-slate-900">Change Password</h3>
+              </div>
               <button onClick={() => setShowAccountPanel(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            {/* Profile block */}
-            <div className="flex items-center gap-4 px-5 py-5 border-b border-slate-100">
-              {currentUser.avatar ? (
-                <img src={currentUser.avatar} alt={currentUser.name} className="w-14 h-14 rounded-full object-cover border-2 border-amber-300 shadow-sm shrink-0" />
-              ) : (
-                <div className="w-14 h-14 rounded-full bg-amber-200 flex items-center justify-center font-bold text-amber-800 text-xl shrink-0 border-2 border-amber-300">
-                  {currentUser.name.charAt(0)}
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="font-bold text-slate-900 truncate">{currentUser.name}</p>
-                <p className="text-sm text-slate-500 truncate">{currentUser.email}</p>
-                <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">{currentUser.role}</span>
+            {pwSuccess ? (
+              <div className="flex flex-col items-center gap-3 py-6">
+                <CheckCircle2 size={40} className="text-emerald-500" />
+                <p className="font-semibold text-emerald-700">Password updated successfully</p>
               </div>
-            </div>
-
-            {/* Change Password section */}
-            <div className="flex-1 overflow-y-auto px-5 py-5">
-              <div className="flex items-center gap-2 mb-4">
-                <KeyRound size={15} className="text-slate-500" />
-                <span className="font-semibold text-slate-700 text-sm">Change Password</span>
-              </div>
-
-              {pwSuccess ? (
-                <div className="flex flex-col items-center gap-3 py-8">
-                  <CheckCircle2 size={40} className="text-emerald-500" />
-                  <p className="font-semibold text-emerald-700 text-sm">Password updated successfully</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {pwError && (
-                    <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{pwError}</div>
-                  )}
-                  {(['current', 'next', 'confirm'] as const).map((field) => {
-                    const labels = { current: 'Current Password', next: 'New Password', confirm: 'Confirm New Password' };
-                    return (
-                      <div key={field}>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">{labels[field]}</label>
-                        <div className="relative">
-                          <input
-                            type={showPw[field] ? 'text' : 'password'}
-                            value={pwForm[field]}
-                            onChange={e => setPwForm(p => ({ ...p, [field]: e.target.value }))}
-                            className={INPUT_STYLES}
-                            autoComplete={field === 'current' ? 'current-password' : 'new-password'}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPw(p => ({ ...p, [field]: !p[field] }))}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          >
-                            {showPw[field] ? <EyeOff size={14} /> : <EyeIcon size={14} />}
-                          </button>
-                        </div>
+            ) : (
+              <div className="space-y-4">
+                {pwError && (
+                  <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{pwError}</div>
+                )}
+                {(['current', 'next', 'confirm'] as const).map(field => {
+                  const labels = { current: 'Current Password', next: 'New Password', confirm: 'Confirm New Password' };
+                  return (
+                    <div key={field}>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">{labels[field]}</label>
+                      <div className="relative">
+                        <input
+                          type={showPw[field] ? 'text' : 'password'}
+                          value={pwForm[field]}
+                          onChange={e => setPwForm(p => ({ ...p, [field]: e.target.value }))}
+                          className={INPUT_STYLES}
+                          autoComplete={field === 'current' ? 'current-password' : 'new-password'}
+                        />
+                        <button type="button" onClick={() => setShowPw(p => ({ ...p, [field]: !p[field] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                          {showPw[field] ? <EyeOff size={14} /> : <EyeIcon size={14} />}
+                        </button>
                       </div>
-                    );
-                  })}
-                  <button
-                    onClick={handleChangePassword}
-                    disabled={pwLoading}
-                    className="w-full flex items-center justify-center gap-2 mt-2 px-4 py-2.5 text-sm font-semibold text-slate-900 bg-[#FFCC00] hover:bg-amber-400 disabled:opacity-60 rounded-xl transition-colors"
-                  >
+                    </div>
+                  );
+                })}
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setShowAccountPanel(false)} className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={handleChangePassword} disabled={pwLoading} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-900 bg-[#FFCC00] hover:bg-amber-400 disabled:opacity-60 rounded-xl transition-colors">
                     {pwLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
-                    Update Password
+                    Update
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
