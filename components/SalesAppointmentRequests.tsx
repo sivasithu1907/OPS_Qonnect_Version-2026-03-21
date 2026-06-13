@@ -38,7 +38,6 @@ interface Props {
   currentUser: CurrentUser;
   technicians: Technician[];
   onActivityCreated?: () => void;
-  onChangePassword?: (current: string, next: string) => Promise<void>;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -79,7 +78,7 @@ const FieldError = ({ msg }: { msg?: string }) =>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, onActivityCreated, onChangePassword }) => {
+const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, onActivityCreated }) => {
   const isSales     = currentUser.role === Role.SALES;
   const isScheduler = currentUser.role === Role.ADMIN || currentUser.role === Role.TEAM_LEAD;
   const myId        = currentUser.techId || currentUser.id;
@@ -129,15 +128,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
   const [deleteTarget, setDeleteTarget] = useState<SalesAppointmentRequest | null>(null);
   const [deleting, setDeleting]         = useState(false);
 
-  // Change password (lives in account panel)
-  const [pwForm, setPwForm]             = useState({ current: '', next: '', confirm: '' });
-  const [pwError, setPwError]           = useState('');
-  const [pwSuccess, setPwSuccess]       = useState(false);
-  const [pwLoading, setPwLoading]       = useState(false);
-  const [showPw, setShowPw]             = useState({ current: false, next: false, confirm: false });
-
-  // Account side panel
-  const [showAccountPanel, setShowAccountPanel] = useState(false);
+  // (Password change handled in App.tsx header key icon for SALES)
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const fetchRequests = useCallback(async () => {
@@ -330,23 +321,6 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
     }
   };
 
-  const handleChangePassword = async () => {
-    setPwError('');
-    if (!pwForm.current) { setPwError('Enter your current password'); return; }
-    if (pwForm.next.length < 6) { setPwError('New password must be at least 6 characters'); return; }
-    if (pwForm.next !== pwForm.confirm) { setPwError('Passwords do not match'); return; }
-    setPwLoading(true);
-    try {
-      await onChangePassword?.(pwForm.current, pwForm.next);
-      setPwSuccess(true);
-      setPwForm({ current: '', next: '', confirm: '' });
-      setTimeout(() => { setPwSuccess(false); setShowAccountPanel(false); }, 1800);
-    } catch (e: any) {
-      setPwError(e.message || 'Failed to change password');
-    } finally {
-      setPwLoading(false);
-    }
-  };
 
   const canDelete = (r: SalesAppointmentRequest) =>
     isScheduler ||
@@ -397,19 +371,19 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 
       {/* ── Page Header ── */}
       <div className="bg-white border-b border-slate-200 px-6 py-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
               <ClipboardList size={20} className="text-amber-600" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Sales Appointment Requests</h1>
-              <p className="text-sm text-slate-500 mt-0.5">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">Sales Appointment Requests</h1>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 hidden sm:block">
                 {isSales ? 'Create and track your appointment requests' : 'Manage and schedule incoming sales requests'}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {isScheduler && pendingCount > 0 && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm font-semibold border border-amber-200">
                 <AlertCircle size={14} />
@@ -449,20 +423,6 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
                 New Request
               </button>
             )}
-            {/* Password change */}
-            <button
-              onClick={() => {
-                setShowAccountPanel(true);
-                setPwError('');
-                setPwSuccess(false);
-                setPwForm({ current: '', next: '', confirm: '' });
-                setShowPw({ current: false, next: false, confirm: false });
-              }}
-              className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-              title="Change Password"
-            >
-              <KeyRound size={16} />
-            </button>
           </div>
         </div>
       </div>
@@ -603,67 +563,6 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
           onClose={() => setScheduleTarget(null)}
           onSubmit={handleSchedule}
         />
-      )}
-
-      {/* ── Change Password Modal ── */}
-      {showAccountPanel && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowAccountPanel(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
-                  <KeyRound size={16} className="text-slate-600" />
-                </div>
-                <h3 className="font-bold text-slate-900">Change Password</h3>
-              </div>
-              <button onClick={() => setShowAccountPanel(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-
-            {pwSuccess ? (
-              <div className="flex flex-col items-center gap-3 py-6">
-                <CheckCircle2 size={40} className="text-emerald-500" />
-                <p className="font-semibold text-emerald-700">Password updated successfully</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pwError && (
-                  <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{pwError}</div>
-                )}
-                {(['current', 'next', 'confirm'] as const).map(field => {
-                  const labels = { current: 'Current Password', next: 'New Password', confirm: 'Confirm New Password' };
-                  return (
-                    <div key={field}>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">{labels[field]}</label>
-                      <div className="relative">
-                        <input
-                          type={showPw[field] ? 'text' : 'password'}
-                          value={pwForm[field]}
-                          onChange={e => setPwForm(p => ({ ...p, [field]: e.target.value }))}
-                          className={INPUT_STYLES}
-                          autoComplete={field === 'current' ? 'current-password' : 'new-password'}
-                        />
-                        <button type="button" onClick={() => setShowPw(p => ({ ...p, [field]: !p[field] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                          {showPw[field] ? <EyeOff size={14} /> : <EyeIcon size={14} />}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div className="flex gap-3 pt-1">
-                  <button onClick={() => setShowAccountPanel(false)} className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
-                    Cancel
-                  </button>
-                  <button onClick={handleChangePassword} disabled={pwLoading} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-900 bg-[#FFCC00] hover:bg-amber-400 disabled:opacity-60 rounded-xl transition-colors">
-                    {pwLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
-                    Update
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
       )}
 
       {/* ── Delete Confirmation Modal ── */}
