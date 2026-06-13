@@ -1588,7 +1588,7 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
 
     res.json({
         token,
-        user: { id: user.id, name: user.name, email: user.email, role: user.role, techId: user.id }
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, techId: user.id, avatar: user.avatar || null }
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -1598,11 +1598,11 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
 // ── /api/me — verify token and return current user (used on app startup) ──
 app.get("/api/me", authenticate, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT id, name, email, role, status FROM users WHERE id = $1", [req.user.id]);
+    const { rows } = await pool.query("SELECT id, name, email, role, status, avatar FROM users WHERE id = $1", [req.user.id]);
     if (rows.length === 0) return res.status(404).json({ error: "User not found" });
     const u = rows[0];
     if (u.status === 'INACTIVE') return res.status(403).json({ error: "Account inactive" });
-    res.json({ id: u.id, name: u.name, email: u.email, role: u.role, techId: u.id });
+    res.json({ id: u.id, name: u.name, email: u.email, role: u.role, techId: u.id, avatar: u.avatar || null });
   } catch (e) {
     res.status(500).json({ error: "Failed to verify session" });
   }
