@@ -1414,7 +1414,7 @@ useEffect(() => {
               <ErrorBoundary name='MainContent'>
               <Suspense fallback={<LoadingFallback />}>
                 {/* ── SALES route guard: redirect to allowed view ── */}
-                {currentUser.role === Role.SALES && activeView !== 'sales_requests' && activeView !== 'operations' && (
+                {currentUser.role === Role.SALES && activeView !== 'sales_requests' && (
                   <div className="flex flex-col items-center justify-center h-full py-32 gap-4 text-slate-400">
                     <div className="text-5xl">🔒</div>
                     <p className="font-semibold text-slate-600">Access Restricted</p>
