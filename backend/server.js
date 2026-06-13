@@ -2256,21 +2256,23 @@ app.post('/api/sales-appointment-requests', authenticate, async (req, res) => {
                 // Create new customer with properly formatted phone
                 const custId = `CUST-${Date.now()}`;
                 const custRes = await pool.query(
-                    `INSERT INTO customers (id, name, phone, building_number, is_active)
-                     VALUES ($1, $2, $3, $4, true)
+                    `INSERT INTO customers (id, name, phone, address, building_number, is_active)
+                     VALUES ($1, $2, $3, $4, $5, true)
                      ON CONFLICT DO NOTHING
                      RETURNING id`,
-                    [custId, customerName.trim(), normPhone, houseNumber?.trim() || null]
+                    [custId, customerName.trim(), normPhone,
+                     locationUrl?.trim() || null, houseNumber?.trim() || null]
                 );
                 if (custRes.rows[0]) resolvedCustomerId = custRes.rows[0].id;
             }
         } else if (resolvedCustomerId) {
-            // Customer exists — update building number if provided
+            // Customer exists — update address and building number if provided
             await pool.query(
                 `UPDATE customers SET
-                   building_number = COALESCE(NULLIF($1,''), building_number)
-                 WHERE id = $2`,
-                [houseNumber?.trim() || '', resolvedCustomerId]
+                   address         = COALESCE(NULLIF($1,''), address),
+                   building_number = COALESCE(NULLIF($2,''), building_number)
+                 WHERE id = $3`,
+                [locationUrl?.trim() || '', houseNumber?.trim() || '', resolvedCustomerId]
             );
         }
         // ─────────────────────────────────────────────────────────────────────
