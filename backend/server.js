@@ -2372,19 +2372,28 @@ app.delete('/api/sales-appointment-requests/:id', authenticate, async (req, res)
         if (!current.rows[0]) return res.status(404).json({ error: 'Request not found' });
         const row = current.rows[0];
 
-        // SALES: can only delete their own PENDING_SCHEDULING requests
+        // SALES: can only delete their own PENDING_SCHEDULING requests.
+        // Once scheduled, in-progress, or done — no deletions regardless of creator.
         if (role === 'SALES') {
             if (row.created_by !== userId)
                 return res.status(403).json({ error: 'You can only delete your own requests' });
             if (row.status !== 'PENDING_SCHEDULING')
-                return res.status(403).json({ error: 'Only pending requests can be deleted' });
+                return res.status(403).json({ error: 'Scheduled, in-progress, or completed appointments cannot be deleted. Contact your Team Lead.' });
         } else if (role === 'FIELD_ENGINEER') {
             return res.status(403).json({ error: 'Field engineers cannot delete sales requests' });
         }
-        // ADMIN / TEAM_LEAD: can delete any
+        // ADMIN / TEAM_LEAD: can delete any status
+
+        // If the SAR has a linked planned activity, delete it too so the
+        // planner and operations monitor stay in sync.
+        const linkedActivityId = row.linked_activity_id;
+        if (linkedActivityId) {
+            await pool.query('DELETE FROM activities WHERE id = $1', [linkedActivityId]);
+            console.log(`SAR DELETE: removed linked activity ${linkedActivityId} with SAR ${id}`);
+        }
 
         await pool.query('DELETE FROM sales_appointment_requests WHERE id = $1', [id]);
-        res.json({ ok: true, id });
+        res.json({ ok: true, id, removedActivityId: linkedActivityId || null });
     } catch (e) {
         console.error('SAR DELETE error:', e);
         res.status(500).json({ error: 'Failed to delete sales appointment request' });
