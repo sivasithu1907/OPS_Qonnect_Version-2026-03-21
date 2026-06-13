@@ -72,7 +72,7 @@ export const NAVIGATION_ITEMS = [
     id: 'operations', 
     label: 'Operations Monitor', 
     icon: <ActivityIcon size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD, Role.SALES],
+    roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'Operations'
   },
   { 
