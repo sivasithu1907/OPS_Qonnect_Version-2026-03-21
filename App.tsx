@@ -302,7 +302,8 @@ const handleLogin = async (email: string, pass: string) => {
               email: data.user.email,
               name: data.user.name,
               role: data.user.role,
-              techId: data.user.id
+              techId: data.user.id,
+              avatar: data.user.avatar || undefined,
           });
           setLoginError('');
           if (data.user.role === Role.FIELD_ENGINEER) {
@@ -905,7 +906,7 @@ const loadCustomers = async () => {
       .then(user => {
         // Token is valid — restore session
         localStorage.setItem('qonnect_user', JSON.stringify(user));
-        setCurrentUser(user);
+        setCurrentUser({ ...user, avatar: user.avatar || undefined });
         // Auto-route based on role and device
         if (user.role === Role.FIELD_ENGINEER) {
           setActiveView('tech_portal');
@@ -1390,9 +1391,13 @@ useEffect(() => {
                             <div className="text-sm font-bold text-slate-800">{currentUser.name}</div>
                             <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{currentUser.role}</div>
                         </div>
-                        <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
-                            {currentUser.name.charAt(0)}
-                        </div>
+                        {currentUser.avatar ? (
+                            <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0" />
+                        ) : (
+                            <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
+                                {currentUser.name.charAt(0)}
+                            </div>
+                        )}
                         <button 
                             onClick={handleLogout}
                             className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
@@ -1548,6 +1553,7 @@ useEffect(() => {
                     <SalesAppointmentRequests
                         currentUser={currentUser}
                         technicians={technicians}
+                        onChangePassword={async (cur: string, nxt: string) => { await handleChangePassword(currentUser.techId ?? currentUser.id, cur, nxt); }}
                         onActivityCreated={() => {
                             // Refresh activities so planner/ops monitor shows the new planned activity
                             const token = localStorage.getItem('qonnect_token');
