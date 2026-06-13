@@ -36,7 +36,7 @@ interface CurrentUser {
 interface Props {
   currentUser: CurrentUser;
   technicians: Technician[];
-  onActivityCreated?: () => void; // trigger parent refresh when scheduling creates an activity
+  onActivityCreated?: () => void; // trigger parent refresh when scheduling creates or removes an activity
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -310,6 +310,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
       setDeleteTarget(null);
       setDetailItem(null);
       fetchRequests();
+      onActivityCreated?.(); // refresh Activity Planner so linked activity disappears
     } catch (e: any) {
       alert(e.message || 'Failed to delete request');
     } finally {
