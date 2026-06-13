@@ -1299,6 +1299,15 @@ useEffect(() => {
                          )}
                      </div>
 
+                     {/* Avatar — before bell */}
+                     {currentUser.avatar ? (
+                         <img src={currentUser.avatar} alt={currentUser.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" />
+                     ) : (
+                         <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
+                             {currentUser.name.charAt(0)}
+                         </div>
+                     )}
+
                      {/* Notification Bell */}
                      <div className="relative" data-notif-panel>
                          <button
@@ -1391,13 +1400,6 @@ useEffect(() => {
                             <div className="text-sm font-bold text-slate-800">{currentUser.name}</div>
                             <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{currentUser.role}</div>
                         </div>
-                        {currentUser.avatar ? (
-                            <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0" />
-                        ) : (
-                            <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
-                                {currentUser.name.charAt(0)}
-                            </div>
-                        )}
                         <button 
                             onClick={handleLogout}
                             className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
