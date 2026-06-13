@@ -52,7 +52,7 @@ const STATUS_CONFIG: Record<SalesRequestStatus, { label: string; color: string; 
 
 const EMPTY_FORM = {
   customerName: '',
-  contactNumber: '',
+  contactNumber: '+974 ',
   locationUrl: '',
   houseNumber: '',
   odooReference: '',
@@ -148,13 +148,15 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 
   // ── Customer search by phone number (debounced) ───────────────────────────
   useEffect(() => {
-    if (!custSearch.trim() || custSearch.length < 4) { setCustResults([]); return; }
+    // Strip non-digits for search, need at least 4 local digits
+    const digits = custSearch.replace(/[^0-9]/g, '');
+    if (digits.length < 4) { setCustResults([]); return; }
     const t = setTimeout(async () => {
       setCustLoading(true);
       try {
         const all = await api.get('/api/customers');
-        // Normalise both sides: strip spaces, dashes, leading +974
-        const normalise = (v: string) => v.replace(/[\s\-\+]/g, '').replace(/^974/, '');
+        // Normalise both sides: digits only
+        const normalise = (v: string) => (v || '').replace(/[^0-9]/g, '');
         const q = normalise(custSearch);
         setCustResults(
           (all as any[]).filter((c: any) =>
@@ -244,7 +246,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
   const validateForm = () => {
     const errs: Record<string, string> = {};
     if (!formData.customerName.trim())   errs.customerName  = 'Customer name is required';
-    if (!formData.contactNumber.trim())  errs.contactNumber = 'Contact number is required';
+    const phoneDigits = formData.contactNumber.replace(/[^0-9]/g, '');
+    if (phoneDigits.length < 8)          errs.contactNumber = 'Enter a valid phone number (min 8 digits)';
     if (!formData.locationUrl.trim())    errs.locationUrl   = 'Location URL is required';
     if (!formData.houseNumber.trim())    errs.houseNumber   = 'House/Building number is required';
     if (!formData.odooReference.trim())  errs.odooReference = 'Odoo Reference is required';
@@ -943,6 +946,7 @@ const FormModal: React.FC<FormModalProps> = ({
             {custLoading && (
               <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
             )}
+            {/* Results dropdown */}
             {custResults.length > 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-48 overflow-y-auto">
                 {custResults.map((c: any) => (
@@ -952,15 +956,26 @@ const FormModal: React.FC<FormModalProps> = ({
                     className="w-full text-left px-4 py-3 hover:bg-amber-50 text-sm border-b border-slate-100 last:border-0 transition-colors"
                   >
                     <span className="font-semibold text-slate-800">{c.name}</span>
-                    <span className="ml-2 text-amber-600 font-mono">{c.phone}</span>
-                    {c.address && <span className="ml-2 text-slate-400 text-xs truncate">{c.address}</span>}
+                    <span className="ml-2 text-amber-600 font-mono text-xs">{c.phone}</span>
+                    {c.buildingNumber && <span className="ml-2 text-slate-400 text-xs">{c.buildingNumber}</span>}
                   </button>
                 ))}
               </div>
             )}
+            {/* No match — offer create new */}
+            {!custLoading && custResults.length === 0 && formData.contactNumber.replace(/[^0-9]/g,'').length >= 4 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-amber-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <span className="text-sm text-slate-500">No existing client found</span>
+                  <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                    <Plus size={11} /> New client will be created
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            Search by phone number — matching clients appear above. If none found, a new client will be created.
+            Type phone number to search — select existing client or enter name below to create new
           </p>
           <FieldError msg={formErrors.contactNumber} />
         </div>
