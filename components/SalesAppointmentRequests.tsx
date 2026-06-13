@@ -374,57 +374,58 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 
       {/* ── Page Header ── */}
       <div className="bg-white border-b border-slate-200 px-6 py-5">
-        {/* Title row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-              <ClipboardList size={16} className="text-amber-600" />
-            </div>
-            <h1 className="text-base font-bold text-slate-900 leading-tight truncate">
-              Sales Appointment Requests
-            </h1>
+        {/* Row 1: Icon + Title + Subtitle */}
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+            <ClipboardList size={20} className="text-amber-600" />
           </div>
-          {/* Actions — always on same row as title, right-aligned */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {isScheduler && pendingCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold border border-amber-200">
-                <AlertCircle size={11} />
-                {pendingCount}
-              </span>
-            )}
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 leading-tight">Sales Appointment Requests</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {isSales ? 'Create and track your appointment requests' : 'Manage and schedule incoming sales requests'}
+            </p>
+          </div>
+        </div>
+
+        {/* Row 2: Controls — right-aligned */}
+        <div className="flex items-center justify-end gap-1.5 mt-2">
+          {isScheduler && pendingCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold border border-amber-200 mr-auto">
+              <AlertCircle size={11} />
+              {pendingCount} Pending
+            </span>
+          )}
+          <button
+            onClick={fetchRequests}
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
             <button
-              onClick={fetchRequests}
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              title="Refresh"
+              onClick={() => setView('list')}
+              className={`p-1.5 transition-colors ${view === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              title="List view"
             >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              <LayoutList size={14} />
             </button>
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-              <button
-                onClick={() => setView('list')}
-                className={`p-1.5 transition-colors ${view === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                title="List view"
-              >
-                <LayoutList size={14} />
-              </button>
-              <button
-                onClick={() => setView('calendar')}
-                className={`p-1.5 transition-colors ${view === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                title="Calendar view"
-              >
-                <LayoutGrid size={14} />
-              </button>
-            </div>
-            {(isSales || isScheduler) && (
-              <button
-                onClick={openCreate}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFCC00] hover:bg-amber-400 text-slate-900 rounded-xl font-bold text-sm transition-colors shadow-sm shrink-0"
-              >
-                <Plus size={14} />
-                <span>New</span>
-              </button>
-            )}
+            <button
+              onClick={() => setView('calendar')}
+              className={`p-1.5 transition-colors ${view === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              title="Calendar view"
+            >
+              <LayoutGrid size={14} />
+            </button>
           </div>
+          {(isSales || isScheduler) && (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFCC00] hover:bg-amber-400 text-slate-900 rounded-xl font-bold text-sm transition-colors shadow-sm"
+            >
+              <Plus size={14} /> New Request
+            </button>
+          )}
         </div>
       </div>
 
