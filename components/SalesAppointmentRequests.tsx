@@ -16,7 +16,8 @@ import {
   MapPin, Phone, FileText, Tag, ChevronDown, ChevronUp,
   CheckCircle2, AlertCircle, Loader2, Edit2, Eye,
   ClipboardList, RefreshCw, Filter, Building, ExternalLink,
-  CalendarCheck, Users, ArrowRight, Inbox, Trash2
+  CalendarCheck, Users, ArrowRight, Inbox, Trash2,
+  LayoutList, LayoutGrid, ChevronLeft, ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 import { Role, SalesAppointmentRequest, SalesRequestStatus, Technician } from '../types';
 import { INPUT_STYLES, SEARCH_INPUT_STYLES, SALES_ACTIVITY_TYPES, SERVICE_CATEGORIES } from '../constants';
@@ -87,7 +88,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
   const [error, setError]             = useState('');
   const [searchQ, setSearchQ]         = useState('');
   const [statusFilter, setStatusFilter] = useState<SalesRequestStatus | 'ALL'>('ALL');
+  // View toggle + calendar month
   const [view, setView]               = useState<'list' | 'calendar'>('list');
+  const [calMonth, setCalMonth]       = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
 
   // Create / Edit form
   const [showForm, setShowForm]       = useState(false);
@@ -300,7 +306,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await api.delete(`/api/sales-appointment-requests/${deleteTarget.id}`);
+      await api.del(`/api/sales-appointment-requests/${deleteTarget.id}`);
       setDeleteTarget(null);
       setDetailItem(null);
       fetchRequests();
@@ -386,6 +392,23 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
             >
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             </button>
+            {/* View toggle */}
+            <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setView('list')}
+                className={`p-2 transition-colors ${view === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                title="List view"
+              >
+                <LayoutList size={16} />
+              </button>
+              <button
+                onClick={() => setView('calendar')}
+                className={`p-2 transition-colors ${view === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                title="Calendar view"
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
             {(isSales || isScheduler) && (
               <button
                 onClick={openCreate}
@@ -447,6 +470,14 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
             <p className="text-red-600 font-medium">{error}</p>
             <button onClick={fetchRequests} className="text-sm text-blue-600 underline">Retry</button>
           </div>
+        ) : view === 'calendar' ? (
+          <CalendarView
+            requests={filtered}
+            calMonth={calMonth}
+            onPrevMonth={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+            onNextMonth={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+            onSelectRequest={r => setDetailItem(r)}
+          />
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
             <Inbox size={48} strokeWidth={1.2} />
@@ -580,6 +611,141 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
           onDelete={() => { setDetailItem(null); setDeleteTarget(detailItem); }}
         />
       )}
+    </div>
+  );
+};
+
+// ─── Calendar View ────────────────────────────────────────────────────────────
+
+interface CalendarViewProps {
+  requests: SalesAppointmentRequest[];
+  calMonth: Date;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onSelectRequest: (r: SalesAppointmentRequest) => void;
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const CalendarView: React.FC<CalendarViewProps> = ({ requests, calMonth, onPrevMonth, onNextMonth, onSelectRequest }) => {
+  const year  = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+
+  // Build calendar grid
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  // Pad to complete last row
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  // Build a map: dateString → requests
+  const byDate = useMemo(() => {
+    const map: Record<string, SalesAppointmentRequest[]> = {};
+    requests.forEach(r => {
+      const dateKey = r.scheduledDate
+        ? r.scheduledDate.slice(0, 10)
+        : r.status === 'PENDING_SCHEDULING'
+        ? null // pending — show on today so they're not hidden
+        : null;
+      if (dateKey) {
+        if (!map[dateKey]) map[dateKey] = [];
+        map[dateKey].push(r);
+      }
+    });
+    // Also bucket PENDING requests by createdAt date for visibility
+    requests.filter(r => r.status === 'PENDING_SCHEDULING').forEach(r => {
+      const key = r.createdAt.slice(0, 10);
+      if (!map[key]) map[key] = [];
+      if (!map[key].includes(r)) map[key].push(r);
+    });
+    return map;
+  }, [requests]);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const dotColor = (status: SalesRequestStatus) => {
+    const c = STATUS_CONFIG[status];
+    return c?.dot ?? 'bg-slate-400';
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      {/* Month header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <button onClick={onPrevMonth} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500">
+          <ChevronLeft size={18} />
+        </button>
+        <h3 className="font-bold text-slate-900 text-base">
+          {calMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+        </h3>
+        <button onClick={onNextMonth} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-500">
+          <ChevronRightIcon size={18} />
+        </button>
+      </div>
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 border-b border-slate-100">
+        {WEEKDAYS.map(d => (
+          <div key={d} className="py-2 text-center text-[11px] font-bold text-slate-400 uppercase">{d}</div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div className="grid grid-cols-7">
+        {cells.map((day, idx) => {
+          const dateStr = day ? `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : null;
+          const cellRequests = dateStr ? (byDate[dateStr] || []) : [];
+          const isToday = dateStr === todayStr;
+          const isPast  = dateStr ? dateStr < todayStr : false;
+
+          return (
+            <div
+              key={idx}
+              className={`min-h-[90px] p-1.5 border-b border-r border-slate-100 last:border-r-0 ${
+                !day ? 'bg-slate-50/50' : isPast ? 'bg-white' : 'bg-white'
+              }`}
+            >
+              {day && (
+                <>
+                  <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mb-1 ${
+                    isToday ? 'bg-[#FFCC00] text-slate-900' : 'text-slate-500'
+                  }`}>
+                    {day}
+                  </div>
+                  <div className="space-y-0.5">
+                    {cellRequests.slice(0, 3).map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => onSelectRequest(r)}
+                        className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium truncate flex items-center gap-1 hover:opacity-80 transition-opacity ${STATUS_CONFIG[r.status]?.bg} ${STATUS_CONFIG[r.status]?.color}`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor(r.status)}`} />
+                        <span className="truncate">{r.customerName}</span>
+                      </button>
+                    ))}
+                    {cellRequests.length > 3 && (
+                      <div className="text-[9px] text-slate-400 px-1">+{cellRequests.length - 3} more</div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-3 px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+        {Object.entries(STATUS_CONFIG).map(([status, cfg]) => (
+          <div key={status} className="flex items-center gap-1.5 text-[10px] text-slate-500">
+            <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+            {cfg.label}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
