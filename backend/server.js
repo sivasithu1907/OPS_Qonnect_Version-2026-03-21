@@ -2233,38 +2233,44 @@ app.post('/api/sales-appointment-requests', authenticate, async (req, res) => {
         const newId   = `SAR-${String(lastNum + 1).padStart(5, '0')}`;
 
         // ── Auto-upsert customer record ──────────────────────────────────────
-        // If no customerId supplied, check by normalised phone. If still no match,
-        // create a new customer so the client appears in the Clients section.
+        // Normalise phone to full E.164 format (+974XXXXXXXX for Qatar numbers)
+        // so it matches how CustomerRecords stores and searches phones.
+        const rawPhone = contactNumber?.trim() || '';
+        let normPhone = rawPhone.replace(/[\s\-]/g, '');
+        if (/^[0-9]{8}$/.test(normPhone)) normPhone = `+974${normPhone}`;
+        else if (/^974[0-9]{8}$/.test(normPhone)) normPhone = `+${normPhone}`;
+        else if (normPhone.startsWith('00974')) normPhone = `+974${normPhone.slice(5)}`;
+
         let resolvedCustomerId = customerId || null;
-        if (!resolvedCustomerId && contactNumber?.trim()) {
-            const normPhone = contactNumber.trim().replace(/[\s\-]/g, '');
+        if (!resolvedCustomerId && normPhone) {
+            // Search by normalised phone — try exact match first, then stripped-prefix match
             const existingCust = await pool.query(
-                `SELECT id FROM customers WHERE REPLACE(REPLACE(phone,' ',''),'-','') = $1 LIMIT 1`,
+                `SELECT id FROM customers WHERE
+                   REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = REGEXP_REPLACE($1, '[^0-9]', '', 'g')
+                 LIMIT 1`,
                 [normPhone]
             );
             if (existingCust.rows[0]) {
                 resolvedCustomerId = existingCust.rows[0].id;
             } else {
-                // Create new customer
+                // Create new customer with properly formatted phone
                 const custId = `CUST-${Date.now()}`;
                 const custRes = await pool.query(
-                    `INSERT INTO customers (id, name, phone, address, building_number, is_active)
-                     VALUES ($1, $2, $3, $4, $5, true)
+                    `INSERT INTO customers (id, name, phone, building_number, is_active)
+                     VALUES ($1, $2, $3, $4, true)
                      ON CONFLICT DO NOTHING
                      RETURNING id`,
-                    [custId, customerName.trim(), normPhone,
-                     locationUrl?.trim() || null, houseNumber?.trim() || null]
+                    [custId, customerName.trim(), normPhone, houseNumber?.trim() || null]
                 );
                 if (custRes.rows[0]) resolvedCustomerId = custRes.rows[0].id;
             }
         } else if (resolvedCustomerId) {
-            // Customer exists — update address/building if provided
+            // Customer exists — update building number if provided
             await pool.query(
                 `UPDATE customers SET
-                   address          = COALESCE(NULLIF($1,''), address),
-                   building_number  = COALESCE(NULLIF($2,''), building_number)
-                 WHERE id = $3`,
-                [locationUrl?.trim() || '', houseNumber?.trim() || '', resolvedCustomerId]
+                   building_number = COALESCE(NULLIF($1,''), building_number)
+                 WHERE id = $2`,
+                [houseNumber?.trim() || '', resolvedCustomerId]
             );
         }
         // ─────────────────────────────────────────────────────────────────────
