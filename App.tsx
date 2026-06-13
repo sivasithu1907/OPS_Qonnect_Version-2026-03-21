@@ -3,7 +3,7 @@ import { generateActivityId, generateTicketId } from './utils/idUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
 import {
-  Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2
+  Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2, KeyRound, EyeOff, Eye as EyeIcon
 } from 'lucide-react';
 
 // Login + ErrorBoundary load eagerly (needed immediately)
@@ -107,6 +107,14 @@ function App() {
 
   // --- Notification State ---
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+  // SALES password change modal (triggered from key icon in header)
+  const [showSalesPwModal, setShowSalesPwModal] = useState(false);
+  const [salesPwForm, setSalesPwForm] = useState({ current: '', next: '', confirm: '' });
+  const [salesPwError, setSalesPwError] = useState('');
+  const [salesPwSuccess, setSalesPwSuccess] = useState(false);
+  const [salesPwLoading, setSalesPwLoading] = useState(false);
+  const [salesShowPw, setSalesShowPw] = useState({ current: false, next: false, confirm: false });
   const [readNotifIds, setReadNotifIds] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('qonnect_read_notifs');
@@ -1108,7 +1116,7 @@ useEffect(() => {
         )}
 
         {/* Sidebar - APPLE iOS LIGHT THEME */}
-        <aside className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#E5E7EB] border-r-[3px] border-[#1E293B]/20 text-gray-900 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'}`}>
+        <aside className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#E5E7EB] border-r-[3px] border-[#1E293B]/20 text-gray-900 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}>
             
             {/* Sidebar Header */}
             <div className={`flex items-center border-b border-[#0F172A]/[0.08] transition-all duration-300 ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}>
@@ -1202,22 +1210,35 @@ useEffect(() => {
             {/* Top Bar */}
             <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-4 shrink-0 z-40 relative">
                 <div className="flex items-center gap-3">
-                    {/* Desktop Toggle (Minimizes Sidebar) */}
-                    <button 
-                        onClick={toggleSidebar}
-                        className="hidden md:block p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
-                        title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                    >
-                        <Menu size={24} />
-                    </button>
-                    {/* Mobile Toggle (Slides Sidebar Out) */}
-                    <button 
-                        onClick={() => setIsMobileMenuOpen(true)}
-                        className="md:hidden p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
-                        title="Open Menu"
-                    >
-                        <Menu size={24} />
-                    </button>
+                    {currentUser.role === Role.SALES ? (
+                        /* SALES: avatar where hamburger was */
+                        currentUser.avatar ? (
+                            <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border-2 border-amber-300 shadow-sm shrink-0" />
+                        ) : (
+                            <div className="w-9 h-9 rounded-full bg-amber-100 border-2 border-amber-300 flex items-center justify-center font-bold text-amber-700 text-sm shrink-0">
+                                {currentUser.name.charAt(0)}
+                            </div>
+                        )
+                    ) : (
+                        <>
+                            {/* Desktop Toggle (Minimizes Sidebar) */}
+                            <button 
+                                onClick={toggleSidebar}
+                                className="hidden md:block p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
+                                title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                            >
+                                <Menu size={24} />
+                            </button>
+                            {/* Mobile Toggle (Slides Sidebar Out) */}
+                            <button 
+                                onClick={() => setIsMobileMenuOpen(true)}
+                                className="md:hidden p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
+                                title="Open Menu"
+                            >
+                                <Menu size={24} />
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -1299,13 +1320,26 @@ useEffect(() => {
                          )}
                      </div>
 
-                     {/* Avatar — before bell */}
-                     {currentUser.avatar ? (
-                         <img src={currentUser.avatar} alt={currentUser.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" />
-                     ) : (
-                         <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
-                             {currentUser.name.charAt(0)}
-                         </div>
+                     {/* Key icon (password) for SALES — before bell */}
+                     {currentUser.role === Role.SALES && (
+                         <button
+                             onClick={() => setShowSalesPwModal(true)}
+                             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                             title="Change Password"
+                         >
+                             <KeyRound size={18} />
+                         </button>
+                     )}
+
+                     {/* Avatar for non-SALES roles — before bell */}
+                     {currentUser.role !== Role.SALES && (
+                         currentUser.avatar ? (
+                             <img src={currentUser.avatar} alt={currentUser.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" />
+                         ) : (
+                             <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
+                                 {currentUser.name.charAt(0)}
+                             </div>
+                         )
                      )}
 
                      {/* Notification Bell */}
@@ -1555,7 +1589,6 @@ useEffect(() => {
                     <SalesAppointmentRequests
                         currentUser={currentUser}
                         technicians={technicians}
-                        onChangePassword={async (cur: string, nxt: string) => { await handleChangePassword(currentUser.techId ?? currentUser.id, cur, nxt); }}
                         onActivityCreated={() => {
                             // Refresh activities so planner/ops monitor shows the new planned activity
                             const token = localStorage.getItem('qonnect_token');
@@ -1621,6 +1654,88 @@ useEffect(() => {
           </Suspense>
 
         </main>
+
+        {/* ── SALES Change Password Modal (triggered from key icon in header) ── */}
+        {showSalesPwModal && currentUser.role === Role.SALES && (
+          <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowSalesPwModal(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
+                    <KeyRound size={16} className="text-slate-600" />
+                  </div>
+                  <h3 className="font-bold text-slate-900">Change Password</h3>
+                </div>
+                <button onClick={() => setShowSalesPwModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              {salesPwSuccess ? (
+                <div className="flex flex-col items-center gap-3 py-6">
+                  <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <KeyRound size={22} className="text-emerald-600" />
+                  </div>
+                  <p className="font-semibold text-emerald-700">Password updated successfully</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {salesPwError && (
+                    <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{salesPwError}</div>
+                  )}
+                  {(['current', 'next', 'confirm'] as const).map(field => {
+                    const labels = { current: 'Current Password', next: 'New Password', confirm: 'Confirm New Password' };
+                    return (
+                      <div key={field}>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">{labels[field]}</label>
+                        <div className="relative">
+                          <input
+                            type={salesShowPw[field] ? 'text' : 'password'}
+                            value={salesPwForm[field]}
+                            onChange={e => setSalesPwForm(p => ({ ...p, [field]: e.target.value }))}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3 text-sm outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-400/20 transition-all"
+                            autoComplete={field === 'current' ? 'current-password' : 'new-password'}
+                          />
+                          <button type="button" onClick={() => setSalesShowPw(p => ({ ...p, [field]: !p[field] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            {salesShowPw[field] ? <EyeOff size={14} /> : <EyeIcon size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setShowSalesPwModal(false)} className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                      Cancel
+                    </button>
+                    <button
+                      disabled={salesPwLoading}
+                      onClick={async () => {
+                        setSalesPwError('');
+                        if (!salesPwForm.current) { setSalesPwError('Enter your current password'); return; }
+                        if (salesPwForm.next.length < 6) { setSalesPwError('New password must be at least 6 characters'); return; }
+                        if (salesPwForm.next !== salesPwForm.confirm) { setSalesPwError('Passwords do not match'); return; }
+                        setSalesPwLoading(true);
+                        try {
+                          await handleChangePassword(currentUser.techId ?? currentUser.id, salesPwForm.current, salesPwForm.next);
+                          setSalesPwSuccess(true);
+                          setSalesPwForm({ current: '', next: '', confirm: '' });
+                          setTimeout(() => { setSalesPwSuccess(false); setShowSalesPwModal(false); }, 1800);
+                        } catch (e: any) {
+                          setSalesPwError(e.message || 'Failed to change password');
+                        } finally {
+                          setSalesPwLoading(false);
+                        }
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-900 bg-[#FFCC00] hover:bg-amber-400 disabled:opacity-60 rounded-xl transition-colors"
+                    >
+                      {salesPwLoading ? <span className="w-4 h-4 border-2 border-slate-700/30 border-t-slate-700 rounded-full animate-spin" /> : <KeyRound size={14} />}
+                      Update
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
     </div>
   );
 }
