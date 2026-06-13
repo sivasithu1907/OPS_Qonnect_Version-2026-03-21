@@ -374,54 +374,58 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
 
       {/* ── Page Header ── */}
       <div className="bg-white border-b border-slate-200 px-6 py-5">
-        {/* Row 1: Icon + Title + Subtitle */}
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
-            <ClipboardList size={20} className="text-amber-600" />
+        {/* Row 1: Icon + Title + Refresh (top-right) */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+              <ClipboardList size={20} className="text-amber-600" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 leading-tight">Sales Appointment Requests</h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {isSales ? 'Create and track your appointment requests' : 'Manage and schedule incoming sales requests'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">Sales Appointment Requests</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isSales ? 'Create and track your appointment requests' : 'Manage and schedule incoming sales requests'}
-            </p>
-          </div>
-        </div>
-
-        {/* Row 2: Controls — right-aligned */}
-        <div className="flex items-center justify-end gap-1.5 mt-2">
-          {isScheduler && pendingCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold border border-amber-200 mr-auto">
-              <AlertCircle size={11} />
-              {pendingCount} Pending
-            </span>
-          )}
           <button
             onClick={fetchRequests}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors shrink-0 mt-0.5"
             title="Refresh"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-            <button
-              onClick={() => setView('list')}
-              className={`p-1.5 transition-colors ${view === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-              title="List view"
-            >
-              <LayoutList size={14} />
-            </button>
-            <button
-              onClick={() => setView('calendar')}
-              className={`p-1.5 transition-colors ${view === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-              title="Calendar view"
-            >
-              <LayoutGrid size={14} />
-            </button>
+        </div>
+
+        {/* Row 2: View toggle (left) + Pending badge + New Request (right) */}
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setView('list')}
+                className={`p-1.5 transition-colors ${view === 'list' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                title="List view"
+              >
+                <LayoutList size={14} />
+              </button>
+              <button
+                onClick={() => setView('calendar')}
+                className={`p-1.5 transition-colors ${view === 'calendar' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                title="Calendar view"
+              >
+                <LayoutGrid size={14} />
+              </button>
+            </div>
+            {isScheduler && pendingCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold border border-amber-200">
+                <AlertCircle size={11} />
+                {pendingCount} Pending
+              </span>
+            )}
           </div>
           {(isSales || isScheduler) && (
             <button
               onClick={openCreate}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFCC00] hover:bg-amber-400 text-slate-900 rounded-xl font-bold text-sm transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFCC00] hover:bg-amber-400 text-slate-900 rounded-xl font-bold text-sm transition-colors shadow-sm shrink-0"
             >
               <Plus size={14} /> New Request
             </button>
