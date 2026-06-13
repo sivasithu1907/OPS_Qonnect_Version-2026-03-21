@@ -509,22 +509,17 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
             )}
           </div>
         ) : (
-          <div className="grid gap-3">
-            {filtered.map(r => (
-              <RequestCard
-                key={r.id}
-                request={r}
-                canEdit={canEdit(r)}
-                canDelete={canDelete(r)}
-                isScheduler={isScheduler}
-                onEdit={() => openEdit(r)}
-                onSchedule={() => openSchedule(r)}
-                onView={() => setDetailItem(r)}
-                onDelete={() => setDeleteTarget(r)}
-                technicians={technicians}
-              />
-            ))}
-          </div>
+          <DateGroupedList
+            requests={filtered}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            isScheduler={isScheduler}
+            onEdit={r => openEdit(r)}
+            onSchedule={r => openSchedule(r)}
+            onView={r => setDetailItem(r)}
+            onDelete={r => setDeleteTarget(r)}
+            technicians={technicians}
+          />
         )}
       </div>
 
@@ -619,6 +614,89 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
           onDelete={() => { setDetailItem(null); setDeleteTarget(detailItem); }}
         />
       )}
+    </div>
+  );
+};
+
+// ─── Date Grouped List ────────────────────────────────────────────────────────
+
+const formatDateHeader = (dateStr: string): string => {
+  const date = new Date(dateStr + 'T00:00:00');
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const isSameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (isSameDay(date, today))     return 'Today';
+  if (isSameDay(date, yesterday)) return 'Yesterday';
+
+  return date.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+};
+
+interface GroupedListProps {
+  requests: SalesAppointmentRequest[];
+  canEdit: (r: SalesAppointmentRequest) => boolean;
+  canDelete: (r: SalesAppointmentRequest) => boolean;
+  isScheduler: boolean;
+  onEdit: (r: SalesAppointmentRequest) => void;
+  onSchedule: (r: SalesAppointmentRequest) => void;
+  onView: (r: SalesAppointmentRequest) => void;
+  onDelete: (r: SalesAppointmentRequest) => void;
+  technicians: Technician[];
+}
+
+const DateGroupedList: React.FC<GroupedListProps> = ({
+  requests, canEdit, canDelete, isScheduler,
+  onEdit, onSchedule, onView, onDelete, technicians
+}) => {
+  // Group by created date (Qatar timezone YYYY-MM-DD)
+  const groups = useMemo(() => {
+    const map: Record<string, SalesAppointmentRequest[]> = {};
+    requests.forEach(r => {
+      const key = new Date(r.createdAt)
+        .toLocaleDateString('en-CA', { timeZone: 'Asia/Qatar' }); // YYYY-MM-DD
+      if (!map[key]) map[key] = [];
+      map[key].push(r);
+    });
+    // Sort groups newest first
+    return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
+  }, [requests]);
+
+  return (
+    <div className="space-y-6">
+      {groups.map(([dateKey, groupRequests]) => (
+        <div key={dateKey}>
+          {/* Date section header */}
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+              {formatDateHeader(dateKey)}
+            </span>
+            <div className="flex-1 h-px bg-slate-200" />
+            <span className="text-xs text-slate-400 shrink-0">{groupRequests.length} request{groupRequests.length !== 1 ? 's' : ''}</span>
+          </div>
+          {/* Cards for this date */}
+          <div className="grid gap-3">
+            {groupRequests.map(r => (
+              <RequestCard
+                key={r.id}
+                request={r}
+                canEdit={canEdit(r)}
+                canDelete={canDelete(r)}
+                isScheduler={isScheduler}
+                onEdit={() => onEdit(r)}
+                onSchedule={() => onSchedule(r)}
+                onView={() => onView(r)}
+                onDelete={() => onDelete(r)}
+                technicians={technicians}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 };
