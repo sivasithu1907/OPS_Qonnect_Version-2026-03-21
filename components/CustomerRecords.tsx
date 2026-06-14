@@ -515,7 +515,7 @@ onSaveCustomer(data as Customer);
                          <button onClick={closeModal}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                     </div>
                     
-                    <form onSubmit={handleSubmit} className="p-6 space-y-4 bg-white flex-1 overflow-y-auto">
+                    <form key={activeItem?.id ?? '__new_customer__'} onSubmit={handleSubmit} className="p-6 space-y-4 bg-white flex-1 overflow-y-auto">
                         
                         {/* Avatar Upload */}
                         <div className="flex flex-col items-center mb-4">
