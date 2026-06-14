@@ -114,6 +114,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const [overrideStartedAt, setOverrideStartedAt] = useState('');
   const [overrideCompletedAt, setOverrideCompletedAt] = useState('');
   const [overrideNote, setOverrideNote] = useState('');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<string | 'ALL'>('ALL');
 
   // --- Create Form State ---
@@ -1130,11 +1131,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                   <div>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm('Cancel this ticket? This cannot be undone.')) {
-                          onUpdateTicket({ ...selectedTicket, status: TicketStatus.CANCELLED, updatedAt: new Date().toISOString() });
-                        }
-                      }}
+                      onClick={() => setShowCancelConfirm(true)}
                       className="w-full py-2 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
                     >
                       Cancel Ticket
@@ -1495,6 +1492,36 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         </div>
       )}
     </div>
+
+    {/* ── Cancel Ticket Confirm Modal ── */}
+    {showCancelConfirm && selectedTicket && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCancelConfirm(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="p-4 bg-red-600 text-white">
+                    <h3 className="font-bold text-lg">Cancel Ticket?</h3>
+                    <p className="text-red-100 text-xs mt-0.5">#{selectedTicket.id} — {selectedTicket.customerName}</p>
+                </div>
+                <div className="p-5">
+                    <p className="text-sm text-slate-700">This will mark the ticket as <span className="font-bold text-red-600">Cancelled</span>. This action cannot be undone.</p>
+                </div>
+                <div className="p-4 border-t border-slate-200 flex gap-3">
+                    <button onClick={() => setShowCancelConfirm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">
+                        Keep Ticket
+                    </button>
+                    <button
+                        onClick={() => {
+                            onUpdateTicket({ ...selectedTicket, status: TicketStatus.CANCELLED, updatedAt: new Date().toISOString() });
+                            setShowCancelConfirm(false);
+                        }}
+                        className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+                    >
+                        Cancel Ticket
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+
   );
 };
 
