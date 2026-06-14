@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import {
   Plus, Search, X, Calendar, Clock, User as UserIcon,
   MapPin, Phone, FileText, Tag, ChevronDown, ChevronUp,
