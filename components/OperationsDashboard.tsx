@@ -1,5 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef, useLayoutEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Team, Site, Technician, Activity, Ticket, TicketStatus, Priority, Customer } from '../types';
 import { 
   MapPin, Clock, Truck, ShieldAlert, 
@@ -1458,7 +1459,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                      <button 
                         onClick={() => {
                             if (!selectedItem) {
-                                alert("No item selected");
+                                toast.error("No item selected");
                                 return;
                             }
                             if (onNavigate) {
