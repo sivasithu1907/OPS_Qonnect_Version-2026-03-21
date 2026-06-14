@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import { Ticket, Activity, Technician, Customer, Team, Site, Role } from '../types';
 import { Database, Download, Upload, AlertTriangle, CheckCircle2, History, FileJson, ShieldAlert, Archive, Play, RefreshCw, X, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
