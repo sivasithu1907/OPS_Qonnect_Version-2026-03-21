@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
 import { ChevronLeft, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
@@ -164,7 +165,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           
           const remaining = MAX_PHOTOS - existingPhotos.length;
           if (remaining <= 0) {
-              alert(`Maximum ${MAX_PHOTOS} photos allowed per job.`);
+              toast.error(`Maximum ${MAX_PHOTOS} photos allowed per job.`);
               setPhotoUploading(false);
               return;
           }
