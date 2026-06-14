@@ -48,6 +48,8 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
 
   const [modalType, setModalType] = useState<'add' | 'edit' | 'view' | null>(null);
   const [activeItem, setActiveItem] = useState<Customer | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   
@@ -125,10 +127,8 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
           e.stopPropagation();
       }
 
-      if (window.confirm("Are you sure you want to delete this client record? This action cannot be undone.")) {
-          onDeleteCustomer(id);
-          closeModal();
-      }
+      setDeleteTargetId(id);
+      setShowDeleteConfirm(true);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -965,6 +965,38 @@ onSaveCustomer(data as Customer);
                 </div>
             );
         })()}
+
+
+      {/* ── Delete Customer Confirm Modal ── */}
+      {showDeleteConfirm && deleteTargetId && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-red-600 text-white">
+                      <h3 className="font-bold text-lg">Delete Client Record?</h3>
+                      <p className="text-red-100 text-xs mt-0.5">This action cannot be undone.</p>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-sm text-slate-700">All data for this client including tickets and activity history will be permanently removed.</p>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex gap-3">
+                      <button onClick={() => { setShowDeleteConfirm(false); setDeleteTargetId(null); }} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">
+                          Cancel
+                      </button>
+                      <button
+                          onClick={() => {
+                              onDeleteCustomer(deleteTargetId);
+                              closeModal();
+                              setShowDeleteConfirm(false);
+                              setDeleteTargetId(null);
+                          }}
+                          className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+                      >
+                          Delete Permanently
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
     </div>
   );
