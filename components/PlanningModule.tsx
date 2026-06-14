@@ -75,6 +75,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   // Mobile Tab State
   const [mobileTab, setMobileTab] = useState<ActivityStatus>('PLANNED');
 
+  // List View filter — kept at parent level so it survives parent re-renders
+  const [listFilter, setListFilter] = useState<string>('ALL');
+
   // Form State
   const [plannedDatetime, setPlannedDatetime] = useState(''); // YYYY-MM-DDTHH:mm
   const [durationState, setDurationState] = useState<{ val: string, unit: 'HOURS' | 'DAYS' }>({ val: '2', unit: 'HOURS' });
@@ -340,8 +343,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   // --- View Components ---
 
   const ListView = () => {
-  const [listFilter, setListFilter] = React.useState<string>('ALL');
-  const statusFilters = ['ALL', 'PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
+  // listFilter state is at parent component level — shared + stable across re-renders
+  const statusFilters = ['ALL', 'PLANNED', 'ON_MY_WAY', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
   const filteredActs = listFilter === 'ALL'
     ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
     : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
@@ -478,7 +481,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 };
 
   const KanbanView = () => {
-    const columns: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
+    const columns: ActivityStatus[] = ['PLANNED', 'ON_MY_WAY', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
     
     return (
       <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-14rem)]">
@@ -509,7 +512,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
   // --- Mobile Tab View ---
   const MobileTabView = () => {
-      const tabs: ActivityStatus[] = ['PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
+      const tabs: ActivityStatus[] = ['PLANNED', 'ON_MY_WAY', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
       const filteredActs = activities.filter(a => a.status === mobileTab);
 
       return (
@@ -916,8 +919,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       
                       salesLeadId: salesLeadIdState || undefined,
                       leadTechId: selectedLeadTechId || (canSelfAssign ? currentUserId : undefined),
-                      assistantTechIds: assistantTechState,
-                      supportingEngineerIds: supportingEngineerState,
+                      // Deduplicate: remove from assistants if already in supporting (and vice versa)
+                      assistantTechIds: assistantTechState.filter(id => !supportingEngineerState.includes(id)),
+                      supportingEngineerIds: supportingEngineerState.filter(id => !assistantTechState.includes(id)),
                       freelancers: freelancers.filter(f => f.name.trim())
                   };
 
@@ -1584,8 +1588,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               plannedDate: actOverrideTarget?.plannedDate || undefined,
                               updatedAt: new Date().toISOString()
                           };
-                          if (actOverrideStartedAt) updates.startedAt = new Date(actOverrideStartedAt).toISOString();
-                          if (actOverrideCompletedAt) { updates.completedAt = new Date(actOverrideCompletedAt + '+03:00').toISOString(); }
+                          // Both timestamps treated as Qatar local time (UTC+3) — consistent conversion
+                          if (actOverrideStartedAt) updates.startedAt = new Date(actOverrideStartedAt + ':00+03:00').toISOString();
+                          if (actOverrideCompletedAt) updates.completedAt = new Date(actOverrideCompletedAt + ':00+03:00').toISOString();
                           if (actOverrideNote) updates.completionNote = (actOverrideTarget.completionNote ? actOverrideTarget.completionNote + '\n' : '') + '[Admin Override] ' + actOverrideNote;
                           onUpdateActivity(updates);
                           setShowActOverride(false);
