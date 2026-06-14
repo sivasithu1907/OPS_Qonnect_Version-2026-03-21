@@ -1491,7 +1491,6 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           </div>
         </div>
       )}
-    </div>
 
     {/* ── Cancel Ticket Confirm Modal ── */}
     {showCancelConfirm && selectedTicket && (
@@ -1522,6 +1521,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         </div>
     )}
 
+    </div>
   );
 };
 
