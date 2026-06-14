@@ -46,7 +46,8 @@ interface Props {
 const STATUS_CONFIG: Record<SalesRequestStatus, { label: string; color: string; bg: string; dot: string }> = {
   PENDING_SCHEDULING: { label: 'Pending Scheduling', color: 'text-amber-700',  bg: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400'  },
   SCHEDULED:          { label: 'Scheduled',          color: 'text-blue-700',   bg: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-500'   },
-  IN_PROGRESS:        { label: 'In Progress',         color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200', dot: 'bg-indigo-500' },
+  IN_PROGRESS:        { label: 'In Progress',         color: 'text-amber-700',  bg: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-500'  },
+  COMPLETED:          { label: 'Completed',           color: 'text-emerald-700',bg: 'bg-emerald-50 border-emerald-200',dot: 'bg-emerald-500'},
   DONE:               { label: 'Done',                color: 'text-emerald-700',bg: 'bg-emerald-50 border-emerald-200',dot: 'bg-emerald-500'},
   CANCELLED:          { label: 'Cancelled',           color: 'text-slate-500',  bg: 'bg-slate-50  border-slate-200',  dot: 'bg-slate-400'  },
 };
@@ -1429,9 +1430,20 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
           </div>
 
           {r.linkedActivityId && (
-            <div className="mt-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 flex items-center gap-2">
-              <CheckCircle2 size={14} />
-              Planned activity created: <span className="font-mono font-semibold">{r.linkedActivityId}</span>
+            <div className={`mt-4 px-4 py-3 rounded-xl text-sm flex items-center gap-2 border ${
+                r.status === 'COMPLETED'   ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                r.status === 'IN_PROGRESS' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                'bg-blue-50 border-blue-200 text-blue-700'
+            }`}>
+              {r.status === 'COMPLETED'   ? <CheckCircle2 size={14} /> :
+               r.status === 'IN_PROGRESS' ? <span className="text-base">🔄</span> :
+               <span className="text-base">📅</span>}
+              <span>
+                Activity <span className="font-mono font-semibold">{r.linkedActivityId}</span>
+                {r.status === 'IN_PROGRESS' && <span className="ml-1 font-semibold">— Work In Progress</span>}
+                {r.status === 'COMPLETED'   && <span className="ml-1 font-semibold">— Completed</span>}
+                {r.status === 'SCHEDULED'   && <span className="ml-1">— Scheduled &amp; Planned</span>}
+              </span>
             </div>
           )}
 
