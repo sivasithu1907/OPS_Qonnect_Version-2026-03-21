@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef, useLayoutEffect } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import { Team, Site, Technician, Activity, Ticket, TicketStatus, Priority, Customer } from '../types';
 import { 
   MapPin, Clock, Truck, ShieldAlert, 
