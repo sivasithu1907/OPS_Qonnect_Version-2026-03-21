@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { 
   ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
