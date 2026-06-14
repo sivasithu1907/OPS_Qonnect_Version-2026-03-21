@@ -19,19 +19,23 @@ interface PlanningModuleProps {
   onUpdateActivity: (activity: Activity) => void;
   onDeleteActivity: (id: string) => void;
   onAddCustomer?: (customer: Customer) => Promise<Customer | null> | void;
-  isMobile?: boolean; // New prop for mobile responsiveness
+  isMobile?: boolean;
   initialActivityId?: string | null;
   onClearInitialActivity?: () => void;
   currentUserId?: string; // For self-assign logic
+  isSaving?: boolean;     // Prevents double-submit
+  currentUserRole?: Role; // For permission-based UI
 }
 
 const PlanningModule: React.FC<PlanningModuleProps> = ({ 
   activities, sites, customers, technicians = [],
-  onAddActivity, onUpdateActivity, onDeleteActivity, onAddCustomer = (_: Customer) => {}, // Fixed default signature
+  onAddActivity, onUpdateActivity, onDeleteActivity, onAddCustomer = (_: Customer) => {},
   isMobile = false,
   initialActivityId,
   onClearInitialActivity,
-  currentUserId
+  currentUserId,
+  isSaving = false,
+  currentUserRole
 }) => {
   const showPhotoLightbox = (src: string) => {
     const overlay = document.createElement('div');
@@ -97,6 +101,27 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   // Freelancers State (activity-level, no user record)
   const [freelancers, setFreelancers] = useState<{ name: string; role: string; phone: string }[]>([]);
 
+  // Controlled state for supporting engineers and assistant TAs (replaces defaultChecked)
+  const [supportingEngineerState, setSupportingEngineerState] = useState<string[]>([]);
+  const [assistantTechState, setAssistantTechState] = useState<string[]>([]);
+
+  // Controlled state for uncontrolled-by-default selects
+  const [activityType, setActivityType] = useState<string>('Installation');
+  const [activityPriority, setActivityPriority] = useState<string>('MEDIUM');
+  const [activityStatus, setActivityStatus] = useState<string>('PLANNED');
+  const [salesLeadIdState, setSalesLeadIdState] = useState<string>('');
+  const [descriptionState, setDescriptionState] = useState<string>('');
+  const [remarksState, setRemarksState] = useState<string>('');
+  const [odooLinkState, setOdooLinkState] = useState<string>('');
+
+  // Reschedule modal state
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Activity | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+
+  // Delete confirmation modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   // Filter Active Staff Only
   const teamLeads = technicians.filter(t => t.systemRole === Role.TEAM_LEAD && t.status !== 'LEAVE' && t.isActive !== false);
   const fieldEngineers = technicians.filter(t => t.systemRole === Role.FIELD_ENGINEER && t.status !== 'LEAVE' && t.isActive !== false);
@@ -131,7 +156,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       }
   }, [initialActivityId, activities]);
 
-  // Initialize form state when opening modal
+  // Initialize ALL form state when modal opens — ensures clean slate every time
   useEffect(() => {
     if (isModalOpen) {
         if (editingActivity) {
@@ -143,12 +168,21 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 unit: editingActivity.durationUnit || 'HOURS'
             });
             setSelectedCustomerId(editingActivity.customerId || '');
-            // For SAR-created activities that have customerName in details but no customerId matched,
-            // we just leave the selector at the found ID; the customer was created at schedule time.
             setLocationUrl(editingActivity.locationUrl || '');
             setHouseNumber(editingActivity.houseNumber || '');
             setFreelancers((editingActivity as any).freelancers || []);
+            // Controlled state for formerly-uncontrolled fields
+            setActivityType(editingActivity.type || 'Installation');
+            setActivityPriority(editingActivity.priority || 'MEDIUM');
+            setActivityStatus(editingActivity.status || 'PLANNED');
+            setSalesLeadIdState(editingActivity.salesLeadId || '');
+            setDescriptionState(editingActivity.description || '');
+            setRemarksState((editingActivity as any).remarks || '');
+            setOdooLinkState(editingActivity.odooLink || '');
+            setSupportingEngineerState((editingActivity as any).supportingEngineerIds || []);
+            setAssistantTechState(editingActivity.assistantTechIds || []);
         } else {
+            // Create mode — clean slate
             const now = new Date();
             now.setDate(now.getDate() + 1);
             now.setHours(9, 0, 0, 0);
@@ -158,6 +192,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             setLocationUrl('');
             setHouseNumber('');
             setFreelancers([]);
+            setActivityType('Installation');
+            setActivityPriority('MEDIUM');
+            setActivityStatus('PLANNED');
+            setSalesLeadIdState('');
+            setDescriptionState('');
+            setRemarksState('');
+            setOdooLinkState('');
+            setSupportingEngineerState([]);
+            setAssistantTechState([]);
+            setServiceCats([]);
+            setSelectedLeadTechId('');
         }
     }
   }, [isModalOpen, editingActivity]);
@@ -828,49 +873,53 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                </div>
                
-               <form onSubmit={(e) => {
+               <form
+                  key={editingActivity?.id ?? '__new__'}
+                  onSubmit={(e) => {
                   e.preventDefault();
                   if (!selectedCustomerId) {
                       alert('Please select a customer.');
                       return;
                   }
+                  if (!activityType) {
+                      alert('Please select an activity type.');
+                      return;
+                  }
+                  if (serviceCats.length === 0) {
+                      alert('Please select at least one service category.');
+                      return;
+                  }
+                  if (!plannedDatetime) {
+                      alert('Please set a planned date and time.');
+                      return;
+                  }
 
-                  const formData = new FormData(e.currentTarget);
-                  const data = Object.fromEntries(formData.entries()) as any;
-                  
                   // Construct ISO Date from datetime-local input
-                  const plannedDateIso = plannedDatetime
-                      ? new Date(plannedDatetime).toISOString()
-                      : new Date().toISOString();
+                  const plannedDateIso = new Date(plannedDatetime).toISOString();
 
                   const activityPayload: any = {
-                      type: data.type,
+                      type: activityType,
                       serviceCategory: serviceCats.join(', ') || 'Other',
                       customerId: selectedCustomerId || undefined,
-                      priority: data.priority,
-                      status: data.status || 'PLANNED',
+                      priority: activityPriority,
+                      // Status: only set from form in edit mode; create always starts PLANNED
+                      status: editingActivity ? activityStatus : 'PLANNED',
                       plannedDate: plannedDateIso,
                       durationHours: Number(durationState.val),
                       durationUnit: durationState.unit,
-                      description: data.description,
-                      remarks: data.remarks || '',
+                      description: descriptionState,
+                      remarks: remarksState || '',
                       
-                      odooLink: data.odooLink,
-                      locationUrl: locationUrl || data.locationUrl,
-                      houseNumber: houseNumber || data.houseNumber,
+                      odooLink: odooLinkState || undefined,
+                      locationUrl: locationUrl,
+                      houseNumber: houseNumber,
                       
-                      salesLeadId: data.salesLeadId || undefined,
-                      leadTechId: selectedLeadTechId || data.leadTechId || (canSelfAssign ? currentUserId : undefined),
-                      assistantTechIds: formData.getAll('assistantTechIds') as string[],
-                      supportingEngineerIds: formData.getAll('supportingEngineerIds') as string[],
+                      salesLeadId: salesLeadIdState || undefined,
+                      leadTechId: selectedLeadTechId || (canSelfAssign ? currentUserId : undefined),
+                      assistantTechIds: assistantTechState,
+                      supportingEngineerIds: supportingEngineerState,
                       freelancers: freelancers.filter(f => f.name.trim())
                   };
-
-                  // Validate required fields
-                  if (!activityPayload.customerId) {
-                      alert('Please select a customer');
-                      return;
-                  }
 
                   if (editingActivity) {
                       onUpdateActivity({
@@ -909,13 +958,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase">Activity Type</label>
-                          <select name="type" defaultValue={editingActivity?.type || 'Installation'} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                          <select value={activityType} onChange={e => setActivityType(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
                              {['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'].map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                       </div>
                       <div className="space-y-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase">Priority</label>
-                          <select name="priority" defaultValue={editingActivity?.priority || 'MEDIUM'} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                          <select value={activityPriority} onChange={e => setActivityPriority(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
                              {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
                       </div>
@@ -1006,7 +1055,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                        <input 
                         type="text" 
                         name="odooLink" 
-                        defaultValue={editingActivity?.odooLink} 
+                        value={odooLinkState}
+                        onChange={e => setOdooLinkState(e.target.value)}
                         placeholder="https://odoo.crm..." 
                         className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
                        />
@@ -1024,7 +1074,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/>
                                   <label className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sales Lead</label>
                               </div>
-                              <select name="salesLeadId" defaultValue={editingActivity?.salesLeadId || ''} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
+                              <select value={salesLeadIdState} onChange={e => setSalesLeadIdState(e.target.value)} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
                                   <option value="">— Unassigned —</option>
                                   {salesTeam.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
@@ -1101,9 +1151,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                             <div key={t.id} className="flex items-center gap-2">
                                                 <input
                                                     type="checkbox"
-                                                    name="supportingEngineerIds"
                                                     value={t.id}
-                                                    defaultChecked={(editingActivity as any)?.supportingEngineerIds?.includes(t.id)}
+                                                    checked={supportingEngineerState.includes(t.id)}
+                                                    onChange={e => setSupportingEngineerState(prev =>
+                                                        e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id)
+                                                    )}
                                                     id={`support_fe_${t.id}`}
                                                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                                 />
@@ -1125,9 +1177,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                             <div key={t.id} className="flex items-center gap-2">
                                                 <input 
                                                     type="checkbox" 
-                                                    name="assistantTechIds" 
                                                     value={t.id} 
-                                                    defaultChecked={editingActivity?.assistantTechIds?.includes(t.id)}
+                                                    checked={assistantTechState.includes(t.id)}
+                                                    onChange={e => setAssistantTechState(prev =>
+                                                        e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id)
+                                                    )}
                                                     id={`helper_${t.id}`}
                                                     className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                                 />
@@ -1222,28 +1276,34 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {editingActivity && (
                         <div className="space-y-1">
                            <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
-                           <select name="status" defaultValue={editingActivity?.status} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
-                              {(['PLANNED', 'IN_PROGRESS', 'DONE', 'CANCELLED'] as ActivityStatus[])
-                                .map(s => <option key={s} value={s}>{getActivityStatusLabel(s)}</option>)
-                              }
-                           </select>
+                           {/* Status is read-only in edit form — use Admin Override to change status */}
+                           <div className={`w-full border rounded-lg p-2.5 text-sm font-medium ${
+                               activityStatus === 'DONE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                               activityStatus === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                               activityStatus === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200 text-orange-700' :
+                               activityStatus === 'CANCELLED' ? 'bg-slate-100 border-slate-200 text-slate-500' :
+                               'bg-amber-50 border-amber-200 text-amber-700'
+                           }`}>
+                               {getActivityStatusLabel(activityStatus as ActivityStatus)}
+                               <span className="ml-2 text-[10px] text-slate-400 font-normal">(Use Admin Override to change status)</span>
+                           </div>
                         </div>
                   )}
 
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Description / Scope of Work</label>
-                      <textarea name="description" rows={3} defaultValue={editingActivity?.description} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
+                      <textarea value={descriptionState} onChange={e => setDescriptionState(e.target.value)} rows={3} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
                   </div>
 
                   {/* General Remarks (separate from carry forward reason) */}
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">General Remarks</label>
-                      <textarea name="remarks" rows={2} defaultValue={(editingActivity as any)?.remarks} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
+                      <textarea value={remarksState} onChange={e => setRemarksState(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
                   </div>
 
                   {editingActivity && (
                      <div className="flex justify-between items-center pt-4 border-t border-slate-100">
-                        <button type="button" onClick={() => { if(confirm('Delete this activity?')) { onDeleteActivity(editingActivity.id); setIsModalOpen(false); } }} className="text-red-500 text-sm hover:text-red-700 flex items-center gap-1">
+                        <button type="button" onClick={() => { setShowDeleteConfirm(true); }} className="text-red-500 text-sm hover:text-red-700 flex items-center gap-1">
                             <X size={16} /> Delete Activity
                         </button>
                      </div>
@@ -1251,8 +1311,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
                         <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
-                        <button type="submit" className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all flex items-center gap-2">
-                            <Save size={18} /> {editingActivity ? 'Update Activity' : 'Plan Activity'}
+                        <button type="submit" disabled={isSaving} className={`px-6 py-2 font-medium rounded-lg shadow-lg transition-all flex items-center gap-2 ${isSaving ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}>
+                            <Save size={18} /> {isSaving ? 'Saving...' : editingActivity ? 'Update Activity' : 'Plan Activity'}
                         </button>
                   </div>
                </form>
@@ -1446,21 +1506,14 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 {/* Reschedule — for carry-forward or any status */}
                 {(va.status === 'CARRY_FORWARD' || va.status === 'PLANNED' || va.status === 'DONE' || va.status === 'IN_PROGRESS') && (
                     <button onClick={() => {
-                        // Reschedule = set new planned date + reset to PLANNED status
-                        const newDate = prompt('Enter new date & time (YYYY-MM-DD HH:MM):', 
-                            new Date(Date.now() + 24*60*60*1000).toISOString().slice(0,16).replace('T',' '));
-                        if (newDate && newDate.trim()) {
-                            const isoDate = new Date(newDate.trim().replace(' ','T')).toISOString();
-                            onUpdateActivity({
-                                ...va,
-                                status: 'PLANNED',
-                                plannedDate: isoDate,
-                                nextPlannedAt: null,
-                                carryForwardNote: va.carryForwardNote ? va.carryForwardNote + '\n[Rescheduled to ' + newDate.trim() + ']' : '[Rescheduled to ' + newDate.trim() + ']',
-                                updatedAt: new Date().toISOString()
-                            });
-                            setViewingActivity(null);
-                        }
+                        setRescheduleTarget(va);
+                        // Default: next day at same time
+                        const nextDay = new Date(va.plannedDate || Date.now());
+                        nextDay.setDate(nextDay.getDate() + 1);
+                        const pad = (n: number) => String(n).padStart(2,'0');
+                        setRescheduleDate(`${nextDay.getFullYear()}-${pad(nextDay.getMonth()+1)}-${pad(nextDay.getDate())}T${pad(nextDay.getHours())}:${pad(nextDay.getMinutes())}`);
+                        setShowRescheduleModal(true);
+                        setViewingActivity(null);
                     }} className={`w-full py-2.5 font-bold rounded-xl text-sm flex items-center justify-center gap-2 ${
                         va.status === 'CARRY_FORWARD' 
                             ? 'bg-orange-500 text-white hover:bg-orange-600' 
@@ -1544,6 +1597,89 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       )}
 
     </div>
+
+      {/* ── Reschedule Modal ── */}
+      {showRescheduleModal && rescheduleTarget && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowRescheduleModal(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-slate-800 text-white">
+                      <h3 className="font-bold text-lg">Reschedule Activity</h3>
+                      <p className="text-slate-300 text-xs mt-0.5">{rescheduleTarget.reference} — {rescheduleTarget.type}</p>
+                  </div>
+                  <div className="p-5 space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">New Date & Time <span className="text-red-500">*</span></label>
+                          <input
+                              type="datetime-local"
+                              value={rescheduleDate}
+                              onChange={e => setRescheduleDate(e.target.value)}
+                              min={new Date().toISOString().slice(0,16)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                          />
+                      </div>
+                      <p className="text-xs text-slate-400">
+                          This will reset the activity status to <span className="font-bold text-amber-600">PLANNED</span> and update the planned date.
+                          The original date will be preserved in the activity notes.
+                      </p>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex gap-3">
+                      <button onClick={() => setShowRescheduleModal(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button
+                          disabled={!rescheduleDate}
+                          onClick={() => {
+                              if (!rescheduleDate || !rescheduleTarget) return;
+                              const isoDate = new Date(rescheduleDate).toISOString();
+                              const oldDate = new Date(rescheduleTarget.plannedDate).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar'});
+                              onUpdateActivity({
+                                  ...rescheduleTarget,
+                                  status: 'PLANNED',
+                                  plannedDate: isoDate,
+                                  nextPlannedAt: undefined,
+                                  carryForwardNote: rescheduleTarget.carryForwardNote
+                                      ? rescheduleTarget.carryForwardNote + '\n[Rescheduled from ' + oldDate + ']'
+                                      : '[Rescheduled from ' + oldDate + ']',
+                                  updatedAt: new Date().toISOString()
+                              });
+                              setShowRescheduleModal(false);
+                              setRescheduleTarget(null);
+                          }}
+                          className="flex-1 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                      >
+                          Reschedule
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {showDeleteConfirm && editingActivity && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-red-600 text-white">
+                      <h3 className="font-bold text-lg">Delete Activity?</h3>
+                      <p className="text-red-100 text-xs mt-0.5">{editingActivity.reference} — {editingActivity.type}</p>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-sm text-slate-700">This action is <span className="font-bold text-red-600">permanent</span> and cannot be undone. All visit history and data for this activity will be lost.</p>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex gap-3">
+                      <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button
+                          onClick={() => {
+                              onDeleteActivity(editingActivity.id);
+                              setShowDeleteConfirm(false);
+                              setIsModalOpen(false);
+                          }}
+                          className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+                      >
+                          Delete Permanently
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
   );
 };
 
