@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Ticket, Activity, Technician, Customer, Team, Site, Role } from '../types';
 import { Database, Download, Upload, AlertTriangle, CheckCircle2, History, FileJson, ShieldAlert, Archive, Play, RefreshCw, X, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
@@ -105,7 +106,7 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
       } catch (error) {
           console.error("Export failed", error);
           addLog('EXPORT', 'Export process failed', 'FAILED');
-          alert('Export failed. Check console.');
+          toast.error('Export failed. Please try again.');
       } finally {
           setLoading(false);
       }
@@ -158,7 +159,7 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
 
       } catch (error) {
           console.error("Import parsing failed", error);
-          alert("Failed to parse backup file. Please ensure it is a valid Qonnect export.");
+          toast.error("Failed to parse backup file. Ensure it is a valid Qonnect export.");
           addLog('IMPORT', 'File parsing failed', 'FAILED');
       } finally {
           setLoading(false);
@@ -218,7 +219,7 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
       } catch (e) {
           console.error("Merge failed", e);
           addLog('IMPORT', 'Merge process failed during execution', 'FAILED');
-          alert('System merge failed.');
+          toast.error('System merge failed. Check console for details.');
       } finally {
           setLoading(false);
       }
