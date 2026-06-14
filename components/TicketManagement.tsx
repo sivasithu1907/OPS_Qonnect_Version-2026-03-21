@@ -118,6 +118,29 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<string | 'ALL'>('ALL');
 
+  // Admin Override submit handler
+  const handleApplyOverride = () => {
+      if (!selectedTicket) return;
+      const updates: any = {
+          ...selectedTicket,
+          status: overrideStatus as TicketStatus,
+          updatedAt: new Date().toISOString(),
+      };
+      // Convert Qatar local datetime inputs → UTC ISO strings
+      if (overrideStartedAt) {
+          updates.startedAt = new Date(overrideStartedAt + ':00+03:00').toISOString();
+      }
+      if (overrideCompletedAt) {
+          updates.completedAt = new Date(overrideCompletedAt + ':00+03:00').toISOString();
+      }
+      if (overrideNote.trim()) {
+          updates.completionNote = overrideNote.trim();
+      }
+      onUpdateTicket(updates);
+      setShowAdminOverride(false);
+      toast.success('Override applied');
+  };
+
   // --- Create Form State ---
   const initialCreateState = {
     customerId: '',
@@ -450,8 +473,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
   const isDetailValid = () => {
       if (!editForm) return false;
-      // Location and House Number are optional — always valid
-      return true;
+      // Require at minimum a category to save
+      return !!editForm.category;
   };
 
   const handleSaveChanges = () => {
@@ -532,23 +555,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       setNewClientName('');
   };
 
-  // --- Send & Stub Logic ---
-  const sendToWhatsApp = (phone: string, message: string) => {
-      console.log(`[STUB] Sending WhatsApp to ${phone}: ${message}`);
-      toast.success(`Message sent to WhatsApp (${phone})`);
-  };
-
+  // --- Message Reply Logic ---
+  // Note: WhatsApp replies are handled automatically by the bot backend.
+  // This records the message internally in the ticket history only.
   const handleSend = () => {
     if (!selectedTicketId || !replyText.trim() || !editForm) return;
-    
-    // Internal Update
     onSendMessage(selectedTicketId, replyText, MessageSender.AGENT);
-    
-    // External Stub
-    sendToWhatsApp(editForm.phoneNumber, replyText);
-
     setReplyText('');
-    setAnalysisResult(null); // Clear analysis on send
+    setAnalysisResult(null);
+    toast.success('Message logged to ticket history');
   };
 
   const handleAIAnalysis = async () => {
@@ -1492,6 +1507,77 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           </div>
         </div>
       )}
+
+    {/* ── Admin Override Modal ── */}
+    {showAdminOverride && selectedTicket && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowAdminOverride(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="p-4 bg-indigo-700 text-white">
+                    <h3 className="font-bold text-lg">Admin Override</h3>
+                    <p className="text-indigo-200 text-xs mt-0.5">#{selectedTicket.id} — {selectedTicket.customerName}</p>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Force Status</label>
+                        <select
+                            value={overrideStatus}
+                            onChange={e => setOverrideStatus(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        >
+                            {[TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED,
+                              TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD,
+                              TicketStatus.RESOLVED, TicketStatus.CANCELLED].map(s => (
+                                <option key={s} value={s}>{s.replace(/_/g,' ')}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
+                            Started At <span className="text-slate-400 font-normal">(Qatar time, optional)</span>
+                        </label>
+                        <input
+                            type="datetime-local"
+                            value={overrideStartedAt}
+                            onChange={e => setOverrideStartedAt(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">
+                            Completed At <span className="text-slate-400 font-normal">(Qatar time, optional)</span>
+                        </label>
+                        <input
+                            type="datetime-local"
+                            value={overrideCompletedAt}
+                            onChange={e => setOverrideCompletedAt(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Admin Note</label>
+                        <textarea
+                            value={overrideNote}
+                            onChange={e => setOverrideNote(e.target.value)}
+                            rows={2}
+                            placeholder="Reason for override..."
+                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                        />
+                    </div>
+                </div>
+                <div className="p-4 border-t border-slate-200 flex gap-3">
+                    <button onClick={() => setShowAdminOverride(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleApplyOverride}
+                        className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700"
+                    >
+                        Apply Override
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
 
     {/* ── Cancel Ticket Confirm Modal ── */}
     {showCancelConfirm && selectedTicket && (
