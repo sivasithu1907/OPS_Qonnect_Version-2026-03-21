@@ -1001,9 +1001,10 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
     // STEP A: Check for existing customer by phone (prevent duplicates)
     let actualCustomerId = customerId;
     if (phoneNumber && String(phoneNumber).trim().length > 4) {
-      const normalizedPhone = String(phoneNumber).trim().replace(/\s+/g, '');
+      // Unified normalization: strip all non-digit/non-plus characters
+      const normalizedPhone = String(phoneNumber).trim().replace(/[^0-9+]/g, '');
       const existingCust = await client.query(
-        `SELECT id FROM customers WHERE REPLACE(phone, ' ', '') = $1 LIMIT 1`,
+        `SELECT id FROM customers WHERE REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') = $1 LIMIT 1`,
         [normalizedPhone]
       );
       if (existingCust.rows.length > 0) {
@@ -1370,9 +1371,9 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
 
     // Check for existing customer with same phone number
     if (phone && String(phone).trim().length > 4) {
-      const normalizedPhone = String(phone).trim().replace(/\s+/g, '');
+      const normalizedPhone = String(phone).trim().replace(/[^0-9+]/g, '');
       const existing = await pool.query(
-        `SELECT * FROM customers WHERE REPLACE(phone, ' ', '') = $1 LIMIT 1`,
+        `SELECT * FROM customers WHERE REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') = $1 LIMIT 1`,
         [normalizedPhone]
       );
       if (existing.rows.length > 0) {
@@ -2328,7 +2329,7 @@ app.post('/api/sales-appointment-requests', authenticate, writeRateLimit, async 
             // Search by normalised phone — try exact match first, then stripped-prefix match
             const existingCust = await pool.query(
                 `SELECT id FROM customers WHERE
-                   REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = REGEXP_REPLACE($1, '[^0-9]', '', 'g')
+                   REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') = REGEXP_REPLACE($1, '[^0-9+]', '', 'g')
                  LIMIT 1`,
                 [normPhone]
             );
