@@ -1596,7 +1596,6 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           </div>
       )}
 
-    </div>
 
       {/* ── Reschedule Modal ── */}
       {showRescheduleModal && rescheduleTarget && (
@@ -1680,6 +1679,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           </div>
       )}
 
+    </div>
   );
 };
 
