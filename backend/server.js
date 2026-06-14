@@ -872,8 +872,10 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
         const userId = req.user.id;
         const [ticketsR, activitiesR, customersR] = await Promise.all([
             pool.query("SELECT * FROM tickets WHERE assigned_tech_id = $1 ORDER BY updated_at DESC LIMIT 50", [userId]),
-            pool.query(`SELECT * FROM activities WHERE (lead_tech_id = $1 OR details->>'primaryEngineerId' = $1) 
-                        AND type != 'WHATSAPP_SUPPORT' ORDER BY planned_date DESC LIMIT 50`, [userId]),
+            pool.query(`SELECT * FROM activities WHERE (lead_tech_id = $1 OR details->>'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1) 
+                        AND type != 'WHATSAPP_SUPPORT'
+                        AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
+                        ORDER BY planned_date DESC LIMIT 150`, [userId]),
             pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200")
         ]);
         res.json({
@@ -2074,6 +2076,29 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
             `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${extraClauses} WHERE id=${idParam}`,
             allParams
         );
+
+        // ── SAR Sync: if this activity was created from a Sales Appointment Request,
+        // keep the SAR status in sync with activity progress ──────────────────────
+        const salesRequestId = mergedDetails.salesRequestId || details.salesRequestId;
+        if (salesRequestId) {
+            let sarStatus = null;
+            if (status === 'IN_PROGRESS' || status === 'ON_MY_WAY' || status === 'ARRIVED') {
+                sarStatus = 'IN_PROGRESS';
+            } else if (status === 'DONE') {
+                sarStatus = 'COMPLETED';
+            } else if (status === 'CANCELLED') {
+                sarStatus = 'CANCELLED';
+            } else if (status === 'PLANNED' || status === 'CARRY_FORWARD') {
+                sarStatus = 'SCHEDULED'; // back to scheduled if rescheduled
+            }
+            if (sarStatus) {
+                await pool.query(
+                    `UPDATE sales_appointment_requests SET status = $1, updated_at = NOW() WHERE id = $2`,
+                    [sarStatus, salesRequestId]
+                ).catch(e => console.error('SAR sync failed (non-critical):', e.message));
+            }
+        }
+
         res.json({ok: true});
     } catch(e) { console.error(e); res.status(500).json({error: "Failed to update activity"}); }
 });
