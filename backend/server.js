@@ -1204,6 +1204,29 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
         }
 
         // 1. Update the database — status + assignment + appointment + notes + timestamps
+        //    For CARRY_FORWARD: also append a visit record to visit_history
+        let visitHistoryClause = '';
+        const visitHistoryParams = [];
+        if (status === 'CARRY_FORWARD' && prevStatus !== 'CARRY_FORWARD') {
+            // Fetch existing visit_history + timestamps to build the visit record
+            const ticketState = await pool.query(
+                'SELECT visit_history, started_at, completed_at FROM tickets WHERE id=$1', [ticketId]
+            );
+            const existingHistory = ticketState.rows[0]?.visit_history || [];
+            const visitRecord = {
+                date: new Date().toISOString(),
+                startedAt: ticketState.rows[0]?.started_at || null,
+                completedAt: new Date().toISOString(),
+                status: 'CARRY_FORWARD',
+                carryForwardReason: carryForwardNote || 'No reason provided',
+                nextPlannedAt: nextPlannedAt || null,
+                assignedTechId: assignedTechId || null,
+            };
+            const updatedHistory = [...existingHistory, visitRecord];
+            visitHistoryParams.push(JSON.stringify(updatedHistory));
+            visitHistoryClause = `, visit_history = $${7 + extraTicketParams.length + visitHistoryParams.length}::jsonb`;
+        }
+
         await pool.query(
             `UPDATE tickets SET 
                 status = $1,
@@ -1212,11 +1235,11 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
                 carry_forward_note = COALESCE($4, carry_forward_note),
                 next_planned_at = COALESCE($5, next_planned_at),
                 completion_note = COALESCE($7, completion_note),
-                updated_at = NOW()${startedAtClause}${completedAtClause}
+                updated_at = NOW()${startedAtClause}${completedAtClause}${visitHistoryClause}
              WHERE id = $6`,
             [status, assignedTechId || null, appointmentTime || null,
              carryForwardNote || null, nextPlannedAt || null, ticketId,
-             completionNote || null, ...extraTicketParams]
+             completionNote || null, ...extraTicketParams, ...visitHistoryParams]
         );
 
         // 2. Fetch customer + ticket info for notifications
