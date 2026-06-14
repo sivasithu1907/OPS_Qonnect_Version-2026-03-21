@@ -384,6 +384,10 @@ const handleLogout = useCallback(() => {
                   odooLink: updated.odooLink,
                   assignedTechId: updated.assignedTechId || null,
                   appointmentTime: updated.appointmentTime || null,
+                  // Also persist customer link changes + phone
+                  customerId: updated.customerId || null,
+                  customerName: updated.customerName || null,
+                  phoneNumber: updated.phoneNumber || null,
               })
           });
           // Reload from DB to keep state fresh (mirrors handleUpdateActivity)
@@ -397,8 +401,11 @@ const handleLogout = useCallback(() => {
   const handleCreateTicket = async (data: any) => {
     const newId = generateTicketId();
     const now = new Date().toISOString();
+    // If engineer pre-assigned at creation, start as ASSIGNED not NEW
+    const initialStatus = data.assignedTechId ? TicketStatus.ASSIGNED : TicketStatus.NEW;
+
     const optimistic: Ticket = {
-      ...data, id: newId, status: TicketStatus.NEW,
+      ...data, id: newId, status: initialStatus,
       createdAt: now, updatedAt: now, messages: [],
       priority: data.priority || Priority.MEDIUM,
       unreadCount: 0
@@ -410,7 +417,7 @@ const handleLogout = useCallback(() => {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          ...data, id: newId, status: TicketStatus.NEW,
+          ...data, id: newId, status: initialStatus,
           createdAt: now, messages: []
         }),
       });
