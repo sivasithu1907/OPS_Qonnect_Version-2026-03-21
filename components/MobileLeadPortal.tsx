@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import toast from 'react-hot-toast';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { 
   ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
@@ -631,7 +632,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       if (!tempDatetime) return;
       const combined = new Date(tempDatetime);
       if (isNaN(combined.getTime()) || combined < new Date()) {
-          alert("Please select a future date and time.");
+          toast.error("Please select a future date and time.");
           return;
       }
       setNextDate(combined.toISOString());
@@ -3955,10 +3956,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
                       <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
                       <button onClick={() => {
-                          if (!actSelectedCustomer) { alert('Please select a customer'); return; }
-                          if (!createActivityForm.type) { alert('Please select an activity type'); return; }
-                          if (actServiceCats.length === 0) { alert('Please select at least one service category'); return; }
-                          if (!createActivityForm.plannedDate) { alert('Please set a planned date'); return; }
+                          if (!actSelectedCustomer) { toast.error('Please select a customer'); return; }
+                          if (!createActivityForm.type) { toast.error('Please select an activity type'); return; }
+                          if (actServiceCats.length === 0) { toast.error('Please select at least one service category'); return; }
+                          if (!createActivityForm.plannedDate) { toast.error('Please set a planned date'); return; }
                           const plannedDt = new Date(createActivityForm.plannedDate);
                           onAddActivity({
                               type: createActivityForm.type,
@@ -4125,7 +4126,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 const phone = ticketSelectedCustomer?.phone || createTicketForm.phone.trim();
                 const name = ticketSelectedCustomer?.name || createTicketForm.customerName.trim();
                 if (!name || !phone || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
-                  alert('Please fill all required fields');
+                  toast.error('Please fill all required fields');
                   return;
                 }
                 let custId = ticketSelectedCustomer?.id;
