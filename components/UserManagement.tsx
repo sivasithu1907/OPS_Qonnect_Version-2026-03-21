@@ -392,7 +392,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                         <button onClick={() => setModalOpen(false)}><XCircle size={20} className="text-slate-400 hover:text-slate-600"/></button>
                     </div>
                     
-                    <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <form key={editingUser?.id ?? '__new_user__'} onSubmit={handleSubmit} className="p-6 space-y-4">
 
                         {/* Avatar Upload */}
                         <div className="flex items-center gap-4 pb-2">
