@@ -1240,24 +1240,23 @@ useEffect(() => {
             <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-4 shrink-0 z-40 relative">
                 <div className="flex items-center gap-3">
                     {currentUser.role === Role.SALES ? (
-                        /* SALES: avatar + name + designation + online status */
-                        <div className="flex items-center gap-2.5">
-                            {/* Avatar with online dot */}
+                        /* SALES: avatar + name + designation + online status — always visible */
+                        <div className="flex items-center gap-3">
+                            {/* Avatar with green online dot */}
                             <div className="relative shrink-0">
                                 {currentUser.avatar ? (
-                                    <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border-2 border-amber-300 shadow-sm" />
+                                    <img src={currentUser.avatar} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shadow-sm" />
                                 ) : (
-                                    <div className="w-9 h-9 rounded-full bg-amber-100 border-2 border-amber-300 flex items-center justify-center font-bold text-amber-700 text-sm">
+                                    <div className="w-10 h-10 rounded-full bg-amber-100 ring-2 ring-amber-400 flex items-center justify-center font-bold text-amber-700 text-sm">
                                         {currentUser.name.charAt(0)}
                                     </div>
                                 )}
-                                {/* Online indicator */}
-                                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
+                                <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
                             </div>
-                            {/* Name + designation */}
-                            <div className="hidden sm:block">
-                                <p className="text-sm font-bold text-slate-800 leading-none">{currentUser.name}</p>
-                                <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">
+                            {/* Name + designation — always shown */}
+                            <div>
+                                <p className="text-sm font-bold text-slate-900 leading-none">{currentUser.name}</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">
                                     {(currentUser as any).jobRole || 'Sales Representative'}
                                 </p>
                             </div>
