@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from './components/Toast';
 import { generateActivityId, generateTicketId } from './utils/idUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
