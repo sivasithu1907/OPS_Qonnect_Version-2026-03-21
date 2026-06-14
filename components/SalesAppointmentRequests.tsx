@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import {
   Plus, Search, X, Calendar, Clock, User as UserIcon,
   MapPin, Phone, FileText, Tag, ChevronDown, ChevronUp,
@@ -318,7 +319,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
       fetchRequests();
       onActivityCreated?.(); // refresh Activity Planner so linked activity disappears
     } catch (e: any) {
-      alert(e.message || 'Failed to delete request');
+      toast.error(e.message || 'Failed to delete request');
     } finally {
       setDeleting(false);
     }
