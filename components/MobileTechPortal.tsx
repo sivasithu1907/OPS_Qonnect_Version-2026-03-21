@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
+import { ChevronLeft, Search, X, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -404,6 +404,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   // --- 4-Tab navigation state ---
   const [activeTab, setActiveTab] = useState<'home' | 'carry' | 'history' | 'more'>('home');
+  const [jobSearch, setJobSearch] = useState('');
   
   // Date selector for Home tab
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -474,6 +475,22 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       // Future: filter by date
       return myJobs.filter(j => matchDate(j.date));
   }, [myJobs, completedJobs, selectedDate, isPastDate, todayKey]);
+
+  // Apply search filter to dateFilteredJobs
+  const searchedJobs = useMemo(() => {
+      if (!jobSearch.trim()) return dateFilteredJobs;
+      const term = jobSearch.toLowerCase();
+      return dateFilteredJobs.filter(j => {
+          const d = j.data as any;
+          const custName = (customers as any[]).find((cu: any) => cu.id === (d.customerId || d.customer_id))?.name || d.customerName || '';
+          return (
+              (d.id || '').toLowerCase().includes(term) ||
+              custName.toLowerCase().includes(term) ||
+              (d.category || d.type || '').toLowerCase().includes(term) ||
+              (d.phoneNumber || d.phone_number || '').includes(term)
+          );
+      });
+  }, [dateFilteredJobs, jobSearch, customers]);
 
   // Carry forward jobs
   const carryForwardJobs = useMemo(() => {
@@ -838,7 +855,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 flex items-center gap-3">
                                             <div className="p-2 bg-blue-50 rounded-lg"><Briefcase size={18} className="text-blue-600" /></div>
                                             <div>
-                                                <div className="text-xl font-bold text-slate-900">{dateFilteredJobs.length}</div>
+                                                <div className="text-xl font-bold text-slate-900">{searchedJobs.length}</div>
                                                 <div className="text-[9px] font-bold text-slate-400 uppercase">{isPastDate ? 'Completed' : 'Total Jobs'}</div>
                                             </div>
                                         </div>
@@ -869,13 +886,30 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                         const inProgressIds = new Set(inProgressJobs.map(j => j.data.id));
                                         const showingInProgress = !isPastDate && !isFutureDate && inProgressJobs.length > 0;
                                         const scheduleJobs = showingInProgress 
-                                            ? dateFilteredJobs.filter(j => !inProgressIds.has(j.data.id))
-                                            : dateFilteredJobs;
+                                            ? searchedJobs.filter(j => !inProgressIds.has(j.data.id))
+                                            : searchedJobs;
                                         return (
                                             <>
+                                                {/* Job Search Bar */}
+                                                <div className="relative mb-3">
+                                                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                    <input
+                                                        type="text"
+                                                        value={jobSearch}
+                                                        onChange={e => setJobSearch(e.target.value)}
+                                                        placeholder="Search jobs, client, category..."
+                                                        className="w-full bg-slate-100 rounded-xl pl-8 pr-8 py-2 text-xs outline-none focus:bg-white focus:ring-2 focus:ring-slate-300"
+                                                    />
+                                                    {jobSearch && (
+                                                        <button onClick={() => setJobSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                                            <X size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 <div className="flex items-center justify-between px-1">
                                                     <p className="text-xs font-bold text-slate-500 uppercase">
                                                         {isPastDate ? 'Completed on this day' : selectedDate === todayKey ? "Today's Schedule" : 'Planned'}
+                                                        {jobSearch && <span className="ml-1 text-blue-500">({searchedJobs.length} result{searchedJobs.length !== 1 ? 's' : ''})</span>}
                                                     </p>
                                                     <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{scheduleJobs.length}</span>
                                                 </div>
