@@ -19,7 +19,12 @@ const TVDisplayMode: React.FC = () => {
 
   const fetchTVData = async () => {
     try {
-      const res = await fetch('/api/tv-data');
+      // TV_TOKEN: read from URL hash (#tv:TOKEN) or localStorage
+      // Example URL: https://qonnectops.duckdns.org/#tv:mysecrettoken
+      const hash = window.location.hash; // e.g. '#tv:mysecrettoken'
+      const tvToken = hash.includes(':') ? hash.split(':')[1] : localStorage.getItem('tv_token') || '';
+      const url = tvToken ? `/api/tv-data?token=${encodeURIComponent(tvToken)}` : '/api/tv-data';
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setTickets(data.tickets || []);
