@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import { Ticket, Activity, Technician, Site } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
