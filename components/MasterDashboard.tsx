@@ -1,623 +1,1488 @@
-import React, { useState, useMemo } from 'react';
-import { Ticket, Activity, Technician, Customer, TicketStatus } from '../types';
-import {
-  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid
-} from 'recharts';
-import {
-  Search, Eye, X, Clock, User, MapPin, Phone, Camera, Download,
-  ChevronDown, Filter, FileText, FileSpreadsheet
-} from 'lucide-react';
 
-interface MasterDashboardProps {
-  tickets: Ticket[];
+import React, { useState, useEffect, useMemo } from 'react';
+import toast from 'react-hot-toast';
+import { Activity, Team, Site, Customer, ActivityStatus, Priority, ActivityType, Technician, ServiceCategory, Role } from '../types';
+import { 
+  Calendar, List, Layout, Plus, Search, Filter, Clock, 
+  MoreHorizontal, ChevronLeft, ChevronRight, User, MapPin, 
+  CheckCircle2, AlertCircle, X, Save, BriefcaseBusiness, Link as LinkIcon, Home
+} from 'lucide-react';
+import CustomerSelector from './CustomerSelector';
+import { getActivityStatusLabel } from '../constants';
+
+interface PlanningModuleProps {
   activities: Activity[];
-  technicians: Technician[];
+  teams: Team[]; 
+  sites: Site[];
   customers: Customer[];
+  technicians?: Technician[];
+  onAddActivity: (activity: Omit<Activity, 'id' | 'reference' | 'createdAt' | 'updatedAt'>) => void;
+  onUpdateActivity: (activity: Activity) => void;
+  onDeleteActivity: (id: string) => void;
+  onAddCustomer?: (customer: Customer) => Promise<Customer | null> | void;
+  isMobile?: boolean;
+  initialActivityId?: string | null;
+  onClearInitialActivity?: () => void;
+  currentUserId?: string; // For self-assign logic
+  isSaving?: boolean;     // Prevents double-submit
+  currentUserRole?: Role; // For permission-based UI
 }
 
-const showPhotoLightbox = (src: string) => {
-  const ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';
-  ov.onclick = () => ov.remove();
-  const im = document.createElement('img');
-  im.src = src;
-  im.style.cssText = 'max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';
-  const cl = document.createElement('div');
-  cl.textContent = '\u2715';
-  cl.style.cssText = 'position:absolute;top:20px;right:24px;color:white;font-size:28px;font-weight:bold;cursor:pointer;background:rgba(0,0,0,0.5);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center';
-  ov.appendChild(im); ov.appendChild(cl); document.body.appendChild(ov);
-};
-
-const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#06b6d4', '#f97316'];
-
-// Qatar work week helpers
-const getQatarWeekStart = (): Date => {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun, 6=Sat
-  const diff = day === 6 ? 0 : day + 1; // Sat=0 offset, Sun=2, Mon=3...
-  const sat = new Date(now);
-  sat.setDate(sat.getDate() - diff);
-  sat.setHours(0, 0, 0, 0);
-  return sat;
-};
-
-const UNIFIED_CATEGORIES = ['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'];
-const ACTIVITY_TYPES = ['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'];
-
-const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, technicians, customers }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'tickets' | 'activities'>('all');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedActTypes, setSelectedActTypes] = useState<string[]>([]);
-  const [assignedFilter, setAssignedFilter] = useState('ALL');
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all'>('month');
-  const [previewItem, setPreviewItem] = useState<any>(null);
-  const [showExport, setShowExport] = useState(false);
-  const [showCatDropdown, setShowCatDropdown] = useState(false);
-  const [showActTypeDropdown, setShowActTypeDropdown] = useState(false);
-
-  // Export state
-  const [exportFormat, setExportFormat] = useState<'pdf' | 'excel'>('pdf');
-  const [exportType, setExportType] = useState<'all' | 'tickets' | 'activities'>('all');
-  const [exportDateStart, setExportDateStart] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); });
-  const [exportDateEnd, setExportDateEnd] = useState(() => new Date().toISOString().slice(0, 10));
-  const [exportColumns, setExportColumns] = useState<string[]>(['date', 'type', 'client', 'category', 'status', 'leadEngineer', 'description']);
-
-  const allEngineers = useMemo(() => {
-    const ids = new Set<string>();
-    tickets.forEach(t => { if (t.assignedTechId) ids.add(t.assignedTechId); });
-    activities.forEach(a => { if (a.leadTechId) ids.add(a.leadTechId); if ((a as any).primaryEngineerId) ids.add((a as any).primaryEngineerId); });
-    const internal = Array.from(ids).map(id => technicians.find(t => t.id === id)).filter(Boolean) as any[];
-    // Add freelancer Field Engineers
-    const flNames = new Set<string>();
-    activities.forEach((a: any) => {
-        ((a as any).freelancers || []).forEach((fl: any) => {
-            if (fl.role === 'FIELD_ENGINEER' && fl.name && !flNames.has(fl.name)) {
-                flNames.add(fl.name);
-            }
-        });
-    });
-    const freelancerEntries = Array.from(flNames).map(name => ({ id: 'FL:' + name, name: name + ' (FL)', isFreelancer: true }));
-    return [...internal, ...freelancerEntries];
-  }, [tickets, activities, technicians]);
-
-  // Normalize all jobs
-  const allJobs = useMemo(() => {
-    const now = new Date();
-    const todayStr = now.toDateString();
-    const qatarWeekStart = getQatarWeekStart();
-    const monthAgo = new Date(now.getTime() - 30 * 86400000);
-
-    const ticketJobs = tickets.map(t => {
-      // Use completedAt for RESOLVED, updatedAt for CARRY_FORWARD, createdAt otherwise
-      const workDate = (t.status === 'RESOLVED' && (t as any).completedAt) ? (t as any).completedAt
-        : (t.status === 'CARRY_FORWARD' && t.updatedAt) ? t.updatedAt : t.createdAt;
-      return {
-        id: t.id, kind: 'ticket' as const, reference: t.id,
-        title: t.customerName || 'Unknown', subtitle: t.category,
-        type: t.type || 'Under Warranty', category: t.category,
-        activityType: '', status: t.status, priority: t.priority,
-        date: new Date(workDate),
-        dateLabel: new Date(workDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }),
-        techId: t.assignedTechId,
-        techName: technicians.find(tc => tc.id === t.assignedTechId)?.name || 'Unassigned',
-        customerId: t.customerId, raw: t,
-      };
-    });
-
-    const activityJobs = activities.map(a => {
-      const cust = customers.find(c => c.id === a.customerId);
-      const workDate = (a.status === 'DONE' && (a as any).completedAt) ? (a as any).completedAt
-        : (a.status === 'CARRY_FORWARD' && a.updatedAt) ? a.updatedAt : (a.plannedDate || a.createdAt);
-      return {
-        id: a.id, kind: 'activity' as const, reference: a.reference,
-        title: cust?.name || 'Unknown', subtitle: a.type,
-        type: (a as any).serviceCategory || 'ELV Systems', category: (a as any).serviceCategory || a.type,
-        activityType: a.type || '', status: a.status, priority: a.priority,
-        date: new Date(workDate),
-        dateLabel: new Date(workDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }),
-        techId: (a as any).primaryEngineerId || a.leadTechId,
-        techName: (() => {
-            const internalName = technicians.find(tc => tc.id === ((a as any).primaryEngineerId || a.leadTechId))?.name;
-            if (internalName) return internalName;
-            // Check freelancers — use FE freelancer name if no internal engineer
-            const feFreelancer = ((a as any).freelancers || []).find((fl: any) => fl.role === 'FIELD_ENGINEER');
-            if (feFreelancer) return `${feFreelancer.name} (FL)`;
-            const anyFreelancer = ((a as any).freelancers || [])[0];
-            if (anyFreelancer) return `${anyFreelancer.name} (FL)`;
-            return 'Unassigned';
-        })(),
-        customerId: a.customerId, raw: a,
-      };
-    });
-
-    let combined = [...ticketJobs, ...activityJobs];
-
-    // Date filter — Qatar week = Saturday to Thursday, cap at today for non-'all'
-    if (dateRange === 'today') combined = combined.filter(j => j.date.toDateString() === todayStr);
-    else if (dateRange === 'week') combined = combined.filter(j => j.date >= qatarWeekStart && j.date <= now);
-    else if (dateRange === 'month') combined = combined.filter(j => j.date >= monthAgo && j.date <= now);
-
-    if (typeFilter === 'tickets') combined = combined.filter(j => j.kind === 'ticket');
-    else if (typeFilter === 'activities') combined = combined.filter(j => j.kind === 'activity');
-    if (statusFilter !== 'ALL') combined = combined.filter(j => j.status === statusFilter);
-
-    // Multi-select category filter
-    if (selectedCategories.length > 0) combined = combined.filter(j =>
-      selectedCategories.some(c => j.category === c || j.subtitle === c || j.type === c)
-    );
-    // Activity type filter
-    if (selectedActTypes.length > 0) combined = combined.filter(j =>
-      j.kind === 'ticket' || selectedActTypes.some(t => j.subtitle?.toLowerCase() === t.toLowerCase() || j.activityType?.toLowerCase() === t.toLowerCase())
-    );
-
-    if (assignedFilter !== 'ALL') {
-      if (assignedFilter.startsWith('FL:')) {
-        // Freelancer filter — match by name
-        const flName = assignedFilter.replace('FL:', '') + ' (FL)';
-        combined = combined.filter(j => j.techName === flName);
-      } else {
-        combined = combined.filter(j => j.techId === assignedFilter);
-      }
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      combined = combined.filter(j =>
-        j.reference.toLowerCase().includes(q) || j.title.toLowerCase().includes(q) ||
-        j.subtitle.toLowerCase().includes(q) || j.techName.toLowerCase().includes(q)
-      );
-    }
-
-    // Sort: most recently worked on first (completedAt > updatedAt > date)
-    return combined.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [tickets, activities, technicians, customers, searchQuery, statusFilter, typeFilter, selectedCategories, selectedActTypes, assignedFilter, dateRange]);
-
-  const metrics = useMemo(() => {
-    const all = allJobs;
-    return {
-      total: all.length,
-      active: all.filter(j => ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED', 'ASSIGNED'].includes(j.status)).length,
-      planned: all.filter(j => ['PLANNED', 'NEW', 'OPEN'].includes(j.status)).length,
-      completed: all.filter(j => ['DONE', 'RESOLVED'].includes(j.status)).length,
-      carryForward: all.filter(j => j.status === 'CARRY_FORWARD').length,
-      cancelled: all.filter(j => j.status === 'CANCELLED').length,
-    };
-  }, [allJobs]);
-
-  const statusPieData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    allJobs.forEach(j => { counts[j.status] = (counts[j.status] || 0) + 1; });
-    return Object.entries(counts).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value }));
-  }, [allJobs]);
-
-  const engineerBarData = useMemo(() => {
-    const counts: Record<string, { name: string, tickets: number, activities: number }> = {};
-    allJobs.forEach(j => {
-      if (!counts[j.techName]) counts[j.techName] = { name: j.techName, tickets: 0, activities: 0 };
-      if (j.kind === 'ticket') counts[j.techName].tickets++;
-      else counts[j.techName].activities++;
-    });
-    return Object.values(counts).sort((a, b) => (b.tickets + b.activities) - (a.tickets + a.activities)).slice(0, 8);
-  }, [allJobs]);
-
-  const velocityData = useMemo(() => {
-    const days: Record<string, { date: string, created: number, completed: number }> = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-      days[key] = { date: key, created: 0, completed: 0 };
-    }
-    allJobs.forEach(j => {
-      const key = j.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-      if (days[key]) days[key].created++;
-      const completedAt = (j.raw as any).completedAt;
-      if (completedAt) {
-        const ck = new Date(completedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-        if (days[ck]) days[ck].completed++;
-      }
-    });
-    return Object.values(days);
-  }, [allJobs]);
-
-  const statusColors: Record<string, string> = {
-    'NEW': 'bg-purple-100 text-purple-700', 'OPEN': 'bg-blue-100 text-blue-700',
-    'PLANNED': 'bg-amber-100 text-amber-700', 'ASSIGNED': 'bg-indigo-100 text-indigo-700',
-    'ON_MY_WAY': 'bg-cyan-100 text-cyan-700', 'ARRIVED': 'bg-indigo-100 text-indigo-700',
-    'IN_PROGRESS': 'bg-blue-100 text-blue-700', 'DONE': 'bg-emerald-100 text-emerald-700',
-    'RESOLVED': 'bg-emerald-100 text-emerald-700', 'CARRY_FORWARD': 'bg-orange-100 text-orange-700',
-    'CANCELLED': 'bg-slate-100 text-slate-500',
+const PlanningModule: React.FC<PlanningModuleProps> = ({ 
+  activities, sites, customers, technicians = [],
+  onAddActivity, onUpdateActivity, onDeleteActivity, onAddCustomer = (_: Customer) => {},
+  isMobile = false,
+  initialActivityId,
+  onClearInitialActivity,
+  currentUserId,
+  isSaving = false,
+  currentUserRole
+}) => {
+  const showPhotoLightbox = (src: string) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer;';
+    overlay.onclick = () => overlay.remove();
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+    const close = document.createElement('div');
+    close.textContent = '✕';
+    close.style.cssText = 'position:absolute;top:20px;right:24px;color:white;font-size:28px;font-weight:bold;cursor:pointer;background:rgba(0,0,0,0.5);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;';
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
   };
 
-  const fmtDt = (iso: string) => iso ? new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-  const fmtTime = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) : '—';
-  const fmtDate = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>('kanban');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
+  const [showActOverride, setShowActOverride] = useState(false);
+  const [actOverrideTarget, setActOverrideTarget] = useState<Activity | null>(null);
+  const [actOverrideStatus, setActOverrideStatus] = useState('');
+  const [actOverrideStartedAt, setActOverrideStartedAt] = useState('');
+  const [actOverrideCompletedAt, setActOverrideCompletedAt] = useState('');
+  const [actOverrideNote, setActOverrideNote] = useState('');
+  
+  // Calendar week navigation state
+  const [calendarWeekStart, setCalendarWeekStart] = useState<Date>(() => {
+      const d = new Date();
+      // Qatar work week: Saturday to Friday
+      d.setDate(d.getDate() - ((d.getDay() + 1) % 7)); // Most recent Saturday
+      d.setHours(0, 0, 0, 0);
+      return d;
+  });
+  
+  // Mobile Tab State
+  const [mobileTab, setMobileTab] = useState<ActivityStatus>('PLANNED');
 
-  // Toggle multi-select helpers
-  const toggleCat = (cat: string) => setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
-  const toggleActType = (t: string) => setSelectedActTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+  // List View filter — kept at parent level so it survives parent re-renders
+  const [listFilter, setListFilter] = useState<string>('ALL');
 
-  // Export handler
-  const handleExport = () => {
-    // Build export data
-    let data = allJobs;
-    if (exportType === 'tickets') data = data.filter(j => j.kind === 'ticket');
-    else if (exportType === 'activities') data = data.filter(j => j.kind === 'activity');
-    
-    const es = new Date(exportDateStart); es.setHours(0,0,0,0);
-    const ee = new Date(exportDateEnd); ee.setHours(23,59,59,999);
-    data = data.filter(j => j.date >= es && j.date <= ee);
+  // Form State
+  const [plannedDatetime, setPlannedDatetime] = useState(''); // YYYY-MM-DDTHH:mm
+  const [durationState, setDurationState] = useState<{ val: string, unit: 'HOURS' | 'DAYS' }>({ val: '2', unit: 'HOURS' });
+  
+  // Customer Selector State
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  
+  // Location auto-fill state (controlled, populated from customer on select)
+  const [locationUrl, setLocationUrl] = useState('');
+  const [serviceCats, setServiceCats] = useState<string[]>([]);
+  const [selectedLeadTechId, setSelectedLeadTechId] = useState('');
 
-    const colMap: Record<string, { label: string, getValue: (j: any) => string }> = {
-      date: { label: 'Date', getValue: j => j.dateLabel },
-      type: { label: 'Type', getValue: j => j.kind === 'ticket' ? 'Ticket' : 'Activity' },
-      reference: { label: 'Reference', getValue: j => j.reference },
-      client: { label: 'Client', getValue: j => j.title },
-      category: { label: 'Category', getValue: j => j.subtitle || j.category },
-      status: { label: 'Status', getValue: j => j.status.replace(/_/g, ' ') },
-      priority: { label: 'Priority', getValue: j => j.priority },
-      leadEngineer: { label: 'Lead Engineer', getValue: j => j.techName },
-      technicalAssociate: { label: 'Technical Associate', getValue: j => {
-        const raw = j.raw; const ids = (raw as any).assistantTechIds || [];
-        return ids.map((id: string) => technicians.find(t => t.id === id)?.name || '').filter(Boolean).join(', ');
-      }},
-      salesLead: { label: 'Sales Lead', getValue: j => {
-        const slId = (j.raw as any).salesLeadId; return slId ? (technicians.find(t => t.id === slId)?.name || '') : '';
-      }},
-      description: { label: 'Description', getValue: j => (j.raw as any).description || (j.raw as any).notes || '' },
-      odooRef: { label: 'Odoo Ref', getValue: j => (j.raw as any).odooLink || '' },
-    };
-
-    const cols = exportColumns.map(id => colMap[id]).filter(Boolean);
-    if (cols.length === 0) { alert('Select at least one column'); return; }
-
-    if (exportFormat === 'excel') {
-      const headers = cols.map(c => c.label);
-      const rows = data.map(item => cols.map(c => `"${String(c.getValue(item)).replace(/"/g, '""')}"`).join(','));
-      const csv = [headers.join(','), ...rows].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `qonnect_${exportType}_${exportDateStart}_to_${exportDateEnd}.csv`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  // Sync serviceCats when editing activity changes
+  React.useEffect(() => {
+    if (editingActivity?.serviceCategory) {
+      setServiceCats(editingActivity.serviceCategory.split(', ').filter(Boolean));
     } else {
-      // PDF with branded layout
-      const s1 = document.createElement('script');
-      s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-      s1.onload = () => {
-        const s2 = document.createElement('script');
-        s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
-        s2.onload = () => {
-          try {
-            const { jsPDF } = (window as any).jspdf;
-            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-            const pw = (doc as any).internal.pageSize.getWidth();
-            const ph = (doc as any).internal.pageSize.getHeight();
-            const title = exportType === 'tickets' ? 'After-Sales Tickets Report' : exportType === 'activities' ? 'Operations Activity Report' : 'Combined Operations Report';
-
-            doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 24, 'F');
-            doc.setFontSize(16); doc.setTextColor(253, 187, 64); doc.text('QONNECT', 14, 14);
-            doc.setFontSize(12); doc.setTextColor(255, 255, 255); doc.text(title, pw - 14, 10, { align: 'right' });
-            doc.setFontSize(8); doc.setTextColor(148, 163, 184);
-            doc.text(`Period: ${exportDateStart} to ${exportDateEnd}  |  Records: ${data.length}  |  Generated: ${new Date().toLocaleString('en-GB', {timeZone:'Asia/Qatar'})}`, pw - 14, 17, { align: 'right' });
-            doc.setFillColor(253, 187, 64); doc.rect(0, 24, pw, 1, 'F');
-
-            (doc as any).autoTable({
-              startY: 30,
-              head: [cols.map(c => c.label)],
-              body: data.map(item => cols.map(c => String(c.getValue(item) ?? ''))),
-              styles: { fontSize: 7.5, cellPadding: 2.5, textColor: [30, 41, 59], lineColor: [226, 232, 240], lineWidth: 0.1 },
-              headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7 },
-              alternateRowStyles: { fillColor: [248, 250, 252] },
-              margin: { left: 10, right: 10, bottom: 16 },
-              didDrawPage: (d2: any) => {
-                if (d2.pageNumber > 1) {
-                  doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 18, 'F');
-                  doc.setFontSize(11); doc.setTextColor(253, 187, 64); doc.text('QONNECT', 14, 11);
-                  doc.setFontSize(8); doc.setTextColor(255, 255, 255); doc.text(title, pw - 14, 11, { align: 'right' });
-                  doc.setFillColor(253, 187, 64); doc.rect(0, 18, pw, 0.5, 'F');
-                }
-              }
-            });
-
-            const tp = (doc as any).internal.getNumberOfPages();
-            for (let i = 1; i <= tp; i++) {
-              doc.setPage(i);
-              doc.setFillColor(248, 250, 252); doc.rect(0, ph - 10, pw, 10, 'F');
-              doc.setFontSize(7); doc.setTextColor(100, 116, 139);
-              doc.text('Qonnect W.L.L.  |  qonnect.qa', 14, ph - 4);
-              doc.text(`Page ${i} of ${tp}`, pw - 14, ph - 4, { align: 'right' });
-            }
-            doc.save(`qonnect_${exportType}_${exportDateStart}_to_${exportDateEnd}.pdf`);
-          } catch (err) { console.error('PDF failed:', err); alert('PDF generation failed.'); }
-        };
-        document.head.appendChild(s2);
-      };
-      document.head.appendChild(s1);
+      setServiceCats([]);
     }
-    setShowExport(false);
-  };
+    setSelectedLeadTechId(editingActivity?.leadTechId || '');
+  }, [editingActivity]);
+  const [houseNumber, setHouseNumber] = useState('');
 
-  const exportPresetDate = (preset: string) => {
-    const now = new Date();
-    if (preset === 'today') { setExportDateStart(now.toISOString().slice(0, 10)); setExportDateEnd(now.toISOString().slice(0, 10)); }
-    else if (preset === 'week') { setExportDateStart(getQatarWeekStart().toISOString().slice(0, 10)); setExportDateEnd(now.toISOString().slice(0, 10)); }
-    else if (preset === 'month') { const m = new Date(now); m.setDate(1); setExportDateStart(m.toISOString().slice(0, 10)); setExportDateEnd(now.toISOString().slice(0, 10)); }
-  };
+  // Freelancers State (activity-level, no user record)
+  const [freelancers, setFreelancers] = useState<{ name: string; role: string; phone: string }[]>([]);
 
-  const EXPORT_COLUMNS = [
-    { id: 'date', label: 'Date' }, { id: 'type', label: 'Type' }, { id: 'client', label: 'Client' },
-    { id: 'category', label: 'Category' }, { id: 'status', label: 'Status' }, { id: 'description', label: 'Description' },
-    { id: 'salesLead', label: 'Sales Lead' }, { id: 'leadEngineer', label: 'Lead Engineer' },
-    { id: 'technicalAssociate', label: 'Technical Associate' }, { id: 'reference', label: 'Reference' },
-    { id: 'odooRef', label: 'Odoo Ref' }, { id: 'priority', label: 'Priority' },
+  // Controlled state for supporting engineers and assistant TAs (replaces defaultChecked)
+  const [supportingEngineerState, setSupportingEngineerState] = useState<string[]>([]);
+  const [assistantTechState, setAssistantTechState] = useState<string[]>([]);
+
+  // Controlled state for uncontrolled-by-default selects
+  const [activityType, setActivityType] = useState<string>('Installation');
+  const [activityPriority, setActivityPriority] = useState<string>('MEDIUM');
+  const [activityStatus, setActivityStatus] = useState<string>('PLANNED');
+  const [salesLeadIdState, setSalesLeadIdState] = useState<string>('');
+  const [descriptionState, setDescriptionState] = useState<string>('');
+  const [remarksState, setRemarksState] = useState<string>('');
+  const [odooLinkState, setOdooLinkState] = useState<string>('');
+
+  // Form validation error (shown inline above submit button)
+  const [formError, setFormError] = useState('');
+
+  // Reschedule modal state
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Activity | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+
+  // Delete confirmation modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Filter Active Staff Only
+  const teamLeads = technicians.filter(t => t.systemRole === Role.TEAM_LEAD && t.status !== 'LEAVE' && t.isActive !== false);
+  const fieldEngineers = technicians.filter(t => t.systemRole === Role.FIELD_ENGINEER && t.status !== 'LEAVE' && t.isActive !== false);
+  const assignableLeads = technicians.filter(t => (t.systemRole === Role.TEAM_LEAD || t.systemRole === Role.FIELD_ENGINEER) && t.status !== 'LEAVE' && t.isActive !== false);
+  const salesTeam = technicians.filter(t => t.level === 'SALES' && t.status !== 'LEAVE' && t.isActive !== false);
+  const technicalAssociates = technicians.filter(t => t.level === 'TECHNICAL_ASSOCIATE' && t.status !== 'LEAVE' && t.isActive !== false);
+
+  // Self Assign Logic for Team Lead
+  const currentUser = technicians.find(t => t.id === currentUserId);
+  const canSelfAssign = currentUser?.systemRole === Role.TEAM_LEAD;
+
+  // Date Constants
+  const currentYear = new Date().getFullYear();
+  const YEARS = Array.from({ length: 5 }, (_, i) => currentYear + i);
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June', 
+    'July', 'August', 'September', 'October', 'November', 'December'
   ];
+  const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
 
-  return (
-    <div className="h-full flex flex-col overflow-hidden bg-slate-50">
-      {/* Header */}
-      <div className="px-6 pt-5 pb-4 bg-white border-b border-slate-200 shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-black text-slate-900">Master Dashboard</h1>
-            <p className="text-slate-500 text-sm">Complete operational overview</p>
+  // Handle Initial ID from Navigation
+  useEffect(() => {
+      if (initialActivityId) {
+          const act = activities.find(a => a.id === initialActivityId);
+          if (act) {
+              setEditingActivity(act);
+              setIsModalOpen(true);
+          }
+          // Clear ID to prevent reopen loops if needed, though parent handles unmount usually
+          if (onClearInitialActivity) onClearInitialActivity();
+      }
+  }, [initialActivityId, activities]);
+
+  // Initialize ALL form state when modal opens — ensures clean slate every time
+  useEffect(() => {
+    if (isModalOpen) {
+        setFormError(''); // Clear any previous validation error
+        if (editingActivity) {
+            const d = new Date(editingActivity.plannedDate);
+            const pad = (n: number) => String(n).padStart(2,'0');
+            setPlannedDatetime(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+            setDurationState({
+                val: editingActivity.durationHours.toString(),
+                unit: editingActivity.durationUnit || 'HOURS'
+            });
+            setSelectedCustomerId(editingActivity.customerId || '');
+            setLocationUrl(editingActivity.locationUrl || '');
+            setHouseNumber(editingActivity.houseNumber || '');
+            setFreelancers((editingActivity as any).freelancers || []);
+            // Controlled state for formerly-uncontrolled fields
+            setActivityType(editingActivity.type || 'Installation');
+            setActivityPriority(editingActivity.priority || 'MEDIUM');
+            setActivityStatus(editingActivity.status || 'PLANNED');
+            setSalesLeadIdState(editingActivity.salesLeadId || '');
+            setDescriptionState(editingActivity.description || '');
+            setRemarksState((editingActivity as any).remarks || '');
+            setOdooLinkState(editingActivity.odooLink || '');
+            setSupportingEngineerState((editingActivity as any).supportingEngineerIds || []);
+            setAssistantTechState(editingActivity.assistantTechIds || []);
+        } else {
+            // Create mode — clean slate
+            const now = new Date();
+            now.setDate(now.getDate() + 1);
+            now.setHours(9, 0, 0, 0);
+            setPlannedDatetime(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T09:00`);
+            setDurationState({ val: '2', unit: 'HOURS' });
+            setSelectedCustomerId('');
+            setLocationUrl('');
+            setHouseNumber('');
+            setFreelancers([]);
+            setActivityType('Installation');
+            setActivityPriority('MEDIUM');
+            setActivityStatus('PLANNED');
+            setSalesLeadIdState('');
+            setDescriptionState('');
+            setRemarksState('');
+            setOdooLinkState('');
+            setSupportingEngineerState([]);
+            setAssistantTechState([]);
+            setServiceCats([]);
+            setSelectedLeadTechId('');
+        }
+    }
+  }, [isModalOpen, editingActivity]);
+
+  const getDaysInMonth = (year: string, month: string) => {
+      if (!year || !month) return 31;
+      return new Date(parseInt(year), parseInt(month) + 1, 0).getDate();
+  };
+
+  const getDisplayLocation = (act: Activity) => {
+      const site = sites.find(s => s.id === act.siteId);
+      if (site) return site.name;
+      // If houseNumber is a URL, don't show raw URL
+      if (act.houseNumber && !act.houseNumber.startsWith('http')) return `House: ${act.houseNumber}`;
+      const cust = customers.find(c => c.id === act.customerId);
+      if (cust?.buildingNumber && !cust.buildingNumber.startsWith('http')) return `Bldg: ${cust.buildingNumber}`;
+      if (cust?.name) return cust.name;
+      if (act.locationUrl || act.houseNumber?.startsWith('http') || cust?.address?.startsWith('http')) return 'Map linked';
+      return 'N/A';
+  };
+
+  // Determine available associates — ONLY block on TIME OVERLAP, allow multiple jobs per day
+  const selectedDateString = useMemo(() => {
+      if (!plannedDatetime) return '';
+      return new Date(plannedDatetime).toDateString();
+  }, [plannedDatetime]);
+
+  const availableAssociates = useMemo(() => {
+      // If no date/time selected yet, show all TAs (no filtering)
+      if (!plannedDatetime) return technicalAssociates;
+      
+      const newStart = new Date(plannedDatetime).getTime();
+      const durationMs = Number(durationState.val) * (durationState.unit === 'DAYS' ? 86400000 : 3600000);
+      const newEnd = newStart + durationMs;
+      
+      return technicalAssociates.filter(tech => {
+          // Check EVERY activity to see if this TA has a TIME CONFLICT
+          // A conflict means: the TA is assigned to another job AND the time ranges overlap
+          // NO date-only blocking — multiple jobs per day are fine if times don't overlap
+          const hasTimeConflict = activities.some(act => {
+              // Skip the activity being edited
+              if (editingActivity && act.id === editingActivity.id) return false;
+              // Skip completed/cancelled/carry-forwarded — they're done
+              if (['CANCELLED'].includes(act.status)) return false;
+              
+              // Is this TA assigned to this activity in ANY role?
+              const isAssigned = 
+                  (act.assistantTechIds || []).includes(tech.id) ||
+                  ((act as any).supportingEngineerIds || []).includes(tech.id) ||
+                  (act as any).primaryEngineerId === tech.id ||
+                  act.leadTechId === tech.id;
+              
+              if (!isAssigned) return false;
+              
+              // Now check TIME OVERLAP (this is the ONLY blocking criterion)
+              const actStart = new Date(act.plannedDate).getTime();
+              const actDuration = (act.durationHours || 2) * 3600000;
+              const actEnd = actStart + actDuration;
+              
+              // For IN_PROGRESS jobs: they started but haven't ended — treat as blocking until estimated end
+              // Use startedAt if available for more accurate timing
+              const realStart = (act as any).startedAt ? new Date((act as any).startedAt).getTime() : actStart;
+              const realEnd = (act as any).completedAt ? new Date((act as any).completedAt).getTime() : actEnd;
+              
+              // Overlap check: newStart < existingEnd AND newEnd > existingStart
+              return newStart < realEnd && newEnd > realStart;
+          });
+          
+          return !hasTimeConflict;
+      });
+  }, [technicalAssociates, activities, editingActivity, plannedDatetime, durationState]);
+
+  // --- Handlers ---
+  const handleNewCustomer = async (cust: Customer): Promise<Customer | null> => {
+      try {
+          // onAddCustomer returns the DB-created customer with the real server-assigned ID
+          const dbCustomer = await (onAddCustomer as (c: Customer) => Promise<Customer | null>)(cust);
+          if (dbCustomer?.id) {
+              setSelectedCustomerId(dbCustomer.id);
+              return dbCustomer;
+          }
+          // Fallback: use temp ID if DB didn't return a customer (should not happen)
+          setSelectedCustomerId(cust.id);
+          return cust;
+      } catch (err) {
+          console.error('handleNewCustomer error:', err);
+          // Propagate error so CustomerSelector can show it (modal stays open)
+          throw err;
+      }
+  };
+
+  // --- Shared Activity Card (Mobile/Kanban) ---
+  const ActivityCard: React.FC<{ act: Activity, isMobileCard?: boolean }> = ({ act, isMobileCard = false }) => {
+        const customer = customers.find(c => c.id === act.customerId);
+        // Note: leadTechId now points to a FIELD_ENGINEER or Self-Assigned Team Lead
+        const lead = technicians.find(t => t.id === act.leadTechId);
+        const isDelayed = (act.escalationLevel || 0) > 0;
+        
+        return (
+          <div 
+            onClick={() => setViewingActivity(act)} 
+            className={`bg-white rounded-lg shadow-sm border cursor-pointer hover:shadow-md transition-all group ${
+                isDelayed ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'
+            } ${isMobileCard ? 'p-4 mb-3 mx-1' : 'p-4'}`}
+          >
+             <div className="flex justify-between items-start mb-2">
+                <span className="font-mono text-[10px] text-slate-400">{act.reference}</span>
+                <div className="flex gap-1">
+                   {isDelayed && <span className="bg-red-500 text-white text-[9px] px-1 rounded font-bold">L{act.escalationLevel}</span>}
+                   <MoreHorizontal size={14} className="text-slate-300 group-hover:text-emerald-600"/>
+                </div>
+             </div>
+             <h4 className="font-bold text-slate-800 text-sm mb-1">{act.type}</h4>
+             {act.serviceCategory && <p className="text-[10px] text-indigo-600 mb-1">{act.serviceCategory}</p>}
+             <p className="text-xs text-slate-500 mb-3 line-clamp-2">{act.description}</p>
+             
+             <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                   <User size={12} className="text-slate-400" />
+                   <span className="truncate font-medium">{customer?.name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                   <MapPin size={12} className="text-slate-400" />
+                   <span className="truncate">{getDisplayLocation(act)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                   <Clock size={12} className="text-slate-400" />
+                   <span>{new Date(act.plannedDate).toLocaleDateString()}</span>
+                </div>
+             </div>
           </div>
-          <button onClick={() => setShowExport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors">
-            <Download size={14} /> Export Data
+        );
+  };
+
+  // --- View Components ---
+
+  const ListView = () => {
+  // listFilter state is at parent component level — shared + stable across re-renders
+  const statusFilters = ['ALL', 'PLANNED', 'ON_MY_WAY', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
+  const filteredActs = listFilter === 'ALL'
+    ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
+    : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+      <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50/80 overflow-x-auto">
+        {statusFilters.map(f => (
+          <button key={f} onClick={() => setListFilter(f)}
+            className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${listFilter === f ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
+            {f.replace('_',' ')} ({f === 'ALL' ? activities.length : activities.filter(a => a.status === f).length})
           </button>
-        </div>
+        ))}
+      </div>
+      <div className="overflow-x-auto flex-1 overflow-y-auto">
+      <table className="w-full text-sm text-left table-fixed">
+        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
+          <tr>
+            <th className="px-4 py-4 w-[10%]">Ref</th>
+            <th className="px-4 py-4 w-[10%]">Type</th>
+            <th className="px-4 py-4 w-[24%]">Customer / Location</th>
+            <th className="px-4 py-4 w-[8%]">Priority</th>
+            <th className="px-4 py-4 w-[10%]">Status</th>
+            <th className="px-4 py-4 w-[12%]">Planned</th>
+            <th className="px-4 py-4 w-[18%]">Resources</th>
+            <th className="px-4 py-4 text-right w-[8%]">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {filteredActs.map(act => {
+            const customer = customers.find(c => c.id === act.customerId);
+            const lead = technicians.find(t => t.id === act.leadTechId);
+            const salesLead = technicians.find(t => t.id === act.salesLeadId);
+            const salesLeadDisplayName = salesLead?.name || (act as any).salesLeadName || '';
+            const customerDisplayName = customer?.name || (act as any).customerName || 'Unknown';
+            const helpersCount = act.assistantTechIds?.length || 0;
+            const isDelayed = (act.escalationLevel || 0) > 0;
 
-        {/* KPI Strip */}
-        <div className="grid grid-cols-6 gap-3 mb-4">
-          {[
-            { label: 'Total', value: metrics.total, color: 'bg-slate-900 text-white', filter: 'ALL' },
-            { label: 'Active', value: metrics.active, color: 'bg-blue-50 text-blue-700 border border-blue-200', filter: 'IN_PROGRESS' },
-            { label: 'Planned', value: metrics.planned, color: 'bg-amber-50 text-amber-700 border border-amber-200', filter: 'PLANNED' },
-            { label: 'Completed', value: metrics.completed, color: 'bg-emerald-50 text-emerald-700 border border-emerald-200', filter: 'DONE' },
-            { label: 'Carry Fwd', value: metrics.carryForward, color: 'bg-orange-50 text-orange-700 border border-orange-200', filter: 'CARRY_FORWARD' },
-            { label: 'Cancelled', value: metrics.cancelled, color: 'bg-slate-50 text-slate-500 border border-slate-200', filter: 'CANCELLED' },
-          ].map(kpi => (
-            <button key={kpi.label} onClick={() => setStatusFilter(statusFilter === kpi.filter ? 'ALL' : kpi.filter)}
-              className={`p-3 rounded-xl text-center transition-all hover:shadow-md ${statusFilter === kpi.filter ? 'ring-2 ring-slate-900 shadow-md scale-[1.02]' : ''} ${kpi.color}`}>
-              <div className="text-xl font-black">{kpi.value}</div>
-              <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">{kpi.label}</div>
-            </button>
-          ))}
-        </div>
+            return (
+              <tr key={act.id} className={`hover:bg-slate-50 group ${isDelayed ? 'bg-red-50/30' : ''}`}>
+                <td className="px-4 py-4 font-mono text-xs text-slate-500">
+                    <div className="flex items-center gap-2">
+                        {act.reference}
+                        {isDelayed && <AlertCircle size={12} className="text-red-500" />}
+                    </div>
+                    {act.odooLink && (
+                        <a href={act.odooLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] text-purple-600 hover:underline mt-1">
+                            <LinkIcon size={10} /> Odoo
+                        </a>
+                    )}
+                </td>
+                <td className="px-4 py-4 font-medium text-slate-800">
+                    {act.type}
+                    {act.serviceCategory && <div className="text-[10px] text-slate-500 font-normal">{act.serviceCategory}</div>}
+                </td>
+                <td className="px-4 py-4">
+                  <div className="font-medium text-slate-900 truncate">{customerDisplayName}</div>
+                  <div className="text-xs text-slate-500 flex items-center gap-1 truncate">
+                      <MapPin size={10} className="shrink-0" /> {getDisplayLocation(act)}
+                  </div>
+                  {act.locationUrl && (
+                      <a href={act.locationUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[9px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
+                          <MapPin size={8} className="shrink-0" /> View Map
+                      </a>
+                  )}
+                </td>
+                <td className="px-4 py-4">
+                  <span className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                    act.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
+                    act.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                    'bg-slate-50 text-slate-600 border-slate-200'
+                  }`}>{act.priority}</span>
+                </td>
+                <td className="px-4 py-4">
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                    act.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                    act.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                    act.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                    act.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>{getActivityStatusLabel(act.status)}</span>
+                </td>
+                <td className="px-4 py-4 text-slate-600">
+                  <div className="flex items-center gap-1">
+                      <Calendar size={12} /> {new Date(act.plannedDate).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-slate-400 mt-1">
+                      <Clock size={12} /> {new Date(act.plannedDate).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                     <div className="flex flex-col gap-1">
+                       {lead ? (
+                         <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"/>
+                              <span className="font-medium">{lead.name}</span>
+                         </div>
+                       ) : <span className="text-slate-400 italic text-[10px]">No Eng.</span>}
+                       
+                       {salesLeadDisplayName && (
+                         <div className="flex items-center gap-2 text-xs text-indigo-600">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500"/>
+                            <span>{salesLeadDisplayName.split(' ')[0]} (Sales)</span>
+                         </div>
+                       )}
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Status Distribution</h3>
-            <ResponsiveContainer width="100%" height={140}>
-              <PieChart><Pie data={statusPieData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2} dataKey="value">
-                {statusPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-              </Pie><RTooltip /></PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {statusPieData.map((d, i) => (
-                <span key={d.name} className="text-[8px] flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />{d.name} ({d.value})
-                </span>
+                       {helpersCount > 0 && <span className="text-[10px] text-slate-500 pl-4">+ {helpersCount} Assts.</span>}
+
+                       {((act as any).freelancers || []).length > 0 && (
+                         <div className="flex flex-wrap gap-1 mt-0.5">
+                           {(act as any).freelancers.map((fl: any, i: number) => (
+                             <span key={i} className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200 font-medium">
+                               {fl.name} <span className="text-[7px] opacity-60">FL</span>
+                             </span>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                </td>
+                <td className="px-4 py-4 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <button onClick={() => setViewingActivity(act)} className="text-slate-400 hover:text-blue-600 font-medium text-xs">View</button>
+                    <span className="text-slate-200">|</span>
+                    <button onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} className="text-slate-400 hover:text-emerald-600 font-medium text-xs">Edit</button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  );
+};
+
+  const KanbanView = () => {
+    const columns: ActivityStatus[] = ['PLANNED', 'ON_MY_WAY', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
+    
+    return (
+      <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-14rem)]">
+        {columns.map(status => (
+          <div key={status} className="flex-1 min-w-[280px] flex flex-col bg-slate-100/50 rounded-xl border border-slate-200/60">
+            <div className={`p-4 border-b border-slate-200 flex justify-between items-center ${
+              status === 'PLANNED' ? 'bg-amber-50/50' : 
+              status === 'IN_PROGRESS' ? 'bg-blue-50/50' : 
+              status === 'CARRY_FORWARD' ? 'bg-orange-50/50' :
+              status === 'DONE' ? 'bg-emerald-50/50' : 'bg-slate-50'
+            }`}>
+              <h3 className="font-bold text-slate-700 text-sm">{getActivityStatusLabel(status)}</h3>
+              <span className="bg-white px-2 py-0.5 rounded text-xs font-bold text-slate-400 border border-slate-200">
+                {activities.filter(a => a.status === status).length}
+              </span>
+            </div>
+            
+            <div className="p-3 flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+              {activities.filter(a => a.status === status).map(act => (
+                  <ActivityCard key={act.id} act={act} />
               ))}
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Jobs by Engineer</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={engineerBarData} layout="vertical" margin={{ left: 0, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 9 }} />
-                <RTooltip /><Bar dataKey="activities" stackId="a" fill="#3b82f6" name="Activities" /><Bar dataKey="tickets" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Tickets" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">7-Day Velocity</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={velocityData} margin={{ left: -10 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 9 }} /><YAxis tick={{ fontSize: 9 }} />
-                <RTooltip /><Bar dataKey="created" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Created" /><Bar dataKey="completed" fill="#10b981" radius={[4, 4, 0, 0]} name="Completed" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        ))}
+      </div>
+    );
+  };
 
-        {/* Filters Row */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 relative min-w-[200px]">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search reference, client, engineer..."
-              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white" />
-          </div>
-          {/* Type */}
-          <div className="flex bg-slate-100 rounded-xl p-0.5 shrink-0">
-            {(['all', 'tickets', 'activities'] as const).map(v => (
-              <button key={v} onClick={() => setTypeFilter(v)} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${typeFilter === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
-                {v === 'all' ? 'All' : v === 'tickets' ? 'Tickets' : 'Activities'}
-              </button>
-            ))}
-          </div>
-          {/* Category multi-select */}
-          <div className="relative">
-            <button onClick={() => { setShowCatDropdown(!showCatDropdown); setShowActTypeDropdown(false); }}
-              className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
-              {selectedCategories.length === 0 ? 'All Categories' : `${selectedCategories.length} selected`} <ChevronDown size={12} />
-            </button>
-            {showCatDropdown && (
-              <div className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-2 min-w-[180px]">
-                {UNIFIED_CATEGORIES.map(c => (
-                  <label key={c} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs">
-                    <input type="checkbox" checked={selectedCategories.includes(c)} onChange={() => toggleCat(c)} className="rounded" />
-                    {c}
-                  </label>
-                ))}
-                {selectedCategories.length > 0 && <button onClick={() => setSelectedCategories([])} className="text-[10px] text-blue-600 px-2 mt-1">Clear all</button>}
+  // --- Mobile Tab View ---
+  const MobileTabView = () => {
+      const tabs: ActivityStatus[] = ['PLANNED', 'ON_MY_WAY', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
+      const filteredActs = activities.filter(a => a.status === mobileTab);
+
+      return (
+          <div className="flex flex-col h-full">
+              {/* Segmented Control */}
+              <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm mb-4 shrink-0 overflow-x-auto">
+                  {tabs.map(t => (
+                      <button 
+                        key={t}
+                        onClick={() => setMobileTab(t)}
+                        className={`flex-1 py-2 px-3 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all ${
+                            mobileTab === t ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
+                        }`}
+                      >
+                          {getActivityStatusLabel(t)} ({activities.filter(a => a.status === t).length})
+                      </button>
+                  ))}
               </div>
-            )}
-          </div>
-          {/* Activity Type multi-select */}
-          <div className="relative">
-            <button onClick={() => { setShowActTypeDropdown(!showActTypeDropdown); setShowCatDropdown(false); }}
-              className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
-              {selectedActTypes.length === 0 ? 'All Activity Types' : `${selectedActTypes.length} selected`} <ChevronDown size={12} />
-            </button>
-            {showActTypeDropdown && (
-              <div className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-xl z-30 p-2 min-w-[160px]">
-                {ACTIVITY_TYPES.map(t => (
-                  <label key={t} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs">
-                    <input type="checkbox" checked={selectedActTypes.includes(t)} onChange={() => toggleActType(t)} className="rounded" />
-                    {t}
-                  </label>
-                ))}
-                {selectedActTypes.length > 0 && <button onClick={() => setSelectedActTypes([])} className="text-[10px] text-blue-600 px-2 mt-1">Clear all</button>}
+
+              {/* Card List */}
+              <div className="flex-1 overflow-y-auto min-h-0 pb-20">
+                  {filteredActs.length === 0 ? (
+                      <div className="text-center py-10 text-slate-400 text-xs">No {getActivityStatusLabel(mobileTab)} activities</div>
+                  ) : (
+                      filteredActs.map(act => <ActivityCard key={act.id} act={act} isMobileCard={true} />)
+                  )}
               </div>
-            )}
           </div>
-          {/* Assigned To */}
-          <select value={assignedFilter} onChange={e => setAssignedFilter(e.target.value)}
-            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none shrink-0">
-            <option value="ALL">All Engineers</option>
-            {allEngineers.map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
-          {/* Date Range */}
-          <div className="flex bg-slate-100 rounded-xl p-0.5 shrink-0">
-            {(['today', 'week', 'month', 'all'] as const).map(v => (
-              <button key={v} onClick={() => setDateRange(v)}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold ${dateRange === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
-                {v === 'all' ? 'All' : v === 'week' ? 'Week (Sat–Thu)' : v.charAt(0).toUpperCase() + v.slice(1)}
-              </button>
-            ))}
-          </div>
+      );
+  };
+
+  const CalendarView = () => {
+    // Use calendarWeekStart state for week days
+    const days = Array.from({length: 7}, (_, i) => {
+        const d = new Date(calendarWeekStart);
+        d.setDate(d.getDate() + i);
+        return d;
+    });
+
+    const goToPrevWeek = () => {
+        setCalendarWeekStart(prev => {
+            const d = new Date(prev);
+            d.setDate(d.getDate() - 7);
+            return d;
+        });
+    };
+    const goToNextWeek = () => {
+        setCalendarWeekStart(prev => {
+            const d = new Date(prev);
+            d.setDate(d.getDate() + 7);
+            return d;
+        });
+    };
+    const goToThisWeek = () => {
+        const d = new Date();
+        d.setDate(d.getDate() - ((d.getDay() + 1) % 7)); // Most recent Saturday
+        d.setHours(0, 0, 0, 0);
+        setCalendarWeekStart(d);
+    };
+
+    const isCurrentWeek = (() => {
+        const now = new Date();
+        const sat = new Date(now);
+        sat.setDate(sat.getDate() - ((sat.getDay() + 1) % 7)); // Most recent Saturday
+        sat.setHours(0, 0, 0, 0);
+        return calendarWeekStart.getTime() === sat.getTime();
+    })();
+
+    // Use Team Leads for rows in Calendar View (since they manage schedules usually)
+    // Also add a "Freelancer / Unassigned" row for activities without an internal lead
+    const hasUnassignedActs = activities.some(a => !a.leadTechId && ((a as any).freelancers || []).length > 0);
+    
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+        {/* Calendar Navigation Bar */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-white">
+            <button onClick={goToPrevWeek} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-800">
+                <ChevronLeft size={18} />
+            </button>
+            <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-slate-800">
+                    {days[0].toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} — {days[6].toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+                {!isCurrentWeek && (
+                    <button onClick={goToThisWeek} className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full hover:bg-blue-100 transition-colors">
+                        Today
+                    </button>
+                )}
+            </div>
+            <button onClick={goToNextWeek} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-800">
+                <ChevronRight size={18} />
+            </button>
+        </div>
+        {/* Header Grid */}
+        <div className="grid grid-cols-8 border-b border-slate-200 bg-slate-50">
+           <div className="p-4 border-r border-slate-200 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center justify-center">
+             Engineer / Lead
+           </div>
+           {days.map(d => (
+             <div key={d.toString()} className="p-3 text-center border-r border-slate-200 last:border-0">
+               <div className="text-xs font-bold text-slate-700 uppercase">{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+               <div className={`text-sm font-bold mt-1 ${d.toDateString() === new Date().toDateString() ? 'text-emerald-600 bg-emerald-50 w-8 h-8 rounded-full flex items-center justify-center mx-auto' : 'text-slate-500'}`}>
+                 {d.getDate()}
+               </div>
+             </div>
+           ))}
+        </div>
+        
+        {/* Body Grid */}
+        <div className="overflow-y-auto flex-1 custom-scrollbar">
+           {assignableLeads.map(lead => (
+             <div key={lead.id} className="grid grid-cols-8 border-b border-slate-100 min-h-[100px]">
+               <div className="p-4 border-r border-slate-200 bg-slate-50/30 flex flex-col justify-center">
+                 <h4 className="font-bold text-slate-800 text-sm">{lead.name}</h4>
+                 <div className="text-[10px] text-slate-500 mt-1">{(lead as any).jobRole || lead.role || lead.systemRole}</div>
+                 <div className={`text-[9px] font-bold mt-0.5 ${lead.systemRole === 'TEAM_LEAD' ? 'text-purple-500' : 'text-blue-500'}`}>
+                   {lead.systemRole === 'TEAM_LEAD' ? 'Team Lead' : 'Field Engineer'}
+                 </div>
+               </div>
+               {days.map(d => {
+                 const today = new Date();
+                 const isToday = d.toDateString() === today.toDateString();
+                 
+                 // Current activities for this day
+                 const currentDayActs = activities.filter(a => {
+                    if (!a.plannedDate && a.status !== 'DONE') return false;
+                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                    if (!isAssigned) return false;
+                    const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
+                    if (isActive) return isToday;
+                    if (a.status === 'DONE') {
+                        const completedDate = new Date((a as any).completedAt || a.updatedAt || a.plannedDate);
+                        return completedDate.toDateString() === d.toDateString();
+                    }
+                    // Check if this date has a visit history entry — if so, let the history card handle it
+                    const hasVisitOnThisDay = ((a as any).visitHistory || []).some((v: any) => 
+                        v.date && new Date(v.date).toDateString() === d.toDateString()
+                    );
+                    if (hasVisitOnThisDay) return false; // History card will show with correct visit status
+                    
+                    return new Date(a.plannedDate).toDateString() === d.toDateString();
+                 });
+                 
+                 // Show visit history entries on their respective dates
+                 const historyCards = activities.filter(a => {
+                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                    if (!isAssigned) return false;
+                    return ((a as any).visitHistory || []).some((v: any) => 
+                        v.date && new Date(v.date).toDateString() === d.toDateString()
+                    );
+                 }).map(a => {
+                    const visit = ((a as any).visitHistory || []).find((v: any) => 
+                        v.date && new Date(v.date).toDateString() === d.toDateString()
+                    );
+                    // Return a virtual activity card with the visit's status
+                    return { ...a, _isHistoryEntry: true, _visitStatus: visit?.status || 'CARRY_FORWARD', _visitDate: visit?.date };
+                 }).filter(a => !currentDayActs.some(ca => ca.id === a.id)); // Don't duplicate if already showing
+                 
+                 const dayActs = [...currentDayActs, ...historyCards];
+                 
+                 return (
+                   <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-slate-50/50 transition-colors">
+                      {dayActs.map(act => {
+                        const isHistoryEntry = (act as any)._isHistoryEntry;
+                        const displayStatus = isHistoryEntry ? (act as any)._visitStatus : act.status;
+                        const actFreelancers = (act as any).freelancers || [];
+                        const actCustomer = customers.find(c => c.id === act.customerId);
+                        const actTAs = (act.assistantTechIds || []).map(id => technicians.find(t => t.id === id)).filter(Boolean);
+                        const actSupport = ((act as any).supportingEngineerIds || [])
+                            .filter((id: string) => !(act.assistantTechIds || []).includes(id))
+                            .map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
+                        const statusColor = displayStatus === 'DONE' ? 'bg-emerald-500' : displayStatus === 'IN_PROGRESS' ? 'bg-blue-500' : displayStatus === 'CARRY_FORWARD' ? 'bg-orange-500' : displayStatus === 'CANCELLED' ? 'bg-slate-400' : 'bg-slate-400';
+                        return (
+                        <div 
+                          key={act.id} 
+                          onClick={() => setViewingActivity(act)}
+                          className={`mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all ${
+                            (act.escalationLevel || 0) > 0 ? 'bg-red-50 border-red-400 border-l-4' :
+                            displayStatus === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
+                            displayStatus === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200 border-l-4 border-l-orange-400' :
+                            displayStatus === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 border-l-4 border-l-blue-500' :
+                            act.priority === 'URGENT' ? 'bg-red-50 border-red-200 border-l-4 border-l-red-500' : 
+                            'bg-white border-slate-200 border-l-4 border-l-blue-400'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-1 mb-0.5">
+                              <div className="font-bold truncate text-slate-700 flex items-center gap-1">
+                                  {act.type}
+                                  {(act.escalationLevel || 0) > 0 && <AlertCircle size={10} className="text-red-500"/>}
+                              </div>
+                              <span className={`shrink-0 px-1 py-0.5 rounded text-[7px] font-bold text-white leading-none ${statusColor}`}>
+                                  {getActivityStatusLabel(act.status)}
+                              </span>
+                          </div>
+                          {/* Client Name */}
+                          {actCustomer && <div className="text-[10px] font-medium text-slate-800 truncate">{actCustomer.name}</div>}
+                          <div className="text-[9px] text-slate-400 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}{act.durationHours ? ` · ${act.durationHours}h` : ''}</div>
+                          {/* TAs */}
+                          {actTAs.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-1">
+                              {actTAs.map((ta: any) => (
+                                <span key={ta.id} className="text-[7px] px-1 py-0.5 bg-teal-50 text-teal-700 rounded border border-teal-200 truncate max-w-[80px]">{ta.name}</span>
+                              ))}
+                            </div>
+                          )}
+                          {/* Support Engineers */}
+                          {actSupport.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-0.5">
+                              {actSupport.map((se: any) => (
+                                <span key={se.id} className="text-[7px] px-1 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 truncate max-w-[80px]">{se.name}</span>
+                              ))}
+                            </div>
+                          )}
+                          {/* Freelancers */}
+                          {actFreelancers.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5 mt-0.5">
+                              {actFreelancers.map((fl: any, i: number) => (
+                                <span key={i} className="text-[7px] px-1 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200">{fl.name} FL</span>
+                              ))}
+                            </div>
+                          )}
+                          {/* Odoo Link */}
+                          {(act as any).odooLink && (
+                            <a href={(act as any).odooLink} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[7px] text-purple-600 hover:underline mt-0.5 block truncate">Odoo ↗</a>
+                          )}
+                        </div>
+                      )})}
+                   </div>
+                 );
+               })}
+             </div>
+           ))}
+
+           {/* Freelancer / Unassigned Row */}
+           {hasUnassignedActs && (
+             <div className="grid grid-cols-8 border-b border-slate-100 min-h-[100px] bg-amber-50/20">
+               <div className="p-4 border-r border-slate-200 bg-amber-50/30 flex flex-col justify-center">
+                 <h4 className="font-bold text-amber-800 text-sm">Freelancer Jobs</h4>
+                 <div className="text-[10px] text-amber-600 mt-1">No internal engineer</div>
+               </div>
+               {days.map(d => {
+                 const today = new Date();
+                 const isToday = d.toDateString() === today.toDateString();
+                 const dayActs = activities.filter(a => {
+                    if (!a.plannedDate && a.status !== 'DONE') return false;
+                    const isFreelancerOnly = !a.leadTechId && ((a as any).freelancers || []).length > 0;
+                    if (!isFreelancerOnly) return false;
+                    const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
+                    if (isActive) return isToday;
+                    if (a.status === 'DONE') {
+                        const completedDate = new Date((a as any).completedAt || a.updatedAt || a.plannedDate);
+                        return completedDate.toDateString() === d.toDateString();
+                    }
+                    return new Date(a.plannedDate).toDateString() === d.toDateString();
+                 });
+                 // Add visit history entries for freelancer activities too
+                 const flHistoryCards = !isToday ? activities.filter(a => {
+                    const isFL = !a.leadTechId && ((a as any).freelancers || []).length > 0;
+                    if (!isFL) return false;
+                    return ((a as any).visitHistory || []).some((v: any) => v.date && new Date(v.date).toDateString() === d.toDateString());
+                 }).filter(a => !dayActs.some(da => da.id === a.id)) : [];
+                 const allDayActs = [...dayActs, ...flHistoryCards];
+                 return (
+                   <div key={d.toString()} className="p-2 border-r border-slate-100 last:border-0 relative hover:bg-amber-50/30 transition-colors">
+                      {allDayActs.map(act => {
+                        const actFreelancers = (act as any).freelancers || [];
+                        return (
+                          <div 
+                            key={act.id + '-' + d.toISOString()} 
+                            onClick={() => setViewingActivity(act)}
+                            className="mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all bg-amber-50 border-amber-200 border-l-4 border-l-amber-400"
+                          >
+                            <div className="font-bold truncate text-amber-800">{act.type}</div>
+                            <div className="text-[10px] text-amber-600 truncate mt-0.5">{getDisplayLocation(act)}</div>
+                            <div className="text-[9px] text-amber-500 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}</div>
+                            <div className="flex flex-wrap gap-0.5 mt-1">
+                              {actFreelancers.map((fl: any, i: number) => (
+                                <span key={i} className="text-[8px] px-1 py-0.5 bg-amber-100 text-amber-700 rounded border border-amber-300 font-bold">{fl.name.split(' ')[0]} FL</span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                   </div>
+                 );
+               })}
+             </div>
+           )}
         </div>
       </div>
+    );
+  };
 
-      {/* Table */}
-      <div className="flex-1 overflow-y-auto pb-20">
-        <table className="w-full text-sm text-left table-fixed">
-          <thead className="bg-white text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
-            <tr>
-              <th className="px-4 py-3 w-[5%]">Type</th>
-              <th className="px-4 py-3 w-[9%]">Ref</th>
-              <th className="px-4 py-3 w-[16%]">Client</th>
-              <th className="px-4 py-3 w-[10%]">Category</th>
-              <th className="px-4 py-3 w-[7%]">Priority</th>
-              <th className="px-4 py-3 w-[10%]">Status</th>
-              <th className="px-4 py-3 w-[10%]">Date</th>
-              <th className="px-4 py-3 w-[13%]">Assigned To</th>
-              <th className="px-4 py-3 w-[6%] text-center">Photos</th>
-              <th className="px-4 py-3 w-[6%] text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {allJobs.length === 0 ? (
-              <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">No jobs found</td></tr>
-            ) : allJobs.map(job => {
-              const photos = (job.raw as any).photos || [];
-              return (
-                <tr key={`${job.kind}-${job.id}`} className="hover:bg-slate-50 group">
-                  <td className="px-4 py-3"><span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${job.kind === 'ticket' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{job.kind === 'ticket' ? 'TKT' : 'ACT'}</span></td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-600 truncate">{job.reference}</td>
-                  <td className="px-4 py-3"><div className="font-medium text-slate-800 truncate">{job.title}</div></td>
-                  <td className="px-4 py-3 text-xs text-slate-600 truncate">{job.subtitle}</td>
-                  <td className="px-4 py-3"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${job.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' : job.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{job.priority}</span></td>
-                  <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColors[job.status] || 'bg-slate-100 text-slate-500'}`}>{job.status.replace(/_/g, ' ')}</span></td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{job.dateLabel}</td>
-                  <td className="px-4 py-3 text-xs text-slate-700 truncate">{job.techName}</td>
-                  <td className="px-4 py-3 text-center">{photos.length > 0 ? <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">{photos.length}</span> : <span className="text-slate-300">{"—"}</span>}</td>
-                  <td className="px-4 py-3 text-right"><button onClick={() => setPreviewItem(job)} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded opacity-0 group-hover:opacity-100"><Eye size={12} /> View</button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+  return (
+    <div className={isMobile ? "p-4 h-full flex flex-col bg-slate-50" : "p-6 h-full flex flex-col"}>
+      {/* Header Toolbar - Hidden on Mobile to save space if needed, or simplified */}
+      {!isMobile && (
+          <div className="flex justify-between items-center mb-6 shrink-0">
+            <div>
+               <h1 className="text-2xl font-bold text-slate-900">Activity Planner</h1>
+               <p className="text-slate-500 text-sm">Schedule and manage field operations</p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+               <div className="bg-white border border-slate-200 rounded-lg p-1 flex">
+                  <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <List size={20} />
+                  </button>
+                  <button onClick={() => setViewMode('kanban')} className={`p-2 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <Layout size={20} />
+                  </button>
+                  <button onClick={() => setViewMode('calendar')} className={`p-2 rounded-md transition-colors ${viewMode === 'calendar' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <Calendar size={20} />
+                  </button>
+               </div>
+               
+               {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
+                 <button 
+                   onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
+                   className="bg-slate-900 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all"
+                 >
+                   <Plus size={18} />
+                   <span>Plan Activity</span>
+                 </button>
+               )}
+            </div>
+          </div>
+      )}
+
+      {isMobile && (
+          <div className="flex justify-between items-center mb-4 shrink-0">
+              <h2 className="font-bold text-slate-800 text-lg">My Planner</h2>
+              {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
+                 <button 
+                   onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
+                   className="bg-slate-900 text-white p-2 rounded-lg shadow-sm"
+                 >
+                   <Plus size={20} />
+                 </button>
+              )}
+          </div>
+      )}
+
+      {/* Main View Area */}
+      <div className="flex-1 overflow-hidden">
+         {isMobile ? (
+             <MobileTabView />
+         ) : (
+             <>
+                 {viewMode === 'list' && <ListView />}
+                 {viewMode === 'kanban' && <KanbanView />}
+                 {viewMode === 'calendar' && <CalendarView />}
+             </>
+         )}
       </div>
 
-      {/* Preview Popup */}
-      {previewItem && (() => {
-        const d = previewItem.raw;
-        if (!d) { setPreviewItem(null); return null; }
-        const isTicket = previewItem.kind === 'ticket';
-        const cust = customers.find(c => c.id === (d.customerId || previewItem.customerId));
-        const tech = technicians.find(t => t.id === (d.assignedTechId || (d as any).primaryEngineerId || d.leadTechId));
-        const salesLd = !isTicket ? technicians.find(t => t.id === (d as any).salesLeadId) : null;
-        const assistants = !isTicket ? ((d as any).assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean) : [];
-        const photos = (d as any).photos || [];
-        const statusColor = d.status === 'DONE' || d.status === 'RESOLVED' ? 'bg-emerald-500' : d.status === 'CARRY_FORWARD' ? 'bg-orange-500' : d.status === 'IN_PROGRESS' ? 'bg-blue-500' : d.status === 'CANCELLED' ? 'bg-slate-400' : 'bg-amber-400';
-        const issueText = isTicket ? (d.messages?.find((m: any) => m.sender === 'CLIENT')?.content || d.notes || (d as any).ai_summary || '') : (d.description || '');
-        const visits = (d as any).visitHistory || (d as any).visit_history || [];
-        const hasVisits = visits.length > 0;
-        const isDone = d.status === 'DONE' || d.status === 'RESOLVED';
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setPreviewItem(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${statusColor}`} />
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{isTicket ? 'TICKET' : 'ACTIVITY'}</span>
-                      <span className="text-[10px] font-mono text-slate-400">{previewItem.reference}</span>
-                    </div>
-                    <h3 className="font-bold text-lg text-slate-900">{isTicket ? d.category : d.type}</h3>
+      {/* Add/Edit Modal */}
+      {isModalOpen && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-2xl max-h-[90vh] rounded-2xl'} overflow-hidden flex flex-col`}>
+               <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                  <h3 className="font-bold text-lg text-slate-900">
+                      {editingActivity ? `Edit Activity` : 'Plan New Activity'}
+                  </h3>
+                  <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+               </div>
+               
+               <form
+                  key={editingActivity?.id ?? '__new__'}
+                  onSubmit={(e) => {
+                  e.preventDefault();
+                  // Inline validation
+                  if (!selectedCustomerId) { setFormError('Please select a customer.'); return; }
+                  if (!activityType)        { setFormError('Please select an activity type.'); return; }
+                  if (serviceCats.length === 0) { setFormError('Please select at least one service category.'); return; }
+                  if (!plannedDatetime)     { setFormError('Please set a planned date and time.'); return; }
+                  setFormError(''); // Clear on valid submit
+
+                  // Construct ISO Date from datetime-local input
+                  const plannedDateIso = new Date(plannedDatetime).toISOString();
+
+                  const activityPayload: any = {
+                      type: activityType,
+                      serviceCategory: serviceCats.join(', ') || 'Other',
+                      customerId: selectedCustomerId || undefined,
+                      priority: activityPriority,
+                      // Status: only set from form in edit mode; create always starts PLANNED
+                      status: editingActivity ? activityStatus : 'PLANNED',
+                      plannedDate: plannedDateIso,
+                      durationHours: Number(durationState.val),
+                      durationUnit: durationState.unit,
+                      description: descriptionState,
+                      remarks: remarksState || '',
+                      
+                      odooLink: odooLinkState || undefined,
+                      locationUrl: locationUrl,
+                      houseNumber: houseNumber,
+                      
+                      salesLeadId: salesLeadIdState || undefined,
+                      leadTechId: selectedLeadTechId || (canSelfAssign ? currentUserId : undefined),
+                      // Deduplicate: remove from assistants if already in supporting (and vice versa)
+                      assistantTechIds: assistantTechState.filter(id => !supportingEngineerState.includes(id)),
+                      supportingEngineerIds: supportingEngineerState.filter(id => !assistantTechState.includes(id)),
+                      freelancers: freelancers.filter(f => f.name.trim())
+                  };
+
+                  if (editingActivity) {
+                      onUpdateActivity({
+                          ...editingActivity,
+                          ...activityPayload,
+                          updatedAt: new Date().toISOString()
+                      });
+                  } else {
+                      onAddActivity(activityPayload);
+                  }
+                  setIsModalOpen(false);
+               }} className="flex-1 overflow-y-auto p-6 space-y-4">
+                  
+                  {/* Customer Selector */}
+                  <div className="space-y-1">
+                      <CustomerSelector 
+                        customers={customers}
+                        selectedCustomerId={selectedCustomerId}
+                        onSelect={(c) => {
+                            setSelectedCustomerId(c.id);
+                            // Auto-fill location from customer record
+                            // address field often contains the location URL
+                            const custUrl = c.address && c.address.startsWith('http') ? c.address : 
+                                           c.buildingNumber && c.buildingNumber.startsWith('http') ? c.buildingNumber : '';
+                            const custHouse = c.buildingNumber && !c.buildingNumber.startsWith('http') ? c.buildingNumber : '';
+                            if (custUrl) setLocationUrl(custUrl);
+                            if (custHouse) setHouseNumber(custHouse);
+                            // If address is not a URL, use it as house/building info
+                            if (c.address && !c.address.startsWith('http') && !custHouse) setHouseNumber(c.address);
+                        }}
+                        onCreateNew={handleNewCustomer}
+                      />
                   </div>
+
+                  {/* Top Row: Type & Priority */}
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Activity Type</label>
+                          <select value={activityType} onChange={e => setActivityType(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                             {['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'].map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Priority</label>
+                          <select value={activityPriority} onChange={e => setActivityPriority(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                             {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                      </div>
+                  </div>
+
+                  {/* Service Category (multi-select) */}
+                  <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
+                      <div className="flex flex-wrap gap-2 p-2.5 bg-white border border-slate-300 rounded-lg min-h-[40px]">
+                        {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(cat => {
+                          const sel = serviceCats.includes(cat);
+                          return (
+                            <button key={cat} type="button" onClick={() => setServiceCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
+                              className={`text-xs px-3 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                              {sel && <span className="mr-1">✓</span>}{cat}
+                            </button>
+                          );
+                        })}
+                      </div>
+                  </div>
+                  
+                  {/* Location Details */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                          <MapPin size={16} /> Location Details
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-500 uppercase">Location URL</label>
+                              <input type="text" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-xs font-semibold text-slate-500 uppercase">House Number</label>
+                              <input type="text" name="houseNumber" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          </div>
+                      </div>
+                  </div>
+                  
+                  {/* Date & Time Selection (Grouped) */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                      <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                          <Calendar size={16} /> Planned Date & Time
+                      </h4>
+                      
+                      {/* Date & Time — single datetime-local picker */}
+                      <div>
+                          <input
+                              type="datetime-local"
+                              value={plannedDatetime}
+                              onChange={e => setPlannedDatetime(e.target.value)}
+                              required
+                              min={new Date().toISOString().slice(0,16)}
+                              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                          />
+                      </div>
+                  </div>
+
+                  {/* Estimated Duration */}
+                  <div className="space-y-1 pt-2">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Estimated Duration</label>
+                      <div className="flex items-stretch shadow-sm rounded-lg overflow-hidden border border-slate-300">
+                          <input 
+                              type="number" 
+                              value={durationState.val}
+                              onChange={e => setDurationState({...durationState, val: e.target.value})}
+                              min="0.5" 
+                              step="0.5" 
+                              required
+                              className="w-1/3 bg-white p-2.5 text-sm outline-none text-center font-medium focus:bg-slate-50" 
+                           />
+                           <div className="w-px bg-slate-200"></div>
+                           <select 
+                              value={durationState.unit}
+                              onChange={e => setDurationState({...durationState, unit: e.target.value as 'HOURS' | 'DAYS'})}
+                              className="flex-1 bg-slate-50 p-2.5 text-sm font-medium outline-none cursor-pointer hover:bg-slate-100"
+                           >
+                               <option value="HOURS">Hours</option>
+                               <option value="DAYS">Days</option>
+                           </select>
+                      </div>
+                  </div>
+
+                  {/* Odoo Reference */}
+                  <div className="space-y-1">
+                       <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+                           <LinkIcon size={12} /> Odoo Reference (CRM Link)
+                       </label>
+                       <input 
+                        type="text" 
+                        name="odooLink" 
+                        value={odooLinkState}
+                        onChange={e => setOdooLinkState(e.target.value)}
+                        placeholder="https://odoo.crm..." 
+                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
+                       />
+                  </div>
+                  
+                  {/* Resource Allocation Section */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                          <User size={16}/> Resource Allocation
+                      </h4>
+                      <div className="space-y-5">
+                          {/* ── Sales Lead ── */}
+                          <div className="space-y-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/>
+                                  <label className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sales Lead</label>
+                              </div>
+                              <select value={salesLeadIdState} onChange={e => setSalesLeadIdState(e.target.value)} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
+                                  <option value="">— Unassigned —</option>
+                                  {salesTeam.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                              {salesTeam.length === 0 && (
+                                <div className="mt-1 text-xs text-slate-400">No Sales Lead available. Add a Sales member in Team Management.</div>
+                              )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-200">
+                                {/* ── Field Engineer ── */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500"/>
+                                        <label className="text-xs font-bold text-purple-700 uppercase tracking-wider">Field Engineer</label>
+                                    </div>
+                                    <select
+                                      name="leadTechId"
+                                      value={selectedLeadTechId}
+                                      onChange={e => setSelectedLeadTechId(e.target.value)}
+                                      disabled={(teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign}
+                                      className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${
+                                        (teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign
+                                          ? "bg-slate-50 text-slate-400 cursor-not-allowed"
+                                          : ""
+                                      }`}
+                                    >
+                                      {/* Placeholder: show when empty, NOT selectable, NOT listed */}
+                                      <option value="">— Unassigned —</option>
+
+                                      {/* Team Leads */}
+                                      {(canSelfAssign || teamLeads.length > 0) && (
+                                        <optgroup label="Team Leads">
+                                          {canSelfAssign && currentUser && (
+                                            <option value={currentUser.id} className="font-bold text-blue-700 bg-blue-50">
+                                              (Self) {currentUser.name}
+                                            </option>
+                                          )}
+
+                                          {teamLeads
+                                            .filter(t => !(canSelfAssign && currentUser && t.id === currentUser.id))
+                                            .map(t => (
+                                              <option key={t.id} value={t.id}>
+                                                {t.name}
+                                              </option>
+                                            ))}
+                                        </optgroup>
+                                      )}
+
+                                      {/* Field Engineers */}
+                                      {fieldEngineers.length > 0 && (
+                                        <optgroup label="Field Engineers">
+                                          {fieldEngineers.map(t => (
+                                            <option key={t.id} value={t.id}>
+                                              {t.name}
+                                            </option>
+                                          ))}
+                                        </optgroup>
+                                      )}
+                                    </select>
+                                    {((teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign) && (
+                                      <div className="mt-1 text-xs text-slate-400">No Team Leads / Field Engineers available.</div>
+                                    )}
+
+                                </div>
+                                {/* ── Supporting Field Engineers (Optional) ── */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500"/>
+                                        <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">Supporting Engineers (Optional)</label>
+                                    </div>
+                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                        {[...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).length > 0 ?
+                                          [...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).map(t => (
+                                            <div key={t.id} className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    value={t.id}
+                                                    checked={supportingEngineerState.includes(t.id)}
+                                                    onChange={e => setSupportingEngineerState(prev =>
+                                                        e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id)
+                                                    )}
+                                                    id={`support_fe_${t.id}`}
+                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <label htmlFor={`support_fe_${t.id}`} className="text-sm text-slate-700 cursor-pointer select-none">
+                                                    {t.name} <span className="text-[10px] text-slate-400">{t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'}</span>
+                                                </label>
+                                            </div>
+                                        )) : <div className="text-xs text-slate-400 italic">No other engineers available.</div>}
+                                    </div>
+                                </div>
+                                {/* ── Technical Associates ── */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-teal-500"/>
+                                        <label className="text-xs font-bold text-teal-700 uppercase tracking-wider">Technical Associates</label>
+                                    </div>
+                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                        {availableAssociates.length > 0 ? availableAssociates.map(t => (
+                                            <div key={t.id} className="flex items-center gap-2">
+                                                <input 
+                                                    type="checkbox" 
+                                                    value={t.id} 
+                                                    checked={assistantTechState.includes(t.id)}
+                                                    onChange={e => setAssistantTechState(prev =>
+                                                        e.target.checked ? [...prev, t.id] : prev.filter(id => id !== t.id)
+                                                    )}
+                                                    id={`helper_${t.id}`}
+                                                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                />
+                                                <label htmlFor={`helper_${t.id}`} className="text-sm text-slate-700 cursor-pointer select-none">
+                                                    {t.name}
+                                                </label>
+                                            </div>
+                                        )) : (
+                                            <div className="text-xs text-slate-400 italic">No available associates for this date.</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Freelancers (Optional) — activity-level, no user record */}
+                                <div className="space-y-2 pt-2 border-t border-slate-100 mt-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Freelancers (Optional)</label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFreelancers(prev => [...prev, { name: '', role: 'TECHNICAL_ASSOCIATE', phone: '' }])}
+                                            className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                                        >
+                                            + Add Freelancer
+                                        </button>
+                                    </div>
+                                    {freelancers.length === 0 && (
+                                        <p className="text-[10px] text-slate-400 italic">No freelancers added. Click "+ Add Freelancer" to attach temporary resources.</p>
+                                    )}
+                                    {freelancers.map((fl, idx) => (
+                                        <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFreelancers(prev => prev.filter((_, i) => i !== idx))}
+                                                className="absolute top-2 right-2 text-slate-400 hover:text-red-500 transition-colors"
+                                                title="Remove"
+                                            >
+                                                ✕
+                                            </button>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 uppercase font-bold">Name *</label>
+                                                    <input
+                                                        type="text"
+                                                        value={fl.name}
+                                                        onChange={(e) => {
+                                                            const updated = [...freelancers];
+                                                            updated[idx] = { ...updated[idx], name: e.target.value };
+                                                            setFreelancers(updated);
+                                                        }}
+                                                        placeholder="e.g. Ahmed (Freelancer)"
+                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 uppercase font-bold">Role</label>
+                                                    <select
+                                                        value={fl.role}
+                                                        onChange={(e) => {
+                                                            const updated = [...freelancers];
+                                                            updated[idx] = { ...updated[idx], role: e.target.value };
+                                                            setFreelancers(updated);
+                                                        }}
+                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                    >
+                                                        <option value="TECHNICAL_ASSOCIATE">Technical Associate</option>
+                                                        <option value="FIELD_ENGINEER">Field Engineer</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-slate-400 uppercase font-bold">Phone (Optional)</label>
+                                                <input
+                                                    type="tel"
+                                                    value={fl.phone}
+                                                    onChange={(e) => {
+                                                        const updated = [...freelancers];
+                                                        updated[idx] = { ...updated[idx], phone: e.target.value };
+                                                        setFreelancers(updated);
+                                                    }}
+                                                    placeholder="+974 XXXX XXXX"
+                                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  {editingActivity && (
+                        <div className="space-y-1">
+                           <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
+                           {/* Status is read-only in edit form — use Admin Override to change status */}
+                           <div className={`w-full border rounded-lg p-2.5 text-sm font-medium ${
+                               activityStatus === 'DONE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                               activityStatus === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                               activityStatus === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200 text-orange-700' :
+                               activityStatus === 'CANCELLED' ? 'bg-slate-100 border-slate-200 text-slate-500' :
+                               'bg-amber-50 border-amber-200 text-amber-700'
+                           }`}>
+                               {getActivityStatusLabel(activityStatus as ActivityStatus)}
+                               <span className="ml-2 text-[10px] text-slate-400 font-normal">(Use Admin Override to change status)</span>
+                           </div>
+                        </div>
+                  )}
+
+                  <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Description / Scope of Work</label>
+                      <textarea value={descriptionState} onChange={e => setDescriptionState(e.target.value)} rows={3} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
+                  </div>
+
+                  {/* General Remarks (separate from carry forward reason) */}
+                  <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-500 uppercase">General Remarks</label>
+                      <textarea value={remarksState} onChange={e => setRemarksState(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
+                  </div>
+
+                  {editingActivity && currentUserRole === Role.ADMIN && (
+                     <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                        <button type="button" onClick={() => { setShowDeleteConfirm(true); }} className="text-red-500 text-sm hover:text-red-700 flex items-center gap-1">
+                            <X size={16} /> Delete Activity
+                        </button>
+                     </div>
+                  )}
+
+                  <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
+                        <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+                        {formError && (
+                            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                                ⚠ {formError}
+                            </p>
+                        )}
+                        <button type="submit" disabled={isSaving} className={`px-6 py-2 font-medium rounded-lg shadow-lg transition-all flex items-center gap-2 ${isSaving ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}>
+                            <Save size={18} /> {isSaving ? 'Saving...' : editingActivity ? 'Update Activity' : 'Plan Activity'}
+                        </button>
+                  </div>
+               </form>
+            </div>
+         </div>
+      )}
+
+      {/* View Activity Detail Panel (read-only) */}
+      {viewingActivity && (() => {
+        const va = viewingActivity as any;
+        const customer = customers.find(c => c.id === va.customerId);
+        const lead = technicians.find(t => t.id === va.leadTechId);
+        const salesLd = technicians.find(t => t.id === va.salesLeadId);
+        const salesLdName = salesLd?.name || (va as any).salesLeadName || '';
+        const vaCustomerName = customer?.name || (va as any).customerName || 'Unknown';
+        const vaCustomerPhone = customer?.phone || (va as any).customerPhone || '';
+        const assistants = (va.assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
+        const fls = va.freelancers || [];
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewingActivity(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div>
+                  <div className="text-xs font-mono text-slate-400">{va.reference}</div>
+                  <h3 className="font-bold text-lg text-slate-900">{va.type}</h3>
+                  {va.serviceCategory && <div className="text-xs text-slate-500">{va.serviceCategory}</div>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1.5 rounded-full text-xs font-bold text-white ${statusColor}`}>{(d.status || '').replace(/_/g, ' ')}</span>
-                  <button onClick={() => setPreviewItem(null)} className="p-1.5 hover:bg-slate-200 rounded-lg"><X size={18} className="text-slate-400" /></button>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                    va.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                    va.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                    va.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>{va.status}</span>
+                  <button onClick={() => setViewingActivity(null)} className="p-1 hover:bg-slate-200 rounded-lg">
+                    <X size={18} className="text-slate-400"/>
+                  </button>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase">Customer</h4>
-                  <div className="text-sm font-bold text-slate-800">{cust?.name || (isTicket ? d.customerName : 'Unknown')}</div>
-                  {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{cust?.phone || d.phoneNumber}</div>}
+                {/* Customer & Location */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Customer</span>
+                    <span className="font-semibold text-slate-800">{vaCustomerName}</span>
+                  </div>
+                  {vaCustomerPhone && <div className="flex justify-between text-sm"><span className="text-slate-400">Phone</span><span className="text-slate-700">{vaCustomerPhone}</span></div>}
+                  {va.houseNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">House / Villa</span><span className="text-slate-700">{va.houseNumber}</span></div>}
+                  {customer?.buildingNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">Building</span><span className="text-slate-700">{customer.buildingNumber}</span></div>}
+                  {va.locationUrl && <div className="flex justify-between text-sm"><span className="text-slate-400">Map</span><a href={va.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[60%]">Open Map</a></div>}
                 </div>
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase">Timing</h4>
-                  <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span>{fmtDt(isTicket ? d.createdAt : d.plannedDate)}</span></div>
-                  {(d as any).startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt((d as any).startedAt)}</span></div>}
-                  {(d as any).completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt((d as any).completedAt)}</span></div>}
+                {/* Timing */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
+                  <div className="flex justify-between text-sm"><span className="text-slate-400">Planned</span><span className="font-semibold text-slate-700">{new Date(va.plannedDate).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-400">Duration</span><span className="text-slate-700">{va.durationHours}h</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-slate-400">Priority</span><span className={`font-bold ${va.priority === 'URGENT' ? 'text-red-600' : va.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{va.priority}</span></div>
+                  {va.startedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Started</span><span className="text-emerald-600 font-medium">{new Date(va.startedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit', minute:'2-digit' })}</span></div>}
+                  {va.completedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Completed</span><span className="text-emerald-600 font-medium">{new Date(va.completedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit', minute:'2-digit' })}</span></div>}
+                  {va.startedAt && va.completedAt && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Actual Duration</span>
+                      <span className="font-bold text-slate-700">{Math.round((new Date(va.completedAt).getTime() - new Date(va.startedAt).getTime()) / 60000)}m</span>
+                    </div>
+                  )}
                 </div>
-                {(salesLd || tech || assistants.length > 0) && (
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
-                    {salesLd && <div className="pb-2 border-b border-slate-200"><div className="text-[10px] font-bold text-indigo-600 uppercase mb-1">Sales Lead</div><div className="text-xs font-medium text-indigo-700">{salesLd.name}</div></div>}
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Team</div>
-                    {tech && <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-purple-500" /><span className="font-medium">{tech.name}</span></div>}
-                    {assistants.map((a: any) => <div key={a.id} className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-teal-500" /><span>{a.name}</span><span className="text-[10px] text-slate-400">TA</span></div>)}
+                {/* Description */}
+                {va.description && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-xs font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 leading-relaxed">{va.description}</p></div>}
+                {/* Resources — split into sections */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
+                  {/* Sales Lead — separate section */}
+                  {salesLdName && (
+                    <div className="pb-2 border-b border-slate-200">
+                      <div className="text-[10px] font-bold text-indigo-600 uppercase mb-1.5">Sales Lead</div>
+                      <div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-indigo-500"/><span className="font-medium text-indigo-700">{salesLdName}</span></div>
+                    </div>
+                  )}
+                  {/* Assigned Team */}
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1.5">Assigned Team</div>
+                    {lead && <div className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-purple-500"/><span className="font-medium text-slate-800">{lead.name}</span><span className="text-[10px] text-slate-400">Lead Engineer</span></div>}
+                    {va.primaryEngineerId && va.primaryEngineerId !== va.leadTechId && (() => {
+                      const prim = technicians.find(t => t.id === va.primaryEngineerId);
+                      return prim ? <div className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-blue-500"/><span className="font-medium text-blue-700">{prim.name}</span><span className="text-[10px] text-slate-400">Primary (Execution)</span></div> : null;
+                    })()}
+                    {assistants.map((a: any) => <div key={a.id} className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-teal-500"/><span className="text-slate-700">{a.name}</span><span className="text-[10px] text-slate-400">Technical Associate</span></div>)}
+                    {(va.supportingEngineerIds || []).filter((sid: string) => !(va.assistantTechIds || []).includes(sid) && sid !== va.primaryEngineerId).map((sid: string) => {
+                      const se = technicians.find(t => t.id === sid);
+                      return se ? <div key={sid} className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-blue-400"/><span className="text-slate-700">{se.name}</span><span className="text-[10px] text-slate-400">Supporting Engineer</span></div> : null;
+                    })}
+                    {fls.map((fl: any, i: number) => <div key={`fl-${i}`} className="flex items-center gap-2 text-sm mb-1"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-amber-800 font-medium">{fl.name}</span><span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-200">Freelancer · {fl.role === 'FIELD_ENGINEER' ? 'FE' : 'TA'}</span>{fl.phone && <span className="text-[10px] text-slate-400 ml-auto">{fl.phone}</span>}</div>)}
+                    {!lead && assistants.length === 0 && fls.length === 0 && <p className="text-xs text-slate-400 italic">No team assigned</p>}
+                  </div>
+                </div>
+                {/* Photos */}
+                {(va.photos || []).length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold text-slate-400 uppercase">Completion Photos ({va.photos.length})</div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {va.photos.map((p: any, i: number) => (
+                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />
+                      ))}
+                    </div>
                   </div>
                 )}
-                {issueText && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{issueText}</p></div>}
-                {/* Completion note — only for DONE/RESOLVED, separate from remarks */}
-                {isDone && (d as any).completionNote && <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-xs text-emerald-800 whitespace-pre-wrap">{(d as any).completionNote}</p></div>}
-                {/* Remarks — only if NO visit history (avoids duplication) */}
-                {!hasVisits && ((d as any).remarks || d.notes) && ((d as any).remarks || d.notes) !== (d as any).completionNote && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div><p className="text-xs whitespace-pre-wrap">{(d as any).remarks || d.notes}</p></div>}
-                {/* Carry forward — only if NO visit history */}
-                {!hasVisits && (d as any).carryForwardNote && <div className="bg-amber-50 rounded-xl p-4 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-xs text-amber-800 whitespace-pre-wrap">{(d as any).carryForwardNote}</p></div>}
-                {/* Visit History Cards */}
-                {hasVisits && (
+                {/* Remarks & Completion — only show when no visit history */}
+                {!(va.visitHistory || []).length && (va.remarks || va.completionNote || va.carryForwardNote || va.cancellationReason) && (
                   <div className="space-y-3">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Visit History ({visits.length} visit{visits.length > 1 ? 's' : ''})</div>
+                    <div className="text-xs font-bold text-slate-400 uppercase">Notes & Remarks</div>
+                    {va.remarks && va.remarks !== va.completionNote && (
+                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Remarks</div>
+                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{va.remarks}</p>
+                      </div>
+                    )}
+                    {va.completionNote && (
+                      <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                        <div className="text-[10px] font-bold text-emerald-500 uppercase mb-1">Completion Summary</div>
+                        <p className="text-sm text-emerald-800 leading-relaxed whitespace-pre-wrap">{va.completionNote}</p>
+                      </div>
+                    )}
+                    {va.carryForwardNote && (
+                      <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                        <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div>
+                        <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">{va.carryForwardNote}</p>
+                        {va.nextPlannedAt && (
+                          <div className="text-xs text-amber-600 mt-2 font-medium">
+                            Next planned: {new Date(va.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(va.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {va.cancellationReason && (
+                      <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                        <div className="text-[10px] font-bold text-red-500 uppercase mb-1">Cancellation Reason</div>
+                        <p className="text-sm text-red-700 leading-relaxed whitespace-pre-wrap">{va.cancellationReason}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Visit History Cards */}
+                {(va.visitHistory || []).length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-xs font-bold text-slate-400 uppercase">Visit History ({va.visitHistory.length} visit{va.visitHistory.length > 1 ? 's' : ''})</div>
                     <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
-                      {visits.map((v: any, i: number) => {
-                        const visCF = v.status === 'CARRY_FORWARD'; const visDone = v.status === 'DONE';
-                        const cardBg = visDone ? 'bg-emerald-50 border-emerald-200' : visCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
-                        const hdrColor = visDone ? 'text-emerald-800' : visCF ? 'text-orange-800' : 'text-blue-800';
-                        const badgeStyle = visDone ? 'bg-emerald-100 text-emerald-700' : visCF ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700';
-                        const dotColor = visDone ? 'bg-emerald-500' : visCF ? 'bg-orange-500' : 'bg-blue-500';
+                      {va.visitHistory.map((v: any, i: number) => {
+                        const isCF = v.status === 'CARRY_FORWARD'; const isDone = v.status === 'DONE';
+                        const cardBg = isDone ? 'bg-emerald-50 border-emerald-200' : isCF ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-200';
+                        const hdrColor = isDone ? 'text-emerald-800' : isCF ? 'text-orange-800' : 'text-blue-800';
+                        const badgeStyle = isDone ? 'bg-emerald-100 text-emerald-700' : isCF ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700';
+                        const dotColor = isDone ? 'bg-emerald-500' : isCF ? 'bg-orange-500' : 'bg-blue-500';
                         const dur = v.startedAt && v.completedAt ? Math.round((new Date(v.completedAt).getTime() - new Date(v.startedAt).getTime()) / 60000) : null;
+                        const fT = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'}) : '—';
+                        const fD = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'}) : '—';
                         return (
                           <div key={i} className="relative pl-5">
                             <div className={`absolute -left-[7px] top-2 w-3 h-3 rounded-full border-2 border-white shadow-sm ${dotColor}`} />
                             <div className={`rounded-xl p-3 border ${cardBg}`}>
-                              <div className="flex justify-between items-center mb-1.5">
-                                <span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} {"—"} {fmtDate(v.date)}</span>
-                                <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500">{fmtTime(v.startedAt)} {"→"} {v.completedAt ? fmtTime(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
+                              <div className="flex justify-between items-center mb-1.5"><span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} — {fD(v.date)}</span><span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span></div>
+                              <div className="text-[10px] text-slate-500">{fT(v.startedAt)} → {v.completedAt ? fT(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
                               {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
                               {v.completionNote && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
-                              {v.carryForwardReason && visCF && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">Carry forward reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
+                              {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
                             </div>
                           </div>
                         );
@@ -625,82 +1490,210 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                     </div>
                   </div>
                 )}
-                {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />)}</div></div>}
-                {(d as any).odooLink && <div className="flex items-center gap-2 text-xs"><span className="text-slate-400">Odoo:</span><a href={(d as any).odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate">{(d as any).odooLink}</a></div>}
+                {va.odooLink && <div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Odoo:</span><a href={va.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">{va.odooLink}</a></div>}
               </div>
-              <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
-                <button onClick={() => setPreviewItem(null)} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm">Close</button>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-2">
+                {/* Action buttons — gated by role */}
+                <div className="flex gap-2">
+                    {/* Edit — Admin and Team Lead can edit */}
+                    {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD) && (
+                        <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 text-sm">
+                            Edit Activity
+                        </button>
+                    )}
+                    {/* Admin Override — Admin only */}
+                    {currentUserRole === Role.ADMIN && (
+                        <button onClick={() => {
+                            setActOverrideTarget(va);
+                            setActOverrideStatus(va.status || 'PLANNED');
+                            setActOverrideStartedAt(va.startedAt ? new Date(va.startedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
+                            setActOverrideCompletedAt(va.completedAt ? new Date(va.completedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
+                            setActOverrideNote('');
+                            setShowActOverride(true);
+                        }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 text-sm">
+                            Admin Override
+                        </button>
+                    )}
+                </div>
+                {/* Reschedule — for carry-forward or any status */}
+                {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD) && (va.status === 'CARRY_FORWARD' || va.status === 'PLANNED' || va.status === 'DONE' || va.status === 'IN_PROGRESS') && (
+                    <button onClick={() => {
+                        setRescheduleTarget(va);
+                        // Default: next day at same time
+                        const nextDay = new Date(va.plannedDate || Date.now());
+                        nextDay.setDate(nextDay.getDate() + 1);
+                        const pad = (n: number) => String(n).padStart(2,'0');
+                        setRescheduleDate(`${nextDay.getFullYear()}-${pad(nextDay.getMonth()+1)}-${pad(nextDay.getDate())}T${pad(nextDay.getHours())}:${pad(nextDay.getMinutes())}`);
+                        setShowRescheduleModal(true);
+                        setViewingActivity(null);
+                    }} className={`w-full py-2.5 font-bold rounded-xl text-sm flex items-center justify-center gap-2 ${
+                        va.status === 'CARRY_FORWARD' 
+                            ? 'bg-orange-500 text-white hover:bg-orange-600' 
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                    }`}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 009 9 9.75 9.75 0 006.74-2.74L21 16"/><path d="M21 12a9 9 0 00-9-9 9.75 9.75 0 00-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M21 21v-5h-5"/></svg>
+                        {va.status === 'CARRY_FORWARD' ? 'Reschedule (Carry Forward)' : 'Reschedule to New Date'}
+                    </button>
+                )}
+                <button onClick={() => setViewingActivity(null)} className="w-full py-2 text-slate-400 font-medium hover:bg-slate-100 rounded-xl text-sm">Close</button>
               </div>
             </div>
           </div>
         );
       })()}
-
-      {/* Export Popup */}
-      {showExport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowExport(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-slate-900">Export Data</h3>
-              <button onClick={() => setShowExport(false)} className="p-1 hover:bg-slate-200 rounded-lg"><X size={16} /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              {/* Format */}
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Format</label>
-                <div className="flex gap-2">
-                  <button onClick={() => setExportFormat('pdf')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${exportFormat === 'pdf' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}><FileText size={14} /> PDF</button>
-                  <button onClick={() => setExportFormat('excel')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all ${exportFormat === 'excel' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}><FileSpreadsheet size={14} /> Excel (CSV)</button>
-                </div>
+      {/* Admin Override Modal for Activities */}
+      {showActOverride && actOverrideTarget && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowActOverride(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-indigo-600 text-white">
+                      <h3 className="font-bold text-lg">Admin Override</h3>
+                      <p className="text-indigo-200 text-xs mt-0.5">Force status change with custom timestamps</p>
+                  </div>
+                  <div className="p-5 space-y-4">
+                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase">Activity</div>
+                          <div className="text-sm font-bold text-slate-900">{actOverrideTarget.reference || actOverrideTarget.id} — {actOverrideTarget.type}</div>
+                          <div className="text-xs text-slate-500">Current: {(actOverrideTarget.status || 'PLANNED').replace(/_/g,' ')}</div>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">New Status *</label>
+                          <select value={actOverrideStatus} onChange={e => setActOverrideStatus(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm">
+                              {['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE','CARRY_FORWARD','CANCELLED'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                          </select>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Planned Date & Time</label>
+                          <input type="datetime-local" value={actOverrideTarget?.plannedDate ? new Date(actOverrideTarget.plannedDate).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : ''} 
+                              onChange={e => { if (actOverrideTarget) setActOverrideTarget({...actOverrideTarget, plannedDate: new Date(e.target.value).toISOString()} as any); }}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          <p className="text-[10px] text-slate-400 mt-0.5">Modify the scheduled date/time</p>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Started At</label>
+                          <input type="datetime-local" value={actOverrideStartedAt} onChange={e => setActOverrideStartedAt(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          <p className="text-[10px] text-slate-400 mt-0.5">When work actually started (even retroactively)</p>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Completed At</label>
+                          <input type="datetime-local" value={actOverrideCompletedAt} onChange={e => setActOverrideCompletedAt(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                          <p className="text-[10px] text-slate-400 mt-0.5">When the job was actually finished (even past dates)</p>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Admin Note</label>
+                          <textarea value={actOverrideNote} onChange={e => setActOverrideNote(e.target.value)} rows={2} placeholder="Reason for override..."
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                      </div>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex gap-3">
+                      <button onClick={() => setShowActOverride(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button onClick={() => {
+                          const updates: any = {
+                              ...actOverrideTarget,
+                              status: actOverrideStatus,
+                              plannedDate: actOverrideTarget?.plannedDate || undefined,
+                              updatedAt: new Date().toISOString()
+                          };
+                          // Both timestamps treated as Qatar local time (UTC+3) — consistent conversion
+                          if (actOverrideStartedAt) updates.startedAt = new Date(actOverrideStartedAt + ':00+03:00').toISOString();
+                          if (actOverrideCompletedAt) updates.completedAt = new Date(actOverrideCompletedAt + ':00+03:00').toISOString();
+                          if (actOverrideNote) updates.completionNote = (actOverrideTarget.completionNote ? actOverrideTarget.completionNote + '\n' : '') + '[Admin Override] ' + actOverrideNote;
+                          onUpdateActivity(updates);
+                          setShowActOverride(false);
+                          setViewingActivity(null);
+                      }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Apply Override</button>
+                  </div>
               </div>
-              {/* Type */}
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Data Type</label>
-                <div className="flex gap-2">
-                  {(['all', 'tickets', 'activities'] as const).map(v => (
-                    <button key={v} onClick={() => setExportType(v)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${exportType === v ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
-                      {v === 'all' ? 'All' : v === 'tickets' ? 'Tickets' : 'Activities'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Date Range */}
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Date Range</label>
-                <div className="flex gap-2 mb-2">
-                  {[{l:'Today',v:'today'},{l:'Week (Sat–Thu)',v:'week'},{l:'This Month',v:'month'}].map(p => (
-                    <button key={p.v} onClick={() => exportPresetDate(p.v)} className="text-[10px] font-bold px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">{p.l}</button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="date" value={exportDateStart} onChange={e => setExportDateStart(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-                  <input type="date" value={exportDateEnd} onChange={e => setExportDateEnd(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-                </div>
-              </div>
-              {/* Columns */}
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Columns</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {EXPORT_COLUMNS.map(col => (
-                    <label key={col.id} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                      <input type="checkbox" checked={exportColumns.includes(col.id)}
-                        onChange={() => setExportColumns(prev => prev.includes(col.id) ? prev.filter(c => c !== col.id) : [...prev, col.id])} className="rounded" />
-                      {col.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50">
-              <button onClick={handleExport} className="w-full py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2">
-                <Download size={14} /> Export {exportFormat.toUpperCase()}
-              </button>
-            </div>
           </div>
-        </div>
       )}
+
+
+      {/* ── Reschedule Modal ── */}
+      {showRescheduleModal && rescheduleTarget && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowRescheduleModal(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-slate-800 text-white">
+                      <h3 className="font-bold text-lg">Reschedule Activity</h3>
+                      <p className="text-slate-300 text-xs mt-0.5">{rescheduleTarget.reference} — {rescheduleTarget.type}</p>
+                  </div>
+                  <div className="p-5 space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">New Date & Time <span className="text-red-500">*</span></label>
+                          <input
+                              type="datetime-local"
+                              value={rescheduleDate}
+                              onChange={e => setRescheduleDate(e.target.value)}
+                              min={new Date().toISOString().slice(0,16)}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                          />
+                      </div>
+                      <p className="text-xs text-slate-400">
+                          This will reset the activity status to <span className="font-bold text-amber-600">PLANNED</span> and update the planned date.
+                          The original date will be preserved in the activity notes.
+                      </p>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex gap-3">
+                      <button onClick={() => setShowRescheduleModal(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button
+                          disabled={!rescheduleDate}
+                          onClick={() => {
+                              if (!rescheduleDate || !rescheduleTarget) return;
+                              const isoDate = new Date(rescheduleDate).toISOString();
+                              const oldDate = new Date(rescheduleTarget.plannedDate).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar'});
+                              onUpdateActivity({
+                                  ...rescheduleTarget,
+                                  status: 'PLANNED',
+                                  plannedDate: isoDate,
+                                  nextPlannedAt: undefined,
+                                  carryForwardNote: rescheduleTarget.carryForwardNote
+                                      ? rescheduleTarget.carryForwardNote + '\n[Rescheduled from ' + oldDate + ']'
+                                      : '[Rescheduled from ' + oldDate + ']',
+                                  updatedAt: new Date().toISOString()
+                              });
+                              setShowRescheduleModal(false);
+                              setRescheduleTarget(null);
+                          }}
+                          className="flex-1 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                      >
+                          Reschedule
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {showDeleteConfirm && editingActivity && (
+          <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-red-600 text-white">
+                      <h3 className="font-bold text-lg">Delete Activity?</h3>
+                      <p className="text-red-100 text-xs mt-0.5">{editingActivity.reference} — {editingActivity.type}</p>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-sm text-slate-700">This action is <span className="font-bold text-red-600">permanent</span> and cannot be undone. All visit history and data for this activity will be lost.</p>
+                  </div>
+                  <div className="p-4 border-t border-slate-200 flex gap-3">
+                      <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button
+                          onClick={() => {
+                              onDeleteActivity(editingActivity.id);
+                              setShowDeleteConfirm(false);
+                              setIsModalOpen(false);
+                          }}
+                          className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+                      >
+                          Delete Permanently
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };
 
-export default React.memo(MasterDashboard);
+export default React.memo(PlanningModule);
