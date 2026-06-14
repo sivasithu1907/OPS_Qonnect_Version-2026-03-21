@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, MessageSender, Priority, Technician, TicketType, TicketFilter, Customer, Role, AnalysisResult } from '../types';
 import { TICKET_CATEGORIES, SEARCH_INPUT_STYLES, INPUT_STYLES } from '../constants';
@@ -261,31 +261,30 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     });
   }, [tickets, activeFilter, viewMode]);
 
-  const filteredTickets = useMemo(() => {
-      let result = baseTickets;
-      const safeSearchTerm = safeString(searchTerm);
+  // Shared search filter — used by both filteredTickets and agingCounts
+  // Extracted to avoid duplicating the same logic in two separate useMemo blocks (T11)
+  const applySearchFilter = useCallback((tickets: Ticket[], term: string) => {
+      const safeSearchTerm = safeString(term);
+      if (!safeSearchTerm.trim()) return tickets;
+      const lowerTerm = safeSearchTerm.toLowerCase();
+      const safeSearchDigits = safeNormalize(safeSearchTerm);
+      return tickets.filter(t => {
+          const tech = technicians.find(tech => tech.id === t.assignedTechId);
+          const matchesText =
+              safeString(t.id).toLowerCase().includes(lowerTerm) ||
+              safeString(t.customerName).toLowerCase().includes(lowerTerm) ||
+              safeString(t.locationUrl).toLowerCase().includes(lowerTerm) ||
+              safeString(t.houseNumber).toLowerCase().includes(lowerTerm) ||
+              (tech && safeString(tech.name).toLowerCase().includes(lowerTerm));
+          const tPhone = safeNormalize(t.phoneNumber);
+          const tPhoneRaw = safeString(t.phoneNumber);
+          const matchesPhone = tPhone.includes(safeSearchDigits) || tPhoneRaw.includes(safeSearchTerm);
+          return matchesText || matchesPhone;
+      });
+  }, [technicians]);
 
-      if (safeSearchTerm.trim()) {
-          const lowerTerm = safeSearchTerm.toLowerCase();
-          const safeSearchDigits = safeNormalize(safeSearchTerm); // Use safe local normalize
-          
-          result = result.filter(t => {
-              const tech = technicians.find(tech => tech.id === t.assignedTechId);
-              const matchesText = 
-                  safeString(t.id).toLowerCase().includes(lowerTerm) ||
-                  safeString(t.customerName).toLowerCase().includes(lowerTerm) ||
-                  safeString(t.locationUrl).toLowerCase().includes(lowerTerm) ||
-                  safeString(t.houseNumber).toLowerCase().includes(lowerTerm) ||
-                  (tech && safeString(tech.name).toLowerCase().includes(lowerTerm));
-              
-              // Safe phone match
-              const tPhone = safeNormalize(t.phoneNumber);
-              const tPhoneRaw = safeString(t.phoneNumber);
-              const matchesPhone = tPhone.includes(safeSearchDigits) || tPhoneRaw.includes(safeSearchTerm);
-              
-              return matchesText || matchesPhone;
-          });
-      }
+  const filteredTickets = useMemo(() => {
+      let result = applySearchFilter(baseTickets, searchTerm);
       if (agingFilter) {
           const now = new Date().getTime();
           result = result.filter(t => {
@@ -304,28 +303,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   }, [baseTickets, searchTerm, agingFilter, priorityFilter, statusFilter, assigneeFilter, technicians]);
 
   const agingCounts = useMemo(() => {
-      let temp = baseTickets;
-      const safeSearchTerm = safeString(searchTerm);
-
-      if (safeSearchTerm.trim()) {
-          const lowerTerm = safeSearchTerm.toLowerCase(); 
-          const safeSearchDigits = safeNormalize(safeSearchTerm);
-
-          temp = temp.filter(t => {
-             const tech = technicians.find(tech => tech.id === t.assignedTechId);
-             const matchesText = 
-                safeString(t.id).toLowerCase().includes(lowerTerm) || 
-                safeString(t.customerName).toLowerCase().includes(lowerTerm) || 
-                (tech && safeString(tech.name).toLowerCase().includes(lowerTerm));
-             
-             // Safe phone match
-             const tPhone = safeNormalize(t.phoneNumber);
-             const tPhoneRaw = safeString(t.phoneNumber);
-             const matchesPhone = tPhone.includes(safeSearchDigits) || tPhoneRaw.includes(safeSearchTerm);
-             
-             return matchesText || matchesPhone;
-          });
-      }
+      // Uses shared applySearchFilter — no duplicate search logic (T11 fix)
+      let temp = applySearchFilter(baseTickets, searchTerm);
       if (priorityFilter !== 'ALL') temp = temp.filter(t => t.priority === priorityFilter);
       if (statusFilter !== 'ALL') temp = temp.filter(t => t.status === statusFilter);
       if (assigneeFilter !== 'ALL') temp = temp.filter(t => t.assignedTechId === assigneeFilter);
