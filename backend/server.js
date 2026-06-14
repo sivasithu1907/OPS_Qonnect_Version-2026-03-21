@@ -76,6 +76,22 @@ const writeRateLimit = (req, res, next) => {
     next();
 };
 
+// Tighter rate limit for destructive/sensitive operations (30/min per user)
+const deleteRateLimit = (req, res, next) => {
+    const key = (req.user?.email || req.ip) + ':delete';
+    const now = Date.now();
+    const window = 60000;
+    const max = 30;
+    const attempts = writeRateMap.get(key) || [];
+    const recent = attempts.filter(t => t > now - window);
+    if (recent.length >= max) {
+        return res.status(429).json({ error: 'Too many requests. Please slow down.' });
+    }
+    recent.push(now);
+    writeRateMap.set(key, recent);
+    next();
+};
+
 /* ---------- WhatsApp Send Helper ---------- */
 async function sendWhatsAppText(to, bodyText) {
   if (!process.env.WA_ACCESS_TOKEN || !process.env.WA_PHONE_NUMBER_ID) {
@@ -628,9 +644,18 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ── PUBLIC TV Display Data (no auth required) ──
-// Returns read-only snapshot of operations data for office TV screens
+// ── TV Display Data ──
+// Protected by a static TV_TOKEN from .env — set TV_TOKEN in backend/.env
+// TV screen accesses via: /api/tv-data?token=<TV_TOKEN>
+// Falls back to open if TV_TOKEN is not configured (backward compatible)
 app.get('/api/tv-data', async (req, res) => {
+    const tvToken = process.env.TV_TOKEN;
+    if (tvToken) {
+        const provided = req.query.token || req.headers['x-tv-token'];
+        if (!provided || provided !== tvToken) {
+            return res.status(401).json({ error: 'TV access denied — invalid or missing token' });
+        }
+    }
     try {
         const [ticketsRes, activitiesRes, usersRes, teamsRes, sitesRes, customersRes] = await Promise.all([
             pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 100"),
@@ -1043,7 +1068,7 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
 });
 
 // 2b. Full ticket update (category, priority, type, location, assignment etc.)
-app.put("/api/tickets/:id", authenticate, async (req, res) => {
+app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
     try {
         const id = req.params.id;
         const { category, priority, type, customerId, customerName,
@@ -1083,7 +1108,7 @@ app.put("/api/tickets/:id", authenticate, async (req, res) => {
 });
 
 // 2c. Append a message to ticket messages array
-app.post("/api/tickets/:id/message", authenticate, async (req, res) => {
+app.post("/api/tickets/:id/message", authenticate, writeRateLimit, async (req, res) => {
     try {
         const id = req.params.id;
         const { sender, content } = req.body;
@@ -1110,7 +1135,7 @@ app.post("/api/tickets/:id/message", authenticate, async (req, res) => {
 });
 
 // 3. Delete a ticket in DB (Admin only)
-app.delete("/api/tickets/:id", authenticate, async (req, res) => {
+app.delete("/api/tickets/:id", authenticate, deleteRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
     const result = await pool.query("DELETE FROM tickets WHERE id=$1", [id]);
@@ -1123,7 +1148,7 @@ app.delete("/api/tickets/:id", authenticate, async (req, res) => {
 });
 
 // 4. Update Ticket Status & Trigger Review Message
-app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
+app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res) => {
     try {
         const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt, completionNote, startedAt: adminStartedAt, completedAt: adminCompletedAt } = req.body;
         const ticketId = req.params.id;
@@ -1396,7 +1421,7 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
 });
 
 // Update customer
-app.put("/api/customers/:id", authenticate, async (req, res) => {
+app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
     const { name, phone, email, address, buildingNumber, notes, is_active } = req.body || {};
@@ -1444,7 +1469,7 @@ app.put("/api/customers/:id", authenticate, async (req, res) => {
 });
 
 // Delete customer
-app.delete("/api/customers/:id", authenticate, async (req, res) => {
+app.delete("/api/customers/:id", authenticate, deleteRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
     const r = await pool.query(`DELETE FROM customers WHERE id=$1`, [id]);
@@ -1639,7 +1664,7 @@ app.get("/api/users", authenticate, async (req, res) => {
 });
 
 // POST User (Create)
-app.post("/api/users", authenticate, async (req, res) => {
+app.post("/api/users", authenticate, writeRateLimit, async (req, res) => {
     try {
         const { id, name, email, password, role, status, phone, job_role, level } = req.body;
         if (!name || !email || !password) {
@@ -1664,7 +1689,7 @@ app.post("/api/users", authenticate, async (req, res) => {
 });
 
 // PUT User (Update)
-app.put("/api/users/:id", authenticate, async (req, res) => {
+app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
     try {
         const { name, email, password, role, status, phone, avatar, job_role, level } = req.body;
         const id = req.params.id;
@@ -1713,7 +1738,7 @@ app.put("/api/users/:id", authenticate, async (req, res) => {
 
 // DELETE User
 // Change own password
-app.put("/api/users/:id/password", authenticate, async (req, res) => {
+app.put("/api/users/:id/password", authenticate, writeRateLimit, async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
         const id = req.params.id;
@@ -1743,7 +1768,7 @@ app.put("/api/users/:id/password", authenticate, async (req, res) => {
     }
 });
 
-app.delete("/api/users/:id", authenticate, async (req, res) => {
+app.delete("/api/users/:id", authenticate, deleteRateLimit, async (req, res) => {
     try {
         const r = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
         if (r.rowCount === 0) return res.status(404).json({ error: "User not found" });
@@ -1770,7 +1795,7 @@ app.get("/api/teams", authenticate, async (req, res) => {
 });
 
 // POST Team (Create)
-app.post("/api/teams", authenticate, async (req, res) => {
+app.post("/api/teams", authenticate, writeRateLimit, async (req, res) => {
     try {
         const { id, name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
         if (!name) return res.status(400).json({ error: "Team name is required" });
@@ -1796,7 +1821,7 @@ app.post("/api/teams", authenticate, async (req, res) => {
 });
 
 // PUT Team (Update)
-app.put("/api/teams/:id", authenticate, async (req, res) => {
+app.put("/api/teams/:id", authenticate, writeRateLimit, async (req, res) => {
     try {
         const { name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
         const id = req.params.id;
@@ -1830,7 +1855,7 @@ app.put("/api/teams/:id", authenticate, async (req, res) => {
 });
 
 // DELETE Team
-app.delete("/api/teams/:id", authenticate, async (req, res) => {
+app.delete("/api/teams/:id", authenticate, deleteRateLimit, async (req, res) => {
     try {
         const r = await pool.query("DELETE FROM teams WHERE id = $1", [req.params.id]);
         if (r.rowCount === 0) return res.status(404).json({ error: "Team not found" });
@@ -1906,7 +1931,7 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
 });
 
 // PUT Activity (Update)
-app.put("/api/activities/:id", authenticate, async (req, res) => {
+app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) => {
     try {
         const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
         // Save admin-provided timestamps BEFORE deleting from details
@@ -2054,7 +2079,7 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
 });
 
 // DELETE Activity
-app.delete("/api/activities/:id", authenticate, async (req, res) => {
+app.delete("/api/activities/:id", authenticate, deleteRateLimit, async (req, res) => {
     try {
         await pool.query("DELETE FROM activities WHERE id=$1", [req.params.id]);
         res.json({ok: true});
@@ -2201,7 +2226,7 @@ app.get('/api/dashboard/pending-sales-requests', authenticate, async (req, res) 
 });
 
 /* ── POST /api/sales-appointment-requests ── */
-app.post('/api/sales-appointment-requests', authenticate, async (req, res) => {
+app.post('/api/sales-appointment-requests', authenticate, writeRateLimit, async (req, res) => {
     try {
         const role = req.user.role;
         const userId = req.user.id;
@@ -2315,7 +2340,7 @@ app.post('/api/sales-appointment-requests', authenticate, async (req, res) => {
 });
 
 /* ── PUT /api/sales-appointment-requests/:id ── */
-app.put('/api/sales-appointment-requests/:id', authenticate, async (req, res) => {
+app.put('/api/sales-appointment-requests/:id', authenticate, writeRateLimit, async (req, res) => {
     try {
         const role   = req.user.role;
         const userId = req.user.id;
@@ -2384,7 +2409,7 @@ app.put('/api/sales-appointment-requests/:id', authenticate, async (req, res) =>
 });
 
 /* ── DELETE /api/sales-appointment-requests/:id ── */
-app.delete('/api/sales-appointment-requests/:id', authenticate, async (req, res) => {
+app.delete('/api/sales-appointment-requests/:id', authenticate, deleteRateLimit, async (req, res) => {
     try {
         const role   = req.user.role;
         const userId = req.user.id;
@@ -2429,7 +2454,7 @@ app.delete('/api/sales-appointment-requests/:id', authenticate, async (req, res)
 // Validates required scheduling fields, updates the request to SCHEDULED,
 // then creates a corresponding planned Activity so it appears in
 // Activity Planner and Operations Monitor immediately.
-app.post('/api/sales-appointment-requests/:id/schedule', authenticate, async (req, res) => {
+app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRateLimit, async (req, res) => {
     try {
         const role   = req.user.role;
         const userId = req.user.id;
