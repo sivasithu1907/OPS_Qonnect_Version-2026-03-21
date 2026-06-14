@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import { Ticket, TicketStatus, MessageSender, Priority, Technician, TicketType, TicketFilter, Customer, Role, AnalysisResult } from '../types';
 import { TICKET_CATEGORIES, SEARCH_INPUT_STYLES, INPUT_STYLES } from '../constants';
 import { analyzeTicketMessage } from '../services/geminiService';
