@@ -38,6 +38,7 @@ interface CurrentUser {
 interface Props {
   currentUser: CurrentUser;
   technicians: Technician[];
+  activities?: any[]; // For resource occupancy calendar
   onActivityCreated?: () => void;
 }
 
@@ -80,7 +81,7 @@ const FieldError = ({ msg }: { msg?: string }) =>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, onActivityCreated }) => {
+const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, activities = [], onActivityCreated }) => {
   const isSales     = currentUser.role === Role.SALES;
   const isScheduler = currentUser.role === Role.ADMIN || currentUser.role === Role.TEAM_LEAD;
   const myId        = currentUser.techId || currentUser.id;
@@ -93,6 +94,10 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
   const [statusFilter, setStatusFilter] = useState<SalesRequestStatus | 'ALL'>('ALL');
   // View toggle + calendar month
   const [view, setView]               = useState<'list' | 'calendar'>('list');
+  // Sales: "my requests" tab vs "all requests" tab
+  const [myOnly, setMyOnly]           = useState<boolean>(true);
+  // Calendar day popup
+  const [calDayPopup, setCalDayPopup] = useState<{ dateStr: string; requests: SalesAppointmentRequest[]; activities: any[] } | null>(null);
   const [calMonth, setCalMonth]       = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -174,6 +179,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
   // ── Filtering ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return requests.filter(r => {
+      // Sales "My Requests" tab: show only own requests
+      if (isSales && myOnly && r.createdBy !== myId) return false;
       if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
       if (searchQ.trim()) {
         const q = searchQ.toLowerCase();
@@ -186,7 +193,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
       }
       return true;
     });
-  }, [requests, statusFilter, searchQ]);
+  }, [requests, statusFilter, searchQ, isSales, myOnly, myId]);
 
   const pendingCount = useMemo(
     () => requests.filter(r => r.status === SalesRequestStatus.PENDING_SCHEDULING).length,
@@ -433,6 +440,25 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
         </div>
       </div>
 
+      {/* ── My / All toggle (Sales only) ── */}
+      {isSales && (
+        <div className="px-6 pt-3 pb-0 bg-white flex gap-2 border-b-0">
+          <button
+            onClick={() => setMyOnly(true)}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${myOnly ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+          >
+            My Requests
+          </button>
+          <button
+            onClick={() => setMyOnly(false)}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all flex items-center gap-1.5 ${!myOnly ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+          >
+            All Requests
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${!myOnly ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{requests.length}</span>
+          </button>
+        </div>
+      )}
+
       {/* ── Filters / Search ── */}
       <div className="px-6 py-4 bg-white border-b border-slate-100">
         <div className="flex flex-col sm:flex-row gap-3">
@@ -484,10 +510,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, o
         ) : view === 'calendar' ? (
           <CalendarView
             requests={filtered}
+            activities={activities}
+            technicians={technicians}
             calMonth={calMonth}
             onPrevMonth={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
             onNextMonth={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
-            onSelectRequest={r => setDetailItem(r)}
+            onSelectDay={(dateStr, reqs, acts) => setCalDayPopup({ dateStr, requests: reqs, activities: acts })}
           />
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
@@ -708,15 +736,17 @@ const DateGroupedList: React.FC<GroupedListProps> = ({
 
 interface CalendarViewProps {
   requests: SalesAppointmentRequest[];
+  activities: any[];
+  technicians: Technician[];
   calMonth: Date;
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  onSelectRequest: (r: SalesAppointmentRequest) => void;
+  onSelectDay: (dateStr: string, requests: SalesAppointmentRequest[], activities: any[]) => void;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const CalendarView: React.FC<CalendarViewProps> = ({ requests, calMonth, onPrevMonth, onNextMonth, onSelectRequest }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, technicians, calMonth, onPrevMonth, onNextMonth, onSelectDay }) => {
   const year  = calMonth.getFullYear();
   const month = calMonth.getMonth();
 
@@ -730,28 +760,50 @@ const CalendarView: React.FC<CalendarViewProps> = ({ requests, calMonth, onPrevM
   // Pad to complete last row
   while (cells.length % 7 !== 0) cells.push(null);
 
-  // Build a map: dateString → requests
+  // Build maps: dateString → SARs + dateString → Activities
   const byDate = useMemo(() => {
     const map: Record<string, SalesAppointmentRequest[]> = {};
     requests.forEach(r => {
-      const dateKey = r.scheduledDate
-        ? r.scheduledDate.slice(0, 10)
-        : r.status === 'PENDING_SCHEDULING'
-        ? null // pending — show on today so they're not hidden
-        : null;
+      const dateKey = r.scheduledDate ? r.scheduledDate.slice(0, 10) : null;
       if (dateKey) {
         if (!map[dateKey]) map[dateKey] = [];
         map[dateKey].push(r);
       }
     });
-    // Also bucket PENDING requests by createdAt date for visibility
+    // Pending requests: show on created date
     requests.filter(r => r.status === 'PENDING_SCHEDULING').forEach(r => {
       const key = r.createdAt.slice(0, 10);
       if (!map[key]) map[key] = [];
-      if (!map[key].includes(r)) map[key].push(r);
+      if (!map[key].find(x => x.id === r.id)) map[key].push(r);
     });
     return map;
   }, [requests]);
+
+  // Build activity map: dateString → scheduled activities (resource occupancy)
+  const actByDate = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    activities.filter(a => a.plannedDate && a.status !== 'CANCELLED').forEach(a => {
+      const key = a.plannedDate.slice(0, 10);
+      if (!map[key]) map[key] = [];
+      map[key].push(a);
+    });
+    return map;
+  }, [activities]);
+
+  // Count unique engineers booked per day
+  const engineersBooked = useMemo(() => {
+    const result: Record<string, number> = {};
+    Object.entries(actByDate).forEach(([date, acts]) => {
+      const eng = new Set<string>();
+      acts.forEach(a => {
+        if (a.leadTechId) eng.add(a.leadTechId);
+        if (a.primaryEngineerId) eng.add(a.primaryEngineerId);
+        (a.supportingEngineerIds || []).forEach((id: string) => eng.add(id));
+      });
+      result[date] = eng.size;
+    });
+    return result;
+  }, [actByDate]);
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -793,30 +845,53 @@ const CalendarView: React.FC<CalendarViewProps> = ({ requests, calMonth, onPrevM
           return (
             <div
               key={idx}
-              className={`min-h-[90px] p-1.5 border-b border-r border-slate-100 last:border-r-0 ${
-                !day ? 'bg-slate-50/50' : isPast ? 'bg-white' : 'bg-white'
+              onClick={() => {
+                if (!day || !dateStr) return;
+                const dayActs = actByDate[dateStr] || [];
+                const dayReqs = byDate[dateStr] || [];
+                if (dayActs.length > 0 || dayReqs.length > 0) {
+                  onSelectDay(dateStr, dayReqs, dayActs);
+                }
+              }}
+              className={`min-h-[90px] p-1.5 border-b border-r border-slate-100 last:border-r-0 transition-colors ${
+                !day ? 'bg-slate-50/50' :
+                (actByDate[dateStr || ''] || []).length > 0 ? 'bg-blue-50/30 hover:bg-blue-50 cursor-pointer' : 'bg-white hover:bg-slate-50 cursor-pointer'
               }`}
             >
               {day && (
                 <>
-                  <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mb-1 ${
-                    isToday ? 'bg-[#FFCC00] text-slate-900' : 'text-slate-500'
-                  }`}>
-                    {day}
+                  <div className="flex items-center justify-between mb-1">
+                    <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                      isToday ? 'bg-[#FFCC00] text-slate-900' : 'text-slate-500'
+                    }`}>
+                      {day}
+                    </div>
+                    {/* Engineer occupancy indicator */}
+                    {engineersBooked[dateStr || ''] > 0 && (
+                      <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700" title={`${engineersBooked[dateStr || '']} engineer(s) booked`}>
+                        {engineersBooked[dateStr || '']}👷
+                      </span>
+                    )}
                   </div>
                   <div className="space-y-0.5">
-                    {cellRequests.slice(0, 3).map(r => (
-                      <button
+                    {/* SAR entries */}
+                    {cellRequests.slice(0, 2).map(r => (
+                      <div
                         key={r.id}
-                        onClick={() => onSelectRequest(r)}
-                        className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium truncate flex items-center gap-1 hover:opacity-80 transition-opacity ${STATUS_CONFIG[r.status]?.bg} ${STATUS_CONFIG[r.status]?.color}`}
+                        className={`w-full text-left px-1.5 py-0.5 rounded text-[9px] font-medium truncate flex items-center gap-1 ${STATUS_CONFIG[r.status]?.bg} ${STATUS_CONFIG[r.status]?.color}`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor(r.status)}`} />
                         <span className="truncate">{r.customerName}</span>
-                      </button>
+                      </div>
                     ))}
-                    {cellRequests.length > 3 && (
-                      <div className="text-[9px] text-slate-400 px-1">+{cellRequests.length - 3} more</div>
+                    {/* Activity summary */}
+                    {(actByDate[dateStr || ''] || []).length > 0 && (
+                      <div className="text-[9px] font-bold text-blue-600 px-1 flex items-center gap-0.5">
+                        <span>📋</span> {(actByDate[dateStr || ''] || []).length} job{(actByDate[dateStr || ''] || []).length > 1 ? 's' : ''}
+                      </div>
+                    )}
+                    {cellRequests.length > 2 && (
+                      <div className="text-[9px] text-slate-400 px-1">+{cellRequests.length - 2} more</div>
                     )}
                   </div>
                 </>
@@ -1471,6 +1546,134 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
           </div>
         </div>
       </div>
+
+      {/* ── Calendar Day Popup ── */}
+      {calDayPopup && (
+        <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setCalDayPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-800 text-white rounded-t-2xl">
+              <div>
+                <h3 className="font-bold text-base">
+                  {new Date(calDayPopup.dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </h3>
+                <p className="text-slate-300 text-xs mt-0.5">
+                  {calDayPopup.activities.length} planned job{calDayPopup.activities.length !== 1 ? 's' : ''} · {calDayPopup.requests.length} appointment request{calDayPopup.requests.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button onClick={() => setCalDayPopup(null)} className="p-1.5 hover:bg-white/10 rounded-lg">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+              {/* ── Planned Activities (Field Resource Occupancy) ── */}
+              {calDayPopup.activities.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"/> Scheduled Jobs
+                  </h4>
+                  <div className="space-y-2">
+                    {calDayPopup.activities.map((a: any, i: number) => {
+                      const lead = technicians.find(t => t.id === a.leadTechId);
+                      const primary = technicians.find(t => t.id === a.primaryEngineerId);
+                      const supporting = (a.supportingEngineerIds || [])
+                        .map((id: string) => technicians.find(t => t.id === id)?.name)
+                        .filter(Boolean);
+                      const timeStr = a.plannedDate
+                        ? new Date(a.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })
+                        : null;
+                      const statusColor = a.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                                         a.status === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
+                                         a.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                                         'bg-blue-100 text-blue-700';
+                      return (
+                        <div key={i} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-slate-800 text-sm">{a.type || 'Activity'}</span>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{(a.status || '').replace(/_/g,' ')}</span>
+                              </div>
+                              {a.customerName && <p className="text-xs text-slate-500 mt-0.5">{a.customerName}</p>}
+                            </div>
+                            <div className="text-right shrink-0">
+                              {timeStr && <div className="text-xs font-bold text-slate-700">{timeStr}</div>}
+                              {a.durationHours > 0 && <div className="text-[10px] text-slate-400">{a.durationHours}h</div>}
+                            </div>
+                          </div>
+                          {/* Service category */}
+                          {a.serviceCategory && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {String(a.serviceCategory).split(', ').filter(Boolean).map((cat: string) => (
+                                <span key={cat} className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200 font-medium">{cat}</span>
+                              ))}
+                            </div>
+                          )}
+                          {/* Resource team */}
+                          <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                            {(primary || lead) && (
+                              <span className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                                👷 {(primary || lead)?.name}
+                              </span>
+                            )}
+                            {supporting.map((name: string) => (
+                              <span key={name} className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                                🔧 {name}
+                              </span>
+                            ))}
+                            {(a.freelancers || []).map((fl: any, fi: number) => (
+                              <span key={fi} className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 text-orange-700">
+                                🆓 {fl.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Appointment Requests ── */}
+              {calDayPopup.requests.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400"/> Appointment Requests
+                  </h4>
+                  <div className="space-y-2">
+                    {calDayPopup.requests.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => { setCalDayPopup(null); setDetailItem(r); }}
+                        className="w-full text-left bg-slate-50 border border-slate-200 rounded-xl p-3 hover:bg-slate-100 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-slate-800 text-sm">{r.customerName}</span>
+                            <span className="ml-2 text-[10px] font-mono text-slate-400">{r.id}</span>
+                          </div>
+                          <StatusBadge status={r.status} />
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{r.activityType} · {r.salesLeadName}</p>
+                        {r.scheduledStartTime && (
+                          <p className="text-xs font-bold text-blue-600 mt-1">⏰ {r.scheduledStartTime}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {calDayPopup.activities.length === 0 && calDayPopup.requests.length === 0 && (
+                <p className="text-center text-slate-400 py-8 text-sm">Nothing scheduled on this day</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
