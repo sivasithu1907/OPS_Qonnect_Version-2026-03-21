@@ -428,7 +428,7 @@ const handleLogout = useCallback(() => {
   };
 
   const handleDeleteTicket = async (id: string) => {
-      if (!window.confirm("Are you sure you want to delete this ticket?")) return;
+      if (!id) return; // Child component is responsible for user confirmation
       try {
           const response = await fetch(`/api/tickets/${id}`, {
               method: "DELETE",
@@ -568,7 +568,7 @@ const handleLogout = useCallback(() => {
   };
 
   const handleDeleteActivity = async (id: string) => {
-      if (!window.confirm("Are you sure you want to delete this activity?")) return;
+      if (!id) return; // Child component (PlanningModule) is responsible for user confirmation
       try {
           const res = await fetch(`/api/activities/${id}`, { method: "DELETE", headers: getAuthHeaders() });
           if (res.ok) await loadActivities(); // Refresh from DB
