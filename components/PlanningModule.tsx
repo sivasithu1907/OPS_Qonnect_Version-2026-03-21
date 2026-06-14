@@ -829,13 +829,15 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   </button>
                </div>
                
-               <button 
-                 onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
-                 className="bg-slate-900 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all"
-               >
-                 <Plus size={18} />
-                 <span>Plan Activity</span>
-               </button>
+               {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
+                 <button 
+                   onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
+                   className="bg-slate-900 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all"
+                 >
+                   <Plus size={18} />
+                   <span>Plan Activity</span>
+                 </button>
+               )}
             </div>
           </div>
       )}
@@ -843,12 +845,14 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       {isMobile && (
           <div className="flex justify-between items-center mb-4 shrink-0">
               <h2 className="font-bold text-slate-800 text-lg">My Planner</h2>
-              <button 
-                 onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
-                 className="bg-slate-900 text-white p-2 rounded-lg shadow-sm"
-               >
-                 <Plus size={20} />
-               </button>
+              {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
+                 <button 
+                   onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
+                   className="bg-slate-900 text-white p-2 rounded-lg shadow-sm"
+                 >
+                   <Plus size={20} />
+                 </button>
+              )}
           </div>
       )}
 
@@ -1305,7 +1309,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <textarea value={remarksState} onChange={e => setRemarksState(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
                   </div>
 
-                  {editingActivity && (
+                  {editingActivity && currentUserRole === Role.ADMIN && (
                      <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                         <button type="button" onClick={() => { setShowDeleteConfirm(true); }} className="text-red-500 text-sm hover:text-red-700 flex items-center gap-1">
                             <X size={16} /> Delete Activity
@@ -1489,26 +1493,30 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 {va.odooLink && <div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Odoo:</span><a href={va.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">{va.odooLink}</a></div>}
               </div>
               <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-2">
-                {/* Admin action buttons */}
+                {/* Action buttons — gated by role */}
                 <div className="flex gap-2">
-                    {/* Edit */}
-                    <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 text-sm">
-                        Edit Activity
-                    </button>
-                    {/* Admin Override — force status + timestamps */}
-                    <button onClick={() => {
-                        setActOverrideTarget(va);
-                        setActOverrideStatus(va.status || 'PLANNED');
-                        setActOverrideStartedAt(va.startedAt ? new Date(va.startedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
-                        setActOverrideCompletedAt(va.completedAt ? new Date(va.completedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
-                        setActOverrideNote('');
-                        setShowActOverride(true);
-                    }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 text-sm">
-                        Admin Override
-                    </button>
+                    {/* Edit — Admin and Team Lead can edit */}
+                    {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD) && (
+                        <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 text-sm">
+                            Edit Activity
+                        </button>
+                    )}
+                    {/* Admin Override — Admin only */}
+                    {currentUserRole === Role.ADMIN && (
+                        <button onClick={() => {
+                            setActOverrideTarget(va);
+                            setActOverrideStatus(va.status || 'PLANNED');
+                            setActOverrideStartedAt(va.startedAt ? new Date(va.startedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
+                            setActOverrideCompletedAt(va.completedAt ? new Date(va.completedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
+                            setActOverrideNote('');
+                            setShowActOverride(true);
+                        }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 text-sm">
+                            Admin Override
+                        </button>
+                    )}
                 </div>
                 {/* Reschedule — for carry-forward or any status */}
-                {(va.status === 'CARRY_FORWARD' || va.status === 'PLANNED' || va.status === 'DONE' || va.status === 'IN_PROGRESS') && (
+                {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD) && (va.status === 'CARRY_FORWARD' || va.status === 'PLANNED' || va.status === 'DONE' || va.status === 'IN_PROGRESS') && (
                     <button onClick={() => {
                         setRescheduleTarget(va);
                         // Default: next day at same time
