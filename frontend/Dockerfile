@@ -2,11 +2,12 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Copy package files from the root
-COPY package.json ./
-RUN npm install
+# Copy BOTH package files first — this allows Docker to cache the npm install layer.
+# The cache is only invalidated when package.json or package-lock.json actually changes.
+COPY package.json package-lock.json ./
+RUN npm install --frozen-lockfile
 
-# Copy EVERYTHING to ensure index.css and all components are found
+# Copy source files (separate layer — doesn't invalidate npm cache)
 COPY . .
 
 # Build the application
