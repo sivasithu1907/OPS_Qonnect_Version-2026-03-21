@@ -314,6 +314,7 @@ async function initDb() {
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_escalated_at TIMESTAMPTZ;
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS visit_history JSONB DEFAULT '[]';
     `);
 
     // 3. Customer ID Sequence
@@ -491,7 +492,6 @@ await pool.query(`
       -- Add new structured fields (safe to run on existing DB)
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS location_url TEXT;
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS issue_category TEXT;
-      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS location_url TEXT;
     `);
 
     // WhatsApp Logs Table
@@ -534,6 +534,8 @@ await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_activities_planned ON activities(planned_date DESC);
         CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_tickets_assigned ON tickets(assigned_tech_id);
+        CREATE INDEX IF NOT EXISTS idx_tickets_phone ON tickets(phone_number);
+        CREATE INDEX IF NOT EXISTS idx_sessions_last_interaction ON sessions(last_interaction);
         CREATE INDEX IF NOT EXISTS idx_users_email ON users(LOWER(email));
         CREATE INDEX IF NOT EXISTS idx_tickets_created ON tickets(created_at DESC);
     `).catch(() => {}); // Non-fatal if indexes already exist
@@ -756,6 +758,9 @@ function mapTicket(r) {
     completionNote: r.completion_note || undefined,
     cancellationReason: r.cancellation_reason || undefined,
     lastEscalatedAt: r.last_escalated_at || undefined,
+    startedAt: r.started_at || undefined,
+    completedAt: r.completed_at || undefined,
+    visitHistory: Array.isArray(r.visit_history) ? r.visit_history : [],
   };
 }
 
@@ -1002,12 +1007,19 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
         [normalizedPhone]
       );
       if (existingCust.rows.length > 0) {
+        // Customer already exists — use their canonical ID, update enriched fields
         actualCustomerId = existingCust.rows[0].id;
-        // Update name/location if provided
-        await client.query(`UPDATE customers SET name=COALESCE(NULLIF($1,''), name), building_number=COALESCE(NULLIF($2,''), building_number) WHERE id=$3`,
-          [customerName, houseNumber || '', actualCustomerId]);
+        await client.query(
+          `UPDATE customers SET
+             name             = COALESCE(NULLIF($1,''), name),
+             building_number  = COALESCE(NULLIF($2,''), building_number),
+             address          = COALESCE(NULLIF($3,''), address)
+           WHERE id = $4`,
+          [customerName, houseNumber || '', locationUrl || '', actualCustomerId]
+        );
+        // IMPORTANT: do NOT insert a new customer — existing one wins
       } else {
-        // Create new customer
+        // New customer — server uses the client-provided ID (already a QNC-CUST-XXXX from backend)
         await client.query(`
           INSERT INTO customers (id, name, phone, address, building_number)
           VALUES ($1, $2, $3, $4, $5)
@@ -1075,6 +1087,7 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
         const id = req.params.id;
         const { category, priority, type, customerId, customerName,
                 assignedTechId, appointmentTime, locationUrl, houseNumber, odooLink, notes, photos } = req.body;
+        const { phoneNumber } = req.body; // also capture phoneNumber for update
         await pool.query(
             `UPDATE tickets SET
                 category         = COALESCE($1,  category),
@@ -1090,6 +1103,8 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
                 messages         = CASE WHEN $12::text IS NOT NULL
                                         THEN COALESCE(messages,'[]'::jsonb) || $12::jsonb
                                         ELSE messages END,
+                type             = COALESCE($13, type),
+                phone_number     = COALESCE($14, phone_number),
                 updated_at       = NOW()
              WHERE id = $11`,
             [
@@ -1099,7 +1114,8 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
                 odooLink || null, notes || null,
                 customerId || null, customerName || null,
                 id,
-                photos ? JSON.stringify(photos) : null
+                photos ? JSON.stringify(photos) : null,
+                type || null, phoneNumber || null
             ]
         );
         res.json({ ok: true });
@@ -2633,7 +2649,17 @@ app.get("/api/whatsapp/webhook", (req, res) => {
     }
 });
 
+// ── WhatsApp Webhook: TEMPORARILY DISABLED ──
+// Bot flow is on hold. Incoming messages are acknowledged (200) but not processed.
+// Re-enable by removing this stub and uncommenting the full handler below.
 app.post("/api/whatsapp/webhook", async (req, res) => {
+    console.log('[WA Webhook] Received — bot flow disabled, returning 200');
+    return res.sendStatus(200);
+});
+
+// ── DISABLED WA webhook handler (preserved for re-enable) ──
+// eslint-disable-next-line no-unused-vars
+async function _disabled_whatsapp_webhook(req, res) {
     const startTime = Date.now();
     try {
         const body = req.body;
@@ -2790,11 +2816,26 @@ app.post("/api/whatsapp/webhook", async (req, res) => {
     } catch (webhookErr) {
         console.error("Webhook outer error:", webhookErr);
     }
-});
+} // end _disabled_whatsapp_webhook
 
 async function handleIncomingMessage(phone, text) {
 	try {
 	const startTime = Date.now();
+
+	// ── Session expiry: clear stale sessions older than 48 hours ──
+	// Prevents returning customers from re-entering an old incomplete flow
+	try {
+		const expiry = await pool.query(
+			`DELETE FROM sessions WHERE phone = $1 AND last_interaction < NOW() - INTERVAL '48 hours' RETURNING phone`,
+			[phone]
+		);
+		if (expiry.rowCount > 0) {
+			console.log(`[Session] Expired stale session for ${phone} — starting fresh`);
+		}
+	} catch(expErr) {
+		console.error('[Session] Expiry check error (non-critical):', expErr.message);
+	}
+
 	const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 	const intent = await detectIntent(text, model);
 	console.log("Detected intent:", intent);
