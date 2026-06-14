@@ -539,20 +539,22 @@ const handleLogout = useCallback(() => {
       }
   }, [isSavingActivity]);
 
-  // When an activity has a customer + location/building, update the customer record if its fields are empty
+  // When an activity has a customer + location/building, update the customer record if its fields are empty.
+  // Only fires when location data is present AND different from what the customer already has.
   const syncActivityLocationToCustomer = async (act: any) => {
       try {
           const custId = act.customerId;
           if (!custId) return;
+          // Must have actual location data to sync
+          const locationUrl = (act.locationUrl || '').trim();
+          const houseNumber = (act.houseNumber || '').trim();
+          if (!locationUrl && !houseNumber) return; // Nothing to sync
           const cust = customers.find(c => c.id === custId);
           if (!cust) return;
-          const locationUrl = act.locationUrl || '';
-          const houseNumber = act.houseNumber || '';
-          if (!locationUrl && !houseNumber) return;
-          // Only update if the customer's fields are empty
-          const needsAddress = !cust.address && locationUrl;
-          const needsBuilding = !(cust as any).buildingNumber && houseNumber;
-          if (!needsAddress && !needsBuilding) return;
+          // Only update fields that are empty on the customer record
+          const needsAddress = !cust.address?.trim() && locationUrl;
+          const needsBuilding = !(cust as any).buildingNumber?.trim() && houseNumber;
+          if (!needsAddress && !needsBuilding) return; // Customer already has this info
           await fetch(`/api/customers/${encodeURIComponent(custId)}`, {
               method: "PUT",
               headers: getAuthHeaders(),
@@ -588,7 +590,11 @@ const loadTickets = async () => {
     try {
       const res = await fetch("/api/activities", { headers: getAuthHeaders() });
       const data = await res.json();
-      if (Array.isArray(data)) setActivities(data);
+      if (Array.isArray(data)) {
+          setActivities(data);
+          // Note: viewingActivity in child components will naturally refresh
+          // because it derives from the activities array passed as a prop
+      }
     } catch (e) {
       console.error("Failed to load activities", e);
     }
