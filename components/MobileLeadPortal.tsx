@@ -168,12 +168,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [actSelectedCustomer, setActSelectedCustomer] = useState<Customer | null>(null);
   const [actServiceCats, setActServiceCats] = useState<string[]>([]);
 
-  // Create Activity (quick)
+  // Create Activity (quick) — all form state fully initialized for clean resets
   const [showCreateActivity, setShowCreateActivity] = useState(false);
-  const [createActivityForm, setCreateActivityForm] = useState({
+  const EMPTY_CREATE_FORM = {
       type: '', serviceCategory: '', customerId: '', description: '',
       plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: ''
-  });
+  };
+  const [createActivityForm, setCreateActivityForm] = useState({ ...EMPTY_CREATE_FORM });
 
   // Create Ticket — customer phone search
   const [ticketPhoneSearch, setTicketPhoneSearch] = useState('');
@@ -3760,7 +3761,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                       <h3 className="font-bold text-lg text-slate-900">Plan New Activity</h3>
-                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); }}><X size={20} className="text-slate-400" /></button>
+                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }}><X size={20} className="text-slate-400" /></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                       {/* Customer — search by name or phone */}
@@ -3892,7 +3893,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
                   </div>
                   <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
-                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
                       <button onClick={() => {
                           if (!actSelectedCustomer) { alert('Please select a customer'); return; }
                           if (!createActivityForm.type) { alert('Please select an activity type'); return; }
