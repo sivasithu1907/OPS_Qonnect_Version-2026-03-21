@@ -411,11 +411,11 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // Current tech info
   const currentTech = technicians.find((t: any) => t.id === currentTechId);
 
-  // Generate date range — 2 prev, today center, 2 next (5 total)
+  // Generate date range — 7 prev, today, 2 next (10 total) — scrollable history
   const dateRange = useMemo(() => {
       const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
       const today = new Date();
-      for (let i = -2; i <= 2; i++) {
+      for (let i = -7; i <= 2; i++) {
           const d = new Date(today);
           d.setDate(today.getDate() + i);
           const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
