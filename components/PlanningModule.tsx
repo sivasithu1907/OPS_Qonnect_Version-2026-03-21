@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import { Activity, Team, Site, Customer, ActivityStatus, Priority, ActivityType, Technician, ServiceCategory, Role } from '../types';
 import { 
   Calendar, List, Layout, Plus, Search, Filter, Clock, 
@@ -117,6 +118,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   const [remarksState, setRemarksState] = useState<string>('');
   const [odooLinkState, setOdooLinkState] = useState<string>('');
 
+  // Form validation error (shown inline above submit button)
+  const [formError, setFormError] = useState('');
+
   // Reschedule modal state
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduleTarget, setRescheduleTarget] = useState<Activity | null>(null);
@@ -162,6 +166,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   // Initialize ALL form state when modal opens — ensures clean slate every time
   useEffect(() => {
     if (isModalOpen) {
+        setFormError(''); // Clear any previous validation error
         if (editingActivity) {
             const d = new Date(editingActivity.plannedDate);
             const pad = (n: number) => String(n).padStart(2,'0');
@@ -884,22 +889,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   key={editingActivity?.id ?? '__new__'}
                   onSubmit={(e) => {
                   e.preventDefault();
-                  if (!selectedCustomerId) {
-                      alert('Please select a customer.');
-                      return;
-                  }
-                  if (!activityType) {
-                      alert('Please select an activity type.');
-                      return;
-                  }
-                  if (serviceCats.length === 0) {
-                      alert('Please select at least one service category.');
-                      return;
-                  }
-                  if (!plannedDatetime) {
-                      alert('Please set a planned date and time.');
-                      return;
-                  }
+                  // Inline validation
+                  if (!selectedCustomerId) { setFormError('Please select a customer.'); return; }
+                  if (!activityType)        { setFormError('Please select an activity type.'); return; }
+                  if (serviceCats.length === 0) { setFormError('Please select at least one service category.'); return; }
+                  if (!plannedDatetime)     { setFormError('Please set a planned date and time.'); return; }
+                  setFormError(''); // Clear on valid submit
 
                   // Construct ISO Date from datetime-local input
                   const plannedDateIso = new Date(plannedDatetime).toISOString();
@@ -1319,6 +1314,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
                         <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+                        {formError && (
+                            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                                ⚠ {formError}
+                            </p>
+                        )}
                         <button type="submit" disabled={isSaving} className={`px-6 py-2 font-medium rounded-lg shadow-lg transition-all flex items-center gap-2 ${isSaving ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}>
                             <Save size={18} /> {isSaving ? 'Saving...' : editingActivity ? 'Update Activity' : 'Plan Activity'}
                         </button>
