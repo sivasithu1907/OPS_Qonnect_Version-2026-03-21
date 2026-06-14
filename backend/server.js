@@ -1133,18 +1133,21 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
         const prevStatus = current.rows[0]?.status;
         const alreadyStarted = current.rows[0]?.started_at;
 
-        // Build timestamp clauses — admin-provided values take priority
+        // Build timestamp clauses — admin-provided values take priority (parameterized)
         let startedAtClause = "";
         let completedAtClause = "";
+        const extraTicketParams = [];
 
         if (adminStartedAt) {
-            startedAtClause = `, started_at = '${new Date(adminStartedAt).toISOString()}'`;
+            extraTicketParams.push(new Date(adminStartedAt).toISOString());
+            startedAtClause = `, started_at = $${7 + extraTicketParams.length}`;
         } else if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
             startedAtClause = ", started_at = NOW()";
         }
 
         if (adminCompletedAt) {
-            completedAtClause = `, completed_at = '${new Date(adminCompletedAt).toISOString()}'`;
+            extraTicketParams.push(new Date(adminCompletedAt).toISOString());
+            completedAtClause = `, completed_at = $${7 + extraTicketParams.length}`;
         } else if (status === 'RESOLVED' && prevStatus !== 'RESOLVED') {
             completedAtClause = ", completed_at = NOW()";
         }
@@ -1167,7 +1170,7 @@ app.put("/api/tickets/:id/status", authenticate, async (req, res) => {
              WHERE id = $6`,
             [status, assignedTechId || null, appointmentTime || null,
              carryForwardNote || null, nextPlannedAt || null, ticketId,
-             completionNote || null]
+             completionNote || null, ...extraTicketParams]
         );
 
         // 2. Fetch customer + ticket info for notifications
@@ -1982,30 +1985,32 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
             return res.json({ok: true, visitRecorded: true});
         }
 
-        // ── NORMAL STATUS TRANSITIONS ──
-        let startedAtClause = "";
-        let completedAtClause = "";
-        let visitHistoryClause = "";
+        // ── NORMAL STATUS TRANSITIONS (fully parameterized — no string interpolation) ──
+        // Build SET clause and params array together to avoid SQL injection in timestamps
+        const baseParams = [
+            type, priority, status, plannedDate,
+            safeCustomerId, siteId, leadTechId,
+            description, durationHours,
+            JSON.stringify(mergedDetails)
+        ];
+        let extraClauses = '';
+        const extraParams = [];
 
-        // Admin-provided timestamps take priority over auto-generated NOW()
+        // Admin-provided startedAt (explicit override) — always parameterized
         if (adminStartedAt) {
-            startedAtClause = `, started_at = '${new Date(adminStartedAt).toISOString()}'`;
-        } else if (status === 'IN_PROGRESS' && (prevStatus === 'PLANNED' || prevStatus === 'CARRY_FORWARD' || prevStatus === 'ARRIVED' || prevStatus === 'ON_MY_WAY')) {
-            // ALWAYS set started_at when entering IN_PROGRESS — even if there's an old stale value from a previous visit
-            startedAtClause = ", started_at = NOW()";
+            extraParams.push(new Date(adminStartedAt).toISOString());
+            extraClauses += `, started_at = $${baseParams.length + extraParams.length}`;
+        } else if (status === 'IN_PROGRESS' && ['PLANNED','CARRY_FORWARD','ARRIVED','ON_MY_WAY'].includes(prevStatus)) {
+            extraClauses += ', started_at = NOW()';
         }
 
-        // When rescheduling (going back to PLANNED), clear started_at and completed_at
-        if (status === 'PLANNED' && prevStatus !== 'PLANNED') {
-            startedAtClause = ", started_at = NULL";
-            completedAtClause = ", completed_at = NULL";
-        }
-
+        // Admin-provided completedAt (explicit override) — always parameterized
         if (adminCompletedAt) {
-            completedAtClause = `, completed_at = '${new Date(adminCompletedAt).toISOString()}'`;
+            extraParams.push(new Date(adminCompletedAt).toISOString());
+            extraClauses += `, completed_at = $${baseParams.length + extraParams.length}`;
         } else if (status === 'DONE' && prevStatus !== 'DONE') {
-            completedAtClause = ", completed_at = NOW()";
-            // Record the completed visit in history
+            extraClauses += ', completed_at = NOW()';
+            // Record completed visit in history — parameterized jsonb
             const visitRecord = {
                 date: current.rows[0].planned_date || plannedDate,
                 startedAt: current.rows[0].started_at || null,
@@ -2020,18 +2025,31 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
                 status: 'DONE'
             };
             const updatedHistory = [...existingHistory, visitRecord];
-            visitHistoryClause = `, visit_history = '${JSON.stringify(updatedHistory).replace(/'/g, "''")}'::jsonb`;
-        }
-        if (status === 'PLANNED' || status === 'CANCELLED') {
-            startedAtClause  = ", started_at = NULL";
-            completedAtClause = ", completed_at = NULL";
-            delete mergedDetails.primaryEngineerId;
-            delete mergedDetails.supportingEngineerIds;
+            extraParams.push(JSON.stringify(updatedHistory));
+            extraClauses += `, visit_history = $${baseParams.length + extraParams.length}::jsonb`;
         }
 
+        // Only clear timestamps when EXPLICITLY rescheduling (prevStatus was not PLANNED).
+        // IMPORTANT: We do NOT wipe data when an admin edits a PLANNED activity normally.
+        if (status === 'PLANNED' && prevStatus !== 'PLANNED') {
+            // Rescheduling back to planned — clear execution timestamps only
+            extraClauses += ', started_at = NULL, completed_at = NULL';
+        }
+        if (status === 'CANCELLED') {
+            extraClauses += ', started_at = NULL, completed_at = NULL';
+            delete mergedDetails.primaryEngineerId;
+            delete mergedDetails.supportingEngineerIds;
+            // Re-apply mergedDetails since we mutated it after setting baseParams
+            baseParams[9] = JSON.stringify(mergedDetails);
+        }
+
+        // id is always the last param
+        const allParams = [...baseParams, ...extraParams, req.params.id];
+        const idParam = `$${allParams.length}`;
+
         await pool.query(
-            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${startedAtClause}${completedAtClause}${visitHistoryClause} WHERE id=$11`,
-            [type, priority, status, plannedDate, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), req.params.id]
+            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${extraClauses} WHERE id=${idParam}`,
+            allParams
         );
         res.json({ok: true});
     } catch(e) { console.error(e); res.status(500).json({error: "Failed to update activity"}); }
