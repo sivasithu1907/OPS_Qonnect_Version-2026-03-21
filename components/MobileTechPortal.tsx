@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
 import { ChevronLeft, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
