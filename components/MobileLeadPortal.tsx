@@ -147,6 +147,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [dispatchPrimaryId, setDispatchPrimaryId] = useState('');
   const [dispatchSupportIds, setDispatchSupportIds] = useState<string[]>([]);
   const [dispatchFreelancers, setDispatchFreelancers] = useState<{name:string;role:string;phone:string}[]>([]);
+
+  // Activity reschedule modal state
+  const [showActivityReschedule, setShowActivityReschedule] = useState(false);
+  const [rescheduleActivityTarget, setRescheduleActivityTarget] = useState<Activity | null>(null);
+  const [rescheduleActivityDate, setRescheduleActivityDate] = useState('');
   
   // Date Picker State
   const [nextDate, setNextDate] = useState('');
@@ -297,7 +302,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const myJobsDateRange = useMemo(() => {
       const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
       const today = new Date();
-      for (let i = -2; i <= 2; i++) {
+      for (let i = -7; i <= 2; i++) {
           const d = new Date(today); d.setDate(today.getDate() + i);
           const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
           dates.push({ key, day: String(d.getDate()).padStart(2,'0'), weekday: d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase(), month: d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(), isToday: i===0 });
@@ -352,39 +357,76 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const selectedTicket = tickets.find(t => t.id === selectedTicketId);
 
   // Recent changes feed — combines ticket + activity updates, sorted by updatedAt
-  const recentChanges = useMemo(() => {
+  // ── Notification System ────────────────────────────────────────────────────
+  // Targeted notifications for THIS Team Lead only:
+  // - New activities assigned to them (last 48h, PLANNED)
+  // - Overdue activities (planned date passed, not started)
+  // - Carry Forward items needing reschedule
+  // - Urgent/High priority items newly assigned
+  const notifications = useMemo(() => {
       const now = Date.now();
-      const dayMs = 24 * 60 * 60 * 1000;
-      const cutoff = now - (7 * dayMs); // last 7 days
+      const h48 = 48 * 60 * 60 * 1000;
+      const items: {
+          id: string; kind: 'activity' | 'ticket'; title: string;
+          subtitle: string; status: string; updatedAt: string;
+          priority: string; type: 'new_assignment' | 'overdue' | 'carry_forward' | 'urgent';
+          ref: string;
+      }[] = [];
 
-      const ticketChanges = tickets
-          .filter(t => new Date(t.updatedAt).getTime() > cutoff)
-          .map(t => ({
-              id: t.id,
-              kind: 'ticket' as const,
-              title: t.customerName || t.id,
-              subtitle: t.category,
-              status: t.status,
-              updatedAt: t.updatedAt,
-              assignedTo: technicians.find(te => te.id === t.assignedTechId)?.name || 'Unassigned'
-          }));
+      // Activities assigned to this TL
+      const myActivities = (activities || []).filter(a => a.leadTechId === currentUserId);
 
-      const actChanges = (activities || [])
-          .filter(a => new Date(a.updatedAt || a.createdAt).getTime() > cutoff)
-          .map(a => ({
-              id: (a as any).reference || a.id,
-              kind: 'activity' as const,
-              title: (a as any).type || 'Activity',
-              subtitle: (a as any).serviceCategory || '',
-              status: (a as any).status || 'PLANNED',
-              updatedAt: a.updatedAt || a.createdAt,
-              assignedTo: technicians.find(te => te.id === (a as any).leadTechId)?.name || 'Unassigned'
-          }));
+      myActivities.forEach(a => {
+          const act = a as any;
+          const updatedMs = new Date(a.updatedAt || a.createdAt).getTime();
+          const plannedMs = new Date(a.plannedDate).getTime();
+          const isNew = updatedMs > now - h48;
+          const isOverdue = plannedMs < now && !['DONE','CANCELLED','IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(act.status);
+          const isCF = act.status === 'CARRY_FORWARD';
+          const isUrgent = (act.priority === 'URGENT' || act.priority === 'HIGH') && isNew;
 
-      return [...ticketChanges, ...actChanges]
-          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-          .slice(0, 50);
-  }, [tickets, activities, technicians]);
+          if (isUrgent) {
+              items.push({ id: a.id, kind: 'activity', title: act.type || 'Activity',
+                  subtitle: (customers || []).find((cu: any) => cu.id === a.customerId)?.name || act.customerName || '',
+                  status: act.status, updatedAt: a.updatedAt || a.createdAt,
+                  priority: act.priority, type: 'urgent', ref: act.reference || a.id });
+          } else if (isCF) {
+              items.push({ id: a.id, kind: 'activity', title: act.type || 'Activity',
+                  subtitle: (customers || []).find((cu: any) => cu.id === a.customerId)?.name || act.customerName || '',
+                  status: act.status, updatedAt: a.updatedAt || a.createdAt,
+                  priority: act.priority, type: 'carry_forward', ref: act.reference || a.id });
+          } else if (isOverdue) {
+              items.push({ id: a.id, kind: 'activity', title: act.type || 'Activity',
+                  subtitle: (customers || []).find((cu: any) => cu.id === a.customerId)?.name || act.customerName || '',
+                  status: act.status, updatedAt: a.updatedAt || a.createdAt,
+                  priority: act.priority, type: 'overdue', ref: act.reference || a.id });
+          } else if (isNew && act.status === 'PLANNED') {
+              items.push({ id: a.id, kind: 'activity', title: act.type || 'Activity',
+                  subtitle: (customers || []).find((cu: any) => cu.id === a.customerId)?.name || act.customerName || '',
+                  status: act.status, updatedAt: a.updatedAt || a.createdAt,
+                  priority: act.priority, type: 'new_assignment', ref: act.reference || a.id });
+          }
+      });
+
+      // Tickets assigned to this TL (new in last 48h)
+      (tickets || []).filter(t => t.assignedTechId === currentUserId).forEach(t => {
+          const updatedMs = new Date(t.updatedAt || t.createdAt).getTime();
+          if (updatedMs > now - h48 && !['RESOLVED','CANCELLED'].includes(t.status)) {
+              items.push({ id: t.id, kind: 'ticket', title: t.type || 'Ticket',
+                  subtitle: t.customerName || '', status: t.status,
+                  updatedAt: t.updatedAt || t.createdAt, priority: t.priority || 'MEDIUM',
+                  type: 'new_assignment', ref: t.id });
+          }
+      });
+
+      // Sort: urgent first, then carry_forward, overdue, new — within each by recency
+      const order = { urgent: 0, carry_forward: 1, overdue: 2, new_assignment: 3 };
+      return items
+          .sort((a, b) => (order[a.type] - order[b.type]) || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+          .slice(0, 30);
+  }, [tickets, activities, customers, currentUserId]);
+
+  const unreadNotifCount = notifications.length;
 
   // Dashboard counts
   const currentTech = technicians.find(t => t.id === currentUserId);
@@ -651,6 +693,16 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       setDispatchPrimaryId('');
       setDispatchSupportIds([]);
       setDispatchFreelancers([]);
+  };
+
+  // Helper to open activity reschedule modal
+  const openActivityReschedule = (act: Activity, defaultOffset = 0) => {
+      const d = new Date(act.plannedDate || Date.now());
+      if (defaultOffset) d.setDate(d.getDate() + defaultOffset);
+      const pad = (n: number) => String(n).padStart(2,'0');
+      setRescheduleActivityDate(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+      setRescheduleActivityTarget(act);
+      setShowActivityReschedule(true);
   };
 
   const getStatusColor = (s: string) => {
@@ -1487,13 +1539,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               <button onClick={() => setShowNotifications(true)} className="w-full flex items-center gap-3 p-4 active:bg-slate-50 transition-colors">
                                   <div className="p-2 bg-amber-50 rounded-lg relative">
                                       <BellRing size={20} className="text-amber-400" />
-                                      {recentChanges.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}
+                                      {unreadNotifCount > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}
                                   </div>
                                   <div className="flex-1 text-left">
                                       <span className="text-slate-900 font-medium block">Activity Log</span>
                                       <span className="text-[10px] text-slate-500">Recent changes on tickets & activities</span>
                                   </div>
-                                  {recentChanges.length > 0 && <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{recentChanges.length}</span>}
+                                  {unreadNotifCount > 0 && <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">{unreadNotifCount}</span>}
                                   <ChevronRight size={16} className="text-slate-500" />
                               </button>
                           </div>
@@ -1754,10 +1806,15 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         <button
                             onClick={() => setShowNotifications(true)}
                             className="relative p-1.5 rounded-full hover:bg-slate-100 transition-colors"
-                            title={recentChanges.length > 0 ? `${recentChanges.length} recent update(s)` : 'Activity Log'}
+                            title={unreadNotifCount > 0 ? `${unreadNotifCount} notification(s)` : 'Notifications'}
                         >
-                            <Bell size={20} className={stalledCount > 0 ? 'text-red-500' : recentChanges.length > 0 ? 'text-amber-500' : 'text-slate-400'} />
-                            {(stalledCount > 0 || recentChanges.length > 0) && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-white" />}
+                            <Bell size={20} className={unreadNotifCount > 0 ? 'text-amber-500' : 'text-slate-400'} />
+                            {unreadNotifCount > 0 && (
+                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                                    {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                                </span>
+                            )}
+                            {(stalledCount > 0 || unreadNotifCount > 0) && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border-2 border-white" />}
                         </button>
                         <div className="w-9 h-9 rounded-full bg-amber-50 ring-2 ring-amber-400 flex items-center justify-center overflow-hidden">
                             {currentTech?.avatar ? (
@@ -2169,6 +2226,33 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     <div className="space-y-2">
                         {actStatus === 'PLANNED' && (
                             <div className="space-y-2">
+                                {/* Move to Today — pull a future activity to today */}
+                                {act.plannedDate && new Date(act.plannedDate).toDateString() !== new Date().toDateString() && (
+                                    <button onClick={() => {
+                                        const orig = new Date(act.plannedDate);
+                                        const today = new Date();
+                                        // Keep same time, change date to today
+                                        today.setHours(orig.getHours(), orig.getMinutes(), 0, 0);
+                                        onUpdateActivity({ ...act, plannedDate: today.toISOString(), updatedAt: new Date().toISOString() });
+                                        setViewActivity(null);
+                                        toast.success('Activity moved to today');
+                                    }}
+                                        className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                        <Calendar size={18} /> Move to Today
+                                    </button>
+                                )}
+                                {/* Reschedule — pick any date */}
+                                <button onClick={() => {
+                                        const d = new Date(act.plannedDate || Date.now());
+                                        const pad = (n: number) => String(n).padStart(2,'0');
+                                        setRescheduleActivityDate(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+                                        setRescheduleActivityTarget(act);
+                                        setShowActivityReschedule(true);
+                                        setViewActivity(null);
+                                    }}
+                                    className="w-full bg-slate-100 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] border border-slate-200">
+                                    <RotateCcw size={18} /> Change Date / Time
+                                </button>
                                 <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setDispatchFreelancers((act as any).freelancers ? JSON.parse(JSON.stringify((act as any).freelancers)) : []); setModalType('activity_dispatch'); setViewActivity(null); }}
                                     className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
                                     <Users size={18} /> Dispatch Team
@@ -2206,10 +2290,26 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             </div>
                         )}
                         {actStatus === 'CARRY_FORWARD' && (
-                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setDispatchFreelancers((act as any).freelancers ? JSON.parse(JSON.stringify((act as any).freelancers)) : []); setModalType('activity_dispatch'); setViewActivity(null); }}
-                                className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
-                                <RotateCcw size={18} /> Reschedule
-                            </button>
+                            <div className="space-y-2">
+                                {/* Reschedule — pick new date for this carried-forward activity */}
+                                <button onClick={() => {
+                                        const d = new Date(act.plannedDate || Date.now());
+                                        d.setDate(d.getDate() + 1); // default next day
+                                        const pad = (n: number) => String(n).padStart(2,'0');
+                                        setRescheduleActivityDate(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+                                        setRescheduleActivityTarget(act);
+                                        setShowActivityReschedule(true);
+                                        setViewActivity(null);
+                                    }}
+                                    className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                    <RotateCcw size={18} /> Reschedule to New Date
+                                </button>
+                                {/* Also allow dispatch */}
+                                <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setDispatchFreelancers((act as any).freelancers ? JSON.parse(JSON.stringify((act as any).freelancers)) : []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                                    className="w-full bg-slate-100 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98] border border-slate-200">
+                                    <Users size={18} /> Re-dispatch Team
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}
@@ -3727,74 +3827,53 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowNotifications(false)}>
               <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
-                      <h3 className="font-bold text-lg text-slate-900">Activity Log</h3>
+                      <h3 className="font-bold text-lg text-slate-900">Notifications</h3>
                       <button onClick={() => setShowNotifications(false)}><X size={20} className="text-slate-400" /></button>
                   </div>
                   <div className="flex-1 overflow-y-auto">
-                      {recentChanges.length === 0 ? (
+                      {notifications.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
                               <Bell size={40} className="mb-3 text-slate-300" />
-                              <p className="text-sm">No recent changes</p>
+                              <p className="text-sm font-medium">All caught up!</p>
+                              <p className="text-xs mt-1">No pending notifications</p>
                           </div>
-                      ) : (() => {
-                          const grouped: Record<string, typeof recentChanges> = {};
-                          recentChanges.forEach(change => {
-                              const dt = new Date(change.updatedAt);
-                              const today = new Date();
-                              const yesterday = new Date(today);
-                              yesterday.setDate(yesterday.getDate() - 1);
-                              let label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                              if (dt.toDateString() === today.toDateString()) label = 'Today';
-                              else if (dt.toDateString() === yesterday.toDateString()) label = 'Yesterday';
-                              if (!grouped[label]) grouped[label] = [];
-                              grouped[label].push(change);
-                          });
-                          return (
-                              <div>
-                                  {Object.entries(grouped).map(([dateLabel, items]) => (
-                                      <div key={dateLabel}>
-                                          <div className="sticky top-0 bg-slate-50 px-4 py-2 border-b border-slate-100 z-10">
-                                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{dateLabel}</span>
-                                          </div>
-                                          <div className="divide-y divide-slate-50">
-                                              {items.map((change, idx) => {
-                                                  const dt = new Date(change.updatedAt);
-                                                  const timeStr = dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                                                  return (
-                                                      <div key={`${change.kind}-${change.id}-${idx}`} className="px-4 py-3 hover:bg-slate-50">
-                                                          <div className="flex items-start gap-3">
-                                                              <div className="flex flex-col items-center shrink-0 pt-0.5">
-                                                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                                                      change.kind === 'ticket' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'
-                                                                  }`}>
-                                                                      {change.kind === 'ticket' ? <ListTodo size={14} /> : <ActivityIcon size={14} />}
-                                                                  </div>
-                                                                  <span className="text-[9px] text-slate-400 mt-1">{timeStr}</span>
-                                                              </div>
-                                                              <div className="flex-1 min-w-0">
-                                                                  <div className="flex items-center gap-2 mb-0.5">
-                                                                      <span className="text-sm font-bold text-slate-800 truncate">{change.title}</span>
-                                                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${getStatusColor(change.status)}`}>
-                                                                          {change.status.replace(/_/g,' ')}
-                                                                      </span>
-                                                                  </div>
-                                                                  {change.subtitle && <p className="text-xs text-slate-500 truncate">{change.subtitle}</p>}
-                                                                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
-                                                                      <span className="font-mono">{change.id}</span>
-                                                                      <span>•</span>
-                                                                      <span>{change.assignedTo}</span>
-                                                                  </div>
-                                                              </div>
-                                                          </div>
-                                                      </div>
-                                                  );
-                                              })}
+                      ) : (
+                          <div className="divide-y divide-slate-50">
+                              {notifications.map((notif, idx) => {
+                                  const typeConfig = {
+                                      urgent:         { icon: '🚨', label: 'Urgent',          bg: 'bg-red-50',    border: 'border-red-200',    text: 'text-red-700'    },
+                                      carry_forward:  { icon: '⟲',  label: 'Carry Forward',   bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700' },
+                                      overdue:        { icon: '⚠️', label: 'Overdue',          bg: 'bg-amber-50',  border: 'border-amber-200',  text: 'text-amber-700'  },
+                                      new_assignment: { icon: '🆕', label: 'New Assignment',   bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700'   },
+                                  }[notif.type];
+                                  const timeStr = new Date(notif.updatedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                                  const dateStr = new Date(notif.updatedAt).toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
+                                  return (
+                                      <div key={`${notif.kind}-${notif.id}-${idx}`} className={`px-4 py-3 ${typeConfig.bg} border-l-4 ${typeConfig.border}`}>
+                                          <div className="flex items-start gap-3">
+                                              <span className="text-lg shrink-0 mt-0.5">{typeConfig.icon}</span>
+                                              <div className="flex-1 min-w-0">
+                                                  <div className="flex items-center gap-2 mb-0.5">
+                                                      <span className="text-sm font-bold text-slate-800 truncate">{notif.title}</span>
+                                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${typeConfig.text} ${typeConfig.bg} border ${typeConfig.border}`}>
+                                                          {typeConfig.label}
+                                                      </span>
+                                                  </div>
+                                                  {notif.subtitle && <p className="text-xs text-slate-600 truncate font-medium">{notif.subtitle}</p>}
+                                                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                                                      <span className="font-mono">{notif.ref}</span>
+                                                      <span>•</span>
+                                                      <span className="font-medium">{notif.status.replace(/_/g,' ')}</span>
+                                                      <span>•</span>
+                                                      <span>{dateStr} {timeStr}</span>
+                                                  </div>
+                                              </div>
                                           </div>
                                       </div>
-                                  ))}
-                              </div>
-                          );
-                      })()}
+                                  );
+                              })}
+                          </div>
+                      )}
                   </div>
               </div>
           </div>
@@ -4160,6 +4239,53 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           </div>
         </div>
       )}
+
+    {/* ── Activity Reschedule Modal ── */}
+    {showActivityReschedule && rescheduleActivityTarget && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowActivityReschedule(false)}>
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="p-4 bg-slate-800 text-white">
+                    <h3 className="font-bold text-lg">Reschedule Activity</h3>
+                    <p className="text-slate-300 text-xs mt-0.5">{rescheduleActivityTarget.reference} — {(rescheduleActivityTarget as any).type}</p>
+                </div>
+                <div className="p-5 space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">New Date & Time <span className="text-red-500">*</span></label>
+                        <input
+                            type="datetime-local"
+                            value={rescheduleActivityDate}
+                            onChange={e => setRescheduleActivityDate(e.target.value)}
+                            className="w-full border border-slate-300 rounded-xl p-3 text-sm"
+                        />
+                    </div>
+                    <p className="text-xs text-slate-400">Status resets to <span className="font-bold text-amber-600">PLANNED</span>. Original date preserved in history.</p>
+                </div>
+                <div className="p-4 border-t border-slate-200 grid grid-cols-2 gap-3">
+                    <button onClick={() => { setShowActivityReschedule(false); setRescheduleActivityTarget(null); }}
+                        className="py-3 text-slate-500 font-bold rounded-xl border border-slate-200">Cancel</button>
+                    <button
+                        disabled={!rescheduleActivityDate}
+                        onClick={() => {
+                            if (!rescheduleActivityDate || !rescheduleActivityTarget) return;
+                            onUpdateActivity({
+                                ...rescheduleActivityTarget,
+                                status: 'PLANNED' as any,
+                                plannedDate: new Date(rescheduleActivityDate).toISOString(),
+                                nextPlannedAt: undefined,
+                                updatedAt: new Date().toISOString()
+                            });
+                            setShowActivityReschedule(false);
+                            setRescheduleActivityTarget(null);
+                            toast.success('Activity rescheduled');
+                        }}
+                        className="py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                        Reschedule
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+
     </div>
   );
 };
