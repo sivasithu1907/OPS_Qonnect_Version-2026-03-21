@@ -394,6 +394,8 @@ async function initDb() {
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS visit_history JSONB DEFAULT '[]';
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS customer_name TEXT;
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS customer_phone TEXT;
 
       -- Permanent fix: normalise any users whose level is blank or whose systemRole
       -- was stored as a human-readable label instead of the enum value.
