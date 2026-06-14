@@ -265,10 +265,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || t.createdAt }));
       const doneActivities = (activities || [])
           .filter(a => a.leadTechId === currentUserId && (a.status === 'DONE' || a.status === 'CANCELLED' || a.status === 'CARRY_FORWARD'))
-          .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.updatedAt || a.createdAt }));
+          // Use plannedDate so activities appear on the correct visit day when browsing history
+          .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.plannedDate || a.updatedAt || a.createdAt }));
       return [...doneTickets, ...doneActivities]
           .sort((a, b) => new Date(b.sortDate || 0).getTime() - new Date(a.sortDate || 0).getTime())
-          .slice(0, 50); // last 50 completed
+          .slice(0, 100); // last 100 completed/CF items
   }, [tickets, currentUserId]);
 
   const myJobs = useMemo(() => {
