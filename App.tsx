@@ -1240,14 +1240,28 @@ useEffect(() => {
             <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-4 shrink-0 z-40 relative">
                 <div className="flex items-center gap-3">
                     {currentUser.role === Role.SALES ? (
-                        /* SALES: avatar where hamburger was */
-                        currentUser.avatar ? (
-                            <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border-2 border-amber-300 shadow-sm shrink-0" />
-                        ) : (
-                            <div className="w-9 h-9 rounded-full bg-amber-100 border-2 border-amber-300 flex items-center justify-center font-bold text-amber-700 text-sm shrink-0">
-                                {currentUser.name.charAt(0)}
+                        /* SALES: avatar + name + designation + online status */
+                        <div className="flex items-center gap-2.5">
+                            {/* Avatar with online dot */}
+                            <div className="relative shrink-0">
+                                {currentUser.avatar ? (
+                                    <img src={currentUser.avatar} alt={currentUser.name} className="w-9 h-9 rounded-full object-cover border-2 border-amber-300 shadow-sm" />
+                                ) : (
+                                    <div className="w-9 h-9 rounded-full bg-amber-100 border-2 border-amber-300 flex items-center justify-center font-bold text-amber-700 text-sm">
+                                        {currentUser.name.charAt(0)}
+                                    </div>
+                                )}
+                                {/* Online indicator */}
+                                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
                             </div>
-                        )
+                            {/* Name + designation */}
+                            <div className="hidden sm:block">
+                                <p className="text-sm font-bold text-slate-800 leading-none">{currentUser.name}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wide">
+                                    {(currentUser as any).jobRole || 'Sales Representative'}
+                                </p>
+                            </div>
+                        </div>
                     ) : (
                         <>
                             {/* Desktop Toggle (Minimizes Sidebar) */}
