@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import toast from 'react-hot-toast';
+import toast from './Toast';
 import { Activity, Team, Site, Customer, ActivityStatus, Priority, ActivityType, Technician, ServiceCategory, Role } from '../types';
 import { 
   Calendar, List, Layout, Plus, Search, Filter, Clock, 
