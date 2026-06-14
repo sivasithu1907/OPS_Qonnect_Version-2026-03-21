@@ -95,10 +95,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
             (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED))
         .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || (t as any).updated_at || t.createdAt })),
       ...activities
-        .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) && (a.status === 'DONE' || a.status === 'CANCELLED'))
-        .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.updatedAt || a.createdAt })),
+        .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) &&
+            (a.status === 'DONE' || a.status === 'CANCELLED' || a.status === 'CARRY_FORWARD'))
+        // Use plannedDate as sortDate so activities appear on their original visit day in history
+        .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.plannedDate || a.updatedAt || a.createdAt })),
   ].sort((a, b) => new Date(b.sortDate || 0).getTime() - new Date(a.sortDate || 0).getTime())
-   .slice(0, 50);
+   .slice(0, 100);
 
   const myJobs = [
       ...tickets
