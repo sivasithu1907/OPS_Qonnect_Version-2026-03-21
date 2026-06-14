@@ -172,7 +172,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [showCreateActivity, setShowCreateActivity] = useState(false);
   const EMPTY_CREATE_FORM = {
       type: '', serviceCategory: '', customerId: '', description: '',
-      plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: ''
+      plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '', assignedEngineerId: ''
   };
   const [createActivityForm, setCreateActivityForm] = useState({ ...EMPTY_CREATE_FORM });
 
@@ -3885,6 +3885,22 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
                       </div>
 
+                      {/* Assign Engineer (optional — defaults to self) */}
+                      <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Assign To <span className="text-slate-400 font-normal text-[10px]">(optional — defaults to you)</span></label>
+                          <select
+                              value={(createActivityForm as any).assignedEngineerId || ''}
+                              onChange={e => setCreateActivityForm(p => ({...p, assignedEngineerId: e.target.value}))}
+                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1"
+                          >
+                              <option value="">— Self Assign —</option>
+                              {(technicians || [])
+                                  .filter(t => (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD') && t.status !== 'LEAVE' && t.isActive !== false && t.id !== currentUserId)
+                                  .map(t => <option key={t.id} value={t.id}>{t.name} ({t.systemRole === 'TEAM_LEAD' ? 'TL' : 'FE'})</option>)
+                              }
+                          </select>
+                      </div>
+
                       {/* Description */}
                       <div>
                           <label className="text-xs font-semibold text-slate-500 uppercase">Description</label>
@@ -3910,7 +3926,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               status: 'PLANNED',
                               locationUrl: createActivityForm.locationUrl || undefined,
                               houseNumber: createActivityForm.houseNumber || undefined,
-                              leadTechId: currentUserId,
+                              // Use selected engineer if chosen, otherwise self-assign (Team Lead)
+                              leadTechId: (createActivityForm as any).assignedEngineerId || currentUserId,
                           });
                           setShowCreateActivity(false);
                           setActCustSearch('');
