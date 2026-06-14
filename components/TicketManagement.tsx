@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import { Ticket, TicketStatus, MessageSender, Priority, Technician, TicketType, TicketFilter, Customer, Role, AnalysisResult } from '../types';
 import { TICKET_CATEGORIES, SEARCH_INPUT_STYLES, INPUT_STYLES } from '../constants';
 import { analyzeTicketMessage } from '../services/geminiService';
@@ -456,7 +457,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const handleSaveChanges = () => {
     if (!selectedTicket || !editForm) return;
     if (!isDetailValid()) {
-        alert("Location URL and House Number are mandatory.");
+        toast.error("Location URL and House Number are mandatory.");
         return;
     }
     
@@ -503,7 +504,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   const handleInlineCreateClient = async () => {
       if (!editForm) return;
       if (!newClientName.trim()) {
-          alert('Client Name is required');
+          toast.error('Client Name is required');
           return;
       }
       
@@ -534,7 +535,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   // --- Send & Stub Logic ---
   const sendToWhatsApp = (phone: string, message: string) => {
       console.log(`[STUB] Sending WhatsApp to ${phone}: ${message}`);
-      alert(`Message Sent to WhatsApp (${phone})`);
+      toast.success(`Message sent to WhatsApp (${phone})`);
   };
 
   const handleSend = () => {
@@ -579,7 +580,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         }
     } catch (err: any) {
         console.error("AI Handover failed", err);
-        alert(err.message || "Failed to connect to AI Service.");
+        toast.error(err.message || "Failed to connect to AI Service.");
     } finally {
         setIsAnalyzing(false);
     }
@@ -606,18 +607,18 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
       if (isNewClientMode) {
           if (!createForm.customerName.trim() || !createForm.phone.trim()) {
-              alert("Name and Phone are required for new clients.");
+              toast.error("Name and Phone are required for new clients.");
               return;
           }
 
           if (duplicateWarning) {
-              alert(`Client already exists: ${duplicateWarning.name}. Please select existing client.`);
+              toast.error(`Client already exists: ${duplicateWarning.name}. Please select existing client.`);
               return;
           }
           
           const phoneValidation = validatePhone(createForm.phone);
           if (!phoneValidation.isValid) {
-              alert(phoneValidation.error);
+              toast.error(phoneValidation.error);
               return;
           }
           const finalPhone = phoneValidation.formatted!;
