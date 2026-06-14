@@ -816,7 +816,7 @@ app.get("/api/mobile/lead", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, techsR, customersR, teamsR, sitesR] = await Promise.all([
             pool.query("SELECT * FROM tickets WHERE status NOT IN ('RESOLVED','CANCELLED') ORDER BY updated_at DESC LIMIT 100"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' AND status NOT IN ('DONE','CANCELLED') ORDER BY planned_date DESC LIMIT 100"),
+            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' AND (status NOT IN ('CANCELLED') AND (status != 'DONE' OR completed_at > NOW() - INTERVAL '7 days')) ORDER BY planned_date DESC LIMIT 150"),
             pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
             pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200"),
             pool.query("SELECT * FROM teams ORDER BY name"),
@@ -1885,23 +1885,15 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
             return res.status(400).json({ error: "Activity type is required" });
         }
         
-        // Generate ID on server if not provided or if it would conflict
-        if (!id) {
+        // Server always generates the canonical ID — never trust client-provided IDs.
+        // This prevents temp/optimistic client IDs from leaking into the database
+        // and eliminates race conditions when the user acts before the sync completes.
+        {
             const maxResult = await pool.query("SELECT id FROM activities ORDER BY id DESC LIMIT 1");
             const lastId = maxResult.rows[0]?.id || 'QNC-ACT-000000';
             const lastNum = parseInt(lastId.replace('QNC-ACT-', ''), 10) || 0;
             id = `QNC-ACT-${String(lastNum + 1).padStart(6, '0')}`;
             reference = id;
-        } else {
-            // Check if ID already exists — if so, generate a new one
-            const exists = await pool.query("SELECT 1 FROM activities WHERE id=$1", [id]);
-            if (exists.rows.length > 0) {
-                const maxResult = await pool.query("SELECT id FROM activities ORDER BY id DESC LIMIT 1");
-                const lastId = maxResult.rows[0]?.id || 'QNC-ACT-000000';
-                const lastNum = parseInt(lastId.replace('QNC-ACT-', ''), 10) || 0;
-                id = `QNC-ACT-${String(lastNum + 1).padStart(6, '0')}`;
-                reference = id;
-            }
         }
         
         await pool.query(
@@ -1977,7 +1969,13 @@ app.put("/api/activities/:id", authenticate, async (req, res) => {
             };
             const updatedHistory = [...existingHistory, visitRecord];
 
-            // Update activity: set status to CARRY_FORWARD, record completed_at as NOW, store visit history
+            // IMPORTANT: planned_date stays as the ORIGINAL visit date — never overwrite with nextPlannedAt.
+            // The next visit date lives only in details.nextPlannedAt so the calendar shows
+            // this activity on its original day as CARRY_FORWARD (orange), not the future date.
+            // Store nextPlannedAt from the request into mergedDetails if provided.
+            if (details.nextPlannedAt) {
+                mergedDetails.nextPlannedAt = details.nextPlannedAt;
+            }
             await pool.query(
                 `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW() WHERE id=$11`,
                 [type, priority, current.rows[0].planned_date, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
