@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Ticket, Activity, Technician, Site } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
@@ -484,7 +485,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
         .filter((f): f is ReportField => !!f);
       
       if (fieldsToExport.length === 0) {
-          alert('Please select at least one field to export.');
+          toast.error('Please select at least one field to export.');
           return;
       }
 
@@ -557,7 +558,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                       doc.save(`${reportType}_report_${startDate}_to_${endDate}.pdf`);
                   } catch (err) {
                       console.error('PDF generation failed:', err);
-                      alert('PDF generation failed. Please try again.');
+                      toast.error('PDF generation failed. Please try again.');
                   }
               };
               document.head.appendChild(script2);
