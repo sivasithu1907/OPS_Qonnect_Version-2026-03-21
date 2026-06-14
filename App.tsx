@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import { generateActivityId, generateTicketId } from './utils/idUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
@@ -423,7 +424,7 @@ const handleLogout = useCallback(() => {
       console.error("Failed to create ticket:", e);
       // Rollback optimistic update
       setTickets(prev => prev.filter(t => t.id !== newId));
-      alert("Failed to create ticket.");
+      toast.error("Failed to create ticket.");
     }
   };
 
@@ -439,11 +440,11 @@ const handleLogout = useCallback(() => {
               await loadTickets();
           } else {
               const err = await response.json().catch(() => ({}));
-              alert(`Error: ${err.error || "Could not delete ticket"}`);
+              toast.error(err.error || "Could not delete ticket");
           }
       } catch (e) {
           console.error("Delete ticket error:", e);
-          alert("Failed to connect to the server.");
+          toast.error("Failed to connect to the server. Check your connection.");
       }
   };
 
@@ -643,7 +644,7 @@ const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
     return created as Customer;
   } catch (e) {
     console.error(e);
-    alert("Failed to create customer");
+    toast.error("Failed to create customer");
     return null;
   }
 };
@@ -653,7 +654,7 @@ const handleUpdateCustomer = async (c: Customer) => {
     const id = (c as any)?.id ? String((c as any).id).trim() : "";
     if (!id) {
       console.error("🚨 Update customer called without id:", c);
-      alert("Failed to update customer: missing customer id.");
+      toast.error("Failed to update customer: missing ID.");
       return;
     }
 
@@ -677,14 +678,14 @@ const handleUpdateCustomer = async (c: Customer) => {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       console.error("Update failed:", res.status, text);
-      alert(`Failed to update customer (${res.status})`);
+      toast.error(`Failed to update customer (${res.status})`);
       return;
     }
 
     await loadCustomers();
   } catch (e) {
     console.error("Update exception:", e);
-    alert("Failed to update customer");
+    toast.error("Failed to update customer");
   }
 };
 
@@ -700,7 +701,7 @@ const handleDeleteCustomer = async (id: string) => {
     await loadCustomers();
   } catch (e) {
     console.error(e);
-    alert("Failed to delete customer");
+    toast.error("Failed to delete customer");
   }
 };
 
@@ -753,7 +754,7 @@ const handleDeleteCustomer = async (id: string) => {
           await loadUsers();
       } catch (e) {
           console.error("handleSaveUser error:", e);
-          alert("Failed to save user. Please try again.");
+          toast.error("Failed to save user. Please try again.");
       }
   };
 
@@ -764,7 +765,7 @@ const handleDeleteCustomer = async (id: string) => {
           await loadUsers();
       } catch (e) {
           console.error("handleDeleteUser error:", e);
-          alert("Failed to delete user. Please try again.");
+          toast.error("Failed to delete user. Please try again.");
       }
   };
 
@@ -1125,6 +1126,15 @@ useEffect(() => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: { borderRadius: '10px', fontFamily: 'inherit', fontSize: '14px', maxWidth: '420px' },
+          success: { iconTheme: { primary: '#10b981', secondary: '#fff' } },
+          error:   { duration: 5000, iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+        }}
+      />
         
         {/* Mobile Overlay */}
         {isMobileMenuOpen && (
