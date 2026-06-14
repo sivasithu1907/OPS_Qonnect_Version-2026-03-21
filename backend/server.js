@@ -662,8 +662,14 @@ app.get('/api/tv-data', async (req, res) => {
     }
     try {
         const [ticketsRes, activitiesRes, usersRes, teamsRes, sitesRes, customersRes] = await Promise.all([
-            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 100"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200"),
+            pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
+                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
+                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
+                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
+                visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 100`),
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
+                customer_phone, site_id, lead_tech_id, description, duration_hours,
+                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
             pool.query("SELECT id, name, role, status, avatar, level, phone FROM users WHERE status != 'INACTIVE'"),
             pool.query("SELECT * FROM teams"),
             pool.query("SELECT * FROM sites"),
@@ -847,8 +853,14 @@ function mapActivity(r) {
 app.get("/api/mobile/lead", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, techsR, customersR, teamsR, sitesR] = await Promise.all([
-            pool.query("SELECT * FROM tickets WHERE status NOT IN ('RESOLVED','CANCELLED') ORDER BY updated_at DESC LIMIT 100"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' AND (status NOT IN ('CANCELLED') AND (status != 'DONE' OR completed_at > NOW() - INTERVAL '7 days')) ORDER BY planned_date DESC LIMIT 150"),
+            pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
+                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
+                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
+                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
+                visit_history, created_at, updated_at FROM tickets WHERE status NOT IN ('RESOLVED','CANCELLED') ORDER BY updated_at DESC LIMIT 100`),
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
+                customer_phone, site_id, lead_tech_id, description, duration_hours,
+                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' AND (status NOT IN ('CANCELLED') AND (status != 'DONE' OR completed_at > NOW() - INTERVAL '7 days')) ORDER BY planned_date DESC LIMIT 150`),
             pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
             pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200"),
             pool.query("SELECT * FROM teams ORDER BY name"),
@@ -878,8 +890,12 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
     try {
         const userId = req.user.id;
         const [ticketsR, activitiesR, customersR] = await Promise.all([
-            pool.query("SELECT * FROM tickets WHERE assigned_tech_id = $1 ORDER BY updated_at DESC LIMIT 50", [userId]),
-            pool.query(`SELECT * FROM activities WHERE (lead_tech_id = $1 OR details->>'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1) 
+            pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
+                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
+                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
+                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
+                visit_history, created_at, updated_at FROM tickets WHERE assigned_tech_id = $1 ORDER BY updated_at DESC LIMIT 50`, [userId]),
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE (lead_tech_id = $1 OR details->>'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1) 
                         AND type != 'WHATSAPP_SUPPORT'
                         AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
                         ORDER BY planned_date DESC LIMIT 150`, [userId]),
@@ -901,10 +917,19 @@ app.get("/api/refresh-lite", authenticate, async (req, res) => {
     try {
         const since = req.query.since || new Date(Date.now() - 60000).toISOString();
         const [ticketsR, activitiesR] = await Promise.all([
-            pool.query("SELECT * FROM tickets WHERE updated_at > $1 ORDER BY updated_at DESC", [since]),
-            pool.query("SELECT * FROM activities WHERE updated_at > $1 AND type != 'WHATSAPP_SUPPORT' ORDER BY updated_at DESC", [since])
+            pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
+                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
+                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
+                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
+                visit_history, created_at, updated_at FROM tickets WHERE updated_at > $1 ORDER BY updated_at DESC`, [since]),
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
+                customer_phone, site_id, lead_tech_id, description, duration_hours,
+                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE updated_at > $1 AND type != 'WHATSAPP_SUPPORT' ORDER BY updated_at DESC`, [since])
         ]);
+        const hasChanges = ticketsR.rows.length > 0 || activitiesR.rows.length > 0;
         res.json({
+            hasChanges,
+            timestamp: new Date().toISOString(),
             tickets: ticketsR.rows.map(mapTicket),
             activities: activitiesR.rows.map(mapActivity),
             hasChanges: ticketsR.rows.length > 0 || activitiesR.rows.length > 0,
@@ -920,10 +945,16 @@ app.get("/api/refresh-lite", authenticate, async (req, res) => {
 app.get("/api/init", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, usersR, customersR, teamsR, sitesR] = await Promise.all([
-            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 200"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200"),
+            pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
+                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
+                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
+                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
+                visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 200`),
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
+                customer_phone, site_id, lead_tech_id, description, duration_hours,
+                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
             pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
-            pool.query("SELECT * FROM customers ORDER BY name LIMIT 200"),
+            pool.query(`SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY name LIMIT 200`),
             pool.query("SELECT * FROM teams ORDER BY name"),
             pool.query("SELECT * FROM sites ORDER BY name")
         ]);
@@ -951,9 +982,15 @@ app.get("/api/init", authenticate, async (req, res) => {
 app.get("/api/refresh", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, customersR] = await Promise.all([
-            pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 200"),
-            pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200"),
-            pool.query("SELECT * FROM customers ORDER BY name LIMIT 200")
+            pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
+                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
+                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
+                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
+                visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 200`),
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
+                customer_phone, site_id, lead_tech_id, description, duration_hours,
+                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
+            pool.query(`SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY name LIMIT 200`)
         ]);
         res.json({
             tickets: ticketsR.rows.map(mapTicket),
@@ -968,7 +1005,11 @@ app.get("/api/refresh", authenticate, async (req, res) => {
 
 app.get("/api/tickets", authenticate, async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM tickets ORDER BY updated_at DESC LIMIT 200");
+    const result = await pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
+                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
+                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
+                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
+                visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 200`);
     res.json(result.rows.map(mapTicket));
   } catch (e) {
     console.error("Tickets fetch error:", e);
@@ -1125,6 +1166,24 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
     } catch (e) {
         console.error("Ticket update error:", e);
         res.status(500).json({ error: "Failed to update ticket" });
+    }
+});
+
+// 2b-lite. Get messages for a specific ticket (on-demand, not in list payload)
+app.get("/api/tickets/:id/messages", authenticate, async (req, res) => {
+    try {
+        const result = await pool.query(
+            "SELECT messages FROM tickets WHERE id = $1",
+            [req.params.id]
+        );
+        if (!result.rows[0]) return res.status(404).json({ error: 'Ticket not found' });
+        const messages = Array.isArray(result.rows[0].messages)
+            ? result.rows[0].messages
+            : (result.rows[0].messages ? JSON.parse(result.rows[0].messages) : []);
+        res.json({ messages });
+    } catch (e) {
+        console.error('Messages fetch error:', e);
+        res.status(500).json({ error: 'Failed to fetch messages' });
     }
 });
 
@@ -1364,7 +1423,7 @@ app.get("/api/customers", authenticate, async (req, res) => {
       );
     } else {
       result = await pool.query(
-        `SELECT * FROM customers ORDER BY created_at DESC LIMIT 200`
+        `SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY created_at DESC LIMIT 200`
       );
     }
 
@@ -1933,7 +1992,9 @@ app.get("/api/activities/:id/full", authenticate, async (req, res) => {
 
 app.get("/api/activities", authenticate, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200");
+    const { rows } = await pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
+                customer_phone, site_id, lead_tech_id, description, duration_hours,
+                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`);
     res.json(rows.map(mapActivityLite));
   } catch (e) { res.status(500).json({error: "Failed to load activities"}); }
 });
