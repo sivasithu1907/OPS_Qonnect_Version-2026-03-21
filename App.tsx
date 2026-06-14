@@ -476,8 +476,13 @@ const handleLogout = useCallback(() => {
       }
   };
 
+  // Activity save guard — prevents double-submit
+  const [isSavingActivity, setIsSavingActivity] = useState(false);
+
   // Activity Handlers (API-Connected)
   const handleAddActivity = useCallback(async (act: any) => {
+      if (isSavingActivity) return; // prevent double-submit
+      setIsSavingActivity(true);
       const newId = generateActivityId();
       const now = new Date().toISOString();
       const payload = { ...act, id: newId, reference: newId, status: act.status || 'PLANNED', createdAt: now, updatedAt: now };
@@ -492,18 +497,23 @@ const handleLogout = useCallback(() => {
           if (!res.ok) {
               // Rollback
               setActivities(prev => prev.filter(a => a.id !== newId));
+              console.error('Failed to create activity:', res.status);
           } else {
-              // Background sync — delay to ensure DB has committed
-              setTimeout(() => loadActivities(), 2000);
+              // Reload immediately so server-canonical ID replaces temp client ID
+              await loadActivities();
+              syncActivityLocationToCustomer(act);
           }
-          syncActivityLocationToCustomer(act);
       } catch (e) {
           console.error("Failed to add activity", e);
           setActivities(prev => prev.filter(a => a.id !== newId));
+      } finally {
+          setIsSavingActivity(false);
       }
-  }, []);
+  }, [isSavingActivity]);
 
   const handleUpdateActivity = useCallback(async (updated: Activity) => {
+      if (isSavingActivity) return; // prevent double-submit
+      setIsSavingActivity(true);
       // Optimistic UI update immediately — so buttons reflect new status instantly
       setActivities(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
       try {
@@ -513,18 +523,21 @@ const handleLogout = useCallback(() => {
               body: JSON.stringify(updated)
           });
           if (res.ok) {
-              // Background sync after delay to get server-generated fields
-              setTimeout(() => loadActivities(), 2000);
+              // Reload immediately to get server-generated fields (visit history, timestamps)
+              await loadActivities();
+              syncActivityLocationToCustomer(updated);
           } else {
               // Rollback on failure — reload from server
-              loadActivities();
+              console.error('Failed to update activity:', res.status);
+              await loadActivities();
           }
-          syncActivityLocationToCustomer(updated);
       } catch (e) {
           console.error("Failed to update activity", e);
-          loadActivities(); // Rollback
+          await loadActivities(); // Rollback
+      } finally {
+          setIsSavingActivity(false);
       }
-  }, []);
+  }, [isSavingActivity]);
 
   // When an activity has a customer + location/building, update the customer record if its fields are empty
   const syncActivityLocationToCustomer = async (act: any) => {
@@ -1525,6 +1538,8 @@ useEffect(() => {
                         onAddCustomer={handleAddCustomer}
                         initialActivityId={targetActivityId}
                         onClearInitialActivity={() => setTargetActivityId(null)}
+                        isSaving={isSavingActivity}
+                        currentUserRole={currentUser?.role}
                     />
                 )}
                 {activeView === 'customers' && (
