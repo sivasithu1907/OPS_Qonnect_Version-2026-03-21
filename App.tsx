@@ -1640,6 +1640,7 @@ useEffect(() => {
                     <SalesAppointmentRequests
                         currentUser={currentUser}
                         technicians={technicians}
+                        activities={activities}
                         onActivityCreated={() => {
                             // Refresh activities so planner/ops monitor shows the new planned activity
                             const token = localStorage.getItem('qonnect_token');
