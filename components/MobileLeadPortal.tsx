@@ -145,6 +145,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Activity Dispatch State (Team Lead picks the execution crew)
   const [dispatchPrimaryId, setDispatchPrimaryId] = useState('');
   const [dispatchSupportIds, setDispatchSupportIds] = useState<string[]>([]);
+  const [dispatchFreelancers, setDispatchFreelancers] = useState<{name:string;role:string;phone:string}[]>([]);
   
   // Date Picker State
   const [nextDate, setNextDate] = useState('');
@@ -648,6 +649,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       setShowDatePicker(false);
       setDispatchPrimaryId('');
       setDispatchSupportIds([]);
+      setDispatchFreelancers([]);
   };
 
   const getStatusColor = (s: string) => {
@@ -2067,10 +2069,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 <div>
                     <div className="flex items-center gap-2 mb-2">
                         <span className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${
-                            actStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
-                            actStatus === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
-                            actStatus === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                            actStatus === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                            actStatus === 'IN_PROGRESS'    ? 'bg-amber-100 text-amber-700' :
+                            actStatus === 'ON_MY_WAY'      ? 'bg-blue-100 text-blue-700' :
+                            actStatus === 'ARRIVED'        ? 'bg-purple-100 text-purple-700' :
+                            actStatus === 'DONE'           ? 'bg-emerald-100 text-emerald-700' :
+                            actStatus === 'CARRY_FORWARD'  ? 'bg-orange-100 text-orange-700' :
+                            actStatus === 'CANCELLED'      ? 'bg-red-100 text-red-700' :
                             'bg-indigo-50 text-indigo-700 border border-indigo-100'
                         }`}>{actStatus.replace(/_/g, ' ')}</span>
                         <span className="text-xs font-mono text-slate-400">#{act.reference || act.id}</span>
@@ -2164,7 +2168,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     <div className="space-y-2">
                         {actStatus === 'PLANNED' && (
                             <div className="space-y-2">
-                                <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                                <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setDispatchFreelancers((act as any).freelancers ? JSON.parse(JSON.stringify((act as any).freelancers)) : []); setModalType('activity_dispatch'); setViewActivity(null); }}
                                     className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
                                     <Users size={18} /> Dispatch Team
                                 </button>
@@ -2201,7 +2205,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             </div>
                         )}
                         {actStatus === 'CARRY_FORWARD' && (
-                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setModalType('activity_dispatch'); setViewActivity(null); }}
+                            <button onClick={() => { setModalActivity(act); setDispatchPrimaryId((act as any).primaryEngineerId || ''); setDispatchSupportIds(act.assistantTechIds || []); setDispatchFreelancers((act as any).freelancers ? JSON.parse(JSON.stringify((act as any).freelancers)) : []); setModalType('activity_dispatch'); setViewActivity(null); }}
                                 className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
                                 <RotateCcw size={18} /> Reschedule
                             </button>
@@ -3202,7 +3206,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         onUpdateActivity({
                             ...a,
                             status: 'CARRY_FORWARD',
-                            plannedDate: nextDate,
+                            // Do NOT send plannedDate — backend keeps the original visit date.
+                            // nextPlannedAt carries the future date for display only.
                             carryForwardNote: cfNote,
                             currentVisitRemark: actionNote || '',
                             nextPlannedAt: nextDate,
@@ -3350,26 +3355,63 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     )}
                 </div>
 
-                {/* Freelancers Section */}
+                {/* Freelancers Section — inline add/remove during dispatch */}
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Freelancers</label>
-                    {((modalActivity as any)?.freelancers || []).length > 0 ? (
-                        <div className="space-y-1 rounded-xl border border-orange-100 bg-orange-50/30 p-3">
-                            {((modalActivity as any).freelancers || []).map((fl: any, i: number) => (
-                                <div key={i} className="flex items-center gap-2 py-1">
-                                    <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center text-[10px] font-bold text-orange-700">
-                                        {fl.name?.charAt(0) || 'F'}
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Freelancers</label>
+                        <button
+                            type="button"
+                            onClick={() => setDispatchFreelancers((prev: any[]) => [...prev, { name: '', role: 'TECHNICAL_ASSOCIATE', phone: '' }])}
+                            className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200"
+                        >
+                            + Add Freelancer
+                        </button>
+                    </div>
+                    {dispatchFreelancers.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No freelancers added.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {dispatchFreelancers.map((fl: any, i: number) => (
+                                <div key={i} className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDispatchFreelancers((prev: any[]) => prev.filter((_: any, idx: number) => idx !== i))}
+                                        className="absolute top-2 right-2 text-slate-400 hover:text-red-500 text-sm font-bold"
+                                    >✕</button>
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                        <div>
+                                            <div className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Name *</div>
+                                            <input
+                                                value={fl.name}
+                                                onChange={e => setDispatchFreelancers((prev: any[]) => prev.map((f: any, idx: number) => idx === i ? {...f, name: e.target.value} : f))}
+                                                placeholder="Freelancer name"
+                                                className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <div className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Role</div>
+                                            <select
+                                                value={fl.role}
+                                                onChange={e => setDispatchFreelancers((prev: any[]) => prev.map((f: any, idx: number) => idx === i ? {...f, role: e.target.value} : f))}
+                                                className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs"
+                                            >
+                                                <option value="TECHNICAL_ASSOCIATE">Tech Associate</option>
+                                                <option value="FIELD_ENGINEER">Field Engineer</option>
+                                            </select>
+                                        </div>
                                     </div>
                                     <div>
-                                        <span className="text-sm font-medium text-slate-800">{fl.name}</span>
-                                        <span className="text-[10px] text-orange-600 ml-1.5">{fl.role === 'FIELD_ENGINEER' ? 'Field Engineer' : 'Technical Associate'}</span>
+                                        <div className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Phone (optional)</div>
+                                        <input
+                                            value={fl.phone}
+                                            onChange={e => setDispatchFreelancers((prev: any[]) => prev.map((f: any, idx: number) => idx === i ? {...f, phone: e.target.value} : f))}
+                                            placeholder="+974 XXXX XXXX"
+                                            className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs"
+                                        />
                                     </div>
-                                    {fl.phone && <a href={`tel:${fl.phone}`} className="ml-auto text-[10px] text-emerald-600 font-bold">Call</a>}
                                 </div>
                             ))}
                         </div>
-                    ) : (
-                        <p className="text-xs text-slate-400 italic">No freelancers assigned. Add via Activity Planner.</p>
                     )}
                 </div>
 
@@ -3409,11 +3451,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         const a = modalActivity as any;
                         onUpdateActivity({
                             ...a,
-                            status: dispatchPrimaryId ? 'ON_MY_WAY' : a.status, // Only change status if engineer assigned
+                            status: dispatchPrimaryId ? 'ON_MY_WAY' : a.status,
                             primaryEngineerId: dispatchPrimaryId || null,
                             supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
-                            leadTechId: dispatchPrimaryId || null, // Update leadTechId to match dispatch selection (null if unassigned)
+                            leadTechId: dispatchPrimaryId || null,
                             assistantTechIds: dispatchSupportIds,
+                            // Include any freelancers added/edited during dispatch
+                            freelancers: dispatchFreelancers.filter((f: any) => f.name.trim()),
                             updatedAt: new Date().toISOString()
                         });
                         closeModal();
