@@ -6,7 +6,7 @@ import {
   ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
   CheckCircle2, History, AlertTriangle, X, UserPlus,
-  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Play, CheckSquare, ChevronDown, KeyRound,
+  TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Edit2, Play, CheckSquare, ChevronDown, KeyRound,
   Home, Settings, ClipboardList, Zap, Lock, BellRing, LayoutGrid, Activity as ActivityIcon, Layers
 } from 'lucide-react';
 import ReportsModule from './ReportsModule';
@@ -135,6 +135,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [viewTech, setViewTech] = useState<Technician | null>(null);
   const [viewFreelancer, setViewFreelancer] = useState<{ name: string; phone: string; activities: any[] } | null>(null);
   const [viewTicket, setViewTicket] = useState<Ticket | null>(null); 
+  const [ticketEditMode, setTicketEditMode] = useState(false);
+  const [ticketEditForm, setTicketEditForm] = useState<{locationUrl:string;houseNumber:string;category:string;priority:string;odooLink:string} | null>(null);
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [viewJob, setViewJob] = useState<{ type: 'ticket' | 'activity', data: any } | null>(null);
 
@@ -510,6 +512,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   const handleTicketCardTap = (ticket: Ticket) => {
       setViewTicket(ticket);
+      setTicketEditMode(false);
+      setTicketEditForm(null);
   };
 
   const handleActivityCardTap = (activity: Activity) => {
@@ -1897,19 +1901,39 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6">
                             {/* Header */}
-                            <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${getStatusColor(viewTicket.status)}`}>
-                                        {viewTicket.status.replace('_', ' ')}
-                                    </span>
-                                    <span className="text-xs font-mono text-slate-400">#{viewTicket.id}</span>
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className={`px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wide ${getStatusColor(viewTicket.status)}`}>
+                                            {viewTicket.status.replace('_', ' ')}
+                                        </span>
+                                        <span className="text-xs font-mono text-slate-400">#{viewTicket.id}</span>
+                                    </div>
+                                    <h2 className="text-xl font-bold text-slate-900 leading-tight">
+                                        {viewTicket.category}
+                                    </h2>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Created {new Date(viewTicket.createdAt).toLocaleDateString()} at {new Date(viewTicket.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                    </p>
                                 </div>
-                                <h2 className="text-xl font-bold text-slate-900 leading-tight">
-                                    {viewTicket.category}
-                                </h2>
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Created {new Date(viewTicket.createdAt).toLocaleDateString()} at {new Date(viewTicket.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                                </p>
+                                {/* Inline edit toggle */}
+                                {onUpdateTicket && !ticketEditMode && (
+                                    <button
+                                        onClick={() => {
+                                            setTicketEditForm({
+                                                locationUrl: viewTicket.locationUrl || '',
+                                                houseNumber: viewTicket.houseNumber || '',
+                                                category: viewTicket.category || '',
+                                                priority: viewTicket.priority || 'MEDIUM',
+                                                odooLink: viewTicket.odooLink || '',
+                                            });
+                                            setTicketEditMode(true);
+                                        }}
+                                        className="shrink-0 p-2 bg-slate-100 rounded-xl text-slate-600 hover:bg-slate-200"
+                                    >
+                                        <Edit2 size={16} />
+                                    </button>
+                                )}
                             </div>
 
                             {/* Main Info */}
@@ -1924,7 +1948,60 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     </div>
                                 </div>
 
-                                {/* Location */}
+                                {/* Location — view or inline edit */}
+                                {ticketEditMode && ticketEditForm ? (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-blue-700 uppercase">Edit Ticket Details</span>
+                                            <button onClick={() => { setTicketEditMode(false); setTicketEditForm(null); }}
+                                                className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">House / Building No.</label>
+                                            <input value={ticketEditForm.houseNumber}
+                                                onChange={e => setTicketEditForm(p => p ? {...p, houseNumber: e.target.value} : p)}
+                                                placeholder="Villa 10" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Location URL</label>
+                                            <input value={ticketEditForm.locationUrl}
+                                                onChange={e => setTicketEditForm(p => p ? {...p, locationUrl: e.target.value} : p)}
+                                                placeholder="https://maps.google..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Priority</label>
+                                            <select value={ticketEditForm.priority}
+                                                onChange={e => setTicketEditForm(p => p ? {...p, priority: e.target.value} : p)}
+                                                className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white">
+                                                {['LOW','MEDIUM','HIGH','URGENT'].map(p => <option key={p} value={p}>{p}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Odoo Link</label>
+                                            <input value={ticketEditForm.odooLink}
+                                                onChange={e => setTicketEditForm(p => p ? {...p, odooLink: e.target.value} : p)}
+                                                placeholder="https://odoo..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white" />
+                                        </div>
+                                        <div className="flex gap-2 pt-1">
+                                            <button onClick={() => { setTicketEditMode(false); setTicketEditForm(null); }}
+                                                className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl border border-slate-200 text-sm">Cancel</button>
+                                            <button onClick={() => {
+                                                if (!ticketEditForm || !onUpdateTicket) return;
+                                                onUpdateTicket({
+                                                    ...viewTicket,
+                                                    locationUrl: ticketEditForm.locationUrl,
+                                                    houseNumber: ticketEditForm.houseNumber,
+                                                    priority: ticketEditForm.priority as any,
+                                                    odooLink: ticketEditForm.odooLink,
+                                                    updatedAt: new Date().toISOString(),
+                                                });
+                                                setTicketEditMode(false);
+                                                setTicketEditForm(null);
+                                                toast.success('Ticket updated');
+                                            }} className="flex-1 py-2.5 bg-slate-800 text-white font-bold rounded-xl text-sm">Save</button>
+                                        </div>
+                                    </div>
+                                ) : (
                                 <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
                                     <div className="p-2 bg-white rounded-lg shadow-sm text-slate-400"><MapPin size={20}/></div>
                                     <div className="flex-1">
@@ -1937,6 +2014,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         )}
                                     </div>
                                 </div>
+                                )}
 
                                 {/* Description */}
                                 <div>
