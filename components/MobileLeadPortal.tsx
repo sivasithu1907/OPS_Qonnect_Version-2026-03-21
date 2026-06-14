@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
+import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
 import { 
   ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
