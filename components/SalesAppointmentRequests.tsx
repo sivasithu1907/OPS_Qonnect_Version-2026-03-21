@@ -96,8 +96,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   const [view, setView]               = useState<'list' | 'calendar'>('list');
   // Sales: "my requests" tab vs "all requests" tab
   const [myOnly, setMyOnly]           = useState<boolean>(true);
-  // Calendar day popup
-  const [calDayPopup, setCalDayPopup] = useState<{ dateStr: string; requests: SalesAppointmentRequest[]; activities: any[] } | null>(null);
+  // Calendar day popup — managed inside CalendarView component
   const [calMonth, setCalMonth]       = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -515,7 +514,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
             calMonth={calMonth}
             onPrevMonth={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
             onNextMonth={() => setCalMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
-            onSelectDay={(dateStr, reqs, acts) => setCalDayPopup({ dateStr, requests: reqs, activities: acts })}
+            onSelectRequest={r => setDetailItem(r)}
           />
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
@@ -741,12 +740,14 @@ interface CalendarViewProps {
   calMonth: Date;
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  onSelectDay: (dateStr: string, requests: SalesAppointmentRequest[], activities: any[]) => void;
+  onSelectRequest?: (r: SalesAppointmentRequest) => void;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, technicians, calMonth, onPrevMonth, onNextMonth, onSelectDay }) => {
+const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, technicians, calMonth, onPrevMonth, onNextMonth, onSelectRequest }) => {
+  // Self-contained popup state — no dependency on parent scope
+  const [dayPopup, setDayPopup] = useState<{ dateStr: string; requests: SalesAppointmentRequest[]; activities: any[] } | null>(null);
   const year  = calMonth.getFullYear();
   const month = calMonth.getMonth();
 
@@ -852,10 +853,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, techn
               key={idx}
               onClick={() => {
                 if (!day || !dateStr) return;
-                const dayActs = actByDate[dateStr] || [];
-                const dayReqs = byDate[dateStr] || [];
-                // Always open popup — even if empty, it confirms the day is clear
-                onSelectDay(dateStr, dayReqs, dayActs);
+                setDayPopup({
+                  dateStr,
+                  requests: byDate[dateStr] || [],
+                  activities: actByDate[dateStr] || [],
+                });
               }}
               className={`min-h-[90px] p-1.5 border-b border-r border-slate-100 last:border-r-0 transition-colors ${
                 !day ? 'bg-slate-50/50' :
@@ -915,6 +917,133 @@ const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, techn
           </div>
         ))}
       </div>
+
+      {/* ── Day Popup Modal — self-contained inside CalendarView ── */}
+      {dayPopup != null && (
+        <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDayPopup(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-800 text-white rounded-t-2xl">
+              <div>
+                <h3 className="font-bold text-base">
+                  {new Date(dayPopup.dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </h3>
+                <p className="text-slate-300 text-xs mt-0.5">
+                  {dayPopup.activities.length} job{dayPopup.activities.length !== 1 ? 's' : ''} · {dayPopup.requests.length} request{dayPopup.requests.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button onClick={() => setDayPopup(null)} className="p-1.5 hover:bg-white/10 rounded-lg">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* Planned Activities */}
+              {dayPopup.activities.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"/> Scheduled Jobs
+                  </h4>
+                  <div className="space-y-2">
+                    {dayPopup.activities.map((a: any, i: number) => {
+                      const lead = technicians.find(t => t.id === a.leadTechId);
+                      const primary = technicians.find(t => t.id === a.primaryEngineerId);
+                      const supporting = (a.supportingEngineerIds || [])
+                        .map((id: string) => technicians.find(t => t.id === id)?.name)
+                        .filter(Boolean);
+                      const timeStr = a.plannedDate
+                        ? new Date(a.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })
+                        : null;
+                      const statusColor = a.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
+                                         a.status === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
+                                         a.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                                         'bg-blue-100 text-blue-700';
+                      return (
+                        <div key={i} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-slate-800 text-sm">{a.type || 'Activity'}</span>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{(a.status || '').replace(/_/g,' ')}</span>
+                              </div>
+                              {a.customerName && <p className="text-xs text-slate-500 mt-0.5">{a.customerName}</p>}
+                            </div>
+                            <div className="text-right shrink-0">
+                              {timeStr && <div className="text-xs font-bold text-slate-700">{timeStr}</div>}
+                              {a.durationHours > 0 && <div className="text-[10px] text-slate-400">{a.durationHours}h</div>}
+                            </div>
+                          </div>
+                          {a.serviceCategory && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {String(a.serviceCategory).split(', ').filter(Boolean).map((cat: string) => (
+                                <span key={cat} className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200 font-medium">{cat}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                            {(primary || lead) && (
+                              <span className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                                👷 {(primary || lead)?.name}
+                              </span>
+                            )}
+                            {supporting.map((name: string) => (
+                              <span key={name} className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                                🔧 {name}
+                              </span>
+                            ))}
+                            {(a.freelancers || []).map((fl: any, fi: number) => (
+                              <span key={fi} className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 text-orange-700">
+                                🆓 {fl.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Appointment Requests */}
+              {dayPopup.requests.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400"/> Appointment Requests
+                  </h4>
+                  <div className="space-y-2">
+                    {dayPopup.requests.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => { setDayPopup(null); onSelectRequest && onSelectRequest(r); }}
+                        className="w-full text-left bg-slate-50 border border-slate-200 rounded-xl p-3 hover:bg-slate-100 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-slate-800 text-sm">{r.customerName}</span>
+                            <span className="ml-2 text-[10px] font-mono text-slate-400">{r.id}</span>
+                          </div>
+                          <StatusBadge status={r.status} />
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{r.activityType} · {r.salesLeadName}</p>
+                        {r.scheduledStartTime && (
+                          <p className="text-xs font-bold text-blue-600 mt-1">⏰ {r.scheduledStartTime}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {dayPopup.activities.length === 0 && dayPopup.requests.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <span className="text-3xl mb-2">📭</span>
+                  <p className="text-sm font-medium">Nothing scheduled</p>
+                  <p className="text-xs mt-1">This day is free</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -1552,131 +1681,6 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
         </div>
       </div>
 
-      {/* ── Calendar Day Popup ── */}
-      {calDayPopup != null && (
-        <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setCalDayPopup(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-800 text-white rounded-t-2xl">
-              <div>
-                <h3 className="font-bold text-base">
-                  {new Date(calDayPopup.dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                </h3>
-                <p className="text-slate-300 text-xs mt-0.5">
-                  {calDayPopup.activities.length} planned job{calDayPopup.activities.length !== 1 ? 's' : ''} · {calDayPopup.requests.length} appointment request{calDayPopup.requests.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-              <button onClick={() => setCalDayPopup(null)} className="p-1.5 hover:bg-white/10 rounded-lg">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-
-              {/* ── Planned Activities (Field Resource Occupancy) ── */}
-              {calDayPopup.activities.length > 0 && (
-                <div>
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"/> Scheduled Jobs
-                  </h4>
-                  <div className="space-y-2">
-                    {calDayPopup.activities.map((a: any, i: number) => {
-                      const lead = technicians.find(t => t.id === a.leadTechId);
-                      const primary = technicians.find(t => t.id === a.primaryEngineerId);
-                      const supporting = (a.supportingEngineerIds || [])
-                        .map((id: string) => technicians.find(t => t.id === id)?.name)
-                        .filter(Boolean);
-                      const timeStr = a.plannedDate
-                        ? new Date(a.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })
-                        : null;
-                      const statusColor = a.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
-                                         a.status === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
-                                         a.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                                         'bg-blue-100 text-blue-700';
-                      return (
-                        <div key={i} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-bold text-slate-800 text-sm">{a.type || 'Activity'}</span>
-                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{(a.status || '').replace(/_/g,' ')}</span>
-                              </div>
-                              {a.customerName && <p className="text-xs text-slate-500 mt-0.5">{a.customerName}</p>}
-                            </div>
-                            <div className="text-right shrink-0">
-                              {timeStr && <div className="text-xs font-bold text-slate-700">{timeStr}</div>}
-                              {a.durationHours > 0 && <div className="text-[10px] text-slate-400">{a.durationHours}h</div>}
-                            </div>
-                          </div>
-                          {/* Service category */}
-                          {a.serviceCategory && (
-                            <div className="flex flex-wrap gap-1 mb-2">
-                              {String(a.serviceCategory).split(', ').filter(Boolean).map((cat: string) => (
-                                <span key={cat} className="text-[9px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200 font-medium">{cat}</span>
-                              ))}
-                            </div>
-                          )}
-                          {/* Resource team */}
-                          <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
-                            {(primary || lead) && (
-                              <span className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
-                                👷 {(primary || lead)?.name}
-                              </span>
-                            )}
-                            {supporting.map((name: string) => (
-                              <span key={name} className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
-                                🔧 {name}
-                              </span>
-                            ))}
-                            {(a.freelancers || []).map((fl: any, fi: number) => (
-                              <span key={fi} className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 text-orange-700">
-                                🆓 {fl.name}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Appointment Requests ── */}
-              {calDayPopup.requests.length > 0 && (
-                <div>
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-400"/> Appointment Requests
-                  </h4>
-                  <div className="space-y-2">
-                    {calDayPopup.requests.map(r => (
-                      <button
-                        key={r.id}
-                        onClick={() => { setCalDayPopup(null); setDetailItem(r); }}
-                        className="w-full text-left bg-slate-50 border border-slate-200 rounded-xl p-3 hover:bg-slate-100 transition-colors"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="font-bold text-slate-800 text-sm">{r.customerName}</span>
-                            <span className="ml-2 text-[10px] font-mono text-slate-400">{r.id}</span>
-                          </div>
-                          <StatusBadge status={r.status} />
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5">{r.activityType} · {r.salesLeadName}</p>
-                        {r.scheduledStartTime && (
-                          <p className="text-xs font-bold text-blue-600 mt-1">⏰ {r.scheduledStartTime}</p>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {calDayPopup.activities.length === 0 && calDayPopup.requests.length === 0 && (
-                <p className="text-center text-slate-400 py-8 text-sm">Nothing scheduled on this day</p>
-              )}
-            </div>
-          </div>
-        </div>
       )}
 
     </div>
