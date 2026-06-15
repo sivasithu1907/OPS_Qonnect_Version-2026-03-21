@@ -1656,6 +1656,7 @@ useEffect(() => {
                     <MobileTechPortal 
                         tickets={tickets}
                         activities={activities}
+                        customers={customers}
                         currentTechId={currentUser.techId || ''}
                         onUpdateStatus={(tId, status, note) => {
                             const t = tickets.find(x => x.id === tId);
