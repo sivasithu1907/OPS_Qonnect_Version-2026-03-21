@@ -303,16 +303,18 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [myJobsDate, setMyJobsDate] = useState<string>(() => {
       const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   });
+  const [myJobsDateOffset, setMyJobsDateOffset] = useState(0); // 0 = today centered
   const myJobsDateRange = useMemo(() => {
       const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
       const today = new Date();
-      for (let i = -7; i <= 2; i++) {
-          const d = new Date(today); d.setDate(today.getDate() + i);
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      for (let i = -2; i <= 2; i++) {
+          const d = new Date(today); d.setDate(today.getDate() + myJobsDateOffset + i);
           const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          dates.push({ key, day: String(d.getDate()).padStart(2,'0'), weekday: d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase(), month: d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(), isToday: i===0 });
+          dates.push({ key, day: String(d.getDate()).padStart(2,'0'), weekday: d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase(), month: d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(), isToday: key === todayKey });
       }
       return dates;
-  }, []);
+  }, [myJobsDateOffset]);
   const myJobsTodayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
   const myJobsIsPast = myJobsDate < myJobsTodayKey;
   const myJobsDateFiltered = useMemo(() => {
@@ -1701,21 +1703,37 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               
               {activeTab === 'my_jobs' && (
                   <div>
-                      {/* Date Picker — TechPortal style */}
-                      <div className="bg-white border-b border-slate-100 px-4 py-3">
-                          <div className="flex justify-between gap-2">
-                              {myJobsDateRange.map(d => (
-                                  <button key={d.key} onClick={() => setMyJobsDate(d.key)}
-                                      className={`flex-1 flex flex-col items-center py-2.5 rounded-2xl transition-all ${
-                                          myJobsDate === d.key ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105' :
-                                          d.isToday ? 'bg-blue-50 text-blue-700 border-2 border-blue-200' : 'bg-slate-50 text-slate-600'
-                                      }`}>
-                                      <span className={`text-[9px] font-bold ${myJobsDate === d.key ? 'text-blue-100' : 'text-slate-400'}`}>{d.weekday}</span>
-                                      <span className="text-xl font-bold leading-tight">{d.day}</span>
-                                      <span className={`text-[8px] font-bold ${myJobsDate === d.key ? 'text-blue-200' : 'text-slate-400'}`}>{d.month}</span>
-                                  </button>
-                              ))}
+                      {/* Date Picker — 5 days + < > scroll */}
+                      <div className="bg-white border-b border-slate-100 px-2 py-3">
+                          <div className="flex items-center gap-1">
+                              <button onClick={() => setMyJobsDateOffset(o => o - 1)}
+                                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200 shrink-0">
+                                  <ChevronLeft size={16} strokeWidth={2.5} />
+                              </button>
+                              <div className="flex-1 flex justify-between gap-1">
+                                  {myJobsDateRange.map(d => (
+                                      <button key={d.key} onClick={() => setMyJobsDate(d.key)}
+                                          className={`flex-1 flex flex-col items-center py-2 rounded-2xl transition-all ${
+                                              myJobsDate === d.key ? 'bg-slate-900 text-white shadow-lg scale-105' :
+                                              d.isToday ? 'bg-blue-50 text-blue-700 border-2 border-blue-200' : 'bg-slate-50 text-slate-600'
+                                          }`}>
+                                          <span className={`text-[9px] font-bold ${myJobsDate === d.key ? 'text-slate-300' : 'text-slate-400'}`}>{d.weekday}</span>
+                                          <span className="text-lg font-bold leading-tight">{d.day}</span>
+                                          <span className={`text-[8px] font-bold ${myJobsDate === d.key ? 'text-slate-400' : 'text-slate-400'}`}>{d.month}</span>
+                                      </button>
+                                  ))}
+                              </div>
+                              <button onClick={() => setMyJobsDateOffset(o => o + 1)}
+                                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200 shrink-0">
+                                  <ChevronRight size={16} strokeWidth={2.5} />
+                              </button>
                           </div>
+                          {myJobsDateOffset !== 0 && (
+                              <button onClick={() => { setMyJobsDateOffset(0); setMyJobsDate(myJobsTodayKey); }}
+                                  className="mt-2 w-full text-center text-[10px] font-bold text-blue-600 py-1 bg-blue-50 rounded-xl">
+                                  ↩ Back to Today
+                              </button>
+                          )}
                       </div>
 
                       {/* Summary Cards */}
