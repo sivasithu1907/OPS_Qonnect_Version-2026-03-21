@@ -763,18 +763,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, techn
   // Build maps: dateString → SARs + dateString → Activities
   const byDate = useMemo(() => {
     const map: Record<string, SalesAppointmentRequest[]> = {};
+    // `requests` is already the filtered list — respect whatever filter is active
     requests.forEach(r => {
-      const dateKey = r.scheduledDate ? r.scheduledDate.slice(0, 10) : null;
+      // Scheduled/InProgress/Completed/Done: show on scheduledDate
+      // Pending: show on createdAt (no scheduled date yet)
+      const dateKey = r.scheduledDate
+        ? r.scheduledDate.slice(0, 10)
+        : r.status === 'PENDING_SCHEDULING'
+          ? r.createdAt.slice(0, 10)
+          : null;
       if (dateKey) {
         if (!map[dateKey]) map[dateKey] = [];
-        map[dateKey].push(r);
+        if (!map[dateKey].find(x => x.id === r.id)) map[dateKey].push(r);
       }
-    });
-    // Pending requests: show on created date
-    requests.filter(r => r.status === 'PENDING_SCHEDULING').forEach(r => {
-      const key = r.createdAt.slice(0, 10);
-      if (!map[key]) map[key] = [];
-      if (!map[key].find(x => x.id === r.id)) map[key].push(r);
     });
     return map;
   }, [requests]);
@@ -827,10 +828,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, techn
         </button>
       </div>
 
-      {/* Weekday headers */}
+      {/* Weekday headers — Friday highlighted as Qatar holiday */}
       <div className="grid grid-cols-7 border-b border-slate-100">
-        {WEEKDAYS.map(d => (
-          <div key={d} className="py-2 text-center text-[11px] font-bold text-slate-400 uppercase">{d}</div>
+        {WEEKDAYS.map((d, i) => (
+          <div key={d} className={`py-2 text-center text-[11px] font-bold uppercase ${
+            i === 5 ? 'text-red-400 bg-red-50/50' : 'text-slate-400'
+          }`}>
+            {d}{i === 5 && <span className="block text-[8px] font-normal text-red-300">Holiday</span>}
+          </div>
         ))}
       </div>
 
@@ -849,12 +854,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ requests, activities, techn
                 if (!day || !dateStr) return;
                 const dayActs = actByDate[dateStr] || [];
                 const dayReqs = byDate[dateStr] || [];
-                if (dayActs.length > 0 || dayReqs.length > 0) {
-                  onSelectDay(dateStr, dayReqs, dayActs);
-                }
+                // Always open popup — even if empty, it confirms the day is clear
+                onSelectDay(dateStr, dayReqs, dayActs);
               }}
               className={`min-h-[90px] p-1.5 border-b border-r border-slate-100 last:border-r-0 transition-colors ${
                 !day ? 'bg-slate-50/50' :
+                idx % 7 === 5 ? 'bg-red-50/40 hover:bg-red-50/70 cursor-pointer' :
                 (actByDate[dateStr || ''] || []).length > 0 ? 'bg-blue-50/30 hover:bg-blue-50 cursor-pointer' : 'bg-white hover:bg-slate-50 cursor-pointer'
               }`}
             >
