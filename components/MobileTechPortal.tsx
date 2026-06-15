@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, Search, X, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
+import { ChevronLeft, Search, X, CalendarDays, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -403,7 +403,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // Container class defined below in render section
 
   // --- 4-Tab navigation state ---
-  const [activeTab, setActiveTab] = useState<'home' | 'carry' | 'history' | 'more'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'upcoming' | 'carry' | 'history' | 'more'>('home');
   const [jobSearch, setJobSearch] = useState('');
   
   // Date selector for Home tab
@@ -418,7 +418,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const dateRange = useMemo(() => {
       const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
       const today = new Date();
-      for (let i = -7; i <= 2; i++) {
+      for (let i = -7; i <= 14; i++) {
           const d = new Date(today);
           d.setDate(today.getDate() + i);
           const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -491,6 +491,29 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           );
       });
   }, [dateFilteredJobs, jobSearch, customers]);
+
+  // Upcoming planned jobs (next 14 days, PLANNED/ASSIGNED status)
+  const upcomingJobs = useMemo(() => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const future = new Date(today);
+      future.setDate(future.getDate() + 14);
+      return [
+          ...tickets
+            .filter(t => t.assignedTechId === currentTechId &&
+                !['RESOLVED','CANCELLED'].includes(t.status) &&
+                t.appointmentTime &&
+                new Date(t.appointmentTime) > today &&
+                new Date(t.appointmentTime) <= future)
+            .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.appointmentTime! })),
+          ...activities
+            .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) &&
+                ['PLANNED','ASSIGNED'].includes(a.status) &&
+                new Date(a.plannedDate) > today &&
+                new Date(a.plannedDate) <= future)
+            .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.plannedDate })),
+      ].sort((a, b) => new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime());
+  }, [tickets, activities, currentTechId]);
 
   // Carry forward jobs
   const carryForwardJobs = useMemo(() => {
@@ -634,7 +657,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                 <div className="bg-white border-b border-slate-200 px-4 pt-4 pb-3 flex items-center justify-between shrink-0 z-30 shadow-sm">
                     <div>
                         <h2 className="font-bold text-lg text-slate-900 leading-none">
-                            {activeTab === 'home' ? 'My Schedule' : activeTab === 'carry' ? 'Carry Forward' : activeTab === 'history' ? 'Completed' : 'More'}
+                            {activeTab === 'home' ? 'My Schedule' : activeTab === 'upcoming' ? 'Upcoming' : activeTab === 'carry' ? 'Carry Forward' : activeTab === 'history' ? 'Completed' : 'More'}
                         </h2>
                         <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">Field Engineer Portal</p>
                     </div>
@@ -927,6 +950,54 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                         )}
 
                         {/* CARRY FORWARD TAB */}
+                        {activeTab === 'upcoming' && (
+                            <div className="px-4 pb-4 space-y-3">
+                                {upcomingJobs.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                        <CalendarDays size={40} className="mb-3 text-slate-300" />
+                                        <p className="text-sm font-medium">No upcoming jobs</p>
+                                        <p className="text-xs mt-1">Nothing planned for the next 14 days</p>
+                                    </div>
+                                ) : (
+                                    upcomingJobs.map((job, idx) => {
+                                        const d = job.data as any;
+                                        const date = new Date(job.sortDate);
+                                        const dateStr = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Qatar' });
+                                        const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Qatar' });
+                                        const isToday = date.toDateString() === new Date().toDateString();
+                                        const isTomorrow = date.toDateString() === new Date(Date.now() + 86400000).toDateString();
+                                        const dayLabel = isToday ? 'TODAY' : isTomorrow ? 'TOMORROW' : dateStr;
+                                        const custName = (customers as any[]).find((cu: any) => cu.id === (d.customerId || d.customer_id))?.name || d.customerName || 'Unknown';
+                                        return (
+                                            <div key={idx} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${isToday ? 'border-blue-200' : 'border-slate-100'}`}>
+                                                <div className={`px-4 py-2 flex items-center justify-between ${isToday ? 'bg-blue-50' : 'bg-slate-50'}`}>
+                                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-blue-600' : 'text-slate-500'}`}>{dayLabel}</span>
+                                                    <span className="text-[10px] font-bold text-slate-500">{timeStr}</span>
+                                                </div>
+                                                <div className="p-4">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex-1">
+                                                            <p className="font-bold text-slate-800 text-sm">{job.kind === 'activity' ? d.type : d.category}</p>
+                                                            <p className="text-xs text-slate-500 mt-0.5">{custName}</p>
+                                                        </div>
+                                                        <span className="text-[9px] font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700 shrink-0">{job.kind === 'activity' ? 'Activity' : 'Ticket'}</span>
+                                                    </div>
+                                                    {d.locationUrl && (
+                                                        <a href={d.locationUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+                                                            📍 View Location
+                                                        </a>
+                                                    )}
+                                                    {d.durationHours > 0 && (
+                                                        <p className="text-[10px] text-slate-400 mt-1">⏱ {d.durationHours}h planned</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
+
                         {activeTab === 'carry' && (
                             <div className="p-4 space-y-3">
                                 <div className="flex items-center justify-between px-1 mb-2">
@@ -1065,6 +1136,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                     <div className="bg-white/90 backdrop-blur-2xl rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-200/60 flex justify-between px-2 py-1.5">
                         {[
                             { key: 'home' as const, icon: Calendar, label: 'Schedule' },
+                            { key: 'upcoming' as const, icon: CalendarDays, label: 'Upcoming', badge: upcomingJobs.length },
                             { key: 'carry' as const, icon: RotateCcw, label: 'Carry Fwd', badge: carryForwardJobs.length },
                             { key: 'history' as const, icon: History, label: 'Completed' },
                             { key: 'more' as const, icon: Grid, label: 'More' },
