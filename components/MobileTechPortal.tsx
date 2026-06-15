@@ -1180,15 +1180,17 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 <button
                                     key={tab.key}
                                     onClick={() => setActiveTab(tab.key)}
-                                    className={`flex flex-col items-center justify-center py-1.5 flex-1 rounded-xl transition-all duration-200 relative ${isActive ? 'bg-slate-900 text-white scale-105' : 'text-slate-400 active:scale-95'}`}
+                                    className={`flex items-center justify-center py-3 flex-1 rounded-xl transition-all duration-200 relative ${isActive ? 'bg-slate-900 text-white' : 'text-slate-400 active:scale-95'}`}
                                 >
-                                    <div className="relative">
-                                        <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                                        {tab.badge && tab.badge > 0 && (
-                                            <span className={`absolute -top-1.5 -right-2.5 min-w-[16px] h-4 ${isActive ? 'bg-orange-400 text-white' : 'bg-orange-500 text-white'} text-[9px] font-bold rounded-full flex items-center justify-center px-1`}>{tab.badge}</span>
-                                        )}
+                                    <div className="flex flex-col items-center gap-0.5">
+                                        <div className="relative">
+                                            <Icon size={isActive ? 20 : 18} strokeWidth={isActive ? 2.5 : 2} />
+                                            {!!tab.badge && tab.badge > 0 && (
+                                                <span className="absolute -top-1.5 -right-2 min-w-[14px] h-3.5 bg-orange-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">{tab.badge}</span>
+                                            )}
+                                        </div>
+                                        <span className={`text-[8px] font-bold tracking-wide whitespace-nowrap ${isActive ? 'text-white' : 'text-slate-400'}`}>{tab.label}</span>
                                     </div>
-                                    <span className={`text-[8px] font-bold mt-0.5 uppercase tracking-wide ${isActive ? 'text-white' : 'text-slate-400'}`}>{tab.label}</span>
                                 </button>
                             );
                         })}
