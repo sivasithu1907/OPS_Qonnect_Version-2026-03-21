@@ -102,6 +102,13 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       openModal('view', c);
   };
 
+  // Pre-computed timeline for the currently viewed customer — avoids 3x recompute per render
+  const activeTimeline = useMemo(() => {
+      if (!activeItem || modalType !== 'view') return [];
+      return getCustomerTimeline(activeItem.id);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeItem?.id, modalType, activities, tickets]);
+
   const openModal = (type: 'add' | 'edit' | 'view', item?: Customer) => {
       setModalType(type);
       setActiveItem(item || null);
@@ -216,6 +223,7 @@ onSaveCustomer(data as Customer);
       nextPlannedAt?: string;
       cancellationReason?: string;
       serviceCategory?: string;
+      photos?: any[];
   };
 
   const getCustomerTimeline = (customerId: string): TimelineItem[] => {
@@ -250,15 +258,16 @@ onSaveCustomer(data as Customer);
       });
 
       // Tickets for this customer (match by customerId or customerName)
-      const cust = customers.find(c => c.id === customerId);
-      tickets.filter(t => t.customerId === customerId || (cust && t.customerName === cust.name)).forEach(t => {
+      // Match by customerId only — name matching is unreliable (same name, different customers)
+      tickets.filter(t => t.customerId === customerId).forEach(t => {
           const tech = technicians.find(x => x.id === t.assignedTechId);
           items.push({
               id: t.id,
               kind: 'ticket',
               ref: t.id,
               title: t.category,
-              description: t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category,
+              // messages excluded from list queries (performance) — use ai_summary or category
+              description: (t as any).ai_summary || t.notes || t.category,
               status: t.status,
               priority: t.priority,
               date: new Date(t.createdAt),
@@ -734,7 +743,7 @@ onSaveCustomer(data as Customer);
                                             locationUrl: activeItem.address || '',
                                             houseNumber: (activeItem as any).buildingNumber || ''
                                         });
-                                        setModalState({ open: false, mode: 'view', item: null });
+                                        closeModal();
                                     }} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 font-bold text-sm hover:bg-amber-100 active:scale-[0.98] transition-all">
                                         <TicketIcon size={16} />
                                         Create Ticket
@@ -747,7 +756,7 @@ onSaveCustomer(data as Customer);
                                             locationUrl: activeItem.address || '',
                                             houseNumber: (activeItem as any).buildingNumber || ''
                                         });
-                                        setModalState({ open: false, mode: 'view', item: null });
+                                        closeModal();
                                     }} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-700 font-bold text-sm hover:bg-indigo-100 active:scale-[0.98] transition-all">
                                         <Calendar size={16} />
                                         Create Activity
@@ -760,9 +769,9 @@ onSaveCustomer(data as Customer);
                             <Clock size={20} className="text-slate-400"/>
                             Client History
                         </h3>
-                        {/* Summary Chips */}
+                        {/* Summary Chips — timeline computed once */}
                         {(() => {
-                            const timeline = getCustomerTimeline(activeItem.id);
+                            const timeline = activeTimeline;
                             const actCount = timeline.filter(i => i.kind === 'activity').length;
                             const ticketCount = timeline.filter(i => i.kind === 'ticket').length;
                             const doneCount = timeline.filter(i => i.status === 'DONE' || i.status === 'RESOLVED').length;
@@ -778,14 +787,14 @@ onSaveCustomer(data as Customer);
                         })()}
                         
                         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                            {getCustomerTimeline(activeItem.id).length === 0 ? (
+                            {activeTimeline.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 opacity-60">
                                     <Calendar size={48} />
                                     <p>No service history found for this customer.</p>
                                 </div>
                             ) : (
                                 <div className="relative border-l-2 border-slate-100 ml-3 space-y-6 py-2">
-                                    {getCustomerTimeline(activeItem.id).map((item, index) => {
+                                    {activeTimeline.map((item, index) => {
                                         const isTicket = item.kind === 'ticket';
                                         const statusColor = 
                                             item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-500' :
