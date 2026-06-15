@@ -404,6 +404,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   // --- 4-Tab navigation state ---
   const [activeTab, setActiveTab] = useState<'home' | 'upcoming' | 'carry' | 'history' | 'more'>('home');
+  const [dateOffset, setDateOffset] = useState(0); // 0 = today centered
   const [jobSearch, setJobSearch] = useState('');
   
   // Date selector for Home tab
@@ -415,23 +416,26 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const currentTech = technicians.find((t: any) => t.id === currentTechId);
 
   // Generate date range — 7 prev, today, 2 next (10 total) — scrollable history
+  // Only 5 days visible: center-2, center-1, center, center+1, center+2
+  // dateOffset controls which day is center (0 = today, +7 = next week, etc.)
   const dateRange = useMemo(() => {
       const dates: { key: string; day: string; weekday: string; month: string; isToday: boolean }[] = [];
       const today = new Date();
-      for (let i = -7; i <= 14; i++) {
+      for (let i = -2; i <= 2; i++) {
           const d = new Date(today);
-          d.setDate(today.getDate() + i);
+          d.setDate(today.getDate() + dateOffset + i);
           const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
           dates.push({
               key,
               day: String(d.getDate()).padStart(2, '0'),
               weekday: d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
               month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
-              isToday: i === 0
+              isToday: key === todayKey
           });
       }
       return dates;
-  }, []);
+  }, [dateOffset]);
 
   // In-progress count for summary card
   const inProgressJobs = myJobs.filter(j => {
@@ -849,27 +853,56 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                         {/* HOME TAB — Date selector + summary + jobs */}
                         {activeTab === 'home' && (
                             <div>
-                                {/* Date Picker — 5 days centered on today */}
-                                <div className="bg-white border-b border-slate-100 px-4 py-3">
-                                    <div ref={dateScrollRef} className="flex justify-between gap-2">
+                                {/* Date Picker — 5 days centered + < > nav */}
+                                <div className="bg-white border-b border-slate-100 px-2 py-3">
+                                    <div className="flex items-center gap-1">
+                                        {/* Prev button */}
+                                        <button
+                                            onClick={() => { setDateOffset(o => o - 1); }}
+                                            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200 shrink-0"
+                                        >
+                                            <ChevronLeft size={16} strokeWidth={2.5} />
+                                        </button>
+
+                                        {/* 5 day buttons */}
+                                        <div className="flex-1 flex justify-between gap-1">
                                         {dateRange.map(d => (
                                             <button
                                                 key={d.key}
-                                                onClick={() => setSelectedDate(d.key)}
-                                                className={`flex-1 flex flex-col items-center py-2.5 rounded-2xl transition-all ${
-                                                    selectedDate === d.key 
-                                                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105' 
-                                                        : d.isToday 
+                                                onClick={() => { setSelectedDate(d.key); }}
+                                                className={`flex-1 flex flex-col items-center py-2 rounded-2xl transition-all ${
+                                                    selectedDate === d.key
+                                                        ? 'bg-slate-900 text-white shadow-lg scale-105'
+                                                        : d.isToday
                                                             ? 'bg-blue-50 text-blue-700 border-2 border-blue-200'
                                                             : 'bg-slate-50 text-slate-600'
                                                 }`}
                                             >
-                                                <span className={`text-[9px] font-bold ${selectedDate === d.key ? 'text-blue-100' : 'text-slate-400'}`}>{d.weekday}</span>
-                                                <span className="text-xl font-bold leading-tight">{d.day}</span>
-                                                <span className={`text-[8px] font-bold ${selectedDate === d.key ? 'text-blue-200' : 'text-slate-400'}`}>{d.month}</span>
+                                                <span className={`text-[9px] font-bold ${selectedDate === d.key ? 'text-slate-300' : 'text-slate-400'}`}>{d.weekday}</span>
+                                                <span className="text-lg font-bold leading-tight">{d.day}</span>
+                                                <span className={`text-[8px] font-bold ${selectedDate === d.key ? 'text-slate-400' : 'text-slate-400'}`}>{d.month}</span>
                                             </button>
                                         ))}
+                                        </div>
+
+                                        {/* Next button */}
+                                        <button
+                                            onClick={() => { setDateOffset(o => o + 1); }}
+                                            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200 shrink-0"
+                                        >
+                                            <ChevronRight size={16} strokeWidth={2.5} />
+                                        </button>
                                     </div>
+
+                                    {/* Today shortcut — only show when offset != 0 */}
+                                    {dateOffset !== 0 && (
+                                        <button
+                                            onClick={() => { setDateOffset(0); setSelectedDate(new Date().toISOString().slice(0,10)); }}
+                                            className="mt-2 w-full text-center text-[10px] font-bold text-blue-600 py-1 bg-blue-50 rounded-xl"
+                                        >
+                                            ↩ Back to Today
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Summary Cards — Total Jobs + In Progress */}
@@ -1135,11 +1168,11 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                 <div className="absolute bottom-0 left-0 right-0 z-30 px-3" style={{paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))"}}>
                     <div className="bg-white/90 backdrop-blur-2xl rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-200/60 flex justify-between px-2 py-1.5">
                         {[
-                            { key: 'home' as const, icon: Calendar, label: 'Schedule' },
-                            { key: 'upcoming' as const, icon: CalendarDays, label: 'Upcoming', badge: upcomingJobs.length },
-                            { key: 'carry' as const, icon: RotateCcw, label: 'Carry Fwd', badge: carryForwardJobs.length },
-                            { key: 'history' as const, icon: History, label: 'Completed' },
-                            { key: 'more' as const, icon: Grid, label: 'More' },
+                            { key: 'home' as const,     icon: Calendar,     label: 'SCHEDULE' },
+                            { key: 'upcoming' as const, icon: CalendarDays, label: 'UPCOMING', badge: upcomingJobs.length },
+                            { key: 'carry' as const,    icon: RotateCcw,    label: 'CARRY FWD', badge: carryForwardJobs.length },
+                            { key: 'history' as const,  icon: History,      label: 'DONE' },
+                            { key: 'more' as const,     icon: Grid,         label: 'MORE' },
                         ].map(tab => {
                             const isActive = activeTab === tab.key;
                             const Icon = tab.icon;
