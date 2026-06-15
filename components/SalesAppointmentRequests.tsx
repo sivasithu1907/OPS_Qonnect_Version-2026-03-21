@@ -1681,8 +1681,6 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
         </div>
       </div>
 
-      )}
-
     </div>
   );
 };
