@@ -85,6 +85,7 @@ function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [ticketFilter, setTicketFilter] = useState<TicketFilter | null>(null);
+  const [prefillActivity, setPrefillActivity] = useState<any>(null);
   const [focusedTicketId, setFocusedTicketId] = useState<string | null>(null);
   const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
 
@@ -1563,6 +1564,8 @@ useEffect(() => {
                 )}
                 {activeView === 'planning' && (
                     <PlanningModule 
+                        prefillActivity={prefillActivity}
+                        onClearPrefill={() => setPrefillActivity(null)}
                         activities={activities}
                         teams={teams}
                         sites={sites}
@@ -1588,7 +1591,14 @@ useEffect(() => {
                         onSaveCustomer={handleUpdateCustomer}
                         onDeleteCustomer={handleDeleteCustomer}
                         onCreateTicket={(data) => { handleCreateTicket(data); setActiveView('tickets'); }}
-                        onCreateActivity={(data) => { handleAddActivity({ ...data, type: data.type || 'Installation', priority: data.priority || 'MEDIUM', status: 'PLANNED', plannedDate: data.plannedDate || new Date().toISOString(), leadTechId: currentUser?.techId || '' }); setActiveView('planning'); }}
+                        onCreateActivity={(data) => {
+                        // Navigate to Planning + prefill form so user can choose salesRep + other details
+                        setPrefillActivity({
+                            ...data,
+                            salesLeadId: (currentUser?.role === 'SALES') ? currentUser.id : '',
+                        });
+                        setActiveView('planning');
+                    }}
                     />
                 )}
                 {activeView === 'reports' && (
