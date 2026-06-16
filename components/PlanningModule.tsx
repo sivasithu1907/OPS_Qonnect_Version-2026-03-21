@@ -36,6 +36,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   isMobile = false,
   initialActivityId,
   onClearInitialActivity,
+  prefillActivity,
+  onClearPrefill,
   currentUserId,
   isSaving = false,
   currentUserRole
