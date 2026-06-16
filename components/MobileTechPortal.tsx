@@ -1428,12 +1428,10 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           </div>
         </div>
       )}
-    </>
-  );
-};
 
       {/* ── Activity Cancel Modal ── */}
       {showCancelModal && cancelTargetAct && (
+
           <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowCancelModal(false)}>
               <div className="bg-white rounded-t-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
                   <div className="p-4 bg-red-700 text-white">
@@ -1514,5 +1512,11 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
               </div>
           </div>
       )}
+
+      )}
+
+    </>
+  );
+};
 
 export default React.memo(MobileTechPortal);
