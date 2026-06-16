@@ -491,7 +491,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
               (d.id || '').toLowerCase().includes(term) ||
               custName.toLowerCase().includes(term) ||
               (d.category || d.type || '').toLowerCase().includes(term) ||
-              (d.phoneNumber || d.phone_number || '').includes(term)
+              // Phone match only when search has digits
+              (/[0-9]/.test(term) && (d.phoneNumber || d.phone_number || '').replace(/\s/g,'').includes(term.replace(/\s/g,'')))
           );
       });
   }, [dateFilteredJobs, jobSearch, customers]);
