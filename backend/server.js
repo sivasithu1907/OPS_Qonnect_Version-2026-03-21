@@ -396,6 +396,7 @@ async function initDb() {
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS visit_history JSONB DEFAULT '[]';
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS customer_name TEXT;
       ALTER TABLE activities ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+      ALTER TABLE activities ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
 
       -- Permanent fix: normalise any users whose level is blank or whose systemRole
       -- was stored as a human-readable label instead of the enum value.
@@ -769,6 +770,7 @@ function mapTicket(r) {
     startedAt: r.started_at || undefined,
     completedAt: r.completed_at || undefined,
     visitHistory: Array.isArray(r.visit_history) ? r.visit_history : [],
+    cancellationReason: r.cancellation_reason || undefined,
   };
 }
 
@@ -2176,8 +2178,18 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
         const allParams = [...baseParams, ...extraParams, req.params.id];
         const idParam = `$${allParams.length}`;
 
+        // Handle cancellationReason for cancelled activities
+        const cancellationReason = req.body.cancellationReason || mergedDetails.cancellationReason || null;
+        const visitHistory = req.body.visitHistory
+            ? JSON.stringify(req.body.visitHistory)
+            : (mergedDetails.visitHistory ? JSON.stringify(mergedDetails.visitHistory) : null);
+        const visitHistoryClause = visitHistory ? `, visit_history = $${allParams.length + 1}::jsonb` : '';
+        const cancelClause = cancellationReason ? `, cancellation_reason = $${allParams.length + (visitHistory ? 2 : 1)}` : '';
+        if (visitHistory) allParams.push(visitHistory);
+        if (cancellationReason) allParams.push(cancellationReason);
+
         await pool.query(
-            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${extraClauses} WHERE id=${idParam}`,
+            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${extraClauses}${visitHistoryClause}${cancelClause} WHERE id=${idParam}`,
             allParams
         );
 
