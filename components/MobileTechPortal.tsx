@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, Search, X, CalendarDays, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
+import { ChevronLeft, Search, X, XCircle, CalendarDays, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -63,6 +63,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [completionStep, setCompletionStep] = useState(false);
+  // Activity cancel state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelTargetAct, setCancelTargetAct] = useState<any>(null);
+  const [cancelReason, setCancelReason] = useState('client_cancelled_onsite');
+  const [cancelledBy, setCancelledBy] = useState<'CLIENT'|'TEAM'>('CLIENT');
+  const [cancelNote, setCancelNote] = useState('');
   const [completionNotes, setCompletionNotes] = useState('');
   const [reportingDelayActivity, setReportingDelayActivity] = useState<Activity | null>(null);
 
@@ -798,8 +804,30 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                         <button onClick={() => setCompletionStep(true)} className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
                                                             <CheckCircle2 size={16}/> Complete Job
                                                         </button>
+                                                        {/* Client cancelled on-site */}
+                                                        <button onClick={() => {
+                                                            setCancelTargetAct(act);
+                                                            setCancelReason('client_cancelled_onsite');
+                                                            setCancelledBy('CLIENT');
+                                                            setCancelNote('');
+                                                            setShowCancelModal(true);
+                                                        }} className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 font-bold text-sm active:bg-red-100 flex items-center justify-center gap-2">
+                                                            <XCircle size={14}/> Client Cancelled On-Site
+                                                        </button>
                                                     </>
                                                 ) : null}
+                                                {/* Cancel button for ON_MY_WAY */}
+                                                {(actStatus as any) === 'ON_MY_WAY' && (
+                                                    <button onClick={() => {
+                                                        setCancelTargetAct(act);
+                                                        setCancelReason('client_cancelled_enroute');
+                                                        setCancelledBy('CLIENT');
+                                                        setCancelNote('');
+                                                        setShowCancelModal(true);
+                                                    }} className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 font-bold text-sm active:bg-red-100 flex items-center justify-center gap-2">
+                                                        <XCircle size={14}/> Client Cancelled
+                                                    </button>
+                                                )}
                                                 {['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','CARRY_FORWARD'].includes(actStatus) && (
                                                     <button onClick={handleCarryForwardClick} className="w-full py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 font-bold text-sm active:bg-orange-100 flex items-center justify-center gap-2">
                                                         <RotateCcw size={14}/> Carry Forward
@@ -1403,5 +1431,88 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
     </>
   );
 };
+
+      {/* ── Activity Cancel Modal ── */}
+      {showCancelModal && cancelTargetAct && (
+          <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-end justify-center" onClick={() => setShowCancelModal(false)}>
+              <div className="bg-white rounded-t-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 bg-red-700 text-white">
+                      <h3 className="font-bold text-lg">Cancel Job</h3>
+                      <p className="text-red-200 text-xs mt-0.5">{cancelTargetAct.reference}</p>
+                  </div>
+                  <div className="p-5 space-y-4">
+                      {/* Cancelled by */}
+                      <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Cancelled by</label>
+                          <div className="grid grid-cols-2 gap-2">
+                              {(['CLIENT','TEAM'] as const).map(by => (
+                                  <button key={by} onClick={() => setCancelledBy(by)}
+                                      className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${cancelledBy === by ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                                      {by === 'CLIENT' ? '👤 Client' : '🔧 Our Team'}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+                      {/* Reason */}
+                      <div>
+                          <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Reason</label>
+                          <select value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                              className="w-full border border-slate-300 rounded-xl p-3 text-sm">
+                              <option value="client_cancelled_onsite">Client cancelled on-site</option>
+                              <option value="client_cancelled_enroute">Client cancelled en-route</option>
+                              <option value="client_not_home">Client not home</option>
+                              <option value="other">Other</option>
+                          </select>
+                          {cancelReason === 'other' && (
+                              <textarea
+                                  value={cancelNote}
+                                  onChange={e => setCancelNote(e.target.value)}
+                                  rows={2}
+                                  placeholder="Please describe the reason... *"
+                                  className="w-full border border-slate-300 rounded-xl p-3 text-sm resize-none mt-2 focus:ring-2 focus:ring-red-300 focus:outline-none"
+                                  autoFocus
+                              />
+                          )}
+                      </div>
+                      {/* Visit record notice */}
+                      {['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(cancelTargetAct.status) && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+                              ⚠️ A <strong>site visit record</strong> will be saved for this job.
+                          </div>
+                      )}
+                  </div>
+                  <div className="p-4 border-t border-slate-200 grid grid-cols-2 gap-3">
+                      <button onClick={() => { setShowCancelModal(false); setCancelTargetAct(null); }}
+                          className="py-3 text-slate-500 font-bold rounded-xl border border-slate-200">Back</button>
+                      <button
+                          disabled={cancelReason === 'other' && !cancelNote.trim()}
+                          onClick={() => {
+                              if (cancelReason === 'other' && !cancelNote.trim()) return;
+                              const visitOccurred = ['ON_MY_WAY','ARRIVED','IN_PROGRESS'].includes(cancelTargetAct.status);
+                              const existing = cancelTargetAct.visitHistory || [];
+                              const visitRecord = visitOccurred ? {
+                                  date: new Date().toISOString(), status: 'CANCELLED',
+                                  cancelledBy, reason: cancelReason,
+                                  note: cancelNote, visitOccurred: true,
+                              } : null;
+                              onUpdateActivity({
+                                  ...cancelTargetAct,
+                                  status: 'CANCELLED',
+                                  cancellationReason: `[${cancelledBy}] ${cancelReason}${cancelNote ? ': ' + cancelNote : ''}`,
+                                  visitHistory: visitRecord ? [...existing, visitRecord] : existing,
+                                  completedAt: new Date().toISOString(),
+                                  updatedAt: new Date().toISOString(),
+                              });
+                              setShowCancelModal(false);
+                              setCancelTargetAct(null);
+                              setViewJob(null);
+                          }}
+                          className="py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                          Confirm Cancel
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
 export default React.memo(MobileTechPortal);
