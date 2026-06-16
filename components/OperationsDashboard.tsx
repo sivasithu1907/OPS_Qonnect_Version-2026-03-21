@@ -68,16 +68,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Auto-scroll to show 8:00-20:00 as default view
-  useEffect(() => {
-    const el = bodyScrollRef.current;
-    if (!el) return;
-
-    // Default: scroll to 8:00 position so working hours (8-20) are visible
-    const defaultStartHour = 8;
-    const target = defaultStartHour * zoomLevel;
-    el.scrollLeft = target;
-  }, []);
+  // Scroll to NOW handled by useLayoutEffect below (removed duplicate useEffect)
 
   // --- Scroll Synchronization ---
   const handleBodyScroll = () => {
@@ -281,7 +272,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                   type: 'ticket' as const,
                   refLine: t.id,
                   clientLine: t.customerName,
-                  descLine: t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category,
+                  descLine: (t as any).ai_summary || t.notes || t.category,
                   time: new Date(t.updatedAt),
                   status: t.status
               })),
@@ -309,11 +300,14 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     const activeTickets = tickets.filter(t => ['IN_PROGRESS','ASSIGNED','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status))).length;
     const activeJobs = activeActs + activeTickets;
     // crewsOnSite = techs who are actively on a job right now
-    const activeTechIds = new Set(
-        tickets
+    const activeTechIds = new Set([
+        ...tickets
             .filter(t => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(normalizeStatus(t.status)) && t.assignedTechId)
-            .map(t => t.assignedTechId!)
-    );
+            .map(t => t.assignedTechId!),
+        ...activities
+            .filter(a => ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(a.status))
+            .flatMap(a => [a.leadTechId, (a as any).primaryEngineerId].filter(Boolean))
+    ]);
     const crewsOnSite = operationsStaff.filter(t => activeTechIds.has(t.id)).length;
     const plannedToday = activities.filter(a => new Date(a.plannedDate).toDateString() === new Date().toDateString()).length;
     const completedToday = (
@@ -321,7 +315,12 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
         tickets.filter(t => normalizeStatus(t.status) === 'RESOLVED' && new Date((t as any).completedAt || t.updatedAt).toDateString() === todayDate).length
     );
     const alertsCount = activities.filter(a => (a.escalationLevel || 0) > 0 && a.status !== 'DONE' && a.status !== 'CANCELLED').length;
-    const utilization = Math.round((activeJobs / (operationsStaff.length || 1)) * 100);
+    // Utilization = total scheduled hours / (staff × 8h capacity) × 100
+    const totalScheduledHours = activities
+        .filter(a => new Date(a.plannedDate || a.createdAt).toDateString() === todayDate && a.status !== 'CANCELLED')
+        .reduce((sum, a) => sum + (a.durationHours || 2), 0);
+    const capacityHours = (operationsStaff.length || 1) * 8;
+    const utilization = Math.min(100, Math.round((totalScheduledHours / capacityHours) * 100));
 
     return { activeJobs, crewsOnSite, plannedToday, alertsCount, utilization, completedToday };
   }, [activities, tickets, operationsStaff]);
@@ -377,7 +376,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <span className="text-[10px] font-bold text-emerald-600 mb-0.5">↑</span>
                     </div>
                     <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: '45%' }}></div>
+                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100,(metrics.activeJobs/(metrics.plannedToday||1))*100)}%` }}></div>
                     </div>
                 </div>
                 {/* ... KPI Cards ... */}
@@ -403,7 +402,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.plannedToday}</span>
                     </div>
                     <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-slate-400" style={{ width: '70%' }}></div>
+                        <div className="h-full bg-slate-400" style={{ width: `${Math.min(100,(metrics.completedToday/(metrics.plannedToday||1))*100)}%` }}></div>
                     </div>
                 </div>
                 <div className={`p-3 rounded-lg border shadow-sm flex flex-col justify-between ${metrics.alertsCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
@@ -439,7 +438,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.completedToday}</span>
                     </div>
                     <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: '30%' }}></div>
+                        <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100,(metrics.completedToday/(metrics.plannedToday||1))*100)}%` }}></div>
                     </div>
                 </div>
             </div>
