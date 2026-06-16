@@ -101,7 +101,12 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
-  
+
+  // Reset viewMode to 'active' when external filter is cleared
+  useEffect(() => {
+      if (!activeFilter) setViewMode('active');
+  }, [activeFilter]);
+
   // Panel View/Edit mode — default to VIEW (read-only summary)
   const [panelMode, setPanelMode] = useState<'view' | 'edit'>('view');
   
@@ -273,6 +278,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           const matchesText =
               safeString(t.id).toLowerCase().includes(lowerTerm) ||
               safeString(t.customerName).toLowerCase().includes(lowerTerm) ||
+              safeString(t.category).toLowerCase().includes(lowerTerm) ||
+              safeString(t.notes).toLowerCase().includes(lowerTerm) ||
+              safeString((t as any).completionNote).toLowerCase().includes(lowerTerm) ||
               safeString(t.locationUrl).toLowerCase().includes(lowerTerm) ||
               safeString(t.houseNumber).toLowerCase().includes(lowerTerm) ||
               (tech && safeString(tech.name).toLowerCase().includes(lowerTerm));
@@ -295,9 +303,10 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           result = result.filter(t => {
               const created = new Date(t.createdAt).getTime();
               const hoursDiff = (now - created) / (1000 * 60 * 60);
-              if (agingFilter === 'Fresh') return hoursDiff <= 2;
-              if (agingFilter === 'Warning') return hoursDiff > 2 && hoursDiff <= 6;
-              if (agingFilter === 'Stalled') return hoursDiff > 6;
+              // Thresholds aligned with SLA dashboard: Fresh=<24h, Warning=24-72h, Stalled=>72h
+              if (agingFilter === 'Fresh') return hoursDiff <= 24;
+              if (agingFilter === 'Warning') return hoursDiff > 24 && hoursDiff <= 72;
+              if (agingFilter === 'Stalled') return hoursDiff > 72;
               return true;
           });
       }
@@ -315,12 +324,10 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       if (assigneeFilter !== 'ALL') temp = temp.filter(t => t.assignedTechId === assigneeFilter);
       const now = new Date().getTime();
       return {
-          Fresh: temp.filter(t => (now - new Date(t.createdAt).getTime()) / 36e5 <= 2).length,
-          Warning: temp.filter(t => {
-              const h = (now - new Date(t.createdAt).getTime()) / 36e5;
-              return h > 2 && h <= 6;
-          }).length,
-          Stalled: temp.filter(t => (now - new Date(t.createdAt).getTime()) / 36e5 > 6).length,
+          // Aligned with SLA: Fresh<24h, Warning 24-72h, Stalled>72h
+          Fresh:   temp.filter(t => (now - new Date(t.createdAt).getTime()) / 36e5 <= 24).length,
+          Warning: temp.filter(t => { const h = (now - new Date(t.createdAt).getTime()) / 36e5; return h > 24 && h <= 72; }).length,
+          Stalled: temp.filter(t => (now - new Date(t.createdAt).getTime()) / 36e5 > 72).length,
       };
   }, [baseTickets, searchTerm, priorityFilter, statusFilter, assigneeFilter, technicians]);
 
@@ -841,7 +848,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 const healthColor = getHealthColor(health);
                 
                 return (
-                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' : ''}`}>
+                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${
+                        selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' :
+                        ticket.priority === 'URGENT' ? 'border-l-4 border-l-red-500 bg-red-50/30' :
+                        ticket.priority === 'HIGH' ? 'border-l-4 border-l-orange-400 bg-orange-50/20' :
+                        ''}`}>
                         <div className="flex justify-between items-start mb-1">
                             <span className="font-medium text-slate-900">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
@@ -861,6 +872,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         <div className="flex justify-between items-center text-xs">
                             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600"><span className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(ticket.priority)}`}/>{toTitleCase(ticket.priority)}</span>
                             <div className="flex items-center gap-2">
+                                {/* Appointment time — prominently shown if set */}
+                                {ticket.appointmentTime && (
+                                    <span className="flex items-center gap-1 text-blue-600 font-bold text-[10px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                        <Clock size={9} />
+                                        {new Date(ticket.appointmentTime).toLocaleDateString('en-GB',{timeZone:'Asia/Qatar',day:'2-digit',month:'short'})}
+                                        {' '}
+                                        {new Date(ticket.appointmentTime).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}
+                                    </span>
+                                )}
                                 {/* Health Badge */}
                                 {health && (
                                     <div className={`w-2.5 h-2.5 rounded-full ${healthColor} shadow-sm border border-white`} title={`${health?.toUpperCase()} Status`} />
