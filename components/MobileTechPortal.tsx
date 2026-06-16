@@ -1513,8 +1513,6 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           </div>
       )}
 
-      )}
-
     </>
   );
 };
