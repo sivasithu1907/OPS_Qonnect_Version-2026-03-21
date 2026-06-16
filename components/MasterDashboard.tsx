@@ -16,18 +16,7 @@ interface MasterDashboardProps {
   customers: Customer[];
 }
 
-const showPhotoLightbox = (src: string) => {
-  const ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';
-  ov.onclick = () => ov.remove();
-  const im = document.createElement('img');
-  im.src = src;
-  im.style.cssText = 'max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';
-  const cl = document.createElement('div');
-  cl.textContent = '\u2715';
-  cl.style.cssText = 'position:absolute;top:20px;right:24px;color:white;font-size:28px;font-weight:bold;cursor:pointer;background:rgba(0,0,0,0.5);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center';
-  ov.appendChild(im); ov.appendChild(cl); document.body.appendChild(ov);
-};
+// Photo lightbox handled via React state (see lightboxSrc state in component)
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#06b6d4', '#f97316'];
 
@@ -47,6 +36,7 @@ const ACTIVITY_TYPES = ['Installation', 'Service', 'Maintenance', 'Inspection', 
 
 const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, technicians, customers }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState<'all' | 'tickets' | 'activities'>('all');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -142,7 +132,11 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
     if (typeFilter === 'tickets') combined = combined.filter(j => j.kind === 'ticket');
     else if (typeFilter === 'activities') combined = combined.filter(j => j.kind === 'activity');
-    if (statusFilter !== 'ALL') combined = combined.filter(j => j.status === statusFilter);
+    // KPI group filters
+    if (statusFilter === 'ACTIVE') combined = combined.filter(j => ['IN_PROGRESS','ON_MY_WAY','ARRIVED','ASSIGNED'].includes(j.status));
+    else if (statusFilter === 'PENDING') combined = combined.filter(j => ['PLANNED','NEW','OPEN'].includes(j.status));
+    else if (statusFilter === 'COMPLETED') combined = combined.filter(j => ['DONE','RESOLVED'].includes(j.status));
+    else if (statusFilter !== 'ALL') combined = combined.filter(j => j.status === statusFilter);
 
     // Multi-select category filter
     if (selectedCategories.length > 0) combined = combined.filter(j =>
@@ -210,7 +204,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
       days[key] = { date: key, created: 0, completed: 0 };
     }
-    allJobs.forEach(j => {
+    // Use RAW unfiltered data — velocity is a system-wide metric, not filtered view
+    const rawJobs = [...tickets.map(t => ({ date: new Date(t.createdAt), raw: t })),
+                     ...activities.map(a => ({ date: new Date(a.plannedDate || a.createdAt), raw: a }))];
+    rawJobs.forEach(j => {
       const key = j.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
       if (days[key]) days[key].created++;
       const completedAt = (j.raw as any).completedAt;
@@ -363,7 +360,13 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
             <h1 className="text-2xl font-black text-slate-900">Master Dashboard</h1>
             <p className="text-slate-500 text-sm">Complete operational overview</p>
           </div>
-          <button onClick={() => setShowExport(true)} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors">
+          <button onClick={() => {
+            // Inherit active date range into export defaults
+            const now = new Date();
+            if (dateRange === 'today') { setExportDateStart(now.toISOString().slice(0,10)); setExportDateEnd(now.toISOString().slice(0,10)); }
+            else if (dateRange === 'week') { setExportDateStart(getQatarWeekStart().toISOString().slice(0,10)); setExportDateEnd(now.toISOString().slice(0,10)); }
+            setShowExport(true);
+          }} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors">
             <Download size={14} /> Export Data
           </button>
         </div>
@@ -372,9 +375,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
         <div className="grid grid-cols-6 gap-3 mb-4">
           {[
             { label: 'Total', value: metrics.total, color: 'bg-slate-900 text-white', filter: 'ALL' },
-            { label: 'Active', value: metrics.active, color: 'bg-blue-50 text-blue-700 border border-blue-200', filter: 'IN_PROGRESS' },
-            { label: 'Planned', value: metrics.planned, color: 'bg-amber-50 text-amber-700 border border-amber-200', filter: 'PLANNED' },
-            { label: 'Completed', value: metrics.completed, color: 'bg-emerald-50 text-emerald-700 border border-emerald-200', filter: 'DONE' },
+            { label: 'Active', value: metrics.active, color: 'bg-blue-50 text-blue-700 border border-blue-200', filter: 'ACTIVE' },
+            { label: 'Planned', value: metrics.planned, color: 'bg-amber-50 text-amber-700 border border-amber-200', filter: 'PENDING' },
+            { label: 'Completed', value: metrics.completed, color: 'bg-emerald-50 text-emerald-700 border border-emerald-200', filter: 'COMPLETED' },
             { label: 'Carry Fwd', value: metrics.carryForward, color: 'bg-orange-50 text-orange-700 border border-orange-200', filter: 'CARRY_FORWARD' },
             { label: 'Cancelled', value: metrics.cancelled, color: 'bg-slate-50 text-slate-500 border border-slate-200', filter: 'CANCELLED' },
           ].map(kpi => (
@@ -426,6 +429,12 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
         {/* Filters Row */}
         <div className="flex items-center gap-3 flex-wrap">
+          {(searchQuery || statusFilter !== 'ALL' || typeFilter !== 'all' || selectedCategories.length > 0 || selectedActTypes.length > 0 || assignedFilter !== 'ALL' || dateRange !== 'month') && (
+            <button onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); setTypeFilter('all'); setSelectedCategories([]); setSelectedActTypes([]); setAssignedFilter('ALL'); setDateRange('month'); }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100">
+              <X size={12} /> Clear Filters
+            </button>
+          )}
           <div className="flex-1 relative min-w-[200px]">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search reference, client, engineer..."
@@ -457,8 +466,8 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
               </div>
             )}
           </div>
-          {/* Activity Type multi-select */}
-          <div className="relative">
+          {/* Activity Type multi-select — only show when viewing activities */}
+          {typeFilter !== 'tickets' && <div className="relative">
             <button onClick={() => { setShowActTypeDropdown(!showActTypeDropdown); setShowCatDropdown(false); }}
               className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700">
               {selectedActTypes.length === 0 ? 'All Activity Types' : `${selectedActTypes.length} selected`} <ChevronDown size={12} />
@@ -474,7 +483,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 {selectedActTypes.length > 0 && <button onClick={() => setSelectedActTypes([])} className="text-[10px] text-blue-600 px-2 mt-1">Clear all</button>}
               </div>
             )}
-          </div>
+          </div>}
           {/* Assigned To */}
           <select value={assignedFilter} onChange={e => setAssignedFilter(e.target.value)}
             className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none shrink-0">
@@ -511,8 +520,15 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
-            {allJobs.length === 0 ? (
-              <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">No jobs found</td></tr>
+            {allJobs.length === 0 && (tickets.length === 0 && activities.length === 0) ? (
+              <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                  <span>Loading data...</span>
+                </div>
+              </td></tr>
+            ) : allJobs.length === 0 ? (
+              <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">No jobs match current filters</td></tr>
             ) : allJobs.map(job => {
               const photos = (job.raw as any).photos || [];
               return (
@@ -545,7 +561,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
         const assistants = !isTicket ? ((d as any).assistantTechIds || []).map((id: string) => technicians.find(t => t.id === id)).filter(Boolean) : [];
         const photos = (d as any).photos || [];
         const statusColor = d.status === 'DONE' || d.status === 'RESOLVED' ? 'bg-emerald-500' : d.status === 'CARRY_FORWARD' ? 'bg-orange-500' : d.status === 'IN_PROGRESS' ? 'bg-blue-500' : d.status === 'CANCELLED' ? 'bg-slate-400' : 'bg-amber-400';
-        const issueText = isTicket ? (d.messages?.find((m: any) => m.sender === 'CLIENT')?.content || d.notes || (d as any).ai_summary || '') : (d.description || '');
+        const issueText = isTicket ? ((d as any).ai_summary || d.notes || d.category || '') : (d.description || '');
         const visits = (d as any).visitHistory || (d as any).visit_history || [];
         const hasVisits = visits.length > 0;
         const isDone = d.status === 'DONE' || d.status === 'RESOLVED';
@@ -626,7 +642,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                     </div>
                   </div>
                 )}
-                {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />)}</div></div>}
+                {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => setLightboxSrc(p.url || p)} />)}</div></div>}
                 {(d as any).odooLink && <div className="flex items-center gap-2 text-xs"><span className="text-slate-400">Odoo:</span><a href={(d as any).odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate">{(d as any).odooLink}</a></div>}
               </div>
               <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
@@ -700,6 +716,15 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           </div>
         </div>
       )}
+
+      {/* Photo Lightbox — React portal */}
+      {lightboxSrc && (
+        <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center cursor-pointer" onClick={() => setLightboxSrc(null)}>
+          <img src={lightboxSrc} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl" onClick={e => e.stopPropagation()} />
+          <button onClick={() => setLightboxSrc(null)} className="absolute top-5 right-6 w-10 h-10 rounded-full bg-black/50 text-white text-2xl font-bold flex items-center justify-center hover:bg-black/70">✕</button>
+        </div>
+      )}
+
     </div>
   );
 };
