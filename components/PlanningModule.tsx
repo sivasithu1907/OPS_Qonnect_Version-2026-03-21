@@ -23,6 +23,8 @@ interface PlanningModuleProps {
   isMobile?: boolean;
   initialActivityId?: string | null;
   onClearInitialActivity?: () => void;
+  prefillActivity?: { customerId?: string; locationUrl?: string; houseNumber?: string; salesLeadId?: string } | null;
+  onClearPrefill?: () => void;
   currentUserId?: string; // For self-assign logic
   isSaving?: boolean;     // Prevents double-submit
   currentUserRole?: Role; // For permission-based UI
@@ -162,6 +164,18 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           if (onClearInitialActivity) onClearInitialActivity();
       }
   }, [initialActivityId, activities]);
+
+  // When prefill data arrives from CustomerRecords — open modal with pre-filled fields
+  useEffect(() => {
+      if (prefillActivity) {
+          setEditingActivity(null);
+          if (prefillActivity.customerId) setSelectedCustomerId(prefillActivity.customerId);
+          if (prefillActivity.locationUrl) { /* already in customer */ }
+          if (prefillActivity.salesLeadId) setSalesLeadIdState(prefillActivity.salesLeadId);
+          setIsModalOpen(true);
+          onClearPrefill?.();
+      }
+  }, [prefillActivity]);
 
   // Initialize ALL form state when modal opens — ensures clean slate every time
   useEffect(() => {
