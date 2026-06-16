@@ -102,13 +102,6 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       openModal('view', c);
   };
 
-  // Pre-computed timeline for the currently viewed customer — avoids 3x recompute per render
-  const activeTimeline = useMemo(() => {
-      if (!activeItem || modalType !== 'view') return [];
-      return getCustomerTimeline(activeItem.id);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeItem?.id, modalType, activities, tickets]);
-
   const openModal = (type: 'add' | 'edit' | 'view', item?: Customer) => {
       setModalType(type);
       setActiveItem(item || null);
@@ -286,6 +279,14 @@ onSaveCustomer(data as Customer);
 
       return items.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
+
+  // Pre-computed timeline — must be after getCustomerTimeline definition
+  const activeTimeline = useMemo(() => {
+      if (!activeItem || modalType !== 'view') return [];
+      return getCustomerTimeline(activeItem.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeItem?.id, modalType, activities, tickets]);
+
 
   // Legacy wrapper for count badges
   const getCustomerHistory = (customerId: string) => {
