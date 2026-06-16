@@ -72,9 +72,12 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
           const nameMatch = c.name.toLowerCase().includes(lowerTerm);
           const emailMatch = c.email?.toLowerCase().includes(lowerTerm);
           
-          // Safe Phone Match: normalize data phone before check
-          const cPhone = normalizePhone(c.phone);
-          const phoneMatch = cPhone.includes(safeSearch) || (c.phone && c.phone.includes(searchTerm));
+          // Phone match: only when search term actually contains digits (avoid "" matching everything)
+          const hasDigits = /[0-9]/.test(searchTerm);
+          const phoneMatch = hasDigits && safeSearch.length > 0 && (
+              normalizePhone(c.phone).includes(safeSearch) ||
+              (c.phone || '').replace(/\s/g, '').includes(searchTerm.replace(/\s/g, ''))
+          );
 
           return nameMatch || emailMatch || phoneMatch;
       });
