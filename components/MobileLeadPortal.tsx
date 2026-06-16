@@ -251,8 +251,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           list = list.filter(t => 
               t.id.toLowerCase().includes(lower) ||
               t.customerName.toLowerCase().includes(lower) ||
-              t.phoneNumber.includes(lower) ||
-              t.category.toLowerCase().includes(lower)
+              t.category.toLowerCase().includes(lower) ||
+              // Phone match only when search contains digits
+              (/[0-9]/.test(lower) && (t.phoneNumber || '').replace(/\s/g,'').includes(lower.replace(/\s/g,'')))
           );
       }
       return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
