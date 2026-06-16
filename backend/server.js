@@ -2027,9 +2027,10 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
         }
         
         await pool.query(
-            `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, site_id, lead_tech_id, description, duration_hours, details)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-            [id, reference || id, type, priority || 'MEDIUM', status || 'PLANNED', plannedDate, customerId || null, siteId || null, leadTechId || null, description || '', durationHours || 2, JSON.stringify(details || {})]
+            `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, site_id, lead_tech_id, description, duration_hours, details, customer_name)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            [id, reference || id, type, priority || 'MEDIUM', status || 'PLANNED', plannedDate, customerId || null, siteId || null, leadTechId || null, description || '', durationHours || 2, JSON.stringify(details || {}),
+             details?.customerName || (customerId ? ((await pool.query('SELECT name FROM customers WHERE id=$1 LIMIT 1', [customerId]).catch(()=>({rows:[]}))).rows[0]?.name || '') : '')]
         );
         res.status(201).json({ok: true, id});
     } catch(e) { console.error('Activity creation error:', e.message, e.detail || ''); res.status(500).json({error: "Failed to create activity", detail: e.message}); }
@@ -3597,11 +3598,12 @@ const runAutoCarryForward = async () => {
         const result = await pool.query(`
             UPDATE activities 
             SET status = 'CARRY_FORWARD',
-                carry_forward_note = COALESCE(carry_forward_note, '') || 
-                    E'\n[Auto carry-forward] Not completed by end of day',
+                carry_forward_note = COALESCE(NULLIF(carry_forward_note,''), '') || 
+                    E'[Auto] Not completed by end of day — reschedule required',
+                next_planned_at = NULL,
                 completed_at = NOW(),
                 updated_at = NOW()
-            WHERE status IN ('IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED')
+            WHERE status IN ('PLANNED', 'IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED', 'ASSIGNED')
             AND planned_date::date < (NOW() AT TIME ZONE 'Asia/Qatar')::date
             RETURNING reference, lead_tech_id
         `);
