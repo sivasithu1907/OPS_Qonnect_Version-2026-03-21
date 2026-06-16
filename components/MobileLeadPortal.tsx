@@ -5,7 +5,7 @@ import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
 import { 
   ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
-  CheckCircle2, History, AlertTriangle, X, UserPlus,
+  CheckCircle2, History, AlertTriangle, X, XCircle, UserPlus,
   TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Edit2, Play, CheckSquare, ChevronDown, KeyRound,
   Home, Settings, ClipboardList, Zap, Lock, BellRing, LayoutGrid, Activity as ActivityIcon, Layers
 } from 'lucide-react';
@@ -155,6 +155,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [showActivityReschedule, setShowActivityReschedule] = useState(false);
   const [rescheduleActivityTarget, setRescheduleActivityTarget] = useState<Activity | null>(null);
   const [rescheduleActivityDate, setRescheduleActivityDate] = useState('');
+
+  // Activity cancel modal state
+  const [showActivityCancel, setShowActivityCancel] = useState(false);
+  const [cancelActivityTarget, setCancelActivityTarget] = useState<Activity | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelledBy, setCancelledBy] = useState<'CLIENT' | 'TEAM'>('CLIENT');
+  const [cancelNote, setCancelNote] = useState('');
   
   // Date Picker State
   const [nextDate, setNextDate] = useState('');
@@ -2365,10 +2372,19 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             </div>
                         )}
                         {actStatus === 'ON_MY_WAY' && (
-                            <button onClick={() => { onUpdateActivity({ ...act, status: 'ARRIVED', updatedAt: new Date().toISOString() }); setViewActivity(null); }}
-                                className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
-                                <MapPin size={18}/> I've Arrived
-                            </button>
+                            <div className="space-y-2">
+                                <button onClick={() => { onUpdateActivity({ ...act, status: 'ARRIVED', updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                                    className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-[0.98]">
+                                    <MapPin size={18}/> I've Arrived
+                                </button>
+                                <button onClick={() => {
+                                        setCancelActivityTarget(act); setCancelReason('client_cancelled_enroute');
+                                        setCancelledBy('CLIENT'); setCancelNote(''); setShowActivityCancel(true); setViewActivity(null);
+                                    }}
+                                    className="w-full bg-red-50 border border-red-200 text-red-600 font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm active:scale-[0.98]">
+                                    <XCircle size={15}/> Client Cancelled
+                                </button>
+                            </div>
                         )}
                         {actStatus === 'ARRIVED' && (
                             <button onClick={() => { onUpdateActivity({ ...act, status: 'IN_PROGRESS', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setViewActivity(null); }}
@@ -2377,14 +2393,28 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             </button>
                         )}
                         {actStatus === 'IN_PROGRESS' && (
-                            <div className="grid grid-cols-2 gap-2">
-                                <button onClick={() => { setModalActivity(act); setModalType('activity_job_carry'); setViewActivity(null); }}
-                                    className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
-                                    <History size={14}/> Carry Forward
-                                </button>
-                                <button onClick={() => { onUpdateActivity({ ...act, status: 'DONE', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setViewActivity(null); }}
-                                    className="bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
-                                    <CheckSquare size={14}/> Complete
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button onClick={() => { setModalActivity(act); setModalType('activity_job_carry'); setViewActivity(null); }}
+                                        className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
+                                        <History size={14}/> Carry Forward
+                                    </button>
+                                    <button onClick={() => { onUpdateActivity({ ...act, status: 'DONE', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                                        className="bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
+                                        <CheckSquare size={14}/> Complete
+                                    </button>
+                                </div>
+                                {/* Client cancelled on-site — records the visit, cancels the job */}
+                                <button onClick={() => {
+                                        setCancelActivityTarget(act);
+                                        setCancelReason('client_cancelled_onsite');
+                                        setCancelledBy('CLIENT');
+                                        setCancelNote('');
+                                        setShowActivityCancel(true);
+                                        setViewActivity(null);
+                                    }}
+                                    className="w-full bg-red-50 border border-red-200 text-red-600 font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-sm active:scale-[0.98]">
+                                    <XCircle size={16}/> Client Cancelled On-Site
                                 </button>
                             </div>
                         )}
@@ -4338,6 +4368,94 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           </div>
         </div>
       )}
+
+    {/* ── Activity Cancel Modal ── */}
+    {showActivityCancel && cancelActivityTarget && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowActivityCancel(false)}>
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="p-4 bg-red-700 text-white">
+                    <h3 className="font-bold text-lg">Cancel Job</h3>
+                    <p className="text-red-200 text-xs mt-0.5">{cancelActivityTarget.reference} — {(cancelActivityTarget as any).type}</p>
+                </div>
+                <div className="p-5 space-y-4">
+                    {/* Who cancelled */}
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Cancelled by</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {(['CLIENT', 'TEAM'] as const).map(by => (
+                                <button key={by} onClick={() => setCancelledBy(by)}
+                                    className={`py-2.5 rounded-xl font-bold text-sm border transition-all ${cancelledBy === by ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                                    {by === 'CLIENT' ? '👤 Client' : '🔧 Our Team'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Reason */}
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Reason</label>
+                        <select value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                            className="w-full border border-slate-300 rounded-xl p-3 text-sm">
+                            <option value="client_cancelled_onsite">Client cancelled on-site</option>
+                            <option value="client_cancelled_enroute">Client cancelled en-route</option>
+                            <option value="client_not_home">Client not home</option>
+                            <option value="other">Other</option>
+                        </select>
+                        {cancelReason === 'other' && (
+                            <textarea
+                                value={cancelNote}
+                                onChange={e => setCancelNote(e.target.value)}
+                                rows={2}
+                                placeholder="Please describe the reason... *"
+                                className="w-full border border-slate-300 rounded-xl p-3 text-sm resize-none mt-2 focus:ring-2 focus:ring-red-300 focus:outline-none"
+                                autoFocus
+                            />
+                        )}
+                    </div>
+
+                    {/* Explain what happens */}
+                    {['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes((cancelActivityTarget as any).status) && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+                            ⚠️ A <strong>site visit record</strong> will be saved. The team lead can reschedule this job later.
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 border-t border-slate-200 grid grid-cols-2 gap-3">
+                    <button onClick={() => { setShowActivityCancel(false); setCancelActivityTarget(null); }}
+                        className="py-3 text-slate-500 font-bold rounded-xl border border-slate-200">Back</button>
+                    <button
+                        disabled={cancelReason === 'other' && !cancelNote.trim()}
+                        onClick={() => {
+                            if (!cancelActivityTarget) return;
+                            if (cancelReason === 'other' && !cancelNote.trim()) return;
+                            const visitOccurred = ['ON_MY_WAY','ARRIVED','IN_PROGRESS'].includes((cancelActivityTarget as any).status);
+                            const visitRecord = visitOccurred ? {
+                                date: new Date().toISOString(),
+                                status: 'CANCELLED',
+                                cancelledBy,
+                                reason: cancelReason,
+                                note: cancelNote,
+                                visitOccurred: true,
+                            } : null;
+                            const existing = (cancelActivityTarget as any).visitHistory || [];
+                            onUpdateActivity({
+                                ...cancelActivityTarget,
+                                status: 'CANCELLED' as any,
+                                cancellationReason: `[${cancelledBy}] ${cancelReason}${cancelNote ? ': ' + cancelNote : ''}`,
+                                visitHistory: visitRecord ? [...existing, visitRecord] : existing,
+                                completedAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
+                            });
+                            setShowActivityCancel(false);
+                            setCancelActivityTarget(null);
+                            toast.success('Job cancelled — visit record saved');
+                        }}
+                        className="py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700">
+                        Confirm Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
 
     {/* ── Activity Reschedule Modal ── */}
     {showActivityReschedule && rescheduleActivityTarget && (
