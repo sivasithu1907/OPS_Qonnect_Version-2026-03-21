@@ -276,9 +276,14 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               safeString(t.locationUrl).toLowerCase().includes(lowerTerm) ||
               safeString(t.houseNumber).toLowerCase().includes(lowerTerm) ||
               (tech && safeString(tech.name).toLowerCase().includes(lowerTerm));
+          // Only do phone matching when search term actually contains digits
+          // (prevents empty string from matching every record)
+          const hasDigits = /[0-9]/.test(safeSearchTerm);
           const tPhone = safeNormalize(t.phoneNumber);
           const tPhoneRaw = safeString(t.phoneNumber);
-          const matchesPhone = tPhone.includes(safeSearchDigits) || tPhoneRaw.includes(safeSearchTerm);
+          const matchesPhone = hasDigits && safeSearchDigits.length > 0 && (
+              tPhone.includes(safeSearchDigits) || tPhoneRaw.includes(safeSearchTerm)
+          );
           return matchesText || matchesPhone;
       });
   }, [technicians]);
