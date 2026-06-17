@@ -729,113 +729,117 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   // Derived hints from AI Analysis
   const suggestTechAssign = analysisResult?.recommended_action === 'assign_field_engineer';
 
+  // ── Date grouping for list ──
+  const groupedTickets = useMemo(() => {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+      const weekAgo = new Date(today); weekAgo.setDate(today.getDate()-7);
+      const groups: {label:string; tickets:typeof filteredTickets}[] = [];
+      const todayItems = filteredTickets.filter(t => new Date(t.updatedAt) >= today);
+      const yestItems  = filteredTickets.filter(t => { const d=new Date(t.updatedAt); return d >= yesterday && d < today; });
+      const weekItems  = filteredTickets.filter(t => { const d=new Date(t.updatedAt); return d >= weekAgo && d < yesterday; });
+      const olderItems = filteredTickets.filter(t => new Date(t.updatedAt) < weekAgo);
+      if (todayItems.length)  groups.push({ label: 'Today',     tickets: todayItems });
+      if (yestItems.length)   groups.push({ label: 'Yesterday', tickets: yestItems });
+      if (weekItems.length)   groups.push({ label: 'This Week', tickets: weekItems });
+      if (olderItems.length)  groups.push({ label: 'Older',     tickets: olderItems });
+      return groups;
+  }, [filteredTickets]);
+
   return (
-    <div className="flex h-[calc(100vh-6rem)] overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200 m-6">
-      
-      {/* Left List View (Unchanged) */}
-      <div className="w-[440px] shrink-0 border-r border-slate-200 flex flex-col">
-        <div className="p-4 border-b border-slate-100 bg-slate-50 space-y-3">
-             <div className="flex justify-between items-center">
-                <h2 className="font-semibold text-slate-800">
-                    {activeFilter ? 'Filtered' : (viewMode === 'active' ? 'Active Queue' : 'History')} 
-                    <span className="ml-2 text-slate-400 text-sm font-normal">({filteredTickets.length})</span>
-                </h2>
-                {!activeFilter && (
-                     <button 
-                        onClick={() => setIsCreateModalOpen(true)}
-                        className="p-1.5 bg-slate-200 hover:bg-emerald-600 hover:text-white rounded-md transition-all flex items-center gap-1 text-xs font-semibold px-2"
-                    >
-                        <Plus size={16} /> New
-                    </button>
-                )}
-             </div>
-             
-             {!activeFilter && (
-                 <div className="space-y-3">
-                     <div className="relative">
-                         <SearchIcon size={14} className="absolute left-3 top-2.5 text-slate-400" />
-                         <input 
-                            type="text" 
-                            placeholder="Search by ID, name, phone..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className={SEARCH_INPUT_STYLES.replace('w-full', 'w-full text-xs py-2 pl-8 pr-8')}
-                         />
-                         {searchTerm && (
-                             <button onClick={() => setSearchTerm('')} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600">
-                                 <X size={14} />
-                             </button>
-                         )}
-                     </div>
+    <div className="flex flex-col h-[calc(100vh-4.5rem)] overflow-hidden bg-slate-50">
 
-                     <div className="flex flex-col gap-2">
-                         <div className="flex gap-2">
-                             {['Fresh', 'Warning', 'Stalled'].map(type => (
-                                 <button 
-                                    key={type}
-                                    onClick={() => setAgingFilter(agingFilter === type ? null : type as any)}
-                                    className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                                        agingFilter === type 
-                                        ? (type === 'Fresh' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : type === 'Warning' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-100 text-red-700 border-red-200')
-                                        : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-200'
-                                    }`}
-                                 >
-                                     {type} <span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] bg-slate-100">{agingCounts[type as keyof typeof agingCounts]}</span>
-                                 </button>
-                             ))}
-                         </div>
-                         <div className="flex items-center gap-2">
-                             {[
-                                 { val: priorityFilter, set: setPriorityFilter, opts: Object.values(Priority), label: 'Priorities' },
-                                 { val: statusFilter, set: setStatusFilter, opts: [
-                      TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED,
-                      TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD,
-                      TicketStatus.RESOLVED, TicketStatus.CANCELLED
-                  ], label: 'Statuses' },
-                                 { val: assigneeFilter, set: setAssigneeFilter, opts: engineerOptions, label: 'Engineers', valKey: 'id', nameKey: 'name' }
-                             ].map((f, i) => (
-                                 <div key={i} className="relative flex-1">
-                                    <select 
-                                        value={f.val}
-                                        onChange={(e) => f.set(e.target.value as any)}
-                                        className="w-full appearance-none bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-[10px] font-medium text-slate-600 focus:outline-none focus:border-slate-400"
-                                    >
-                                        <option value="ALL">All {f.label}</option>
-                                        {f.opts.map((o: any) => (
-                                            <option 
-                                                key={f.valKey ? o[f.valKey] : o} 
-                                                value={f.valKey ? o[f.valKey] : o}
-                                            >
-                                                {toTitleCase(f.nameKey ? o[f.nameKey] : String(o))}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                 </div>
-                             ))}
-                             {hasActiveLocalFilters && (
-                                 <button onClick={handleClearLocalFilters} className="text-[10px] text-red-500 hover:text-red-700 font-medium whitespace-nowrap px-1 shrink-0">Clear</button>
-                             )}
-                         </div>
-                     </div>
-                 </div>
-             )}
-             
-             {!activeFilter && (
-                 <div className="flex bg-slate-200/50 p-1 rounded-lg">
-                     <button onClick={() => setViewMode('active')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all ${viewMode === 'active' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Active</button>
-                     <button onClick={() => setViewMode('history')} className={`flex-1 text-xs font-semibold py-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${viewMode === 'history' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><History size={12} /> History</button>
-                 </div>
-             )}
-
-             {activeFilter && (
-                 <div className="flex items-center justify-between bg-blue-50 text-blue-700 px-3 py-2 rounded-md text-sm border border-blue-100">
-                     <div className="flex items-center gap-2"><Filter size={14} /><span>{activeFilter.description || 'Filtered List'}</span></div>
-                     <button onClick={onClearFilter} className="hover:text-blue-900"><X size={14}/></button>
-                 </div>
-             )}
+      {/* ── Full-width top bar ── */}
+      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 shrink-0">
+        {/* Title + view toggle */}
+        <div className="flex items-center gap-3 shrink-0">
+          <h2 className="font-bold text-slate-900 text-base">
+            {activeFilter ? 'Filtered' : viewMode === 'active' ? 'Active Tickets' : 'History'}
+          </h2>
+          <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{filteredTickets.length}</span>
+          {!activeFilter && (
+            <div className="flex bg-slate-100 p-0.5 rounded-lg">
+              <button onClick={() => setViewMode('active')} className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${viewMode==='active' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}>Active</button>
+              <button onClick={() => setViewMode('history')} className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all flex items-center gap-1 ${viewMode==='history' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'}`}><History size={11}/>History</button>
+            </div>
+          )}
         </div>
+
+        {/* Search */}
+        {!activeFilter && (
+          <div className="relative flex-1 max-w-sm">
+            <SearchIcon size={14} className="absolute left-3 top-2.5 text-slate-400" />
+            <input type="text" placeholder="Search tickets, client, phone..."
+              value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-8 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 bg-white" />
+            {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-2 text-slate-400"><X size={13}/></button>}
+          </div>
+        )}
+
+        {/* Aging pills */}
+        {!activeFilter && (
+          <div className="flex gap-1.5 shrink-0">
+            {(['Fresh','Warning','Stalled'] as const).map(type => (
+              <button key={type} onClick={() => setAgingFilter(agingFilter===type ? null : type)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                  agingFilter===type
+                    ? type==='Fresh' ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                    : type==='Warning' ? 'bg-amber-100 text-amber-700 border-amber-300'
+                    : 'bg-red-100 text-red-700 border-red-300'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                }`}>
+                {type} <span className="px-1 py-0.5 rounded text-[9px] bg-black/10">{agingCounts[type]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Dropdowns */}
+        {!activeFilter && (
+          <div className="flex items-center gap-2 shrink-0">
+            {[
+              { val: priorityFilter, set: setPriorityFilter, opts: Object.values(Priority), label: 'Priority' },
+              { val: statusFilter,   set: setStatusFilter,   opts: [TicketStatus.NEW,TicketStatus.OPEN,TicketStatus.ASSIGNED,TicketStatus.IN_PROGRESS,TicketStatus.CARRY_FORWARD,TicketStatus.RESOLVED,TicketStatus.CANCELLED], label: 'Status' },
+              { val: assigneeFilter, set: setAssigneeFilter, opts: engineerOptions, label: 'Engineer', valKey:'id', nameKey:'name' }
+            ].map((f,i) => (
+              <div key={i} className="relative">
+                <select value={f.val} onChange={e => f.set(e.target.value as any)}
+                  className="appearance-none bg-white border border-slate-200 rounded-lg py-1.5 pl-2 pr-6 text-[11px] font-medium text-slate-600 focus:outline-none focus:border-slate-400 cursor-pointer">
+                  <option value="ALL">All {f.label}s</option>
+                  {f.opts.map((o:any) => <option key={f.valKey?o[f.valKey]:o} value={f.valKey?o[f.valKey]:o}>{toTitleCase(f.nameKey?o[f.nameKey]:String(o))}</option>)}
+                </select>
+                <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+            ))}
+            {hasActiveLocalFilters && <button onClick={handleClearLocalFilters} className="text-[10px] text-red-500 font-bold px-2 py-1.5 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">✕ Clear</button>}
+          </div>
+        )}
+
+        {/* Spacer + New button */}
+        <div className="ml-auto flex items-center gap-2">
+          {activeFilter && (
+            <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+              <Filter size={12}/> {activeFilter.description || 'Filtered'}
+              <button onClick={onClearFilter}><X size={12}/></button>
+            </div>
+          )}
+          {!activeFilter && (
+            <button onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors">
+              <Plus size={14}/> New Ticket
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Body: list + detail ── */}
+      <div className="flex flex-1 overflow-hidden">
+
+      {/* Left List */}
+      <div className="w-[360px] shrink-0 border-r border-slate-200 flex flex-col bg-white">
         <div className="overflow-y-auto flex-1">
+             
+
           {filteredTickets.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 text-slate-400">
                   <Filter size={32} className="mb-2 opacity-50"/>
@@ -843,15 +847,22 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                   {hasActiveLocalFilters && <button onClick={handleClearLocalFilters} className="mt-2 text-xs text-blue-500 hover:underline">Clear Filters</button>}
               </div>
           ) : (
-            filteredTickets.map(ticket => {
+            <div>
+            {groupedTickets.map(group => (
+              <div key={group.label}>
+                {/* Date group header */}
+                <div className="sticky top-0 z-10 px-4 py-1.5 bg-slate-50 border-b border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{group.label}</span>
+                  <span className="ml-2 text-[9px] text-slate-400">{group.tickets.length} ticket{group.tickets.length !== 1 ? 's' : ''}</span>
+                </div>
+                {group.tickets.map(ticket => {
                 const health = getTicketHealth(ticket);
                 const healthColor = getHealthColor(health);
-                
                 return (
-                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${
-                        selectedTicketId === ticket.id ? 'bg-slate-50 border-l-4 border-l-emerald-500' :
-                        ticket.priority === 'URGENT' ? 'border-l-4 border-l-red-500 bg-red-50/30' :
-                        ticket.priority === 'HIGH' ? 'border-l-4 border-l-orange-400 bg-orange-50/20' :
+                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-3.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${
+                        selectedTicketId === ticket.id ? 'bg-blue-50/50 border-l-4 border-l-blue-500' :
+                        ticket.priority === 'URGENT' ? 'border-l-4 border-l-red-500 bg-red-50/20' :
+                        ticket.priority === 'HIGH' ? 'border-l-4 border-l-orange-400 bg-orange-50/10' :
                         ''}`}>
                         <div className="flex justify-between items-start mb-1">
                             <span className="font-medium text-slate-900">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
@@ -890,44 +901,44 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         </div>
                     </div>
                 );
-            })
+            })}
+              </div>
+            ))}
+            </div>
           )}
         </div>
       </div>
 
-
       {/* Right Detail Panel — 2-panel layout (no chat area) */}
       {selectedTicket && editForm ? (
         <div className="flex-1 flex flex-col bg-white">
-          {/* Detail Header */}
-          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-            <div>
-              <div className="text-[10px] font-mono text-slate-400">{selectedTicket.id}</div>
-              <h3 className="font-bold text-lg text-slate-900">{editForm.customerName}</h3>
-              <p className="text-xs text-slate-500">{formatPhoneDisplay(editForm.phoneNumber)} · {editForm.category} · {safeString(editForm.type)}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                selectedTicket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
-                selectedTicket.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                selectedTicket.status === 'ON_MY_WAY' ? 'bg-cyan-100 text-cyan-700' :
-                selectedTicket.status === 'ARRIVED' ? 'bg-indigo-100 text-indigo-700' :
-                selectedTicket.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                selectedTicket.status === 'CANCELLED' ? 'bg-red-100 text-red-600' :
-                selectedTicket.status === 'NEW' ? 'bg-purple-100 text-purple-700' :
-                'bg-amber-100 text-amber-700'
-              }`}>{selectedTicket.status.replace(/_/g, ' ')}</span>
-              <div className="flex bg-slate-100 rounded-lg p-0.5">
-                <button onClick={() => setPanelMode('view')}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'view' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
-                  <Eye size={12} /> Summary
-                </button>
-                <button onClick={() => setPanelMode('edit')}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${panelMode === 'edit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>
-                  <Edit size={12} /> Edit
-                </button>
+          {/* ── Unified Detail Header ── */}
+          <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between bg-white shrink-0">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-mono text-slate-400">{selectedTicket.id}</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                  selectedTicket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
+                  selectedTicket.status === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
+                  selectedTicket.status === 'ON_MY_WAY' ? 'bg-cyan-100 text-cyan-700' :
+                  selectedTicket.status === 'ARRIVED' ? 'bg-indigo-100 text-indigo-700' :
+                  selectedTicket.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
+                  selectedTicket.status === 'CANCELLED' ? 'bg-red-100 text-red-600' :
+                  selectedTicket.status === 'ASSIGNED' ? 'bg-purple-100 text-purple-700' :
+                  selectedTicket.status === 'NEW' ? 'bg-slate-100 text-slate-600' :
+                  'bg-blue-100 text-blue-700'
+                }`}>{selectedTicket.status.replace(/_/g,' ')}</span>
+                {(() => { const h = getTicketHealth(selectedTicket); const hc = getHealthColor(h); return h ? <span className={`w-2 h-2 rounded-full ${hc}`} title={h}/> : null; })()}
               </div>
-              <button onClick={() => setSelectedTicketId(null)} className="p-1 hover:bg-slate-100 rounded-lg"><X size={16} className="text-slate-400" /></button>
+              <h3 className="font-bold text-lg text-slate-900 truncate">{editForm.customerName}</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(editForm.phoneNumber)} · {editForm.category}</p>
+            </div>
+            <div className="flex items-center gap-2 ml-4 shrink-0">
+              <button onClick={() => setPanelMode(panelMode==='edit'?'view':'edit')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border transition-all ${panelMode==='edit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                <Edit size={12}/> {panelMode==='edit' ? 'Editing' : 'Edit'}
+              </button>
+              <button onClick={() => setSelectedTicketId(null)} className="p-2 hover:bg-slate-100 rounded-lg"><X size={15} className="text-slate-400"/></button>
             </div>
           </div>
 
@@ -1134,30 +1145,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                   }`}>
                     {toTitleCase(selectedTicket?.status || '')}
                   </span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-[10px] text-slate-400">Auto-managed by workflow</p>
-                    <button type="button" onClick={() => { 
-                        setShowAdminOverride(true); 
-                        setOverrideStatus(selectedTicket?.status || ''); 
-                        setOverrideStartedAt(selectedTicket?.startedAt ? new Date(new Date(selectedTicket.startedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
-                        setOverrideCompletedAt(selectedTicket?.completedAt ? new Date(new Date(selectedTicket.completedAt).getTime() + 3*60*60*1000).toISOString().slice(0,16) : '');
-                        setOverrideNote('');
-                    }} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 hover:bg-indigo-100">
-                        Admin Override
-                    </button>
-                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Status is auto-managed by workflow</p>
                 </div>
-                {selectedTicket && selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED && (
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => setShowCancelConfirm(true)}
-                      className="w-full py-2 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
-                    >
-                      Cancel Ticket
-                    </button>
-                  </div>
-                )}
+
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Priority</label><select value={getFormValue('priority') as Priority} onChange={(e) => updateField('priority', e.target.value)} className={INPUT_STYLES}>{Object.values(Priority).map(p => <option key={p} value={p}>{toTitleCase(p)}</option>)}</select></div>
                 
                 {/* Assignment Dropdown with Hint Highlight */}
@@ -1235,50 +1225,52 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <div><label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1 flex items-center gap-1"><LinkIcon size={10}/> Odoo Link</label><input type="text" value={getFormValue('odooLink') as string} onChange={(e) => updateField('odooLink', e.target.value)} placeholder="https://odoo..." className={INPUT_STYLES} /></div>
                 </div>
              </div>
-             <div className="p-4 border-t border-slate-200 bg-white">
-                 {hasUnsavedChanges() && <div className="mb-3 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200"><AlertCircle size={14} /> Unsaved changes</div>}
-                 <div className="flex gap-2">
-                     <button 
-                        onClick={() => {
-                            // Reset form to original ticket data and go back to view
-                            if (selectedTicket) {
-                                setEditForm({
-                                    status: selectedTicket.status,
-                                    type: selectedTicket.type,
-                                    priority: selectedTicket.priority,
-                                    category: selectedTicket.category,
-                                    assignedTechId: selectedTicket.assignedTechId || '',
-                                    appointmentTime: selectedTicket.appointmentTime || '',
-                                    odooLink: selectedTicket.odooLink || '',
-                                    locationUrl: selectedTicket.locationUrl || '',
-                                    houseNumber: selectedTicket.houseNumber || '',
-                                    customerId: selectedTicket.customerId,
-                                    customerName: customers?.find(c => c.id === selectedTicket.customerId)?.name || selectedTicket.customerName,
-                                    phoneNumber: selectedTicket.phoneNumber
-                                });
-                            }
-                            setPanelMode('view');
-                        }}
-                        className="flex-1 py-2.5 rounded-lg font-semibold text-xs text-slate-500 hover:bg-slate-100 transition-colors"
-                     >
-                        Cancel
-                     </button>
-                     <button 
-                        onClick={() => { handleSaveChanges(); setPanelMode('view'); }} 
-                        disabled={!hasUnsavedChanges() || !isDetailValid()} 
-                        className={`flex-1 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all text-xs ${
-                            hasUnsavedChanges() && isDetailValid() 
-                            ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-md' 
-                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                        }`}
-                    >
-                        <Save size={14} /> Save Changes
-                    </button>
-                 </div>
-             </div>
+
              </div>
              </div>
              )}
+
+          {/* ── Sticky Action Bar ── */}
+          <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-3 flex items-center gap-2">
+            {/* Quick assign */}
+            <div className="relative">
+              <select
+                value={editForm?.assignedTechId || ''}
+                onChange={e => { updateField('assignedTechId', e.target.value); }}
+                className="appearance-none text-xs font-bold pl-3 pr-7 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer">
+                <option value="">Unassigned</option>
+                {teamLeads.map(t => <option key={t.id} value={t.id}>TL: {t.name}</option>)}
+                {fieldEngineers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <UserCheck size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+            {/* AI Analyse */}
+            <button onClick={handleAIAnalysis} disabled={isAnalyzing}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-50">
+              <Sparkles size={12}/> {isAnalyzing ? 'Analysing...' : 'AI Analyse'}
+            </button>
+            {/* Save — only when editing and has changes */}
+            {panelMode === 'edit' && hasUnsavedChanges() && (
+              <button onClick={() => { handleSaveChanges(); setPanelMode('view'); }}
+                disabled={!isDetailValid()}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:bg-slate-300 transition-colors">
+                <Save size={12}/> Save Changes
+              </button>
+            )}
+            {/* Cancel ticket */}
+            {selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED && (
+              <button onClick={() => setShowCancelConfirm(true)}
+                className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+                <X size={12}/> Cancel Ticket
+              </button>
+            )}
+            {/* Admin override */}
+            <button onClick={() => { setShowAdminOverride(true); setOverrideStatus(selectedTicket?.status||''); setOverrideStartedAt(''); setOverrideCompletedAt(''); setOverrideNote(''); }}
+              className={`${selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED ? '' : 'ml-auto'} flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors`}>
+              Override
+            </button>
+          </div>
+
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400">
@@ -1288,6 +1280,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           </div>
         </div>
       )}
+      </div>{/* end body flex */}
 
       {/* New Ticket Modal */}
       {isCreateModalOpen && (
