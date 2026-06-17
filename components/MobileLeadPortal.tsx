@@ -1910,7 +1910,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             )}
 
             {/* --- Ticket Detail Bottom Sheet --- */}
-            {viewTicket && (
+            {/* ═══════════════════════════════════════════════
+     TICKET DETAIL BOTTOM SHEET
+     Opens when a ticket card is tapped
+     Props needed: viewTicket, setViewTicket, onUpdateTicket,
+                   ticketEditMode, ticketEditForm, customers, technicians
+     ═══════════════════════════════════════════════ */}
+      {viewTicket && (
                 <div 
                     className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end"
                     onClick={() => setViewTicket(null)}
@@ -2215,7 +2221,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 </div>
             )}
 {/* --- Activity Detail Bottom Sheet --- */}
-{viewActivity && (() => {
+{/* ═══════════════════════════════════════════════
+     ACTIVITY DETAIL BOTTOM SHEET  
+     The most complex section — contains all dispatch logic,
+     status action buttons, and nested modals (dispatch, CF, complete)
+     Props needed: viewActivity, setViewActivity, onUpdateActivity,
+                   all dispatch state, technicians, customers, teams
+     ═══════════════════════════════════════════════ */}
+      {viewActivity && (() => {
     const act = viewActivity as any;
     const actCust = customers?.find((c: any) => c.id === act.customerId);
     const actCustName  = actCust?.name  || (act as any).customerName  || '';
@@ -4370,6 +4383,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       )}
 
     {/* ── Activity Cancel Modal ── */}
+    {/* ═══════════════════════════════════════════════
+     ACTIVITY CANCEL MODAL
+     ═══════════════════════════════════════════════ */}
     {showActivityCancel && cancelActivityTarget && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowActivityCancel(false)}>
             <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -4458,6 +4474,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
     )}
 
     {/* ── Activity Reschedule Modal ── */}
+    {/* ═══════════════════════════════════════════════
+     ACTIVITY RESCHEDULE MODAL
+     ═══════════════════════════════════════════════ */}
     {showActivityReschedule && rescheduleActivityTarget && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowActivityReschedule(false)}>
             <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
