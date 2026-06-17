@@ -86,6 +86,9 @@ function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [ticketFilter, setTicketFilter] = useState<TicketFilter | null>(null);
   const [prefillActivity, setPrefillActivity] = useState<any>(null);
+  const [slaAlerts, setSlaAlerts] = useState<any[]>([]);
+  const [showSlaPanel, setShowSlaPanel] = useState(false);
+  const [slaLastChecked, setSlaLastChecked] = useState<Date | null>(null);
   const [focusedTicketId, setFocusedTicketId] = useState<string | null>(null);
   const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
 
@@ -985,6 +988,20 @@ useEffect(() => {
     const isMobilePortal = activeView === 'lead_portal' || activeView === 'tech_portal';
     const refreshMs = isMobilePortal ? 20000 : 45000; // Slower polling — less server load
     let lastRefreshTime = new Date().toISOString();
+    // SLA alert check every 5 minutes
+    const fetchSLA = async () => {
+      try {
+        const res = await fetch('/api/sla/alerts', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setSlaAlerts(data.allOverdue || []);
+          setSlaLastChecked(new Date());
+        }
+      } catch(e) { /* non-critical */ }
+    };
+    fetchSLA();
+    const slaInterval = setInterval(fetchSLA, 5 * 60 * 1000);
+
     const interval = setInterval(async () => {
       if (isRefreshing || document.hidden) return;
       isRefreshing = true;
@@ -1022,7 +1039,7 @@ useEffect(() => {
         isRefreshing = false;
       }
     }, refreshMs);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); clearInterval(slaInterval); };
   }, [activeView, currentUser]);
   
   // --- Navigation Logic ---
@@ -1392,6 +1409,68 @@ useEffect(() => {
                          )
                      )}
 
+                     {/* SLA Alert Bell — Admin/TL only */}
+                     {currentUser && ['ADMIN','TEAM_LEAD'].includes(currentUser.role) && (
+                         <div className="relative">
+                             <button onClick={() => setShowSlaPanel(p => !p)}
+                                 className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                                 title="SLA Alerts">
+                                 <Bell size={20} className={slaAlerts.filter((a:any) => !a.alreadyAlerted).length > 0 ? 'text-amber-500' : ''} />
+                                 {slaAlerts.filter((a:any) => !a.alreadyAlerted).length > 0 && (
+                                     <span className="absolute top-1.5 right-1.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                                         {slaAlerts.filter((a:any) => !a.alreadyAlerted).length}
+                                     </span>
+                                 )}
+                             </button>
+                             {showSlaPanel && (
+                                 <div className="absolute right-0 top-10 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[200] overflow-hidden">
+                                     <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-800 text-white rounded-t-2xl">
+                                         <div>
+                                             <h3 className="font-bold text-sm">SLA Alerts</h3>
+                                             <p className="text-slate-400 text-[10px] mt-0.5">{slaAlerts.length} ticket{slaAlerts.length !== 1 ? 's' : ''} need attention</p>
+                                         </div>
+                                         <button onClick={() => setShowSlaPanel(false)} className="text-slate-400 hover:text-white"><X size={16}/></button>
+                                     </div>
+                                     <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+                                         {slaAlerts.length === 0 ? (
+                                             <div className="py-8 text-center text-slate-400 text-sm">✅ All tickets within SLA</div>
+                                         ) : (slaAlerts as any[]).map((a:any) => (
+                                             <div key={a.ticketId}
+                                                 onClick={() => { setTicketFilter({type:'id' as any, value:a.ticketId, description:`SLA: ${a.customerName}`}); setActiveView('tickets'); setShowSlaPanel(false); }}
+                                                 className={`px-4 py-3 cursor-pointer hover:bg-slate-50 flex items-start gap-3 ${a.alertType==='STALLED_72H' ? 'border-l-4 border-red-400' : 'border-l-4 border-amber-400'}`}>
+                                                 <span className={`shrink-0 mt-1.5 w-2 h-2 rounded-full ${a.alertType==='STALLED_72H' ? 'bg-red-500' : 'bg-amber-400'}`}/>
+                                                 <div className="flex-1 min-w-0">
+                                                     <div className="flex items-center justify-between gap-2">
+                                                         <span className="text-sm font-bold text-slate-800 truncate">{a.customerName}</span>
+                                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${a.alertType==='STALLED_72H' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                             {a.alertType==='STALLED_72H' ? '⚠ STALLED' : '⏰ WARNING'}
+                                                         </span>
+                                                     </div>
+                                                     <p className="text-xs text-slate-500 mt-0.5">{a.category} · {a.hoursOpen}h open · {a.assignedTech}</p>
+                                                 </div>
+                                                 <button
+                                                     onClick={async (e) => {
+                                                         e.stopPropagation();
+                                                         await fetch(`/api/sla/alerts/${a.ticketId}/acknowledge`, { method:'POST', headers: getAuthHeaders() });
+                                                         setSlaAlerts(prev => prev.filter((x:any) => x.ticketId !== a.ticketId));
+                                                     }}
+                                                     className="shrink-0 text-[9px] font-bold text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded border border-slate-200 hover:bg-slate-50"
+                                                     title="Acknowledge — dismiss this alert">
+                                                     ✓
+                                                 </button>
+                                             </div>
+                                         ))}
+                                     </div>
+                                     {slaLastChecked && (
+                                         <div className="px-4 py-2 border-t border-slate-100 text-[10px] text-slate-400">
+                                             Last checked: {new Date(slaLastChecked).toLocaleTimeString()}
+                                         </div>
+                                     )}
+                                 </div>
+                             )}
+                         </div>
+                     )}
+
                      {/* Notification Bell */}
                      <div className="relative" data-notif-panel>
                          <button
@@ -1616,6 +1695,7 @@ useEffect(() => {
                         tickets={tickets}
                         activities={activities}
                         technicians={technicians}
+                        slaAlerts={slaAlerts}
                         customers={customers}
                     />
                 )}
