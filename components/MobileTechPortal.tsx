@@ -243,6 +243,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
               ...a,
               status: 'DONE',
               completionNote: note || undefined,
+              completedAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
           });
       }
