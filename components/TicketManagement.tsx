@@ -109,6 +109,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
   // Panel View/Edit mode — default to VIEW (read-only summary)
   const [panelMode, setPanelMode] = useState<'view' | 'edit'>('view');
+  // Inline field currently being edited in left col (field name)
+  const [inlineField, setInlineField] = useState<string | null>(null);
   
   // --- Local Filter State ---
   const [searchTerm, setSearchTerm] = useState('');
@@ -347,6 +349,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
   // Sync Edit Form with Selected Ticket
   useEffect(() => {
+    setInlineField(null); // reset any open inline edit
     if (selectedTicket) {
       setEditForm({
         status: selectedTicket.status,
@@ -403,6 +406,13 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           if (!prev) return null;
           return { ...prev, [field]: value };
       });
+      // Auto-save on specific field changes — no Save button needed for these
+      const autoSaveFields = ['priority', 'assignedTechId', 'type', 'appointmentTime'];
+      if (autoSaveFields.includes(field as string)) {
+          const updated = { ...selectedTicket, [field]: value, updatedAt: new Date().toISOString() };
+          onUpdateTicket(updated);
+          toast.success(`${String(field).replace(/([A-Z])/g,' $1').trim()} updated`, { duration: 2000 });
+      }
   };
 
   const updateAppointmentDate = (part: 'day' | 'month' | 'year' | 'hour' | 'minute', value: string) => {
@@ -954,11 +964,63 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 <div className="grid grid-cols-2 gap-0 h-full divide-x divide-slate-100">
                   {/* LEFT col — ticket info */}
                   <div className="p-5 space-y-4 overflow-y-auto">
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Category</div><div className="text-sm font-bold text-slate-800">{selectedTicket.category}</div></div>
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Type</div><div className="text-sm font-bold text-slate-800">{safeString(selectedTicket.type) || '—'}</div></div>
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Priority</div><div className={`text-sm font-bold ${selectedTicket.priority === 'URGENT' ? 'text-red-600' : selectedTicket.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-800'}`}>{toTitleCase(selectedTicket.priority)}</div></div>
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Engineer</div><div className="text-sm font-bold text-slate-800">{tech?.name || 'Unassigned'}</div></div>
+                  {/* ── Inline-editable summary chips ── */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Priority — click to change */}
+                    <div onClick={() => setInlineField(inlineField==='priority'?null:'priority')}
+                      className={`rounded-xl p-3 border cursor-pointer transition-all ${inlineField==='priority' ? 'bg-white border-blue-300 ring-2 ring-blue-100' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
+                      <div className="text-[10px] text-slate-400 mb-0.5">Priority</div>
+                      {inlineField === 'priority' ? (
+                        <select autoFocus value={editForm?.priority||''} onChange={e => { updateField('priority',e.target.value); setInlineField(null); }}
+                          onBlur={() => setInlineField(null)}
+                          className="text-sm font-bold w-full bg-transparent focus:outline-none">
+                          {Object.values(Priority).map(p => <option key={p} value={p}>{toTitleCase(p)}</option>)}
+                        </select>
+                      ) : (
+                        <div className={`text-sm font-bold flex items-center gap-1 ${editForm?.priority==='URGENT'?'text-red-600':editForm?.priority==='HIGH'?'text-orange-500':'text-slate-800'}`}>
+                          {toTitleCase(editForm?.priority||selectedTicket.priority)} <Edit size={10} className="text-slate-300"/>
+                        </div>
+                      )}
+                    </div>
+                    {/* Type — click to change */}
+                    <div onClick={() => setInlineField(inlineField==='type'?null:'type')}
+                      className={`rounded-xl p-3 border cursor-pointer transition-all ${inlineField==='type' ? 'bg-white border-blue-300 ring-2 ring-blue-100' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
+                      <div className="text-[10px] text-slate-400 mb-0.5">Type</div>
+                      {inlineField === 'type' ? (
+                        <select autoFocus value={editForm?.type||''} onChange={e => { updateField('type',e.target.value); setInlineField(null); }}
+                          onBlur={() => setInlineField(null)}
+                          className="text-sm font-bold w-full bg-transparent focus:outline-none">
+                          {Object.values(TicketType).map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      ) : (
+                        <div className="text-sm font-bold text-slate-800 flex items-center gap-1">
+                          {safeString(editForm?.type||selectedTicket.type)||'—'} <Edit size={10} className="text-slate-300"/>
+                        </div>
+                      )}
+                    </div>
+                    {/* Engineer — click to assign */}
+                    <div onClick={() => setInlineField(inlineField==='engineer'?null:'engineer')}
+                      className={`rounded-xl p-3 border cursor-pointer transition-all col-span-2 ${inlineField==='engineer' ? 'bg-white border-blue-300 ring-2 ring-blue-100' : 'bg-slate-50 border-slate-100 hover:border-slate-300'}`}>
+                      <div className="text-[10px] text-slate-400 mb-0.5">Assigned Engineer</div>
+                      {inlineField === 'engineer' ? (
+                        <select autoFocus value={editForm?.assignedTechId||''} onChange={e => { updateField('assignedTechId',e.target.value); setInlineField(null); }}
+                          onBlur={() => setInlineField(null)}
+                          className="text-sm font-bold w-full bg-transparent focus:outline-none">
+                          <option value="">— Unassigned —</option>
+                          <optgroup label="Team Leads">{teamLeads.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+                          <optgroup label="Field Engineers">{fieldEngineers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+                        </select>
+                      ) : (
+                        <div className="text-sm font-bold text-slate-800 flex items-center gap-1">
+                          {tech?.name || 'Unassigned'} <Edit size={10} className="text-slate-300"/>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Category */}
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div className="text-[10px] text-slate-400 mb-1.5">Category</div>
+                    <div className="text-sm font-bold text-slate-800">{editForm?.category || selectedTicket.category}</div>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
