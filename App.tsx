@@ -524,7 +524,7 @@ const handleLogout = useCallback(() => {
   }, [isSavingActivity]);
 
   const handleUpdateActivity = useCallback(async (updated: Activity) => {
-      if (isSavingActivity) return; // prevent double-submit
+      // Note: removed isSavingActivity guard — was silently dropping status updates
       setIsSavingActivity(true);
       // Optimistic UI update immediately — so buttons reflect new status instantly
       setActivities(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
@@ -1409,37 +1409,55 @@ useEffect(() => {
                          )
                      )}
 
-                     {/* SLA Alert Bell — Admin/TL only */}
-                     {currentUser && ['ADMIN','TEAM_LEAD'].includes(currentUser.role) && (
-                         <div className="relative">
-                             <button onClick={() => setShowSlaPanel(p => !p)}
-                                 className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors"
-                                 title="SLA Alerts">
-                                 <Bell size={20} className={slaAlerts.filter((a:any) => !a.alreadyAlerted).length > 0 ? 'text-amber-500' : ''} />
-                                 {slaAlerts.filter((a:any) => !a.alreadyAlerted).length > 0 && (
-                                     <span className="absolute top-1.5 right-1.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
-                                         {slaAlerts.filter((a:any) => !a.alreadyAlerted).length}
-                                     </span>
-                                 )}
-                             </button>
-                             {showSlaPanel && (
-                                 <div className="absolute right-0 top-10 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[200] overflow-hidden">
-                                     <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-800 text-white rounded-t-2xl">
-                                         <div>
-                                             <h3 className="font-bold text-sm">SLA Alerts</h3>
-                                             <p className="text-slate-400 text-[10px] mt-0.5">{slaAlerts.length} ticket{slaAlerts.length !== 1 ? 's' : ''} need attention</p>
-                                         </div>
-                                         <button onClick={() => setShowSlaPanel(false)} className="text-slate-400 hover:text-white"><X size={16}/></button>
+
+                     {/* Notification Bell — single bell, SLA as inner tab */}
+                     <div className="relative" data-notif-panel>
+                         <button
+                             onClick={() => setIsNotifOpen(prev => !prev)}
+                             className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                         >
+                             <Bell size={20} className={slaAlerts.filter((a:any)=>!a.alreadyAlerted).length > 0 ? 'text-amber-500' : ''} />
+                             {(activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length + slaAlerts.filter((a:any)=>!a.alreadyAlerted).length) > 0 && (
+                                 <span className="absolute top-1.5 right-1.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                                     {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length + slaAlerts.filter((a:any)=>!a.alreadyAlerted).length}
+                                 </span>
+                             )}
+                         </button>
+
+                         {isNotifOpen && (
+                             <div className="absolute right-0 top-10 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                                 {/* Tab header */}
+                                 <div className="px-3 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                                     <div className="flex gap-1">
+                                         <button onClick={() => setShowSlaPanel(false)}
+                                             className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${!showSlaPanel ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+                                             Alerts
+                                             {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length > 0 && (
+                                                 <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500 text-white">{activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length}</span>
+                                             )}
+                                         </button>
+                                         {currentUser && ['ADMIN','TEAM_LEAD'].includes(currentUser.role) && (
+                                             <button onClick={() => setShowSlaPanel(true)}
+                                                 className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${showSlaPanel ? 'bg-amber-500 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
+                                                 SLA
+                                                 {slaAlerts.filter((a:any)=>!a.alreadyAlerted).length > 0 && (
+                                                     <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500 text-white">{slaAlerts.filter((a:any)=>!a.alreadyAlerted).length}</span>
+                                                 )}
+                                             </button>
+                                         )}
                                      </div>
-                                     <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+                                     <button onClick={() => setIsNotifOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                                 </div>
+
+                                 {/* SLA Tab */}
+                                 {showSlaPanel && currentUser && ['ADMIN','TEAM_LEAD'].includes(currentUser.role) ? (
+                                     <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
                                          {slaAlerts.length === 0 ? (
                                              <div className="py-8 text-center text-slate-400 text-sm">✅ All tickets within SLA</div>
                                          ) : (slaAlerts as any[]).map((a:any) => (
-                                             <div key={a.ticketId}
-                                                 onClick={() => { setTicketFilter({type:'id' as any, value:a.ticketId, description:`SLA: ${a.customerName}`}); setActiveView('tickets'); setShowSlaPanel(false); }}
-                                                 className={`px-4 py-3 cursor-pointer hover:bg-slate-50 flex items-start gap-3 ${a.alertType==='STALLED_72H' ? 'border-l-4 border-red-400' : 'border-l-4 border-amber-400'}`}>
+                                             <div key={a.ticketId} className={`px-4 py-3 flex items-start gap-3 ${a.alertType==='STALLED_72H' ? 'border-l-4 border-red-400' : 'border-l-4 border-amber-400'}`}>
                                                  <span className={`shrink-0 mt-1.5 w-2 h-2 rounded-full ${a.alertType==='STALLED_72H' ? 'bg-red-500' : 'bg-amber-400'}`}/>
-                                                 <div className="flex-1 min-w-0">
+                                                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setTicketFilter({type:'id' as any, value:a.ticketId, description:`SLA: ${a.customerName}`}); setActiveView('tickets'); setIsNotifOpen(false); }}>
                                                      <div className="flex items-center justify-between gap-2">
                                                          <span className="text-sm font-bold text-slate-800 truncate">{a.customerName}</span>
                                                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${a.alertType==='STALLED_72H' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -1448,108 +1466,58 @@ useEffect(() => {
                                                      </div>
                                                      <p className="text-xs text-slate-500 mt-0.5">{a.category} · {a.hoursOpen}h open · {a.assignedTech}</p>
                                                  </div>
-                                                 <button
-                                                     onClick={async (e) => {
-                                                         e.stopPropagation();
-                                                         await fetch(`/api/sla/alerts/${a.ticketId}/acknowledge`, { method:'POST', headers: getAuthHeaders() });
-                                                         setSlaAlerts(prev => prev.filter((x:any) => x.ticketId !== a.ticketId));
-                                                     }}
-                                                     className="shrink-0 text-[9px] font-bold text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded border border-slate-200 hover:bg-slate-50"
-                                                     title="Acknowledge — dismiss this alert">
-                                                     ✓
-                                                 </button>
+                                                 <button onClick={async (e) => { e.stopPropagation(); await fetch(`/api/sla/alerts/${a.ticketId}/acknowledge`, { method:'POST', headers: getAuthHeaders() }); setSlaAlerts(prev => prev.filter((x:any) => x.ticketId !== a.ticketId)); }}
+                                                     className="shrink-0 text-[9px] font-bold text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded border border-slate-200 hover:bg-slate-50">✓</button>
                                              </div>
                                          ))}
                                      </div>
-                                     {slaLastChecked && (
-                                         <div className="px-4 py-2 border-t border-slate-100 text-[10px] text-slate-400">
-                                             Last checked: {new Date(slaLastChecked).toLocaleTimeString()}
-                                         </div>
-                                     )}
-                                 </div>
-                             )}
-                         </div>
-                     )}
-
-                     {/* Notification Bell */}
-                     <div className="relative" data-notif-panel>
-                         <button
-                             onClick={() => setIsNotifOpen(prev => !prev)}
-                             className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors"
-                         >
-                             <Bell size={20} />
-                             {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length > 0 && (
-                                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-                             )}
-                         </button>
-
-                         {isNotifOpen && (
-                             <div className="absolute right-0 top-10 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                                 {/* Header */}
-                                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                                     <span className="text-sm font-bold text-slate-800">Notifications</span>
-                                     <div className="flex items-center gap-2">
-                                         {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length > 0 && (
-                                             <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
-                                                 {activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length} new
-                                             </span>
-                                         )}
-                                         <button onClick={() => setIsNotifOpen(false)} className="text-slate-400 hover:text-slate-600">
-                                             <X size={16} />
-                                         </button>
-                                     </div>
-                                 </div>
-
-                                 {/* List */}
-                                 <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
-                                     {activeUserNotifications.length === 0 ? (
-                                         <div className="px-4 py-8 text-center text-sm text-slate-400">No notifications</div>
-                                     ) : (
-                                         activeUserNotifications.map(n => {
-                                             const isRead = readNotifIds.has(n.id);
-                                             const typeColor: Record<string, string> = {
-                                                 new_ticket: 'bg-emerald-500',
-                                                 carry_forward: 'bg-amber-500',
-                                                 status_change: 'bg-blue-500',
-                                                 assigned: 'bg-purple-500',
-                                                 sales_scheduled: 'bg-amber-400',
-                                             };
-                                             return (
-                                                 <div
-                                                     key={n.id}
-                                                     className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors ${isRead ? 'opacity-50' : ''}`}
-                                                 >
-                                                     <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${typeColor[n.type] || 'bg-slate-400'}`}></span>
-                                                     <div className="flex-1 min-w-0">
-                                                         <p
-                                                             className="text-xs text-slate-700 leading-snug cursor-pointer hover:text-emerald-600"
-                                                             onClick={() => {
-                                                                 if (n.ticketId) {
-                                                                     setActiveView('tickets');
-                                                                     setTicketFilter({ ticketId: n.ticketId });
-                                                                     setIsNotifOpen(false);
-                                                                 }
-                                                             }}
-                                                         >
-                                                             {n.message}
-                                                         </p>
-                                                         <p className="text-[10px] text-slate-400 mt-0.5">
-                                                             {n.time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · {n.time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                                         </p>
+                                 ) : (
+                                     /* Notifications Tab */
+                                     <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
+                                         {activeUserNotifications.length === 0 ? (
+                                             <div className="px-4 py-8 text-center text-sm text-slate-400">No notifications</div>
+                                         ) : (
+                                             activeUserNotifications.map(n => {
+                                                 const isRead = readNotifIds.has(n.id);
+                                                 const typeColor: Record<string, string> = {
+                                                     urgent: 'bg-red-50 border-l-4 border-red-400',
+                                                     carry_forward: 'bg-orange-50 border-l-4 border-orange-400',
+                                                     overdue: 'bg-amber-50 border-l-4 border-amber-400',
+                                                     new_assignment: 'bg-blue-50 border-l-4 border-blue-400',
+                                                 };
+                                                 return (
+                                                     <div key={n.id} className={`px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-slate-50 ${isRead ? 'opacity-60' : ''} ${typeColor[n.type] || ''}`}
+                                                         onClick={() => {
+                                                             markAsRead(n.id);
+                                                             if (n.ticketId) {
+                                                                 setTicketFilter({ ticketId: n.ticketId });
+                                                                 setActiveView('tickets');
+                                                                 setIsNotifOpen(false);
+                                                             }
+                                                         }}>
+                                                         <span className="shrink-0 mt-1.5 text-base">
+                                                             {n.type === 'urgent' ? '🚨' : n.type === 'carry_forward' ? '⟲' : n.type === 'overdue' ? '⚠️' : '🆕'}
+                                                         </span>
+                                                         <div className="flex-1 min-w-0">
+                                                             <p className={`text-xs leading-snug ${isRead ? 'text-slate-400' : 'text-slate-700 font-medium'}`}
+                                                                 onClick={(e) => { e.stopPropagation(); if (n.ticketId) { setTicketFilter({ ticketId: n.ticketId }); setActiveView('tickets'); setIsNotifOpen(false); } }}>
+                                                                 {n.message}
+                                                             </p>
+                                                             <p className="text-[10px] text-slate-400 mt-0.5">
+                                                                 {n.time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} · {n.time.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                                             </p>
+                                                         </div>
+                                                         {!isRead && (
+                                                             <button onClick={() => markAsRead(n.id)} className="text-[10px] text-slate-400 hover:text-slate-600 shrink-0 px-1.5 py-0.5 border border-slate-200 rounded">
+                                                                 Mark read
+                                                             </button>
+                                                         )}
                                                      </div>
-                                                     {!isRead && (
-                                                         <button
-                                                             onClick={() => markAsRead(n.id)}
-                                                             className="text-[10px] text-slate-400 hover:text-emerald-600 shrink-0 mt-1 whitespace-nowrap"
-                                                         >
-                                                             Mark read
-                                                         </button>
-                                                     )}
-                                                 </div>
-                                             );
-                                         })
-                                     )}
-                                 </div>
+                                                 );
+                                             })
+                                         )}
+                                     </div>
+                                 )}
                              </div>
                          )}
                      </div>
