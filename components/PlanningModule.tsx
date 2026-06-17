@@ -57,7 +57,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     document.body.appendChild(overlay);
   };
 
-  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar'>('kanban');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'calendar' | 'recurring'>('kanban');
+  // Recurring schedules state
+  const [recurringSchedules, setRecurringSchedules] = useState<any[]>([]);
+  const [showRecurringForm, setShowRecurringForm] = useState(false);
+  const [recurringForm, setRecurringForm] = useState({
+    customerId:'', customerName:'', category:'Wi-Fi & Networking',
+    intervalType:'MONTHLY', preferredDayOfMonth:1, preferredTime:'09:00',
+    nextDueDate: new Date().toISOString().slice(0,10),
+    description:'', durationHours:2, notes:''
+  });
+  const [recurringLoading, setRecurringLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
@@ -166,6 +176,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           if (onClearInitialActivity) onClearInitialActivity();
       }
   }, [initialActivityId, activities]);
+
+  // Fetch recurring schedules
+  const fetchRecurring = async () => {
+    setRecurringLoading(true);
+    try {
+      const res = await fetch('/api/recurring-schedules', { headers: { 'Authorization': `Bearer ${localStorage.getItem('qonnect_token') || ''}`, 'Content-Type': 'application/json' } });
+      if (res.ok) setRecurringSchedules(await res.json());
+    } catch(e) { /* non-critical */ }
+    setRecurringLoading(false);
+  };
+  useEffect(() => { if (viewMode === 'recurring') fetchRecurring(); }, [viewMode]);
 
   // When prefill data arrives from CustomerRecords — open modal with pre-filled fields
   useEffect(() => {
@@ -848,6 +869,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <button onClick={() => setViewMode('calendar')} className={`p-2 rounded-md transition-colors ${viewMode === 'calendar' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                     <Calendar size={20} />
                   </button>
+                  <button onClick={() => setViewMode('recurring')} title="AMC / Recurring Schedules"
+                    className={`px-3 py-2 rounded-md text-xs font-bold transition-colors ${viewMode === 'recurring' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+                    AMC
+                  </button>
                </div>
                
                {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
@@ -886,6 +911,161 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  {viewMode === 'list' && <ListView />}
                  {viewMode === 'kanban' && <KanbanView />}
                  {viewMode === 'calendar' && <CalendarView />}
+                 {viewMode === 'recurring' && (
+                   <div className="flex-1 overflow-y-auto p-6">
+                     <div className="flex items-center justify-between mb-6">
+                       <div>
+                         <h3 className="font-bold text-slate-900 text-lg">Recurring Schedules</h3>
+                         <p className="text-xs text-slate-400 mt-0.5">AMC contracts — auto-schedule monthly, quarterly, or annual visits</p>
+                       </div>
+                       <div className="flex gap-2">
+                         <button onClick={() => fetch('/api/recurring-schedules/process', { method:'POST', headers:{ 'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}` } }).then(()=>fetchRecurring())}
+                           className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100">
+                           ▶ Process Due Now
+                         </button>
+                         <button onClick={() => setShowRecurringForm(true)}
+                           className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-slate-900 text-white rounded-lg hover:bg-slate-800">
+                           <Plus size={14}/> New Schedule
+                         </button>
+                       </div>
+                     </div>
+
+                     {recurringLoading ? (
+                       <div className="text-center py-12 text-slate-400">Loading schedules...</div>
+                     ) : recurringSchedules.length === 0 ? (
+                       <div className="text-center py-16 text-slate-400">
+                         <div className="text-4xl mb-3">🔁</div>
+                         <p className="font-medium">No recurring schedules yet</p>
+                         <p className="text-xs mt-1">Set up AMC contracts to auto-create activities</p>
+                       </div>
+                     ) : (
+                       <div className="space-y-3">
+                         {recurringSchedules.map((s: any) => {
+                           const dueDate = new Date(s.next_due_date);
+                           const today = new Date(); today.setHours(0,0,0,0);
+                           const isOverdue = dueDate < today;
+                           const isDueToday = dueDate.toDateString() === today.toDateString();
+                           return (
+                             <div key={s.id} className={`bg-white rounded-xl border p-4 flex items-start justify-between gap-4 ${isOverdue ? 'border-red-200 bg-red-50/30' : isDueToday ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200'}`}>
+                               <div className="flex-1">
+                                 <div className="flex items-center gap-2 mb-1">
+                                   <span className="font-bold text-slate-800">{s.customer_name || 'Unknown'}</span>
+                                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{s.interval_type}</span>
+                                   {isOverdue && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-bold">OVERDUE</span>}
+                                   {isDueToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">DUE TODAY</span>}
+                                   {!s.is_active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-bold">PAUSED</span>}
+                                 </div>
+                                 <p className="text-xs text-slate-500">{s.type} · {s.category}</p>
+                                 <p className="text-xs text-slate-400 mt-0.5">
+                                   Next due: <span className={`font-bold ${isOverdue ? 'text-red-600' : isDueToday ? 'text-amber-600' : 'text-slate-700'}`}>
+                                     {dueDate.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}
+                                   </span>
+                                   {s.last_scheduled_date && ` · Last: ${new Date(s.last_scheduled_date).toLocaleDateString('en-GB', { day:'2-digit', month:'short' })}`}
+                                 </p>
+                                 {s.notes && <p className="text-xs text-slate-400 mt-1 italic">{s.notes}</p>}
+                               </div>
+                               <div className="flex items-center gap-2 shrink-0">
+                                 <button onClick={async () => {
+                                   await fetch(\`/api/recurring-schedules/\${s.id}\`, {
+                                     method:'PUT', headers:{'Authorization':\`Bearer \${localStorage.getItem('qonnect_token')}\`,'Content-Type':'application/json'},
+                                     body: JSON.stringify({ isActive: !s.is_active })
+                                   });
+                                   fetchRecurring();
+                                 }} className={`text-[10px] font-bold px-2 py-1 rounded border ${s.is_active ? 'bg-white text-slate-500 border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>
+                                   {s.is_active ? 'Pause' : 'Resume'}
+                                 </button>
+                                 <button onClick={async () => {
+                                   // Use direct delete (no confirm needed — Pause is the safer option)
+                                   await fetch(\`/api/recurring-schedules/\${s.id}\`, { method:'DELETE', headers:{'Authorization':\`Bearer \${localStorage.getItem('qonnect_token')}\`} });
+                                     fetchRecurring();
+                                   }
+                                 }} className="text-[10px] font-bold px-2 py-1 rounded border bg-white text-red-500 border-red-200 hover:bg-red-50">
+                                   Delete
+                                 </button>
+                               </div>
+                             </div>
+                           );
+                         })}
+                       </div>
+                     )}
+
+                     {/* New Schedule Form Modal */}
+                     {showRecurringForm && (
+                       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowRecurringForm(false)}>
+                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                           <div className="p-4 bg-slate-800 text-white">
+                             <h3 className="font-bold text-lg">New Recurring Schedule</h3>
+                             <p className="text-slate-300 text-xs mt-0.5">AMC / Maintenance Contract</p>
+                           </div>
+                           <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+                             <div>
+                               <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Client</label>
+                               <select value={recurringForm.customerId} onChange={e => {
+                                 const cust = customers.find(c => c.id === e.target.value);
+                                 setRecurringForm(p => ({...p, customerId: e.target.value, customerName: cust?.name||'' }));
+                               }} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm">
+                                 <option value="">Select client...</option>
+                                 {customers.map(cust => <option key={cust.id} value={cust.id}>{cust.name}</option>)}
+                               </select>
+                             </div>
+                             <div>
+                               <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Service Category</label>
+                               <select value={recurringForm.category} onChange={e => setRecurringForm(p => ({...p, category: e.target.value}))}
+                                 className="w-full border border-slate-300 rounded-lg p-2.5 text-sm">
+                                 {['Wi-Fi & Networking','CCTV','Home Automation','Intercom','Smart Speaker','Other'].map(c => <option key={c} value={c}>{c}</option>)}
+                               </select>
+                             </div>
+                             <div>
+                               <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Frequency</label>
+                               <div className="grid grid-cols-2 gap-2">
+                                 {['MONTHLY','QUARTERLY','BIANNUAL','ANNUAL'].map(f => (
+                                   <button key={f} type="button" onClick={() => setRecurringForm(p => ({...p, intervalType:f}))}
+                                     className={`py-2 rounded-lg border text-xs font-bold transition-all ${recurringForm.intervalType===f ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}>
+                                     {f === 'BIANNUAL' ? 'Every 6 months' : f === 'QUARTERLY' ? 'Every 3 months' : f.charAt(0)+f.slice(1).toLowerCase()}
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                             <div className="grid grid-cols-2 gap-3">
+                               <div>
+                                 <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">First Due Date</label>
+                                 <input type="date" value={recurringForm.nextDueDate} onChange={e => setRecurringForm(p => ({...p, nextDueDate:e.target.value}))}
+                                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                               </div>
+                               <div>
+                                 <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Preferred Time</label>
+                                 <input type="time" value={recurringForm.preferredTime} onChange={e => setRecurringForm(p => ({...p, preferredTime:e.target.value}))}
+                                   className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                               </div>
+                             </div>
+                             <div>
+                               <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Description / Notes</label>
+                               <textarea value={recurringForm.notes} onChange={e => setRecurringForm(p => ({...p, notes:e.target.value}))}
+                                 rows={2} placeholder="AMC contract details..."
+                                 className="w-full border border-slate-300 rounded-lg p-2.5 text-sm resize-none" />
+                             </div>
+                           </div>
+                           <div className="p-4 border-t border-slate-200 flex gap-3">
+                             <button onClick={() => setShowRecurringForm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl border border-slate-200">Cancel</button>
+                             <button disabled={!recurringForm.customerId || !recurringForm.nextDueDate}
+                               onClick={async () => {
+                                 await fetch('/api/recurring-schedules', {
+                                   method:'POST',
+                                   headers:{'Authorization':\`Bearer \${localStorage.getItem('qonnect_token')}\`,'Content-Type':'application/json'},
+                                   body: JSON.stringify(recurringForm)
+                                 });
+                                 setShowRecurringForm(false);
+                                 fetchRecurring();
+                               }}
+                               className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                               Create Schedule
+                             </button>
+                           </div>
+                         </div>
+                       </div>
+                     )}
+                   </div>
+                 )}
              </>
          )}
       </div>
