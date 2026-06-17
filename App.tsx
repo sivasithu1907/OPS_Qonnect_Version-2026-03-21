@@ -535,17 +535,22 @@ const handleLogout = useCallback(() => {
               body: JSON.stringify(updated)
           });
           if (res.ok) {
-              // Reload immediately to get server-generated fields (visit history, timestamps)
-              await loadActivities();
+              // For status changes (DONE, CANCELLED etc): trust optimistic update — don't reload
+              // Reloading races with polling and can briefly show stale status
+              const statusChanged = updated.status !== undefined;
+              if (!statusChanged) {
+                  // Only reload for non-status changes (e.g. field edits) to get server fields
+                  await loadActivities();
+              }
               syncActivityLocationToCustomer(updated);
           } else {
-              // Rollback on failure — reload from server
+              // Rollback on failure
               console.error('Failed to update activity:', res.status);
-              await loadActivities();
+              await loadActivities(); // Reload to restore correct state
           }
       } catch (e) {
           console.error("Failed to update activity", e);
-          await loadActivities(); // Rollback
+          await loadActivities();
       } finally {
           setIsSavingActivity(false);
       }
