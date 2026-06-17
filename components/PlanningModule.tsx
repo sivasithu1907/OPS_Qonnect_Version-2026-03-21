@@ -966,8 +966,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                </div>
                                <div className="flex items-center gap-2 shrink-0">
                                  <button onClick={async () => {
-                                   await fetch(\`/api/recurring-schedules/\${s.id}\`, {
-                                     method:'PUT', headers:{'Authorization':\`Bearer \${localStorage.getItem('qonnect_token')}\`,'Content-Type':'application/json'},
+                                   await fetch(`/api/recurring-schedules/${s.id}`, {
+                                     method:'PUT', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
                                      body: JSON.stringify({ isActive: !s.is_active })
                                    });
                                    fetchRecurring();
@@ -976,7 +976,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                  </button>
                                  <button onClick={async () => {
                                    // Use direct delete (no confirm needed — Pause is the safer option)
-                                   await fetch(\`/api/recurring-schedules/\${s.id}\`, { method:'DELETE', headers:{'Authorization':\`Bearer \${localStorage.getItem('qonnect_token')}\`} });
+                                   await fetch(`/api/recurring-schedules/\${s.id}`, { method:'DELETE', headers:{'Authorization':`Bearer \${localStorage.getItem('qonnect_token')}`} });
                                      fetchRecurring();
                                    }
                                  }} className="text-[10px] font-bold px-2 py-1 rounded border bg-white text-red-500 border-red-200 hover:bg-red-50">
@@ -1051,7 +1051,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                onClick={async () => {
                                  await fetch('/api/recurring-schedules', {
                                    method:'POST',
-                                   headers:{'Authorization':\`Bearer \${localStorage.getItem('qonnect_token')}\`,'Content-Type':'application/json'},
+                                   headers:{'Authorization':`Bearer \${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
                                    body: JSON.stringify(recurringForm)
                                  });
                                  setShowRecurringForm(false);
