@@ -942,16 +942,18 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
             </div>
           </div>
 
-          {/* SUMMARY TAB */}
+          {/* SUMMARY TAB — 2-col layout fills the space */}
           {panelMode === 'view' && selectedTicket && (() => {
             const tech = technicians.find(t => t.id === selectedTicket.assignedTechId);
             const cust = customers?.find(c => c.id === selectedTicket.customerId);
-            const issueText = selectedTicket.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (selectedTicket as any).notes || (selectedTicket as any).ai_summary || '';
+            const issueText = (selectedTicket as any).ai_summary || (selectedTicket as any).notes || selectedTicket.category || '';
             const photos = (selectedTicket as any).photos || [];
             const visitHist = (selectedTicket as any).visitHistory || (selectedTicket as any).visit_history || [];
             return (
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="max-w-2xl mx-auto space-y-4">
+              <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-0 h-full divide-x divide-slate-100">
+                  {/* LEFT col — ticket info */}
+                  <div className="p-5 space-y-4 overflow-y-auto">
                   <div className="grid grid-cols-4 gap-3">
                     <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Category</div><div className="text-sm font-bold text-slate-800">{selectedTicket.category}</div></div>
                     <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] text-slate-400 mb-0.5">Type</div><div className="text-sm font-bold text-slate-800">{safeString(selectedTicket.type) || '—'}</div></div>
@@ -1004,8 +1006,85 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     </div>
                   )}
                   {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => { const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';ov.onclick=()=>ov.remove();const im=document.createElement('img');im.src=p.url||p;im.style.cssText='max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';ov.appendChild(im);document.body.appendChild(ov); }} />)}</div></div>}
-                  {selectedTicket.odooLink && <div className="flex items-center gap-2 text-xs text-slate-500"><ExternalLink size={10} /><span>Odoo:</span><a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate">{selectedTicket.odooLink}</a></div>}
-                </div>
+                  {selectedTicket.odooLink && <div className="flex items-center gap-2 text-xs text-slate-500 p-3 bg-slate-50 rounded-xl border border-slate-100"><ExternalLink size={10} /><span className="text-slate-400">Odoo</span><a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate font-medium">{selectedTicket.odooLink}</a></div>}
+                  </div>{/* end left col */}
+
+                  {/* RIGHT col — quick edit fields */}
+                  <div className="p-5 space-y-4 overflow-y-auto bg-slate-50/30">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Edit</div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Priority</label>
+                      <select value={editForm?.priority || ''} onChange={e => updateField('priority', e.target.value)} className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
+                        {Object.values(Priority).map(p => <option key={p} value={p}>{toTitleCase(p)}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Assign Engineer</label>
+                      <select value={editForm?.assignedTechId || ''} onChange={e => updateField('assignedTechId', e.target.value)} className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
+                        <option value="">— Unassigned —</option>
+                        <optgroup label="Team Leads">{teamLeads.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+                        <optgroup label="Field Engineers">{fieldEngineers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Appointment</label>
+                      <input type="datetime-local"
+                        value={toLocalDatetimeInput(editForm?.appointmentTime || '')}
+                        onChange={e => updateField('appointmentTime', fromLocalDatetimeInput(e.target.value))}
+                        className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Type</label>
+                      <select value={editForm?.type || ''} onChange={e => updateField('type', e.target.value)} className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
+                        {Object.values(TicketType).map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Category</label>
+                      <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[40px]">
+                        {TICKET_CATEGORIES.map(cat => {
+                          const cats = ((editForm?.category || '')).split(', ').filter(Boolean);
+                          const sel = cats.includes(cat);
+                          return <button key={cat} type="button" onClick={() => {
+                            const curr = ((editForm?.category||'')).split(', ').filter(Boolean);
+                            const next = sel ? curr.filter(x => x!==cat) : [...curr, cat];
+                            updateField('category', next.join(', ')||'Other');
+                          }} className={`text-[10px] px-2 py-1 rounded-lg border transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{cat}</button>;
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">House / Building No.</label>
+                      <input type="text" value={editForm?.houseNumber || ''} onChange={e => updateField('houseNumber', e.target.value)}
+                        placeholder="Villa 10" className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Location URL</label>
+                      <input type="text" value={editForm?.locationUrl || ''} onChange={e => updateField('locationUrl', e.target.value)}
+                        placeholder="https://maps.google..." className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Odoo Link</label>
+                      <input type="text" value={editForm?.odooLink || ''} onChange={e => updateField('odooLink', e.target.value)}
+                        placeholder="https://odoo..." className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                    </div>
+
+                    {hasUnsavedChanges() && (
+                      <button onClick={() => { handleSaveChanges(); }}
+                        className="w-full py-2.5 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 text-sm flex items-center justify-center gap-2">
+                        <Save size={14}/> Save Changes
+                      </button>
+                    )}
+                  </div>{/* end right col */}
+                </div>{/* end 2-col grid */}
               </div>
             );
           })()}
@@ -1014,7 +1093,6 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              {/* ==================== EDIT MODE (Existing Form) ==================== */}
              {panelMode === 'edit' && (
                <div className="flex-1 overflow-y-auto">
-               <div className="max-w-2xl mx-auto">
                {/* Client Management Section */}
                <div className="p-4 border-b border-slate-200 bg-white space-y-4 shrink-0">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-xs uppercase tracking-wider">
@@ -1120,7 +1198,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 )}
              </div>
 
-             <div className="flex-1 overflow-y-auto space-y-4 p-4 pr-2">
+             <div className="flex-1 overflow-y-auto space-y-4 p-5">
                 {/* AI Summary Banner */}
                 {(selectedTicket as any)?.ai_summary && (
                     <div className="flex items-start gap-2 p-3 bg-purple-50 border border-purple-100 rounded-xl">
@@ -1226,7 +1304,6 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 </div>
              </div>
 
-             </div>
              </div>
              )}
 
