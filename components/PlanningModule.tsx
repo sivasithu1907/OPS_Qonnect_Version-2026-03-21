@@ -975,10 +975,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                    {s.is_active ? 'Pause' : 'Resume'}
                                  </button>
                                  <button onClick={async () => {
-                                   // Use direct delete (no confirm needed — Pause is the safer option)
-                                   await fetch(`/api/recurring-schedules/\${s.id}`, { method:'DELETE', headers:{'Authorization':`Bearer \${localStorage.getItem('qonnect_token')}`} });
-                                     fetchRecurring();
-                                   }
+                                   await fetch(`/api/recurring-schedules/${s.id}`, { method:'DELETE', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`} });
+                                   fetchRecurring();
                                  }} className="text-[10px] font-bold px-2 py-1 rounded border bg-white text-red-500 border-red-200 hover:bg-red-50">
                                    Delete
                                  </button>
@@ -1051,7 +1049,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                onClick={async () => {
                                  await fetch('/api/recurring-schedules', {
                                    method:'POST',
-                                   headers:{'Authorization':`Bearer \${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
+                                   headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
                                    body: JSON.stringify(recurringForm)
                                  });
                                  setShowRecurringForm(false);
