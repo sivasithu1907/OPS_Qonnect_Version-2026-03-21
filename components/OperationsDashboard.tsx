@@ -114,11 +114,18 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
 
   const getTechWorkload = (techId: string) => {
       const today = new Date().toDateString();
-      const todaysActs = activities.filter(a => 
-          a.leadTechId === techId && 
-          new Date(a.plannedDate).toDateString() === today &&
-          a.status !== 'CANCELLED'
-      );
+      const todaysActs = activities.filter(a => {
+          const isToday = new Date(a.plannedDate).toDateString() === today;
+          if (!isToday || a.status === 'CANCELLED') return false;
+          // A job counts toward a tech's workload whether they're the lead,
+          // the primary (actual) engineer, or a supporting engineer on it —
+          // previously only leadTechId was checked, so supporting engineers
+          // showed 0h/0% utilization for jobs they were genuinely working on.
+          if (a.leadTechId === techId) return true;
+          if ((a as any).primaryEngineerId === techId) return true;
+          if (((a as any).supportingEngineerIds || []).includes(techId)) return true;
+          return false;
+      });
       return todaysActs.reduce((acc, curr) => acc + curr.durationHours, 0);
   };
 
@@ -497,6 +504,11 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             if ((a as any).primaryEngineerId === tech.id) return true;
                             // Planning: this tech is the planned lead
                             if (a.leadTechId === tech.id) return true;
+                            // Supporting: this tech is a supporting engineer on the job —
+                            // previously missing here, which meant a supporting engineer's
+                            // own card never showed this job in their hours/utilization,
+                            // even though the job correctly showed in their timeline row.
+                            if (((a as any).supportingEngineerIds || []).includes(tech.id)) return true;
                             return false;
                         });
                         
@@ -506,7 +518,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             ...activeActs.flatMap(a => (a as any).supportingEngineerIds || []),
                             // Include TAs only from today's assigned activities (not global)
                             ...todayActs.flatMap(a => a.assistantTechIds || [])
-                        ].filter(Boolean)));
+                        ].filter(Boolean))).filter(id => id !== tech.id); // exclude self — todayActs now also
+                          // includes jobs where this tech is themselves a supporter (see fix above), so
+                          // without this filter a supporting engineer would show up as a tag on their own card
                         
                         const supportingMembers = uniqueSupportIds
                             .map(mId => technicians.find(t => t.id === mId))
