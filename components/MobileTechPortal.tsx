@@ -80,7 +80,6 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const [cpSuccess, setCpSuccess] = useState(false);
   const [carryForwardIssue, setCarryForwardIssue] = useState('');
   const [carryForwardRemark, setCarryForwardRemark] = useState('');
-  const [carryForwardDatetime, setCarryForwardDatetime] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyDetailJob, setHistoryDetailJob] = useState<any>(null); // For history popup
@@ -299,36 +298,14 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   };
 
   const handleCarryForwardClick = () => {
-      const now = new Date();
-      // Round to next 15 mins
-      const m = now.getMinutes();
-      const rem = m % 15;
-      const add = 15 - rem;
-      now.setMinutes(m + add);
-      
-      // If we pushed past 5pm, maybe default to next day 9am? (Optional DX)
-      if (now.getHours() >= 17) {
-          now.setDate(now.getDate() + 1);
-          now.setHours(9, 0, 0, 0);
-      }
-
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      
-      const hh = String(now.getHours()).padStart(2, '0');
-      const min = String(now.getMinutes()).padStart(2, '0');
-
-      setCarryForwardDatetime(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
       setCarryForwardIssue('');
       setCarryForwardRemark('');
       setIsCarryForwardOpen(true);
   };
 
   const handleConfirmCarryForward = () => {
-      if (!carryForwardIssue.trim() || !carryForwardDatetime) return;
+      if (!carryForwardIssue.trim()) return;
 
-      const nextIso = new Date(carryForwardDatetime).toISOString();
       const combinedNote = carryForwardIssue ? `Reason: ${carryForwardIssue}${carryForwardRemark ? '\nRemark: ' + carryForwardRemark : ''}` : carryForwardRemark;
 
       if (activeJobItem?.type === 'ticket') {
@@ -338,7 +315,6 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                   ...t,
                   status: TicketStatus.CARRY_FORWARD,
                   carryForwardNote: combinedNote,
-                  nextPlannedAt: nextIso,
                   updatedAt: new Date().toISOString()
               });
           } else {
@@ -1268,13 +1244,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Remark / Description</label>
                                 <textarea value={carryForwardRemark} onChange={e => setCarryForwardRemark(e.target.value)} className={INPUT_STYLES} rows={3} placeholder="Additional notes..." />
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Next Date & Time <span className="text-red-500">*</span></label>
-                                <input type="datetime-local" value={carryForwardDatetime} onChange={e => setCarryForwardDatetime(e.target.value)} className={INPUT_STYLES} min={new Date().toISOString().slice(0,16)} />
-                            </div>
+                            {/* No date picker here on purpose — the team lead decides later when
+                                to re-schedule. Carry forward just records that the job is moving,
+                                with a reason; rescheduling happens as a separate step. */}
                             <div className="pt-4 flex gap-3">
                                 <button onClick={() => setIsCarryForwardOpen(false)} className="flex-1 py-3.5 rounded-xl font-bold text-slate-500 bg-slate-100">Cancel</button>
-                                <button onClick={handleConfirmCarryForward} disabled={!carryForwardIssue.trim() || !carryForwardDatetime}
+                                <button onClick={handleConfirmCarryForward} disabled={!carryForwardIssue.trim()}
                                     className="flex-[2] py-3.5 rounded-xl font-bold text-white bg-slate-900 shadow-lg disabled:opacity-50">Confirm</button>
                             </div>
                         </div>
