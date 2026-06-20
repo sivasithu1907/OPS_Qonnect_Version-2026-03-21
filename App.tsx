@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
 import toast, { Toaster } from './components/Toast';
-import { generateActivityId, generateTicketId } from './utils/idUtils';
+import { generateActivityId } from './utils/idUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
 import {
@@ -16,7 +16,6 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const TicketManagement = lazy(() => import('./components/TicketManagement'));
 const OperationsDashboard = lazy(() => import('./components/OperationsDashboard'));
 const PlanningModule = lazy(() => import('./components/PlanningModule'));
-const ReportsModule = lazy(() => import('./components/ReportsModule'));
 const UserManagement = lazy(() => import('./components/UserManagement'));
 const TeamCRM = lazy(() => import('./components/TeamCRM'));
 const MobileLeadPortal = lazy(() => import('./components/MobileLeadPortal').then(m => ({ default: m.MobileLeadPortal || m.default })));
@@ -25,6 +24,7 @@ const CustomerRecords = lazy(() => import('./components/CustomerRecords'));
 const AIChatBot = lazy(() => import('./components/AIChatBot'));
 const SystemDataTools = lazy(() => import('./components/SystemDataTools'));
 const WhatsAppMonitor = lazy(() => import('./components/WhatsAppMonitor'));
+const AuditLog = lazy(() => import('./components/AuditLog'));
 const TVDisplayMode = lazy(() => import('./components/TVDisplayMode'));
 const CompletedJobSummary = lazy(() => import('./components/CompletedJobSummary'));
 const MasterDashboard = lazy(() => import('./components/MasterDashboard'));
@@ -403,13 +403,21 @@ const handleLogout = useCallback(() => {
   }, []);
 
   const handleCreateTicket = async (data: any) => {
-    const newId = generateTicketId();
+    // This is a TEMPORARY placeholder ID only — used so the new ticket can
+    // appear on screen instantly, before the server has responded. It is
+    // never sent as a real ID and never persists: the moment the server
+    // responds with the real, canonical ticket (assigned by an atomic
+    // database sequence), the placeholder below is replaced with it.
+    // This is what fixes the duplicate/overwritten-ticket bug — previously
+    // the client-generated ID (from a per-device localStorage counter) WAS
+    // the permanent ID, so two devices could land on the same number.
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const now = new Date().toISOString();
     // If engineer pre-assigned at creation, start as ASSIGNED not NEW
     const initialStatus = data.assignedTechId ? TicketStatus.ASSIGNED : TicketStatus.NEW;
 
     const optimistic: Ticket = {
-      ...data, id: newId, status: initialStatus,
+      ...data, id: tempId, status: initialStatus,
       createdAt: now, updatedAt: now, messages: [],
       priority: data.priority || Priority.MEDIUM,
       unreadCount: 0
@@ -421,7 +429,7 @@ const handleLogout = useCallback(() => {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          ...data, id: newId, status: initialStatus,
+          ...data, status: initialStatus,
           createdAt: now, messages: []
         }),
       });
@@ -429,15 +437,21 @@ const handleLogout = useCallback(() => {
         const txt = await res.text();
         throw new Error(txt || "Ticket create failed");
       }
+      // Server returns the canonical ticket (real server-assigned ID) —
+      // swap the temp placeholder out for it immediately so the UI never
+      // shows two rows for the same ticket while waiting on the next sync.
+      const serverTicket = await res.json();
+      setTickets(prev => prev.map(t => t.id === tempId ? serverTicket : t));
       // Background sync — delay to ensure DB has committed
       setTimeout(() => loadTickets(), 2000);
     } catch (e) {
       console.error("Failed to create ticket:", e);
       // Rollback optimistic update
-      setTickets(prev => prev.filter(t => t.id !== newId));
+      setTickets(prev => prev.filter(t => t.id !== tempId));
       toast.error("Failed to create ticket.");
     }
   };
+
 
   const handleDeleteTicket = async (id: string) => {
       if (!id) return; // Child component is responsible for user confirmation
@@ -796,13 +810,17 @@ const handleDeleteCustomer = async (id: string) => {
   };
 
   // System Import Handler
-  const handleSystemImport = (data: any) => {
-      if (data.tickets) setTickets(data.tickets);
-      if (data.activities) setActivities(data.activities);
-      if (data.technicians) setTechnicians(data.technicians);
-      if (data.customers) setCustomers(data.customers);
-      if (data.teams) setTeams(data.teams);
-      if (data.sites) setSites(data.sites);
+  const handleSystemImport = async (data: any) => {
+      // `data` is no longer a pre-merged payload — the actual merge now
+      // happens server-side (see SystemDataTools' executeImport, which
+      // calls POST /api/system/import). Once that write completes, this
+      // just reloads everything fresh from the database so the screen
+      // reflects what was genuinely saved, rather than trusting a client
+      // computed merge that previously never made it to Postgres at all.
+      await Promise.all([
+          loadTickets(), loadActivities(), loadCustomers(),
+          loadTeams(), loadSites(), loadUsers(),
+      ]);
   };
 
 const loadCustomers = async () => {
@@ -1053,7 +1071,13 @@ useEffect(() => {
       const isDesktop = window.innerWidth >= 768;
       return NAVIGATION_ITEMS.filter(item => {
           if (!item.roles.includes(currentUser.role)) return false;
-          // Hide mobile portals on desktop for non-Admin roles — Admin keeps access for troubleshooting
+          // Admin no longer needs Lead Portal / Tech Portal in the sidebar —
+          // these are working views for Team Leads / Field Engineers, not an
+          // admin troubleshooting tool. This only hides the menu entry; the
+          // views themselves are unaffected for Admin if reached another way,
+          // and completely unaffected for Team Lead / Field Engineer.
+          if (currentUser.role === Role.ADMIN && (item.id === 'lead_portal' || item.id === 'tech_portal')) return false;
+          // Hide mobile portals on desktop for non-Admin roles
           if (isDesktop && currentUser.role !== Role.ADMIN && (item.id === 'lead_portal' || item.id === 'tech_portal')) return false;
           return true;
       });
@@ -1653,16 +1677,6 @@ useEffect(() => {
                     }}
                     />
                 )}
-                {activeView === 'reports' && (
-                    <ReportsModule 
-                        tickets={tickets}
-                        activities={activities}
-                        technicians={technicians}
-                        sites={sites}
-                        customers={customers}
-                        onNavigate={handleGlobalNav}
-                    />
-                )}
                 {activeView === 'master_dashboard' && (
                     <MasterDashboard
                         tickets={tickets}
@@ -1697,6 +1711,9 @@ useEffect(() => {
                 )}
                 {activeView === 'whatsapp_monitor' && (
                     <WhatsAppMonitor />
+                )}
+                {activeView === 'audit_log' && (
+                    <AuditLog />
                 )}
 
                 {activeView === 'sales_requests' && (
