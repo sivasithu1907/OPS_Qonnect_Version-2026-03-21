@@ -309,6 +309,11 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       return tickets.filter(t => {
           // Only show resolved/carry-forwarded/cancelled tickets
           if (!REPORT_TICKET_STATUSES.includes(t.status)) return false;
+          // Carry-forward tickets are always included regardless of the
+          // selected date range — same reasoning as the Master Dashboard
+          // export: their original date may sit outside the window, but
+          // they still need to be visible on the report until resolved.
+          if (t.status === 'CARRY_FORWARD') return true;
           const dateField = (t.status === 'RESOLVED' && (t as any).completedAt) ? (t as any).completedAt : t.createdAt;
           const tDate = new Date(dateField).getTime();
           return tDate >= start.getTime() && tDate <= end.getTime();
@@ -325,6 +330,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       return activities.filter(a => {
           // Only show done/carry-forwarded/cancelled activities
           if (!REPORT_ACTIVITY_STATUSES.includes(a.status)) return false;
+          // Same as tickets above — carry-forward always shows.
+          if (a.status === 'CARRY_FORWARD') return true;
           const dateField = (a.status === 'DONE' && (a as any).completedAt) ? (a as any).completedAt : a.plannedDate;
           const aDate = new Date(dateField).getTime();
           return aDate >= start.getTime() && aDate <= end.getTime();
