@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import toast from './Toast';
+import api from '../services/api';
 import { Ticket, Activity, Technician, Customer, Team, Site, Role } from '../types';
 import { Database, Download, Upload, AlertTriangle, CheckCircle2, History, FileJson, ShieldAlert, Archive, Play, RefreshCw, X, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
@@ -14,14 +15,14 @@ interface SystemDataToolsProps {
     teams: Team[];
     sites: Site[];
   };
-  onImport: (newData: any) => void;
+  onImport: () => void | Promise<void>;
   currentUser: any;
 }
 
 interface ImportPreview {
     tickets: { create: number, update: number };
     activities: { create: number, update: number };
-    technicians: { create: number, update: number, skippedAdmin: number };
+    technicians: { create: number, update: number, skippedAdmin: number, skippedNew: number };
     customers: { create: number, update: number };
     teams: { create: number, update: number };
     sites: { create: number, update: number };
@@ -179,79 +180,74 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
   };
 
   const calculateTechDiff = (current: any[], incoming: any[] = []) => {
-      let create = 0;
+      // Matches the backend's actual import policy: existing staff get
+      // updated, Admins are always protected, and staff not already in the
+      // database are skipped entirely (no safe password to give a new
+      // account from an export, which never includes passwords).
       let update = 0;
+      let skippedNew = 0;
       let skippedAdmin = 0;
       
       incoming.forEach(item => {
           const existing = current.find(c => c.id === item.id);
-          if (existing) {
-              if (existing.systemRole === Role.ADMIN || item.systemRole === Role.ADMIN) {
-                  skippedAdmin++; // Protected
-              } else {
-                  update++;
-              }
+          if (!existing) {
+              skippedNew++;
+          } else if (existing.systemRole === Role.ADMIN || item.systemRole === Role.ADMIN) {
+              skippedAdmin++; // Protected
           } else {
-              create++;
+              update++;
           }
       });
-      return { create, update, skippedAdmin };
+      return { create: 0, update, skippedAdmin, skippedNew };
   };
 
-  const executeImport = () => {
+  const executeImport = async () => {
       if (!stagedData) return;
       setLoading(true);
 
       try {
-          // Merge Logic
-          const merged = {
-              tickets: mergeArrays(data.tickets, stagedData.tickets),
-              activities: mergeArrays(data.activities, stagedData.activities),
-              customers: mergeArrays(data.customers, stagedData.customers),
-              teams: mergeArrays(data.teams, stagedData.teams),
-              sites: mergeArrays(data.sites, stagedData.sites),
-              technicians: mergeTechnicians(data.technicians, stagedData.technicians)
-          };
+          if (dryRunMode) {
+              // Dry run = preview only. Nothing is sent to the server and
+              // nothing is written anywhere — this just confirms what WOULD
+              // happen if the same file were imported for real.
+              addLog('DRY_RUN', 'Dry run confirmed — no data was written.');
+              setImportStep('success');
+              return;
+          }
 
-          onImport(merged);
-          addLog('IMPORT', 'System data successfully merged and updated.');
+          // Real import — actually persists to the database via the backend.
+          // (Previously this only updated in-memory React state on this page,
+          // which silently vanished on the next refresh/poll since nothing
+          // was ever saved to Postgres.)
+          const res = await api.systemImport({
+              tickets: stagedData.tickets || [],
+              activities: stagedData.activities || [],
+              customers: stagedData.customers || [],
+              teams: stagedData.teams || [],
+              sites: stagedData.sites || [],
+              technicians: stagedData.technicians || [],
+          });
+
+          const r = res.result;
+          const summary = [
+              `Tickets +${r.tickets.created}/~${r.tickets.updated}`,
+              `Activities +${r.activities.created}/~${r.activities.updated}`,
+              `Customers +${r.customers.created}/~${r.customers.updated}`,
+              r.technicians.skippedNew > 0 ? `${r.technicians.skippedNew} new staff skipped (no password in export)` : null,
+          ].filter(Boolean).join(' · ');
+
+          addLog('IMPORT', `Import written to database. ${summary}`);
+          // Refresh the screen's own data from the database so what's shown
+          // matches what was actually saved, instead of trusting the local merge.
+          onImport();
           setImportStep('success');
       } catch (e) {
-          console.error("Merge failed", e);
-          addLog('IMPORT', 'Merge process failed during execution', 'FAILED');
-          toast.error('System merge failed. Check console for details.');
+          console.error("Import failed", e);
+          addLog('IMPORT', 'Import failed to save to the database', 'FAILED');
+          toast.error('Import failed. No changes were saved — please try again.');
       } finally {
           setLoading(false);
       }
-  };
-
-  const mergeArrays = (current: any[], incoming: any[] = []) => {
-      const merged = [...current];
-      incoming.forEach(item => {
-          const idx = merged.findIndex(m => m.id === item.id);
-          if (idx >= 0) {
-              merged[idx] = { ...merged[idx], ...item }; // Merge fields, prioritize incoming
-          } else {
-              merged.push(item);
-          }
-      });
-      return merged;
-  };
-
-  const mergeTechnicians = (current: Technician[], incoming: Technician[] = []) => {
-      const merged = [...current];
-      incoming.forEach(item => {
-          const idx = merged.findIndex(m => m.id === item.id);
-          if (idx >= 0) {
-              // Safety Check: Do not overwrite ADMINS
-              if (merged[idx].systemRole !== Role.ADMIN) {
-                  merged[idx] = { ...merged[idx], ...item };
-              }
-          } else {
-              merged.push(item);
-          }
-      });
-      return merged;
   };
 
   const resetImport = () => {
@@ -348,8 +344,11 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
 
                 {importStep === 'preview' && previewStats && (
                     <div className="flex-1 space-y-4">
-                        <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg flex items-center gap-2 text-xs text-amber-800">
-                            <ShieldAlert size={16} /> Review changes before confirming.
+                        <div className={`p-3 rounded-lg flex items-center gap-2 text-xs ${dryRunMode ? 'bg-amber-50 border border-amber-100 text-amber-800' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                            <ShieldAlert size={16} />
+                            {dryRunMode
+                                ? 'Preview only — nothing will be saved until Dry Run is turned off.'
+                                : 'This will write directly to the live database. Review carefully.'}
                         </div>
                         <div className="space-y-2 text-sm">
                             <div className="flex justify-between border-b pb-1">
@@ -361,18 +360,24 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
                                 <span className="font-mono text-slate-800">+{previewStats.activities.create} / ~{previewStats.activities.update}</span>
                             </div>
                             <div className="flex justify-between border-b pb-1">
-                                <span className="text-slate-500">Staff</span>
-                                <span className="font-mono text-slate-800">+{previewStats.technicians.create} / ~{previewStats.technicians.update}</span>
+                                <span className="text-slate-500">Staff (existing only)</span>
+                                <span className="font-mono text-slate-800">~{previewStats.technicians.update}</span>
                             </div>
                             {previewStats.technicians.skippedAdmin > 0 && (
                                 <div className="text-[10px] text-slate-400 text-right italic">
-                                    {previewStats.technicians.skippedAdmin} Admin records protected
+                                    {previewStats.technicians.skippedAdmin} Admin record{previewStats.technicians.skippedAdmin > 1 ? 's' : ''} protected
+                                </div>
+                            )}
+                            {previewStats.technicians.skippedNew > 0 && (
+                                <div className="text-[10px] text-slate-400 text-right italic">
+                                    {previewStats.technicians.skippedNew} new staff record{previewStats.technicians.skippedNew > 1 ? 's' : ''} skipped (exports never include passwords)
                                 </div>
                             )}
                         </div>
                         <div className="flex gap-2 pt-2">
-                            <button onClick={resetImport} className="flex-1 py-2 text-slate-500 font-bold bg-slate-100 rounded-lg hover:bg-slate-200">Cancel</button>
-                            <button onClick={executeImport} className="flex-1 py-2 text-white font-bold bg-emerald-600 rounded-lg hover:bg-emerald-700 shadow-lg shadow-emerald-900/20">
+                            <button onClick={resetImport} disabled={loading} className="flex-1 py-2 text-slate-500 font-bold bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50">Cancel</button>
+                            <button onClick={executeImport} disabled={loading} className="flex-1 py-2 text-white font-bold bg-emerald-600 rounded-lg hover:bg-emerald-700 shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center justify-center gap-2">
+                                {loading && <Loader2 size={14} className="animate-spin" />}
                                 {dryRunMode ? 'Confirm Dry Run' : 'Execute Import'}
                             </button>
                         </div>
@@ -384,8 +389,12 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
                         <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-3">
                             <CheckCircle2 size={24} />
                         </div>
-                        <h3 className="text-lg font-bold text-slate-800">Import Successful</h3>
-                        <p className="text-sm text-slate-500 mt-1 mb-4">System data has been merged.</p>
+                        <h3 className="text-lg font-bold text-slate-800">{dryRunMode ? 'Dry Run Complete' : 'Import Successful'}</h3>
+                        <p className="text-sm text-slate-500 mt-1 mb-4">
+                            {dryRunMode
+                                ? 'This was a preview only — nothing was saved. Turn off Dry Run to actually import.'
+                                : 'Data has been saved to the database.'}
+                        </p>
                         <button onClick={resetImport} className="text-sm font-bold text-slate-600 hover:underline">Start New Import</button>
                     </div>
                 )}
