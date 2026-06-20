@@ -47,6 +47,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   const [showExport, setShowExport] = useState(false);
   const [showCatDropdown, setShowCatDropdown] = useState(false);
   const [showActTypeDropdown, setShowActTypeDropdown] = useState(false);
+  // Charts panel is collapsed by default so the activity table gets nearly
+  // the full page on load — charts are one click away when actually wanted.
+  const [showCharts, setShowCharts] = useState(false);
 
   // Export state
   const [exportFormat, setExportFormat] = useState<'pdf' | 'excel'>('pdf');
@@ -81,9 +84,14 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     const monthAgo = new Date(now.getTime() - 30 * 86400000);
 
     const ticketJobs = tickets.map(t => {
-      // Use completedAt for RESOLVED, updatedAt for CARRY_FORWARD, createdAt otherwise
-      const workDate = (t.status === 'RESOLVED' && (t as any).completedAt) ? (t as any).completedAt
-        : (t.status === 'CARRY_FORWARD' && t.updatedAt) ? t.updatedAt : t.createdAt;
+      // The job's "date" is its own original/relevant date — completedAt once
+      // genuinely resolved, otherwise when it was created. Carry-forward no
+      // longer shifts this to "today" (updatedAt): doing that meant a ticket
+      // carried forward today would vanish from any view/export filtered to
+      // its real, original date range. Carry-forward jobs keep their
+      // original date and are tracked separately in carryForwardNote/
+      // nextPlannedAt, same as how they already display in the UI.
+      const workDate = (t.status === 'RESOLVED' && (t as any).completedAt) ? (t as any).completedAt : t.createdAt;
       return {
         id: t.id, kind: 'ticket' as const, reference: t.id,
         title: t.customerName || 'Unknown', subtitle: t.category,
@@ -99,8 +107,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
     const activityJobs = activities.map(a => {
       const cust = customers.find(c => c.id === a.customerId);
-      const workDate = (a.status === 'DONE' && (a as any).completedAt) ? (a as any).completedAt
-        : (a.status === 'CARRY_FORWARD' && a.updatedAt) ? a.updatedAt : (a.plannedDate || a.createdAt);
+      // Same reasoning as tickets above — carry-forward keeps its original
+      // planned date instead of jumping to today.
+      const workDate = (a.status === 'DONE' && (a as any).completedAt) ? (a as any).completedAt : (a.plannedDate || a.createdAt);
       return {
         id: a.id, kind: 'activity' as const, reference: a.reference,
         title: cust?.name || 'Unknown', subtitle: a.type,
@@ -125,10 +134,13 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
     let combined = [...ticketJobs, ...activityJobs];
 
-    // Date filter — Qatar week = Saturday to Thursday, cap at today for non-'all'
-    if (dateRange === 'today') combined = combined.filter(j => j.date.toDateString() === todayStr);
-    else if (dateRange === 'week') combined = combined.filter(j => j.date >= qatarWeekStart && j.date <= now);
-    else if (dateRange === 'month') combined = combined.filter(j => j.date >= monthAgo && j.date <= now);
+    // Date filter — Qatar week = Saturday to Thursday, cap at today for non-'all'.
+    // Carry-forward jobs are always kept regardless of the active date filter —
+    // they need to stay visible (and exportable) until someone actually
+    // reschedules or resolves them, no matter how old their original date is.
+    if (dateRange === 'today') combined = combined.filter(j => j.status === 'CARRY_FORWARD' || j.date.toDateString() === todayStr);
+    else if (dateRange === 'week') combined = combined.filter(j => j.status === 'CARRY_FORWARD' || (j.date >= qatarWeekStart && j.date <= now));
+    else if (dateRange === 'month') combined = combined.filter(j => j.status === 'CARRY_FORWARD' || (j.date >= monthAgo && j.date <= now));
 
     if (typeFilter === 'tickets') combined = combined.filter(j => j.kind === 'ticket');
     else if (typeFilter === 'activities') combined = combined.filter(j => j.kind === 'activity');
@@ -245,7 +257,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     
     const es = new Date(exportDateStart); es.setHours(0,0,0,0);
     const ee = new Date(exportDateEnd); ee.setHours(23,59,59,999);
-    data = data.filter(j => j.date >= es && j.date <= ee);
+    // Carry-forward jobs are always included in exports regardless of the
+    // chosen date range — their original date may fall outside the window,
+    // but they still need to show up on the report until rescheduled/resolved.
+    data = data.filter(j => j.status === 'CARRY_FORWARD' || (j.date >= es && j.date <= ee));
 
     const colMap: Record<string, { label: string, getValue: (j: any) => string }> = {
       date: { label: 'Date', getValue: j => j.dateLabel },
@@ -265,6 +280,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       }},
       description: { label: 'Description', getValue: j => (j.raw as any).description || (j.raw as any).notes || '' },
       odooRef: { label: 'Odoo Ref', getValue: j => (j.raw as any).odooLink || '' },
+      nextPlanned: { label: 'Next Planned', getValue: j => {
+        const next = (j.raw as any).nextPlannedAt;
+        return next ? new Date(next).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }) : '';
+      }},
     };
 
     const cols = exportColumns.map(id => colMap[id]).filter(Boolean);
@@ -349,6 +368,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     { id: 'salesLead', label: 'Sales Lead' }, { id: 'leadEngineer', label: 'Lead Engineer' },
     { id: 'technicalAssociate', label: 'Technical Associate' }, { id: 'reference', label: 'Reference' },
     { id: 'odooRef', label: 'Odoo Ref' }, { id: 'priority', label: 'Priority' },
+    { id: 'nextPlanned', label: 'Next Planned' },
   ];
 
   return (
@@ -371,8 +391,8 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           </button>
         </div>
 
-        {/* KPI Strip */}
-        <div className="grid grid-cols-6 gap-3 mb-4">
+        {/* KPI Strip — slightly more compact than before so it takes less vertical space */}
+        <div className="grid grid-cols-6 gap-2 mb-3">
           {[
             { label: 'Total', value: metrics.total, color: 'bg-slate-900 text-white', filter: 'ALL' },
             { label: 'Active', value: metrics.active, color: 'bg-blue-50 text-blue-700 border border-blue-200', filter: 'ACTIVE' },
@@ -382,49 +402,65 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
             { label: 'Cancelled', value: metrics.cancelled, color: 'bg-slate-50 text-slate-500 border border-slate-200', filter: 'CANCELLED' },
           ].map(kpi => (
             <button key={kpi.label} onClick={() => setStatusFilter(statusFilter === kpi.filter ? 'ALL' : kpi.filter)}
-              className={`p-3 rounded-xl text-center transition-all hover:shadow-md ${statusFilter === kpi.filter ? 'ring-2 ring-slate-900 shadow-md scale-[1.02]' : ''} ${kpi.color}`}>
-              <div className="text-xl font-black">{kpi.value}</div>
-              <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">{kpi.label}</div>
+              className={`p-2 rounded-lg text-center transition-all hover:shadow-md ${statusFilter === kpi.filter ? 'ring-2 ring-slate-900 shadow-md scale-[1.02]' : ''} ${kpi.color}`}>
+              <div className="text-base font-black leading-tight">{kpi.value}</div>
+              <div className="text-[9px] font-bold uppercase tracking-wider opacity-70">{kpi.label}</div>
             </button>
           ))}
         </div>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Status Distribution</h3>
-            <ResponsiveContainer width="100%" height={140}>
-              <PieChart><Pie data={statusPieData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2} dataKey="value">
-                {statusPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-              </Pie><RTooltip /></PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {statusPieData.map((d, i) => (
-                <span key={d.name} className="text-[8px] flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />{d.name} ({d.value})
-                </span>
-              ))}
+        {/* Charts & Analytics — collapsed by default so the activity table below
+            gets nearly the full page on load. Charts are a click away, not gone. */}
+        <div className="mb-3">
+          <button
+            onClick={() => setShowCharts(v => !v)}
+            className="w-full flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <ChevronDown size={14} className={`transition-transform ${showCharts ? 'rotate-0' : '-rotate-90'}`} />
+            <span>Charts &amp; analytics</span>
+            <span className="ml-auto text-[10px] font-medium text-slate-400 normal-case">
+              {showCharts ? 'tap to collapse' : 'tap to expand'}
+            </span>
+          </button>
+
+          {showCharts && (
+            <div className="grid grid-cols-3 gap-4 mt-3">
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Status Distribution</h3>
+                <ResponsiveContainer width="100%" height={140}>
+                  <PieChart><Pie data={statusPieData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2} dataKey="value">
+                    {statusPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie><RTooltip /></PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {statusPieData.map((d, i) => (
+                    <span key={d.name} className="text-[8px] flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />{d.name} ({d.value})
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Jobs by Engineer</h3>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={engineerBarData} layout="vertical" margin={{ left: 0, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 9 }} />
+                    <RTooltip /><Bar dataKey="activities" stackId="a" fill="#3b82f6" name="Activities" /><Bar dataKey="tickets" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Tickets" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">7-Day Velocity</h3>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={velocityData} margin={{ left: -10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 9 }} /><YAxis tick={{ fontSize: 9 }} />
+                    <RTooltip /><Bar dataKey="created" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Created" /><Bar dataKey="completed" fill="#10b981" radius={[4, 4, 0, 0]} name="Completed" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Jobs by Engineer</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={engineerBarData} layout="vertical" margin={{ left: 0, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 9 }} />
-                <RTooltip /><Bar dataKey="activities" stackId="a" fill="#3b82f6" name="Activities" /><Bar dataKey="tickets" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Tickets" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">7-Day Velocity</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={velocityData} margin={{ left: -10 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 9 }} /><YAxis tick={{ fontSize: 9 }} />
-                <RTooltip /><Bar dataKey="created" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Created" /><Bar dataKey="completed" fill="#10b981" radius={[4, 4, 0, 0]} name="Completed" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          )}
         </div>
 
         {/* Filters Row */}
@@ -693,6 +729,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                   <input type="date" value={exportDateStart} onChange={e => setExportDateStart(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
                   <input type="date" value={exportDateEnd} onChange={e => setExportDateEnd(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">Carry forward jobs are always included, regardless of date range.</p>
               </div>
               {/* Columns */}
               <div>
