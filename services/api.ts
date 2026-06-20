@@ -159,6 +159,23 @@ export const api = {
         logs: () => api.get('/api/whatsapp/logs'),
     },
 
+    // Audit Log (Admin only — server enforces this independently of the UI)
+    auditLogs: {
+        list: (params?: Record<string, string | number>) => {
+            const qs = params
+                ? '?' + Object.entries(params)
+                    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+                    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+                    .join('&')
+                : '';
+            return api.get(`/api/audit-logs${qs}`);
+        },
+    },
+
+    // System Data Import (Admin only — actually persists to the database,
+    // unlike the old client-only merge which silently discarded on refresh)
+    systemImport: (data: any) => api.post('/api/system/import', data),
+
     // Sales Appointment Requests
     salesRequests: {
         list:     ()           => api.get('/api/sales-appointment-requests'),
