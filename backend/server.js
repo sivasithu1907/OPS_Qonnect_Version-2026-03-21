@@ -158,6 +158,46 @@ async function notifyTeamLeads(message) {
   }
 }
 
+// ── Audit Log ────────────────────────────────────────────────────────────
+// Records who did what, on which record, and when. Called from write
+// endpoints (create/update/delete/status-change) across the app.
+// Deliberately fire-and-forget: a logging failure must never block or fail
+// the actual user-facing action, so errors are caught and only logged to
+// the console, never thrown.
+//
+// req         — the Express request (used to pull actor identity + IP)
+// action      — short verb, e.g. 'CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE'
+// entityType  — e.g. 'TICKET', 'ACTIVITY', 'CUSTOMER', 'USER', 'TEAM', 'SALES_REQUEST'
+// entityId    — the record's own ID, e.g. 'QNC-TK-000139'
+// entityLabel — human-readable label for the record, e.g. a customer name
+// details     — small JSON object with whatever changed (kept compact —
+//               this is a log, not a full snapshot of the record)
+// actorOverride — optional { id, name, role } for routes that run before the
+//               authenticate middleware (e.g. /api/login), where req.user
+//               doesn't exist yet.
+async function logAudit(req, { action, entityType, entityId, entityLabel, details, actorOverride }) {
+  try {
+    const actor = actorOverride || req.user || {};
+    await pool.query(
+      `INSERT INTO audit_logs (actor_id, actor_name, actor_role, action, entity_type, entity_id, entity_label, details, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        actor.id || null,
+        actor.name || actor.email || 'Unknown',
+        actor.role || null,
+        action,
+        entityType,
+        entityId || null,
+        entityLabel || null,
+        JSON.stringify(details || {}),
+        req.ip || null,
+      ]
+    );
+  } catch (e) {
+    console.error('Audit log write failed (non-fatal):', e.message);
+  }
+}
+
 const SALES_REDIRECT_MESSAGE =
   `Thank you for contacting Qonnect. This number is for after-sales support only.\n` +
   `For sales enquiries, kindly contact +974 3330 0319.\n` +
@@ -323,6 +363,17 @@ async function initDb() {
       id BIGSERIAL PRIMARY KEY
     );
   `);
+
+  // 3b. Ticket ID Sequence — atomic, server-only ticket numbering.
+  //     Tickets used to have their IDs generated on the client (localStorage counter),
+  //     which let two devices independently produce the same ID and collide.
+  //     This BIGSERIAL sequence guarantees every ticket ID is unique and assigned
+  //     by the server, the same pattern already used for customer IDs.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ticket_id_seq (
+      id BIGSERIAL PRIMARY KEY
+    );
+  `);
     
     // 4. Users/Technicians Table
     await pool.query(`
@@ -356,6 +407,30 @@ async function initDb() {
         current_site_id TEXT,
         workload_level TEXT DEFAULT 'LOW'
       );
+    `);
+
+    // 5b. Audit Logs Table — records who did what, on what record, and when.
+    //     Written by logAudit() helper, called from write endpoints below.
+    //     id is BIGSERIAL since logs are append-only and high-volume —
+    //     no need for a formatted string ID like other entities.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id BIGSERIAL PRIMARY KEY,
+        actor_id TEXT,
+        actor_name TEXT,
+        actor_role TEXT,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT,
+        entity_label TEXT,
+        details JSONB DEFAULT '{}',
+        ip_address TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_created    ON audit_logs(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_entity      ON audit_logs(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_actor       ON audit_logs(actor_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_action      ON audit_logs(action);
     `);
 
     // 6. Sites Table
@@ -584,6 +659,28 @@ await pool.query(`
     `);
     if (salesFix.rowCount > 0) {
         console.log(`✅ Fixed ${salesFix.rowCount} SALES-level user(s) missing system role`);
+    }
+
+    // ── Self-healing: seed ticket_id_seq past the highest existing ticket number ──
+    // On first run after this migration, existing tickets (e.g. QNC-TK-000139) already
+    // exist with numbers the sequence knows nothing about. Without this, the sequence
+    // would start at 1 and immediately collide with real tickets. This runs once —
+    // after the sequence has any rows, it manages its own state and this is a no-op.
+    const seqCheck = await pool.query(`SELECT COUNT(*) AS n FROM ticket_id_seq`);
+    if (Number(seqCheck.rows[0].n) === 0) {
+        const maxTicket = await pool.query(
+            `SELECT id FROM tickets WHERE id LIKE 'QNC-TK-%' ORDER BY id DESC LIMIT 1`
+        );
+        const lastNum = maxTicket.rows[0]?.id
+            ? parseInt(maxTicket.rows[0].id.replace('QNC-TK-', ''), 10) || 0
+            : 0;
+        if (lastNum > 0) {
+            await pool.query(
+                `SELECT setval(pg_get_serial_sequence('ticket_id_seq', 'id'), $1, false)`,
+                [lastNum + 1]
+            );
+            console.log(`✅ Seeded ticket_id_seq to start at ${lastNum + 1}`);
+        }
     }
 
     console.log("✅ DB initialized with Tickets and Customers");
@@ -1025,21 +1122,14 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
   try {
     let { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber } = req.body;
 
-    // Generate or fix ID if it would collide
-    if (id) {
-      const exists = await client.query("SELECT 1 FROM tickets WHERE id=$1", [id]);
-      if (exists.rows.length > 0) {
-        const maxResult = await client.query("SELECT id FROM tickets ORDER BY id DESC LIMIT 1");
-        const lastId = maxResult.rows[0]?.id || 'QNC-TK-000000';
-        const lastNum = parseInt(lastId.replace('QNC-TK-', ''), 10) || 0;
-        id = `QNC-TK-${String(lastNum + 1).padStart(6, '0')}`;
-      }
-    } else {
-      const maxResult = await client.query("SELECT id FROM tickets ORDER BY id DESC LIMIT 1");
-      const lastId = maxResult.rows[0]?.id || 'QNC-TK-000000';
-      const lastNum = parseInt(lastId.replace('QNC-TK-', ''), 10) || 0;
-      id = `QNC-TK-${String(lastNum + 1).padStart(6, '0')}`;
-    }
+    // Ticket IDs are always assigned by the server via an atomic Postgres
+    // sequence — any client-supplied id is ignored. This is the fix for the
+    // duplicate/overwritten-ticket bug: previously each device generated its
+    // own ID from a local counter, so two devices could independently land
+    // on the same ID (e.g. QNC-TK-000139) and collide. The sequence below
+    // can never hand out the same number twice, no matter how many devices
+    // are creating tickets at once.
+    id = await nextTicketId();
 
     await client.query('BEGIN');
 
@@ -1104,6 +1194,14 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
     await client.query('COMMIT');
 
     const ticket = mapTicket(result.rows[0]);
+
+    logAudit(req, {
+      action: 'CREATE',
+      entityType: 'TICKET',
+      entityId: id,
+      entityLabel: customerName,
+      details: { category, priority, status: req.body.status || 'NEW' },
+    });
 
     // ── Notification 1 (manual): Notify all Team Leads of new manually-created ticket ──
     try {
@@ -1220,8 +1318,15 @@ app.post("/api/tickets/:id/message", authenticate, writeRateLimit, async (req, r
 app.delete("/api/tickets/:id", authenticate, deleteRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
+    const existing = await pool.query("SELECT customer_name FROM tickets WHERE id=$1", [id]);
     const result = await pool.query("DELETE FROM tickets WHERE id=$1", [id]);
     if (result.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    logAudit(req, {
+      action: 'DELETE',
+      entityType: 'TICKET',
+      entityId: id,
+      entityLabel: existing.rows[0]?.customer_name || id,
+    });
     res.json({ ok: true });
   } catch (e) {
     console.error("Ticket deletion error:", e);
@@ -1311,6 +1416,14 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
             JOIN customers c ON t.customer_id = c.id
             WHERE t.id = $1
         `, [ticketId]);
+
+        logAudit(req, {
+            action: 'STATUS_CHANGE',
+            entityType: 'TICKET',
+            entityId: ticketId,
+            entityLabel: ticketData.rows[0]?.customer_name_from_db || ticketData.rows[0]?.customer_name || ticketId,
+            details: { from: prevStatus, to: status, carryForwardNote: carryForwardNote || undefined, nextPlannedAt: nextPlannedAt || undefined },
+        });
 
         if (ticketData.rows.length > 0) {
             const { customer_phone, customer_name_from_db, category, priority } = ticketData.rows[0];
@@ -1405,6 +1518,21 @@ async function nextCustomerId() {
     "INSERT INTO customer_id_seq DEFAULT VALUES RETURNING id"
   );
   return toCustomerId(Number(rows[0].id));
+}
+
+// Ticket IDs are always assigned here — the server is the single source of
+// truth. Any client-supplied ticket ID is ignored. This prevents two devices
+// from ever generating the same ticket number (the old localStorage-counter
+// bug), since the sequence lives in Postgres, not on any one device.
+function toTicketId(n) {
+  return `QNC-TK-${String(n).padStart(6, "0")}`;
+}
+
+async function nextTicketId() {
+  const { rows } = await pool.query(
+    "INSERT INTO ticket_id_seq DEFAULT VALUES RETURNING id"
+  );
+  return toTicketId(Number(rows[0].id));
 }
 
 // List customers (optional search: ?q=)
@@ -1507,6 +1635,13 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
     );
 
     const r = rows[0];
+    logAudit(req, {
+      action: 'CREATE',
+      entityType: 'CUSTOMER',
+      entityId: id,
+      entityLabel: r.name,
+      details: { phone: r.phone || undefined },
+    });
     // Return same shape as GET /api/customers so frontend can use immediately
     res.status(201).json({
       id: r.id,
@@ -1560,6 +1695,13 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
 
     if (!rows[0]) return res.status(404).json({ error: "Not found" });
     const r = rows[0];
+    logAudit(req, {
+      action: 'UPDATE',
+      entityType: 'CUSTOMER',
+      entityId: id,
+      entityLabel: r.name,
+      details: { fieldsUpdated: Object.keys(req.body || {}) },
+    });
     res.json({
       id: r.id, name: r.name, phone: r.phone || '',
       email: r.email || '', address: r.address || '',
@@ -1577,8 +1719,15 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
 app.delete("/api/customers/:id", authenticate, deleteRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
+    const existing = await pool.query(`SELECT name FROM customers WHERE id=$1`, [id]);
     const r = await pool.query(`DELETE FROM customers WHERE id=$1`, [id]);
     if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    logAudit(req, {
+      action: 'DELETE',
+      entityType: 'CUSTOMER',
+      entityId: id,
+      entityLabel: existing.rows[0]?.name || id,
+    });
     res.json({ ok: true });
   } catch (e) {
     console.error("customers delete error:", e);
@@ -1702,13 +1851,19 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
 
     const { rows } = await pool.query("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email.trim()]);
-    if (rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
+    if (rows.length === 0) {
+        logAudit(req, { action: 'LOGIN_FAILED', entityType: 'USER', entityLabel: email.trim(), actorOverride: { name: email.trim() } });
+        return res.status(401).json({ error: "Invalid credentials" });
+    }
 
     const user = rows[0];
     if (!user.password) return res.status(401).json({ error: "Account not configured. Contact admin." });
 
     const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) return res.status(401).json({ error: "Invalid credentials" });
+    if (!isValid) {
+        logAudit(req, { action: 'LOGIN_FAILED', entityType: 'USER', entityId: user.id, entityLabel: user.name, actorOverride: { id: user.id, name: user.name, role: user.role } });
+        return res.status(401).json({ error: "Invalid credentials" });
+    }
 
     // Block inactive users
     if (user.status === 'INACTIVE') return res.status(403).json({ error: "Account is inactive. Contact admin." });
@@ -1718,6 +1873,8 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: '12h' }
     );
+
+    logAudit(req, { action: 'LOGIN', entityType: 'USER', entityId: user.id, entityLabel: user.name, actorOverride: { id: user.id, name: user.name, role: user.role } });
 
     res.json({
         token,
@@ -1768,6 +1925,296 @@ app.get("/api/users", authenticate, async (req, res) => {
     }
 });
 
+// ── Audit Log ────────────────────────────────────────────────────────────
+// Admin only. Unlike most other routes in this file (which rely on the
+// frontend hiding nav items by role), this endpoint contains sensitive data
+// — login failures, password-change events, who deleted what — so it
+// enforces the role check server-side rather than trusting the client.
+app.get("/api/audit-logs", authenticate, async (req, res) => {
+    try {
+        if (req.user?.role !== 'ADMIN') {
+            return res.status(403).json({ error: "Admin access required" });
+        }
+
+        const { actorId, action, entityType, entityId, startDate, endDate, q } = req.query;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+        const conditions = [];
+        const params = [];
+
+        if (actorId) { params.push(actorId); conditions.push(`actor_id = $${params.length}`); }
+        if (action) { params.push(action); conditions.push(`action = $${params.length}`); }
+        if (entityType) { params.push(entityType); conditions.push(`entity_type = $${params.length}`); }
+        if (entityId) { params.push(entityId); conditions.push(`entity_id = $${params.length}`); }
+        if (startDate) { params.push(startDate); conditions.push(`created_at >= $${params.length}`); }
+        if (endDate) { params.push(endDate); conditions.push(`created_at <= $${params.length}`); }
+        if (q) {
+            params.push(`%${q}%`);
+            conditions.push(`(entity_label ILIKE $${params.length} OR actor_name ILIKE $${params.length} OR entity_id ILIKE $${params.length})`);
+        }
+
+        const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const countResult = await pool.query(`SELECT COUNT(*) AS total FROM audit_logs ${whereClause}`, params);
+        const total = Number(countResult.rows[0]?.total || 0);
+
+        params.push(limit);
+        params.push(offset);
+        const result = await pool.query(
+            `SELECT id, actor_id, actor_name, actor_role, action, entity_type, entity_id, entity_label, details, ip_address, created_at
+             FROM audit_logs ${whereClause}
+             ORDER BY created_at DESC
+             LIMIT $${params.length - 1} OFFSET $${params.length}`,
+            params
+        );
+
+        res.json({
+            total,
+            limit,
+            offset,
+            logs: result.rows.map(r => ({
+                id: r.id,
+                actorId: r.actor_id,
+                actorName: r.actor_name,
+                actorRole: r.actor_role,
+                action: r.action,
+                entityType: r.entity_type,
+                entityId: r.entity_id,
+                entityLabel: r.entity_label,
+                details: r.details || {},
+                ipAddress: r.ip_address,
+                createdAt: r.created_at,
+            })),
+        });
+    } catch (e) {
+        console.error("Audit log fetch error:", e);
+        res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+});
+
+// ── System Data Import ──────────────────────────────────────────────────
+// Admin only. This is the actual persistence layer behind the Data Export
+// Tool's "Import" feature. Previously, import only updated in-memory React
+// state on the page that ran it — nothing was written to the database, so
+// the very next page refresh (or background poll) silently discarded
+// everything that was "imported". This endpoint actually writes the data.
+//
+// Policy: update existing records, create new ones, NEVER delete anything
+// missing from the imported file (the safest option — an import can never
+// destroy data that isn't explicitly back in the file).
+//
+// Staff/users are a special case: exported backups never include
+// passwords (and never should). So for users: existing users get their
+// non-credential fields updated; users present in the import but not yet
+// in the database are skipped entirely, since there is no safe password
+// to give them. Admin accounts are never modified by import, regardless
+// of what the import file says about them.
+app.post("/api/system/import", authenticate, writeRateLimit, async (req, res) => {
+    if (req.user?.role !== 'ADMIN') {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const { tickets = [], activities = [], customers = [], teams = [], sites = [], technicians = [] } = req.body || {};
+    const result = {
+        tickets: { created: 0, updated: 0, failed: 0 },
+        activities: { created: 0, updated: 0, failed: 0 },
+        customers: { created: 0, updated: 0, failed: 0 },
+        teams: { created: 0, updated: 0, failed: 0 },
+        sites: { created: 0, updated: 0, failed: 0 },
+        technicians: { updated: 0, skippedNew: 0, skippedAdmin: 0, failed: 0 },
+    };
+
+    // ── Customers ──
+    for (const c of customers) {
+        if (!c?.id || !c?.name) { result.customers.failed++; continue; }
+        try {
+            const existing = await pool.query('SELECT id FROM customers WHERE id=$1', [c.id]);
+            await pool.query(
+                `INSERT INTO customers (id, name, phone, email, address, building_number, avatar, notes, is_active)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                 ON CONFLICT (id) DO UPDATE SET
+                   name = EXCLUDED.name, phone = EXCLUDED.phone, email = EXCLUDED.email,
+                   address = EXCLUDED.address, building_number = EXCLUDED.building_number,
+                   avatar = EXCLUDED.avatar, notes = EXCLUDED.notes, is_active = EXCLUDED.is_active`,
+                [c.id, c.name, c.phone || null, c.email || null, c.address || null, c.buildingNumber || null, c.avatar || null, c.notes || null, c.isActive !== false]
+            );
+            if (existing.rows.length > 0) result.customers.updated++; else result.customers.created++;
+        } catch (e) {
+            console.error('Import customer failed:', c.id, e.message);
+            result.customers.failed++;
+        }
+    }
+
+    // ── Teams ──
+    for (const t of teams) {
+        if (!t?.id || !t?.name) { result.teams.failed++; continue; }
+        try {
+            const existing = await pool.query('SELECT id FROM teams WHERE id=$1', [t.id]);
+            await pool.query(
+                `INSERT INTO teams (id, name, lead_id, member_ids, status, current_site_id, workload_level)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)
+                 ON CONFLICT (id) DO UPDATE SET
+                   name = EXCLUDED.name, lead_id = EXCLUDED.lead_id, member_ids = EXCLUDED.member_ids,
+                   status = EXCLUDED.status, current_site_id = EXCLUDED.current_site_id, workload_level = EXCLUDED.workload_level`,
+                [t.id, t.name, t.leadId || null, JSON.stringify(t.memberIds || []), t.status || 'AVAILABLE', t.currentSiteId || null, t.workloadLevel || 'LOW']
+            );
+            if (existing.rows.length > 0) result.teams.updated++; else result.teams.created++;
+        } catch (e) {
+            console.error('Import team failed:', t.id, e.message);
+            result.teams.failed++;
+        }
+    }
+
+    // ── Sites ──
+    for (const s of sites) {
+        if (!s?.id || !s?.name) { result.sites.failed++; continue; }
+        try {
+            const existing = await pool.query('SELECT id FROM sites WHERE id=$1', [s.id]);
+            await pool.query(
+                `INSERT INTO sites (id, name, client_name, location, priority, status, assigned_team_id)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)
+                 ON CONFLICT (id) DO UPDATE SET
+                   name = EXCLUDED.name, client_name = EXCLUDED.client_name, location = EXCLUDED.location,
+                   priority = EXCLUDED.priority, status = EXCLUDED.status, assigned_team_id = EXCLUDED.assigned_team_id`,
+                [s.id, s.name, s.clientName || null, s.location || null, s.priority || null, s.status || 'PLANNED', s.assignedTeamId || null]
+            );
+            if (existing.rows.length > 0) result.sites.updated++; else result.sites.created++;
+        } catch (e) {
+            console.error('Import site failed:', s.id, e.message);
+            result.sites.failed++;
+        }
+    }
+
+    // ── Tickets ──
+    // Note: ticket IDs from a legitimate Qonnect export are already
+    // server-assigned and unique, so they're trusted here (unlike the
+    // ticket-creation endpoint, which never trusts a client-supplied ID).
+    for (const t of tickets) {
+        if (!t?.id || !t?.customerId) { result.tickets.failed++; continue; }
+        try {
+            const existing = await pool.query('SELECT id FROM tickets WHERE id=$1', [t.id]);
+            await pool.query(
+                `INSERT INTO tickets (id, customer_id, customer_name, category, type, priority, status,
+                    location_url, house_number, ai_summary, assigned_tech_id, appointment_time, odoo_link,
+                    notes, phone_number, carry_forward_note, next_planned_at, messages,
+                    assignment_note, completion_note, cancellation_reason, last_escalated_at,
+                    started_at, completed_at, visit_history, created_at, updated_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+                    COALESCE($26, now()), now())
+                 ON CONFLICT (id) DO UPDATE SET
+                    customer_id = EXCLUDED.customer_id, customer_name = EXCLUDED.customer_name,
+                    category = EXCLUDED.category, type = EXCLUDED.type, priority = EXCLUDED.priority,
+                    status = EXCLUDED.status, location_url = EXCLUDED.location_url, house_number = EXCLUDED.house_number,
+                    ai_summary = EXCLUDED.ai_summary, assigned_tech_id = EXCLUDED.assigned_tech_id,
+                    appointment_time = EXCLUDED.appointment_time, odoo_link = EXCLUDED.odoo_link,
+                    notes = EXCLUDED.notes, phone_number = EXCLUDED.phone_number,
+                    carry_forward_note = EXCLUDED.carry_forward_note, next_planned_at = EXCLUDED.next_planned_at,
+                    messages = EXCLUDED.messages, assignment_note = EXCLUDED.assignment_note,
+                    completion_note = EXCLUDED.completion_note, cancellation_reason = EXCLUDED.cancellation_reason,
+                    last_escalated_at = EXCLUDED.last_escalated_at, started_at = EXCLUDED.started_at,
+                    completed_at = EXCLUDED.completed_at, visit_history = EXCLUDED.visit_history,
+                    updated_at = now()`,
+                [
+                    t.id, t.customerId, t.customerName || '', t.category || null, t.type || 'Under Warranty',
+                    t.priority || 'MEDIUM', t.status || 'NEW', t.locationUrl || null, t.houseNumber || null,
+                    t.ai_summary || null, t.assignedTechId || null, t.appointmentTime || null, t.odooLink || null,
+                    t.notes || null, t.phoneNumber || null, t.carryForwardNote || null, t.nextPlannedAt || null,
+                    JSON.stringify(t.messages || []), t.assignmentNote || null, t.completionNote || null,
+                    t.cancellationReason || null, t.lastEscalatedAt || null, t.startedAt || null,
+                    t.completedAt || null, JSON.stringify(t.visitHistory || []), t.createdAt || null
+                ]
+            );
+            if (existing.rows.length > 0) result.tickets.updated++; else result.tickets.created++;
+        } catch (e) {
+            console.error('Import ticket failed:', t.id, e.message);
+            result.tickets.failed++;
+        }
+    }
+
+    // ── Activities ──
+    // Most fields live in the `details` JSONB blob, same convention used by
+    // the activity PUT endpoint — merge onto any existing details rather
+    // than replacing wholesale, so nothing already in the DB is lost if the
+    // imported record happens to be missing a field the export normally includes.
+    for (const a of activities) {
+        if (!a?.id) { result.activities.failed++; continue; }
+        try {
+            const existing = await pool.query('SELECT id, details FROM activities WHERE id=$1', [a.id]);
+            const existingDetails = existing.rows[0]?.details || {};
+            const mergedDetails = {
+                ...existingDetails,
+                customerName: a.customerName, customerPhone: a.customerPhone,
+                serviceCategory: a.serviceCategory, durationUnit: a.durationUnit,
+                assistantTechIds: a.assistantTechIds || [], salesLeadId: a.salesLeadId, salesLeadName: a.salesLeadName,
+                locationUrl: a.locationUrl, houseNumber: a.houseNumber, escalationLevel: a.escalationLevel,
+                carryForwardNote: a.carryForwardNote, nextPlannedAt: a.nextPlannedAt, odooLink: a.odooLink,
+                freelancerDetails: a.freelancerDetails, freelancers: a.freelancers || [],
+                photos: a.photos || existingDetails.photos || [], completionNote: a.completionNote, remarks: a.remarks,
+                primaryEngineerId: a.primaryEngineerId || null, supportingEngineerIds: a.supportingEngineerIds || [],
+                currentVisitRemark: a.currentVisitRemark,
+            };
+            await pool.query(
+                `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, site_id,
+                    lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, COALESCE($16, now()), now())
+                 ON CONFLICT (id) DO UPDATE SET
+                    reference = EXCLUDED.reference, type = EXCLUDED.type, priority = EXCLUDED.priority,
+                    status = EXCLUDED.status, planned_date = EXCLUDED.planned_date, customer_id = EXCLUDED.customer_id,
+                    site_id = EXCLUDED.site_id, lead_tech_id = EXCLUDED.lead_tech_id, description = EXCLUDED.description,
+                    duration_hours = EXCLUDED.duration_hours, details = EXCLUDED.details,
+                    started_at = EXCLUDED.started_at, completed_at = EXCLUDED.completed_at,
+                    visit_history = EXCLUDED.visit_history, updated_at = now()`,
+                [
+                    a.id, a.reference || a.id, a.type || null, a.priority || 'MEDIUM', a.status || 'PLANNED',
+                    a.plannedDate || null, a.customerId || null, a.siteId || null, a.leadTechId || null,
+                    a.description || '', a.durationHours || 2, JSON.stringify(mergedDetails),
+                    a.startedAt || null, a.completedAt || null, JSON.stringify(a.visitHistory || []), a.createdAt || null
+                ]
+            );
+            if (existing.rows.length > 0) result.activities.updated++; else result.activities.created++;
+        } catch (e) {
+            console.error('Import activity failed:', a.id, e.message);
+            result.activities.failed++;
+        }
+    }
+
+    // ── Technicians / Staff ──
+    // Only updates EXISTING users — never creates new ones (no safe password
+    // to assign) and never touches Admin accounts, regardless of what the
+    // import file contains for them.
+    for (const tech of technicians) {
+        if (!tech?.id) { result.technicians.failed++; continue; }
+        try {
+            const existing = await pool.query('SELECT id, role FROM users WHERE id=$1', [tech.id]);
+            if (existing.rows.length === 0) { result.technicians.skippedNew++; continue; }
+            if (existing.rows[0].role === 'ADMIN' || tech.systemRole === 'ADMIN') { result.technicians.skippedAdmin++; continue; }
+            await pool.query(
+                `UPDATE users SET name = $1, phone = $2, job_role = $3, level = $4,
+                    status = $5, avatar = $6
+                 WHERE id = $7`,
+                [
+                    tech.name || null, tech.phone || null, tech.role || null, tech.level || null,
+                    (tech.isActive === false ? 'INACTIVE' : 'ACTIVE'), tech.avatar || null, tech.id
+                ]
+            );
+            result.technicians.updated++;
+        } catch (e) {
+            console.error('Import technician failed:', tech.id, e.message);
+            result.technicians.failed++;
+        }
+    }
+
+    logAudit(req, {
+        action: 'IMPORT',
+        entityType: 'SYSTEM',
+        entityLabel: 'Bulk data import',
+        details: result,
+    });
+
+    res.json({ ok: true, result });
+});
+
 // POST User (Create)
 app.post("/api/users", authenticate, writeRateLimit, async (req, res) => {
     try {
@@ -1785,6 +2232,13 @@ app.post("/api/users", authenticate, writeRateLimit, async (req, res) => {
              RETURNING id, name, email, role as "systemRole", status, phone, job_role, level`,
             [userId, name.trim(), email.trim(), hashedPass, finalRole, (status === 'AVAILABLE' ? 'ACTIVE' : (status || 'ACTIVE')), phone || null, job_role || null, level || null]
         );
+        logAudit(req, {
+            action: 'CREATE',
+            entityType: 'USER',
+            entityId: userId,
+            entityLabel: name,
+            details: { email, role: finalRole, level: level || undefined },
+        });
         res.status(201).json(rows[0]);
     } catch (e) {
         console.error("User create error:", e);
@@ -1830,6 +2284,16 @@ app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
         );
         if (!rows[0]) return res.status(404).json({ error: "User not found" });
         const r = rows[0];
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'USER',
+            entityId: id,
+            entityLabel: r.name,
+            details: {
+                fieldsUpdated: Object.keys(req.body).filter(k => k !== 'password'),
+                passwordChanged: !!password,
+            },
+        });
         res.json({
             ...r,
             isActive: r.status === 'ACTIVE',
@@ -1866,6 +2330,13 @@ app.put("/api/users/:id/password", authenticate, writeRateLimit, async (req, res
         const hashedPass = await bcrypt.hash(newPassword, 10);
         await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hashedPass, id]);
 
+        logAudit(req, {
+            action: 'PASSWORD_CHANGE',
+            entityType: 'USER',
+            entityId: id,
+            entityLabel: req.user?.name || id,
+        });
+
         res.json({ ok: true, message: "Password changed successfully" });
     } catch (e) {
         console.error("Change password error:", e);
@@ -1875,8 +2346,16 @@ app.put("/api/users/:id/password", authenticate, writeRateLimit, async (req, res
 
 app.delete("/api/users/:id", authenticate, deleteRateLimit, async (req, res) => {
     try {
+        const existing = await pool.query("SELECT name, email FROM users WHERE id = $1", [req.params.id]);
         const r = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
         if (r.rowCount === 0) return res.status(404).json({ error: "User not found" });
+        logAudit(req, {
+            action: 'DELETE',
+            entityType: 'USER',
+            entityId: req.params.id,
+            entityLabel: existing.rows[0]?.name || req.params.id,
+            details: { email: existing.rows[0]?.email || undefined },
+        });
         res.json({ ok: true });
     } catch (e) {
         console.error("User delete error:", e);
@@ -2034,6 +2513,13 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
             [id, reference || id, type, priority || 'MEDIUM', status || 'PLANNED', plannedDate, customerId || null, siteId || null, leadTechId || null, description || '', durationHours || 2, JSON.stringify(details || {}),
              details?.customerName || (customerId ? ((await pool.query('SELECT name FROM customers WHERE id=$1 LIMIT 1', [customerId]).catch(()=>({rows:[]}))).rows[0]?.name || '') : '')]
         );
+        logAudit(req, {
+            action: 'CREATE',
+            entityType: 'ACTIVITY',
+            entityId: id,
+            entityLabel: details?.customerName || id,
+            details: { type, status: status || 'PLANNED' },
+        });
         res.status(201).json({ok: true, id});
     } catch(e) { console.error('Activity creation error:', e.message, e.detail || ''); res.status(500).json({error: "Failed to create activity", detail: e.message}); }
 });
@@ -2113,6 +2599,13 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                 `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW() WHERE id=$11`,
                 [type, priority, current.rows[0].planned_date, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
             );
+            logAudit(req, {
+                action: 'STATUS_CHANGE',
+                entityType: 'ACTIVITY',
+                entityId: req.params.id,
+                entityLabel: mergedDetails.customerName || req.params.id,
+                details: { from: prevStatus, to: 'CARRY_FORWARD', carryForwardNote: visitRecord.carryForwardReason || undefined, nextPlannedAt: mergedDetails.nextPlannedAt || undefined },
+            });
             return res.json({ok: true, visitRecorded: true});
         }
 
@@ -2193,6 +2686,14 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
             allParams
         );
 
+        logAudit(req, {
+            action: prevStatus !== status ? 'STATUS_CHANGE' : 'UPDATE',
+            entityType: 'ACTIVITY',
+            entityId: req.params.id,
+            entityLabel: mergedDetails.customerName || req.params.id,
+            details: prevStatus !== status ? { from: prevStatus, to: status } : { fieldsUpdated: Object.keys(req.body) },
+        });
+
         // ── SAR Sync: if this activity was created from a Sales Appointment Request,
         // keep the SAR status in sync with activity progress ──────────────────────
         const salesRequestId = mergedDetails.salesRequestId || details.salesRequestId;
@@ -2222,7 +2723,14 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
 // DELETE Activity
 app.delete("/api/activities/:id", authenticate, deleteRateLimit, async (req, res) => {
     try {
+        const existing = await pool.query("SELECT customer_name FROM activities WHERE id=$1", [req.params.id]);
         await pool.query("DELETE FROM activities WHERE id=$1", [req.params.id]);
+        logAudit(req, {
+            action: 'DELETE',
+            entityType: 'ACTIVITY',
+            entityId: req.params.id,
+            entityLabel: existing.rows[0]?.customer_name || req.params.id,
+        });
         res.json({ok: true});
     } catch(e) { res.status(500).json({error: "Failed to delete activity"}); }
 });
