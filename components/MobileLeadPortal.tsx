@@ -578,7 +578,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           ...modalTicket,
           status: TicketStatus.CARRY_FORWARD,
           carryForwardNote: actionNote,
-          nextPlannedAt: nextDate,
           updatedAt: new Date().toISOString()
       });
       closeModal();
@@ -628,7 +627,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           ...modalTicket,
           status: TicketStatus.CARRY_FORWARD, 
           carryForwardNote: carryIssue ? `Reason: ${carryIssue}\nRemark: ${actionNote}` : actionNote,
-          nextPlannedAt: nextDate, 
           updatedAt: new Date().toISOString()
       } as any);
       closeModal();
@@ -3212,9 +3210,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             <button onClick={closeModal}><X size={20} className="text-slate-400"/></button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <input type="datetime-local" value={nextDate} onChange={e => setNextDate(e.target.value)} className={INPUT_STYLES} />
+                            {/* No date picker here on purpose — the team lead decides later when
+                                to re-schedule. Carry forward just records that the job is moving,
+                                with a reason; rescheduling happens as a separate step. */}
                             <textarea value={actionNote} onChange={e => setActionNote(e.target.value)} className={INPUT_STYLES} placeholder="Reason..." rows={3} />
-                            <button onClick={executeCarryForward} className="w-full py-3 bg-orange-500 text-white font-bold rounded-xl shadow-lg">Schedule Carry Forward</button>
+                            <button onClick={executeCarryForward} className="w-full py-3 bg-orange-500 text-white font-bold rounded-xl shadow-lg">Carry Forward</button>
                         </div>
                     </div>
                 </div>
@@ -3318,41 +3318,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     rows={3}
                                 />
                             </div>
-                            
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Next Visit <span className="text-red-500">*</span></label>
-                                <input
-                                    type="datetime-local"
-                                    value={nextDate ? (() => {
-                                        const d = new Date(nextDate);
-                                        const pad = (n: number) => String(n).padStart(2, '0');
-                                        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                                    })() : ''}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        if (val) {
-                                            const d = new Date(val);
-                                            if (!isNaN(d.getTime())) setNextDate(d.toISOString());
-                                        } else {
-                                            setNextDate('');
-                                        }
-                                    }}
-                                    min={new Date().toISOString().slice(0,16)}
-                                    className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-                                />
-                                {(!nextDate && carryIssue.trim()) && (
-                                    <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
-                                        <AlertTriangle size={10} /> Please select next visit date & time.
-                                    </p>
-                                )}
-                            </div>
+
+                            {/* No "Next Visit" date here on purpose — the team lead decides
+                                later when to re-schedule. Carry forward just flags the job as
+                                moved, with a reason; the new date is set as a separate step. */}
 
                             <button 
                                 onClick={executeJobCarry}
-                                disabled={!carryIssue.trim() || !nextDate}
+                                disabled={!carryIssue.trim()}
                                 className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed active:bg-emerald-600/20"
                             >
-                                Schedule Visit
+                                Carry Forward
                             </button>
                         </div>
                     </div>
@@ -3396,61 +3372,35 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     />
                 </div>
 
-                <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Next Visit <span className="text-red-500">*</span></label>
-                    <input
-                        type="datetime-local"
-                        value={nextDate ? (() => {
-                            const d = new Date(nextDate);
-                            const pad = (n: number) => String(n).padStart(2, '0');
-                            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                        })() : ''}
-                        onChange={e => {
-                            const val = e.target.value;
-                            if (val) {
-                                const d = new Date(val);
-                                if (!isNaN(d.getTime())) setNextDate(d.toISOString());
-                            } else {
-                                setNextDate('');
-                            }
-                        }}
-                        min={new Date().toISOString().slice(0,16)}
-                        className="w-full bg-[#F5F6F8] border border-[#E2E5EA] rounded-xl px-4 py-3.5 text-sm font-medium text-[#111827] outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-                    />
-                    {(!nextDate && carryIssue.trim()) && (
-                        <p className="text-[10px] text-red-500 mt-2 font-medium flex items-center gap-1">
-                            <AlertTriangle size={10} /> Please select next visit date & time.
-                        </p>
-                    )}
-                </div>
+                {/* No "Next Visit" date here on purpose — the team lead decides
+                    later when to re-schedule. Carry forward just flags the job as
+                    moved, with a reason; the new date is set as a separate step. */}
 
                 <button 
                     onClick={() => {
-                        if (!modalActivity || !onUpdateActivity || !nextDate) return;
+                        if (!modalActivity || !onUpdateActivity) return;
                         const a: any = modalActivity as any;
                         const cfNote = carryIssue ? `Reason: ${carryIssue}${actionNote ? '\nRemark: ' + actionNote : ''}` : actionNote;
                         
                         // Carry forward = ONE update to the SAME activity
-                        // Sets CARRY_FORWARD status + new planned date + records visit history
-                        // Does NOT create a duplicate, does NOT send a second update
+                        // Sets CARRY_FORWARD status and records visit history.
+                        // Does NOT create a duplicate, does NOT send a second update.
                         onUpdateActivity({
                             ...a,
                             status: 'CARRY_FORWARD',
                             // Do NOT send plannedDate — backend keeps the original visit date.
-                            // nextPlannedAt carries the future date for display only.
                             carryForwardNote: cfNote,
                             currentVisitRemark: actionNote || '',
-                            nextPlannedAt: nextDate,
                             updatedAt: new Date().toISOString()
                         });
                         
                         closeModal();
                         setViewActivity(null);
                     }}
-                    disabled={!carryIssue.trim() || !nextDate}
+                    disabled={!carryIssue.trim()}
                     className="w-full py-3 bg-emerald-600/10 border border-emerald-600/40 text-emerald-600 font-bold rounded-xl disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed active:bg-emerald-600/20"
                 >
-                    Schedule Visit
+                    Carry Forward
                 </button>
             </div>
         </div>
@@ -3683,9 +3633,21 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             ...a,
                             status: dispatchPrimaryId ? 'ON_MY_WAY' : a.status,
                             primaryEngineerId: dispatchPrimaryId || null,
-                            supportingEngineerIds: dispatchSupportIds.filter(id => id !== dispatchPrimaryId),
+                            // dispatchSupportIds mixes two distinct roles selected from the same
+                            // checkbox list — Technical Associates and Field Engineers/Team Leads.
+                            // Split by each person's actual level rather than sending the whole
+                            // list into both fields, otherwise everyone gets double-tagged as
+                            // both a Supporting Engineer and a Technical Associate.
+                            supportingEngineerIds: dispatchSupportIds.filter(id => {
+                                if (id === dispatchPrimaryId) return false;
+                                const t = technicians.find(tc => tc.id === id);
+                                return t?.level !== 'TECHNICAL_ASSOCIATE';
+                            }),
                             leadTechId: dispatchPrimaryId || null,
-                            assistantTechIds: dispatchSupportIds,
+                            assistantTechIds: dispatchSupportIds.filter(id => {
+                                const t = technicians.find(tc => tc.id === id);
+                                return t?.level === 'TECHNICAL_ASSOCIATE';
+                            }),
                             // Include any freelancers added/edited during dispatch
                             freelancers: dispatchFreelancers.filter((f: any) => f.name.trim()),
                             updatedAt: new Date().toISOString()
@@ -3852,8 +3814,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         onUpdateActivity({
                             ...ma,
                             primaryEngineerId: dispatchPrimaryId || ma.primaryEngineerId,
-                            assistantTechIds: dispatchSupportIds,
-                            supportingEngineerIds: dispatchSupportIds.filter((id: string) => id !== dispatchPrimaryId),
+                            // Same split as the initial dispatch — Technical Associates go to
+                            // assistantTechIds, Field Engineers/Team Leads go to supportingEngineerIds.
+                            assistantTechIds: dispatchSupportIds.filter((id: string) => {
+                                const t = technicians.find(tc => tc.id === id);
+                                return t?.level === 'TECHNICAL_ASSOCIATE';
+                            }),
+                            supportingEngineerIds: dispatchSupportIds.filter((id: string) => {
+                                if (id === dispatchPrimaryId) return false;
+                                const t = technicians.find(tc => tc.id === id);
+                                return t?.level !== 'TECHNICAL_ASSOCIATE';
+                            }),
                             leadTechId: ma.leadTechId || dispatchPrimaryId,
                             updatedAt: new Date().toISOString()
                         });
