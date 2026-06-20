@@ -1,5 +1,5 @@
 import { TicketStatus, Role, ActivityStatus } from './types';
-import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList, ShieldCheck } from 'lucide-react';
 
 export const APP_NAME = "Qonnect";
 
@@ -127,6 +127,13 @@ export const NAVIGATION_ITEMS = [
     id: 'whatsapp_monitor', 
     label: 'WhatsApp Monitor', 
     icon: <MessageCircle size={20} />, 
+    roles: [Role.ADMIN],
+    category: 'Admin'
+  },
+  { 
+    id: 'audit_log', 
+    label: 'Audit Log', 
+    icon: <ShieldCheck size={20} />, 
     roles: [Role.ADMIN],
     category: 'Admin'
   },
