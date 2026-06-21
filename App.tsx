@@ -392,6 +392,12 @@ const handleLogout = useCallback(() => {
                   customerId: updated.customerId || null,
                   customerName: updated.customerName || null,
                   phoneNumber: updated.phoneNumber || null,
+                  // Photos were previously never sent here at all, so a field
+                  // engineer's uploaded photo would show briefly in this screen's
+                  // own optimistic state, then vanish the moment loadTickets()
+                  // reloaded fresh data from the server — where it had never
+                  // actually been saved.
+                  photos: updated.photos || undefined,
               })
           });
           // Reload from DB to keep state fresh (mirrors handleUpdateActivity)
