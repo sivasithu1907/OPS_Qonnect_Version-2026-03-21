@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from './Toast';
+import api from '../services/api';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
 import { ChevronLeft, Search, X, XCircle, CalendarDays, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
@@ -87,6 +88,28 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const [photoJobType, setPhotoJobType] = useState<'ticket' | 'activity'>('activity');
   const [photoUploading, setPhotoUploading] = useState(false);
   const [showPhotoSourcePicker, setShowPhotoSourcePicker] = useState(false);
+  // Real photo data fetched on demand — list/prop data only ever carries a
+  // lightweight ['HAS_PHOTOS'] flag (no actual image bytes, to keep the app
+  // fast), so when a job's photo section is actually opened, the real photos
+  // are fetched just for that one job and cached here by job id.
+  const [loadedPhotos, setLoadedPhotos] = useState<Record<string, any[]>>({});
+  const [loadingPhotosForId, setLoadingPhotosForId] = useState<string | null>(null);
+
+  const fetchRealPhotos = async (jobId: string, jobType: 'ticket' | 'activity') => {
+      if (loadedPhotos[jobId] || loadingPhotosForId === jobId) return;
+      setLoadingPhotosForId(jobId);
+      try {
+          const photos = jobType === 'ticket'
+              ? await api.photos.forTicket(jobId)
+              : await api.photos.forActivity(jobId);
+          setLoadedPhotos(prev => ({ ...prev, [jobId]: photos }));
+      } catch (e) {
+          console.error('Failed to load photos for', jobId, e);
+      } finally {
+          setLoadingPhotosForId(null);
+      }
+  };
+
   const photoInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -100,7 +123,11 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
             (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED))
         .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || (t as any).updated_at || t.createdAt })),
       ...activities
-        .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) &&
+        .filter(a =>
+            (a.leadTechId === currentTechId ||
+             (a.assistantTechIds || []).includes(currentTechId) ||
+             (a as any).primaryEngineerId === currentTechId ||
+             ((a as any).supportingEngineerIds || []).includes(currentTechId)) &&
             (a.status === 'DONE' || a.status === 'CANCELLED' || a.status === 'CARRY_FORWARD'))
         // Use plannedDate as sortDate so activities appear on their original visit day in history
         .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.plannedDate || a.updatedAt || a.createdAt })),
@@ -118,7 +145,18 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           delayed: false
       })),
       ...activities
-        .filter(a => (a.leadTechId === currentTechId || (a.assistantTechIds || []).includes(currentTechId)) && a.status !== 'DONE' && a.status !== 'CANCELLED')
+        // Previously only checked leadTechId/assistantTechIds — a tech who was
+        // the actual primary engineer or a supporting engineer on a job (but
+        // not the planning-stage lead) never saw it in their own schedule at
+        // all. Same root cause as the Activity Planner / Operations Monitor
+        // fixes earlier — every "is this job mine" check needs to cover all
+        // four roles consistently.
+        .filter(a =>
+            (a.leadTechId === currentTechId ||
+             (a.assistantTechIds || []).includes(currentTechId) ||
+             (a as any).primaryEngineerId === currentTechId ||
+             ((a as any).supportingEngineerIds || []).includes(currentTechId)) &&
+            a.status !== 'DONE' && a.status !== 'CANCELLED')
         .map(a => ({
           type: 'activity' as const, 
           data: a, 
@@ -136,10 +174,22 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   const activeJobItem = myJobs.find(j => j.data.id === selectedJobId);
   const activeJob = activeJobItem?.data;
 
+  // When a job's detail view opens, fetch its real photo data on demand —
+  // the job object itself only ever carries a lightweight ['HAS_PHOTOS']
+  // flag, never the actual image bytes, until this fetch runs.
+  useEffect(() => {
+      if (!activeJobItem) return;
+      const hasPhotoFlag = ((activeJobItem.data as any).photos || []).length > 0;
+      if (hasPhotoFlag) {
+          fetchRealPhotos(activeJobItem.data.id, activeJobItem.type);
+      }
+  }, [activeJobItem?.data.id]);
+
   // ── Photo upload handler ──
   const handlePhotoClick = (jobId: string, jobType: 'ticket' | 'activity') => {
       setPhotoJobId(jobId);
       setPhotoJobType(jobType);
+      fetchRealPhotos(jobId, jobType);
       setShowPhotoSourcePicker(true);
   };
 
@@ -160,15 +210,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       if (!files || files.length === 0 || !photoJobId) return;
       setPhotoUploading(true);
       try {
-          // Get existing photos count
-          let existingPhotos: any[] = [];
-          if (photoJobType === 'activity') {
-              const act = activities.find(a => a.id === photoJobId);
-              existingPhotos = (act as any)?.photos || [];
-          } else {
-              const ticket = tickets.find(t => t.id === photoJobId);
-              existingPhotos = (ticket as any)?.photos || [];
-          }
+          // Use the real fetched photos, never the lite placeholder data from
+          // props — act.photos/ticket.photos from the list is just ['HAS_PHOTOS']
+          // or [], not real photo objects. Using that directly here would send
+          // the literal placeholder string into the saved array alongside real
+          // photos, corrupting it.
+          const existingPhotos: any[] = loadedPhotos[photoJobId] || [];
           
           const remaining = MAX_PHOTOS - existingPhotos.length;
           if (remaining <= 0) {
@@ -189,15 +236,20 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
               newPhotos.push({ url: base64, takenAt: new Date().toISOString(), name: file.name });
           }
 
+          const updatedPhotos = [...existingPhotos, ...newPhotos];
+          // Update the local cache immediately so the new photo is visible
+          // right away, without waiting for a refetch.
+          setLoadedPhotos(prev => ({ ...prev, [photoJobId]: updatedPhotos }));
+
           if (photoJobType === 'activity') {
               const act = activities.find(a => a.id === photoJobId);
               if (act && onUpdateActivity) {
-                  onUpdateActivity({ ...act, photos: [...existingPhotos, ...newPhotos] } as any);
+                  onUpdateActivity({ ...act, photos: updatedPhotos } as any);
               }
           } else {
               const ticket = tickets.find(t => t.id === photoJobId);
               if (ticket) {
-                  onUpdateTicket?.({ ...ticket, photos: [...existingPhotos, ...newPhotos] } as any);
+                  onUpdateTicket?.({ ...ticket, photos: updatedPhotos } as any);
               }
           }
           setPhotoUploading(false);
@@ -749,15 +801,26 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                 ))}
                                             </div>
                                         )}
-                                        {/* Photos */}
-                                        {(act as any).photos?.length > 0 && (
-                                            <div className="bg-white rounded-xl p-4 border border-slate-100">
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({(act as any).photos.length}/{MAX_PHOTOS})</div>
-                                                <div className="grid grid-cols-4 gap-2">{(act as any).photos.map((p: any, i: number) => (
-                                                    <img key={i} src={p.url || p} alt="" className="w-full aspect-square object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
-                                                ))}</div>
-                                            </div>
-                                        )}
+                                        {/* Photos — real photo data is fetched on demand (see fetchRealPhotos);
+                                            act.photos here is only ever [] or ['HAS_PHOTOS'], a lightweight flag */}
+                                        {(() => {
+                                            const hasPhotoFlag = ((act as any).photos || []).length > 0;
+                                            const realPhotos = loadedPhotos[act.id] || [];
+                                            const isLoadingThisJob = loadingPhotosForId === act.id;
+                                            if (!hasPhotoFlag && realPhotos.length === 0) return null;
+                                            return (
+                                                <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({realPhotos.length || '...'}/{MAX_PHOTOS})</div>
+                                                    {isLoadingThisJob && realPhotos.length === 0 ? (
+                                                        <div className="text-xs text-slate-400 py-4 text-center">Loading photos…</div>
+                                                    ) : (
+                                                        <div className="grid grid-cols-4 gap-2">{realPhotos.map((p: any, i: number) => (
+                                                            <img key={i} src={p.url || p} alt="" className="w-full aspect-square object-cover rounded-lg border border-slate-200 cursor-pointer" onClick={() => showPhotoLightbox(p.url || p)} />
+                                                        ))}</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                         {/* Action buttons */}
                                         {actStatus !== 'DONE' && actStatus !== 'CANCELLED' && (
                                             <div className="space-y-2 pt-2">
@@ -776,7 +839,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                 ) : actStatus === 'IN_PROGRESS' ? (
                                                     <>
                                                         <button onClick={() => handlePhotoClick(act.id, 'activity')} className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm flex items-center justify-center gap-2 border border-slate-200 active:bg-slate-200">
-                                                            <Camera size={14}/> Add Photo ({(act as any).photos?.length || 0}/{MAX_PHOTOS})
+                                                            <Camera size={14}/> Add Photo ({(loadedPhotos[act.id] || []).length}/{MAX_PHOTOS})
                                                         </button>
                                                         <button onClick={() => setCompletionStep(true)} className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
                                                             <CheckCircle2 size={16}/> Complete Job
