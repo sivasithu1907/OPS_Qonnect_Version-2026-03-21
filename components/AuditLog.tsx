@@ -26,7 +26,7 @@ const ACTION_OPTIONS = [
   'LOGIN', 'LOGIN_FAILED', 'PASSWORD_CHANGE', 'IMPORT',
 ];
 
-const ENTITY_OPTIONS = ['TICKET', 'ACTIVITY', 'CUSTOMER', 'USER', 'TEAM', 'SALES_REQUEST', 'SYSTEM'];
+const ENTITY_OPTIONS = ['TICKET', 'ACTIVITY', 'CUSTOMER', 'USER', 'TEAM', 'SALES_REQUEST', 'SYSTEM', 'RECURRING_SCHEDULE'];
 
 const ENTITY_ICON: Record<string, React.ReactNode> = {
   TICKET: <TicketIcon size={14} />,
@@ -36,6 +36,7 @@ const ENTITY_ICON: Record<string, React.ReactNode> = {
   TEAM: <Users size={14} />,
   SALES_REQUEST: <FileText size={14} />,
   SYSTEM: <ShieldCheck size={14} />,
+  RECURRING_SCHEDULE: <RefreshCw size={14} />,
 };
 
 const ACTION_STYLE: Record<string, string> = {
