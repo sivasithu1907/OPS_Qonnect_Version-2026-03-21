@@ -355,6 +355,9 @@ async function initDb() {
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
       ALTER TABLE tickets ADD COLUMN IF NOT EXISTS visit_history JSONB DEFAULT '[]';
+      -- Tickets never had photo support at all (no column, no save path) —
+      -- field engineers could "upload" a photo but it was never persisted.
+      ALTER TABLE tickets ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]';
     `);
 
     // 3. Customer ID Sequence
@@ -431,6 +434,27 @@ async function initDb() {
       CREATE INDEX IF NOT EXISTS idx_audit_entity      ON audit_logs(entity_type, entity_id);
       CREATE INDEX IF NOT EXISTS idx_audit_actor       ON audit_logs(actor_id);
       CREATE INDEX IF NOT EXISTS idx_audit_action      ON audit_logs(action);
+
+      -- 5c. Recurring Schedules (AMC contracts) — previously this whole feature
+      -- had a frontend but no backend at all: every create/pause/delete/process
+      -- call hit a route that didn't exist, so nothing was ever saved.
+      CREATE TABLE IF NOT EXISTS recurring_schedules (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT NOT NULL,
+        customer_name TEXT,
+        type TEXT NOT NULL,
+        category TEXT,
+        interval_type TEXT NOT NULL DEFAULT 'MONTHLY',
+        next_due_date DATE NOT NULL,
+        last_scheduled_date DATE,
+        preferred_time TEXT DEFAULT '09:00',
+        notes TEXT,
+        is_active BOOLEAN DEFAULT true,
+        created_by TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_recurring_due ON recurring_schedules(next_due_date) WHERE is_active = true;
     `);
 
     // 6. Sites Table
@@ -834,7 +858,11 @@ app.get('/api/tv-data', async (req, res) => {
 // ==============================
 
 // Helper: map DB snake_case ticket row → frontend camelCase
-function mapTicket(r) {
+// includeFullPhotos=true returns real photo data (used only by the
+// on-demand /full endpoint); otherwise photos is either [] or ['HAS_PHOTOS']
+// — same lightweight-flag convention already used for activities — so the
+// list endpoint never balloons with base64 image data for every ticket.
+function mapTicket(r, includeFullPhotos = false) {
   return {
     id: r.id,
     customerId: r.customer_id,
@@ -852,6 +880,9 @@ function mapTicket(r) {
     notes: r.notes || undefined,
     ai_summary: r.ai_summary || undefined,
     messages: Array.isArray(r.messages) ? r.messages : (r.messages ? JSON.parse(r.messages) : []),
+    photos: includeFullPhotos
+        ? (Array.isArray(r.photos) ? r.photos : [])
+        : (r.has_photos || (Array.isArray(r.photos) && r.photos.length > 0) ? ['HAS_PHOTOS'] : []),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     unreadCount: 0,
@@ -952,21 +983,35 @@ function mapActivity(r) {
 app.get("/api/mobile/lead", authenticate, async (req, res) => {
     try {
         const [ticketsR, activitiesR, techsR, customersR, teamsR, sitesR] = await Promise.all([
+            // Previously excluded RESOLVED/CANCELLED tickets entirely — meaning
+            // "My Jobs" swiping back to a past day could never show completed
+            // work, because it was never sent to the client at all. Now includes
+            // resolved/cancelled tickets from the last 30 days, same window as
+            // everything else here.
             pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
                 location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
                 odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
                 completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
-                visit_history, created_at, updated_at FROM tickets WHERE status NOT IN ('RESOLVED','CANCELLED') ORDER BY updated_at DESC LIMIT 100`),
+                visit_history, created_at, updated_at FROM tickets
+                WHERE status NOT IN ('RESOLVED','CANCELLED') OR updated_at > NOW() - INTERVAL '30 days'
+                ORDER BY updated_at DESC LIMIT 200`),
+            // Previously: (a) only matched lead_tech_id/assistantTechIds/primaryEngineerId —
+            // supportingEngineerIds was missing entirely, so a supporting engineer's
+            // own completed/carried-forward jobs never even left the database for
+            // them; (b) the DONE cutoff was 7 days, far too short for "swipe back
+            // to see history" to mean anything. Both fixed below.
             pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' AND (status NOT IN ('CANCELLED') AND (status != 'DONE' OR completed_at > NOW() - INTERVAL '7 days')) ORDER BY planned_date DESC LIMIT 150`),
+                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities
+                WHERE type != 'WHATSAPP_SUPPORT' AND (status NOT IN ('CANCELLED') AND (status != 'DONE' OR completed_at > NOW() - INTERVAL '30 days'))
+                ORDER BY planned_date DESC LIMIT 250`),
             pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
             pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200"),
             pool.query("SELECT * FROM teams ORDER BY name"),
             pool.query("SELECT * FROM sites ORDER BY name")
         ]);
         res.json({
-            tickets: ticketsR.rows.map(mapTicket),
+            tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivityLite),
             technicians: techsR.rows.map(r => ({
                 id: r.id, name: r.name, email: r.email, systemRole: r.systemRole, 
@@ -993,15 +1038,21 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
                 location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
                 odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
                 completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
-                visit_history, created_at, updated_at FROM tickets WHERE assigned_tech_id = $1 ORDER BY updated_at DESC LIMIT 50`, [userId]),
-            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE (lead_tech_id = $1 OR details->>'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1) 
+                visit_history, created_at, updated_at FROM tickets WHERE assigned_tech_id = $1 ORDER BY updated_at DESC LIMIT 100`, [userId]),
+            // Previously missing supportingEngineerIds from this match entirely —
+            // a tech who was a supporting engineer (not the planning-stage lead,
+            // not a TA, not even primary) on a job never had that job sent to
+            // their own portal at all, active or completed. This is the same gap
+            // already fixed in the Activity Planner / Operations Monitor / the
+            // frontend completedJobs filter — now consistent here too.
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE (lead_tech_id = $1 OR details->>'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1 OR details->'supportingEngineerIds' ? $1)
                         AND type != 'WHATSAPP_SUPPORT'
                         AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
-                        ORDER BY planned_date DESC LIMIT 150`, [userId]),
+                        ORDER BY planned_date DESC LIMIT 200`, [userId]),
             pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200")
         ]);
         res.json({
-            tickets: ticketsR.rows.map(mapTicket),
+            tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivityLite),
             customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
         });
@@ -1029,7 +1080,7 @@ app.get("/api/refresh-lite", authenticate, async (req, res) => {
         res.json({
             hasChanges,
             timestamp: new Date().toISOString(),
-            tickets: ticketsR.rows.map(mapTicket),
+            tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivity),
             hasChanges: ticketsR.rows.length > 0 || activitiesR.rows.length > 0,
             timestamp: new Date().toISOString()
@@ -1058,7 +1109,7 @@ app.get("/api/init", authenticate, async (req, res) => {
             pool.query("SELECT * FROM sites ORDER BY name")
         ]);
         res.json({
-            tickets: ticketsR.rows.map(mapTicket),
+            tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivityLite),
             users: usersR.rows.map(r => ({
                 id: r.id, name: r.name, email: r.email,
@@ -1092,7 +1143,7 @@ app.get("/api/refresh", authenticate, async (req, res) => {
             pool.query(`SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY name LIMIT 200`)
         ]);
         res.json({
-            tickets: ticketsR.rows.map(mapTicket),
+            tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivityLite),
             customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
         });
@@ -1104,15 +1155,34 @@ app.get("/api/refresh", authenticate, async (req, res) => {
 
 app.get("/api/tickets", authenticate, async (req, res) => {
   try {
+    // Note: photos column is deliberately excluded here — same reasoning as
+    // activities' lite list endpoint. jsonb_array_length flags whether photos
+    // exist without pulling the actual (large, base64) image data into every
+    // ticket list response.
     const result = await pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
                 location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
                 odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
                 completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
-                visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 200`);
-    res.json(result.rows.map(mapTicket));
+                visit_history, created_at, updated_at,
+                CASE WHEN jsonb_array_length(COALESCE(photos, '[]'::jsonb)) > 0 THEN true ELSE false END AS has_photos
+                FROM tickets ORDER BY updated_at DESC LIMIT 200`);
+    res.json(result.rows.map(r => mapTicket(r)));
   } catch (e) {
     console.error("Tickets fetch error:", e);
     res.status(500).json({ error: "Failed to fetch tickets" });
+  }
+});
+
+// Full ticket detail, including real photo data — fetched on demand only
+// when a person actually opens a job's photos, never as part of the list.
+app.get("/api/tickets/:id/full", authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM tickets WHERE id = $1", [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: "Not found" });
+    res.json(mapTicket(rows[0], true));
+  } catch (e) {
+    console.error("Ticket full fetch error:", e);
+    res.status(500).json({ error: "Failed to fetch ticket" });
   }
 });
 
@@ -1244,11 +1314,9 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
                 notes            = COALESCE($8,  notes),
                 customer_id      = COALESCE($9,  customer_id),
                 customer_name    = COALESCE($10, customer_name),
-                messages         = CASE WHEN $12::text IS NOT NULL
-                                        THEN COALESCE(messages,'[]'::jsonb) || $12::jsonb
-                                        ELSE messages END,
-                type             = COALESCE($13, type),
-                phone_number     = COALESCE($14, phone_number),
+                type             = COALESCE($12, type),
+                phone_number     = COALESCE($13, phone_number),
+                photos           = COALESCE($14::jsonb, photos),
                 updated_at       = NOW()
              WHERE id = $11`,
             [
@@ -1258,8 +1326,8 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
                 odooLink || null, notes || null,
                 customerId || null, customerName || null,
                 id,
-                photos ? JSON.stringify(photos) : null,
-                type || null, phoneNumber || null
+                type || null, phoneNumber || null,
+                photos ? JSON.stringify(photos) : null
             ]
         );
         res.json({ ok: true });
@@ -1353,7 +1421,19 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
         if (adminStartedAt) {
             extraTicketParams.push(new Date(adminStartedAt).toISOString());
             startedAtClause = `, started_at = $${7 + extraTicketParams.length}`;
-        } else if (status === 'IN_PROGRESS' && prevStatus !== 'IN_PROGRESS' && !alreadyStarted) {
+        } else if (
+            ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(status) &&
+            !['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(prevStatus)
+        ) {
+            // A ticket entering active execution for the first time (from NEW,
+            // ASSIGNED, PLANNED, or CARRY_FORWARD) gets a fresh started_at now.
+            // Previously this only fired for IN_PROGRESS specifically, and only
+            // if started_at had never been set at all (`!alreadyStarted`) — so a
+            // ticket that had been carried forward kept its OLD started_at from
+            // before the carry-forward forever, which is why Operations Monitor
+            // showed a stale/early start time on the timeline for tickets that
+            // had actually just restarted. Carry-forward now also clears
+            // started_at (below) so this can never be blocked by stale data.
             startedAtClause = ", started_at = NOW()";
         }
 
@@ -1391,6 +1471,10 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
             const updatedHistory = [...existingHistory, visitRecord];
             visitHistoryParams.push(JSON.stringify(updatedHistory));
             visitHistoryClause = `, visit_history = $${7 + extraTicketParams.length + visitHistoryParams.length}::jsonb`;
+            // The old started_at is now safely captured in visit_history above —
+            // clear the live column so the next restart gets a clean, fresh
+            // started_at instead of being blocked by this stale value.
+            startedAtClause = ", started_at = NULL";
         }
 
         await pool.query(
@@ -1533,6 +1617,17 @@ async function nextTicketId() {
     "INSERT INTO ticket_id_seq DEFAULT VALUES RETURNING id"
   );
   return toTicketId(Number(rows[0].id));
+}
+
+// Shared by POST /api/activities and the AMC recurring-schedule processor —
+// keeps both call sites generating IDs the same way instead of duplicating
+// the SQL. (Activities don't yet have an atomic BIGSERIAL sequence like
+// tickets do — this is the existing MAX()+1 pattern, just factored out.)
+async function nextActivityId() {
+  const maxResult = await pool.query("SELECT id FROM activities ORDER BY id DESC LIMIT 1");
+  const lastId = maxResult.rows[0]?.id || 'QNC-ACT-000000';
+  const lastNum = parseInt(lastId.replace('QNC-ACT-', ''), 10) || 0;
+  return `QNC-ACT-${String(lastNum + 1).padStart(6, '0')}`;
 }
 
 // List customers (optional search: ?q=)
@@ -2215,6 +2310,200 @@ app.post("/api/system/import", authenticate, writeRateLimit, async (req, res) =>
     res.json({ ok: true, result });
 });
 
+// ── Recurring Schedules (AMC contracts) ────────────────────────────────────
+// Previously this entire feature had a frontend but no backend at all —
+// every create/pause/resume/delete/process call hit a route that returned
+// 404, so nothing was ever saved and the list always reset back to empty.
+
+// List all recurring schedules, most overdue first
+app.get("/api/recurring-schedules", authenticate, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT * FROM recurring_schedules ORDER BY next_due_date ASC, created_at DESC`
+        );
+        res.json(rows.map(r => ({
+            id: r.id,
+            customer_id: r.customer_id,
+            customer_name: r.customer_name,
+            type: r.type,
+            category: r.category,
+            interval_type: r.interval_type,
+            next_due_date: r.next_due_date,
+            last_scheduled_date: r.last_scheduled_date,
+            preferred_time: r.preferred_time,
+            notes: r.notes,
+            is_active: r.is_active,
+        })));
+    } catch (e) {
+        console.error('Recurring schedules list error:', e);
+        res.status(500).json({ error: "Failed to load recurring schedules" });
+    }
+});
+
+// Create a new AMC contract
+app.post("/api/recurring-schedules", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        const { customerId, customerName, category, intervalType, nextDueDate, preferredTime, notes } = req.body || {};
+        if (!customerId || !nextDueDate) {
+            return res.status(400).json({ error: "customerId and nextDueDate are required" });
+        }
+        const id = `AMC-${Date.now()}`;
+        const custRow = await pool.query('SELECT name FROM customers WHERE id=$1', [customerId]);
+        const resolvedName = customerName || custRow.rows[0]?.name || '';
+
+        await pool.query(
+            `INSERT INTO recurring_schedules (id, customer_id, customer_name, type, category, interval_type, next_due_date, preferred_time, notes, is_active, created_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10)`,
+            [id, customerId, resolvedName, category || 'Maintenance', category || null,
+             intervalType || 'MONTHLY', nextDueDate, preferredTime || '09:00', notes || null, req.user?.id || null]
+        );
+
+        logAudit(req, {
+            action: 'CREATE',
+            entityType: 'RECURRING_SCHEDULE',
+            entityId: id,
+            entityLabel: resolvedName,
+            details: { intervalType: intervalType || 'MONTHLY', nextDueDate },
+        });
+
+        res.status(201).json({ ok: true, id });
+    } catch (e) {
+        console.error('Recurring schedule create error:', e);
+        res.status(500).json({ error: "Failed to create recurring schedule" });
+    }
+});
+
+// Pause/resume a schedule, or edit its fields
+app.put("/api/recurring-schedules/:id", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        const { isActive, nextDueDate, intervalType, preferredTime, notes } = req.body || {};
+        const { rows } = await pool.query(
+            `UPDATE recurring_schedules SET
+                is_active = COALESCE($1, is_active),
+                next_due_date = COALESCE($2, next_due_date),
+                interval_type = COALESCE($3, interval_type),
+                preferred_time = COALESCE($4, preferred_time),
+                notes = COALESCE($5, notes),
+                updated_at = now()
+             WHERE id = $6
+             RETURNING *`,
+            [isActive, nextDueDate || null, intervalType || null, preferredTime || null, notes ?? null, req.params.id]
+        );
+        if (!rows[0]) return res.status(404).json({ error: "Schedule not found" });
+
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'RECURRING_SCHEDULE',
+            entityId: req.params.id,
+            entityLabel: rows[0].customer_name,
+            details: { isActive: rows[0].is_active },
+        });
+
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('Recurring schedule update error:', e);
+        res.status(500).json({ error: "Failed to update recurring schedule" });
+    }
+});
+
+// Delete a schedule
+app.delete("/api/recurring-schedules/:id", authenticate, deleteRateLimit, async (req, res) => {
+    try {
+        const existing = await pool.query('SELECT customer_name FROM recurring_schedules WHERE id=$1', [req.params.id]);
+        const r = await pool.query(`DELETE FROM recurring_schedules WHERE id = $1`, [req.params.id]);
+        if (r.rowCount === 0) return res.status(404).json({ error: "Schedule not found" });
+
+        logAudit(req, {
+            action: 'DELETE',
+            entityType: 'RECURRING_SCHEDULE',
+            entityId: req.params.id,
+            entityLabel: existing.rows[0]?.customer_name || req.params.id,
+        });
+
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('Recurring schedule delete error:', e);
+        res.status(500).json({ error: "Failed to delete recurring schedule" });
+    }
+});
+
+// Advance a schedule's next_due_date forward by one interval from a given date
+function advanceInterval(fromDate, intervalType) {
+    const d = new Date(fromDate);
+    switch (intervalType) {
+        case 'MONTHLY': d.setMonth(d.getMonth() + 1); break;
+        case 'QUARTERLY': d.setMonth(d.getMonth() + 3); break;
+        case 'BIANNUAL': d.setMonth(d.getMonth() + 6); break;
+        case 'ANNUAL': d.setFullYear(d.getFullYear() + 1); break;
+        default: d.setMonth(d.getMonth() + 1);
+    }
+    return d;
+}
+
+// Process all schedules that are due today or earlier: for each one, create
+// a real Activity (so it shows up in Activity Planner / Operations Monitor /
+// everyone's calendar exactly like a manually-created job), notify Team
+// Leads on WhatsApp, then roll the schedule forward to its next interval.
+// Can be called manually ("Process Due Now" button) or wired to a daily cron.
+app.post("/api/recurring-schedules/process", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const { rows: due } = await pool.query(
+            `SELECT * FROM recurring_schedules WHERE is_active = true AND next_due_date <= $1`,
+            [today.toISOString().slice(0, 10)]
+        );
+
+        const created = [];
+        for (const s of due) {
+            try {
+                const activityId = await nextActivityId();
+                const plannedDate = new Date(s.next_due_date);
+                const [hh, mm] = (s.preferred_time || '09:00').split(':');
+                plannedDate.setHours(parseInt(hh, 10) || 9, parseInt(mm, 10) || 0, 0, 0);
+
+                await pool.query(
+                    `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, description, duration_hours, details, customer_name)
+                     VALUES ($1,$2,$3,$4,'PLANNED',$5,$6,$7,$8,$9,$10)`,
+                    [
+                        activityId, activityId, s.type || 'Maintenance', 'MEDIUM', plannedDate,
+                        s.customer_id, s.notes || `AMC ${s.interval_type} visit`, 2,
+                        JSON.stringify({ serviceCategory: s.category, amcScheduleId: s.id, customerName: s.customer_name }),
+                        s.customer_name,
+                    ]
+                );
+
+                const nextDue = advanceInterval(s.next_due_date, s.interval_type);
+                await pool.query(
+                    `UPDATE recurring_schedules SET last_scheduled_date = $1, next_due_date = $2, updated_at = now() WHERE id = $3`,
+                    [s.next_due_date, nextDue.toISOString().slice(0, 10), s.id]
+                );
+
+                logAudit(req, {
+                    action: 'CREATE',
+                    entityType: 'ACTIVITY',
+                    entityId: activityId,
+                    entityLabel: s.customer_name,
+                    details: { source: 'AMC_SCHEDULE', scheduleId: s.id, type: s.type },
+                });
+
+                created.push({ activityId, customerName: s.customer_name, scheduleId: s.id });
+            } catch (e) {
+                console.error('Failed to process recurring schedule', s.id, e.message);
+            }
+        }
+
+        if (created.length > 0) {
+            const lines = created.map(c => `• ${c.customerName} — ${c.activityId}`).join('\n');
+            await notifyTeamLeads(`*AMC: ${created.length} scheduled visit${created.length > 1 ? 's' : ''} created*\n${lines}`);
+        }
+
+        res.json({ ok: true, created: created.length, activities: created });
+    } catch (e) {
+        console.error('Recurring schedule process error:', e);
+        res.status(500).json({ error: "Failed to process recurring schedules" });
+    }
+});
+
 // POST User (Create)
 app.post("/api/users", authenticate, writeRateLimit, async (req, res) => {
     try {
@@ -2499,13 +2788,8 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
         // Server always generates the canonical ID — never trust client-provided IDs.
         // This prevents temp/optimistic client IDs from leaking into the database
         // and eliminates race conditions when the user acts before the sync completes.
-        {
-            const maxResult = await pool.query("SELECT id FROM activities ORDER BY id DESC LIMIT 1");
-            const lastId = maxResult.rows[0]?.id || 'QNC-ACT-000000';
-            const lastNum = parseInt(lastId.replace('QNC-ACT-', ''), 10) || 0;
-            id = `QNC-ACT-${String(lastNum + 1).padStart(6, '0')}`;
-            reference = id;
-        }
+        id = await nextActivityId();
+        reference = id;
         
         await pool.query(
             `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, site_id, lead_tech_id, description, duration_hours, details, customer_name)
@@ -2596,7 +2880,7 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                 mergedDetails.nextPlannedAt = details.nextPlannedAt;
             }
             await pool.query(
-                `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW() WHERE id=$11`,
+                `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW(), started_at=NULL WHERE id=$11`,
                 [type, priority, current.rows[0].planned_date, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
             );
             logAudit(req, {
@@ -2624,7 +2908,19 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
         if (adminStartedAt) {
             extraParams.push(new Date(adminStartedAt).toISOString());
             extraClauses += `, started_at = $${baseParams.length + extraParams.length}`;
-        } else if (status === 'IN_PROGRESS' && ['PLANNED','CARRY_FORWARD','ARRIVED','ON_MY_WAY'].includes(prevStatus)) {
+        } else if (
+            ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(status) &&
+            !['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(prevStatus)
+        ) {
+            // A job entering active execution for the first time (from PLANNED or
+            // CARRY_FORWARD) gets a fresh started_at right now. Previously this
+            // only fired when status became IN_PROGRESS specifically — so a job
+            // that went CARRY_FORWARD → ON_MY_WAY → ARRIVED kept its OLD started_at
+            // from before the carry-forward all the way through those two states,
+            // which is why the Operations Monitor timeline showed a stale start
+            // time (or fell back to a hardcoded 08:00) until it finally reached
+            // IN_PROGRESS. Resetting on the first active-state transition means
+            // the displayed start time is always the real, current one.
             extraClauses += ', started_at = NOW()';
         }
 
