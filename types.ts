@@ -109,6 +109,12 @@ export interface Ticket {
   carryForwardNote?: string;
   cancellationReason?: string;
   nextPlannedAt?: string; // ISO String for Carry Forward
+
+  // Photos uploaded by the field engineer as proof of work. In list
+  // responses this is either [] or ['HAS_PHOTOS'] (a lightweight flag, real
+  // image data is fetched on demand via GET /api/tickets/:id/full) — only
+  // the full-detail response contains actual photo objects ({url, takenAt, name}).
+  photos?: Array<{ url: string; takenAt?: string; name?: string } | string>;
 }
 
 export interface Customer {
