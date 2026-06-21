@@ -275,7 +275,15 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           )
           .map(t => ({ kind: 'ticket' as const, data: t, sortDate: t.updatedAt || t.createdAt }));
       const doneActivities = (activities || [])
-          .filter(a => a.leadTechId === currentUserId && (a.status === 'DONE' || a.status === 'CANCELLED' || a.status === 'CARRY_FORWARD'))
+          // Previously only matched leadTechId — a Team Lead who is themselves
+          // the actual primary engineer or a supporting engineer on a job (not
+          // just the dispatching lead) never saw it in their own completed/
+          // carried-forward history. Same fix as the Tech Portal.
+          .filter(a =>
+              (a.leadTechId === currentUserId ||
+               (a as any).primaryEngineerId === currentUserId ||
+               ((a as any).supportingEngineerIds || []).includes(currentUserId)) &&
+              (a.status === 'DONE' || a.status === 'CANCELLED' || a.status === 'CARRY_FORWARD'))
           // Use plannedDate so activities appear on the correct visit day when browsing history
           .map(a => ({ kind: 'activity' as const, data: a, sortDate: a.plannedDate || a.updatedAt || a.createdAt }));
       return [...doneTickets, ...doneActivities]
@@ -296,7 +304,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
       const myActivityJobs = (activities || [])
           .filter(a =>
-              a.leadTechId === currentUserId &&
+              (a.leadTechId === currentUserId ||
+               (a as any).primaryEngineerId === currentUserId ||
+               ((a as any).supportingEngineerIds || []).includes(currentUserId)) &&
               a.status !== 'DONE' &&
               a.status !== 'CANCELLED'
           )
