@@ -68,6 +68,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     description:'', durationHours:2, notes:''
   });
   const [recurringLoading, setRecurringLoading] = useState(false);
+  const [recurringFormSaving, setRecurringFormSaving] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null);
@@ -182,8 +183,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     setRecurringLoading(true);
     try {
       const res = await fetch('/api/recurring-schedules', { headers: { 'Authorization': `Bearer ${localStorage.getItem('qonnect_token') || ''}`, 'Content-Type': 'application/json' } });
-      if (res.ok) setRecurringSchedules(await res.json());
-    } catch(e) { /* non-critical */ }
+      if (res.ok) {
+          setRecurringSchedules(await res.json());
+      } else {
+          toast.error('Failed to load recurring schedules.');
+      }
+    } catch(e) { toast.error('Failed to load recurring schedules.'); }
     setRecurringLoading(false);
   };
   useEffect(() => { if (viewMode === 'recurring') fetchRecurring(); }, [viewMode]);
@@ -681,7 +686,15 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  // Current activities for this day
                  const currentDayActs = activities.filter(a => {
                     if (!a.plannedDate && a.status !== 'DONE') return false;
-                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                    // A job belongs on this person's row whether they're the lead,
+                    // the actual primary engineer, or a supporting engineer on it.
+                    // Previously only leadTechId/salesLeadId/assignedTeamId were
+                    // checked, so a supporting engineer's row stayed empty even
+                    // though they were genuinely working the job — this hid real
+                    // workload from their calendar and broke utilization tracking.
+                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id
+                        || (a as any).primaryEngineerId === lead.id
+                        || ((a as any).supportingEngineerIds || []).includes(lead.id);
                     if (!isAssigned) return false;
                     const isActive = ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status);
                     if (isActive) return isToday;
@@ -700,7 +713,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  
                  // Show visit history entries on their respective dates
                  const historyCards = activities.filter(a => {
-                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id;
+                    const isAssigned = a.leadTechId === lead.id || a.salesLeadId === lead.id || a.assignedTeamId === lead.id
+                        || (a as any).primaryEngineerId === lead.id
+                        || ((a as any).supportingEngineerIds || []).includes(lead.id);
                     if (!isAssigned) return false;
                     return ((a as any).visitHistory || []).some((v: any) => 
                         v.date && new Date(v.date).toDateString() === d.toDateString()
@@ -722,11 +737,26 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         const displayStatus = isHistoryEntry ? (act as any)._visitStatus : act.status;
                         const actFreelancers = (act as any).freelancers || [];
                         const actCustomer = customers.find(c => c.id === act.customerId);
-                        const actTAs = (act.assistantTechIds || []).map(id => technicians.find(t => t.id === id)).filter(Boolean);
+                        const actTAs = (act.assistantTechIds || []).filter((id: string) => id !== lead.id).map(id => technicians.find(t => t.id === id)).filter(Boolean);
                         const actSupport = ((act as any).supportingEngineerIds || [])
-                            .filter((id: string) => !(act.assistantTechIds || []).includes(id))
+                            .filter((id: string) => !(act.assistantTechIds || []).includes(id) && id !== lead.id)
                             .map((id: string) => technicians.find(t => t.id === id)).filter(Boolean);
                         const statusColor = displayStatus === 'DONE' ? 'bg-emerald-500' : displayStatus === 'IN_PROGRESS' ? 'bg-blue-500' : displayStatus === 'CARRY_FORWARD' ? 'bg-orange-500' : displayStatus === 'CANCELLED' ? 'bg-slate-400' : 'bg-slate-400';
+                        // This job can now appear in more than one person's row (lead +
+                        // supporting engineers) so each card needs to say which capacity
+                        // THIS row's person is on it in — otherwise it looks duplicated
+                        // rather than one job two people are genuinely working.
+                        const isPrimaryForRow = (act as any).primaryEngineerId === lead.id;
+                        const isLeadForRow = act.leadTechId === lead.id;
+                        const isSupportingForRow = ((act as any).supportingEngineerIds || []).includes(lead.id);
+                        const isTAForRow = (act.assistantTechIds || []).includes(lead.id);
+                        const roleTag = (isPrimaryForRow || isLeadForRow)
+                            ? { label: 'Lead', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' }
+                            : isSupportingForRow
+                            ? { label: 'Supporting', cls: 'bg-amber-50 text-amber-700 border-amber-200' }
+                            : isTAForRow
+                            ? { label: 'TA', cls: 'bg-teal-50 text-teal-700 border-teal-200' }
+                            : null;
                         return (
                         <div 
                           key={act.id} 
@@ -749,6 +779,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                   {getActivityStatusLabel(act.status)}
                               </span>
                           </div>
+                          {roleTag && (
+                              <span className={`inline-block text-[7px] font-bold px-1 py-0.5 rounded border mb-0.5 ${roleTag.cls}`}>{roleTag.label}</span>
+                          )}
                           {/* Client Name */}
                           {actCustomer && <div className="text-[10px] font-medium text-slate-800 truncate">{actCustomer.name}</div>}
                           <div className="text-[9px] text-slate-400 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}{act.durationHours ? ` · ${act.durationHours}h` : ''}</div>
@@ -919,7 +952,15 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                          <p className="text-xs text-slate-400 mt-0.5">AMC contracts — auto-schedule monthly, quarterly, or annual visits</p>
                        </div>
                        <div className="flex gap-2">
-                         <button onClick={() => fetch('/api/recurring-schedules/process', { method:'POST', headers:{ 'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}` } }).then(()=>fetchRecurring())}
+                         <button onClick={async () => {
+                           try {
+                               const res = await fetch('/api/recurring-schedules/process', { method: 'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('qonnect_token')}` } });
+                               if (!res.ok) throw new Error('Failed to process schedules');
+                               const data = await res.json();
+                               toast.success(data.created > 0 ? `${data.created} job${data.created > 1 ? 's' : ''} created from due schedules.` : 'No schedules due right now.');
+                               await fetchRecurring();
+                           } catch (e) { toast.error('Failed to process due schedules.'); }
+                         }}
                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100">
                            ▶ Process Due Now
                          </button>
@@ -966,17 +1007,24 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                </div>
                                <div className="flex items-center gap-2 shrink-0">
                                  <button onClick={async () => {
-                                   await fetch(`/api/recurring-schedules/${s.id}`, {
-                                     method:'PUT', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
-                                     body: JSON.stringify({ isActive: !s.is_active })
-                                   });
-                                   fetchRecurring();
+                                   try {
+                                       const res = await fetch(`/api/recurring-schedules/${s.id}`, {
+                                         method:'PUT', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
+                                         body: JSON.stringify({ isActive: !s.is_active })
+                                       });
+                                       if (!res.ok) throw new Error('Failed to update schedule');
+                                       await fetchRecurring();
+                                   } catch (e) { toast.error('Failed to update schedule.'); }
                                  }} className={`text-[10px] font-bold px-2 py-1 rounded border ${s.is_active ? 'bg-white text-slate-500 border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>
                                    {s.is_active ? 'Pause' : 'Resume'}
                                  </button>
                                  <button onClick={async () => {
-                                   await fetch(`/api/recurring-schedules/${s.id}`, { method:'DELETE', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`} });
-                                   fetchRecurring();
+                                   if (!window.confirm(`Delete the AMC schedule for ${s.customer_name || 'this customer'}? This cannot be undone.`)) return;
+                                   try {
+                                       const res = await fetch(`/api/recurring-schedules/${s.id}`, { method:'DELETE', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`} });
+                                       if (!res.ok) throw new Error('Failed to delete schedule');
+                                       await fetchRecurring();
+                                   } catch (e) { toast.error('Failed to delete schedule.'); }
                                  }} className="text-[10px] font-bold px-2 py-1 rounded border bg-white text-red-500 border-red-200 hover:bg-red-50">
                                    Delete
                                  </button>
@@ -1044,19 +1092,31 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                              </div>
                            </div>
                            <div className="p-4 border-t border-slate-200 flex gap-3">
-                             <button onClick={() => setShowRecurringForm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl border border-slate-200">Cancel</button>
-                             <button disabled={!recurringForm.customerId || !recurringForm.nextDueDate}
+                             <button onClick={() => setShowRecurringForm(false)} disabled={recurringFormSaving} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl border border-slate-200 disabled:opacity-50">Cancel</button>
+                             <button disabled={!recurringForm.customerId || !recurringForm.nextDueDate || recurringFormSaving}
                                onClick={async () => {
-                                 await fetch('/api/recurring-schedules', {
-                                   method:'POST',
-                                   headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
-                                   body: JSON.stringify(recurringForm)
-                                 });
-                                 setShowRecurringForm(false);
-                                 fetchRecurring();
+                                 setRecurringFormSaving(true);
+                                 try {
+                                     const res = await fetch('/api/recurring-schedules', {
+                                       method:'POST',
+                                       headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
+                                       body: JSON.stringify(recurringForm)
+                                     });
+                                     if (!res.ok) {
+                                         const body = await res.json().catch(() => ({}));
+                                         throw new Error(body.error || 'Failed to create schedule');
+                                     }
+                                     setShowRecurringForm(false);
+                                     toast.success('AMC schedule created.');
+                                     await fetchRecurring();
+                                 } catch (e: any) {
+                                     toast.error(e.message || 'Failed to create schedule.');
+                                 } finally {
+                                     setRecurringFormSaving(false);
+                                 }
                                }}
                                className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed">
-                               Create Schedule
+                               {recurringFormSaving ? 'Saving…' : 'Create Schedule'}
                              </button>
                            </div>
                          </div>
