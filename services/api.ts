@@ -176,6 +176,15 @@ export const api = {
     // unlike the old client-only merge which silently discarded on refresh)
     systemImport: (data: any) => api.post('/api/system/import', data),
 
+    // On-demand full-detail fetches — used specifically for viewing photos.
+    // Regular ticket/activity list responses only carry a lightweight
+    // ['HAS_PHOTOS'] flag (no real image bytes) to keep the app fast; these
+    // calls fetch the one record's real photo data only when actually needed.
+    photos: {
+        forTicket: (id: string) => api.get(`/api/tickets/${id}/full`).then(t => (t.photos || []).filter((p: any) => p && p !== 'HAS_PHOTOS')),
+        forActivity: (id: string) => api.get(`/api/activities/${id}/full`).then(a => (a.photos || []).filter((p: any) => p && p !== 'HAS_PHOTOS')),
+    },
+
     // Sales Appointment Requests
     salesRequests: {
         list:     ()           => api.get('/api/sales-appointment-requests'),
