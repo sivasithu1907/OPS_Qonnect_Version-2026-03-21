@@ -517,7 +517,13 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         const uniqueSupportIds = Array.from(new Set([
                             ...activeActs.flatMap(a => (a as any).supportingEngineerIds || []),
                             // Include TAs only from today's assigned activities (not global)
-                            ...todayActs.flatMap(a => a.assistantTechIds || [])
+                            ...todayActs.flatMap(a => a.assistantTechIds || []),
+                            // Include the job's own primary/lead engineer too — without this,
+                            // a SUPPORTING engineer's card only ever showed other supporters/TAs
+                            // and never the actual lead they're supporting (e.g. Aswanth's card
+                            // showed "Kaushar Wosta" but not "Obaid", even though Obaid is the
+                            // lead on the very job Aswanth is supporting).
+                            ...activeActs.flatMap(a => [(a as any).primaryEngineerId, a.leadTechId].filter(Boolean)),
                         ].filter(Boolean))).filter(id => id !== tech.id); // exclude self — todayActs now also
                           // includes jobs where this tech is themselves a supporter (see fix above), so
                           // without this filter a supporting engineer would show up as a tag on their own card
@@ -561,18 +567,24 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 <div className="flex flex-wrap gap-1 mb-1">
                                 {supportingMembers.length > 0 && (
                                     supportingMembers.map((assoc: any) => {
-                                    // Determine if this person is a TA (from assistantTechIds) or execution support
+                                    // Determine this person's role on the job relative to THIS card —
+                                    // Lead (primary/leadTechId), execution Support, or TA. Without this,
+                                    // a job's lead/primary engineer fell through to the generic TA style
+                                    // when shown on a supporting engineer's own card.
+                                    const isLead = activeActs.some(a => (a as any).primaryEngineerId === assoc.id || a.leadTechId === assoc.id);
                                     const isTA = todayActs.some(a => (a.assistantTechIds || []).includes(assoc.id));
                                     const isExecSupport = activeActs.some(a => ((a as any).supportingEngineerIds || []).includes(assoc.id));
                                     return (
                                     <span
                                         key={assoc.id}
                                         className={`px-1.5 py-0.5 text-[9px] font-medium rounded flex items-center gap-1 ${
+                                            isLead ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
                                             isExecSupport ? 'bg-blue-50 text-blue-700' : 'bg-teal-50 text-teal-700 border border-teal-200'
                                         }`}
                                     >
-                                        <Users size={8} className={isExecSupport ? 'text-blue-400' : 'text-teal-400'} /> {assoc.name}
-                                        {isTA && !isExecSupport && <span className="text-[7px] opacity-60">TA</span>}
+                                        <Users size={8} className={isLead ? 'text-indigo-400' : isExecSupport ? 'text-blue-400' : 'text-teal-400'} /> {assoc.name}
+                                        {isLead && <span className="text-[7px] opacity-60">Lead</span>}
+                                        {isTA && !isExecSupport && !isLead && <span className="text-[7px] opacity-60">TA</span>}
                                     </span>
                                     );
                                     })
