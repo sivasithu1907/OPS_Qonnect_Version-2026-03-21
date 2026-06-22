@@ -267,7 +267,13 @@ export enum SalesRequestStatus {
   PENDING_SCHEDULING = 'PENDING_SCHEDULING',
   SCHEDULED = 'SCHEDULED',
   IN_PROGRESS = 'IN_PROGRESS',
-  DONE = 'DONE',
+  // Renamed from DONE to COMPLETED — the backend has always written
+  // 'COMPLETED' to the database when a linked job finishes (see the SAR
+  // Sync logic in server.js), but this enum said 'DONE', so the status
+  // filter could never match a single completed request, for anyone.
+  // Renaming the enum to match the real, already-stored value avoids a
+  // data migration entirely.
+  COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED'
 }
 
