@@ -49,7 +49,6 @@ const STATUS_CONFIG: Record<SalesRequestStatus, { label: string; color: string; 
   SCHEDULED:          { label: 'Scheduled',          color: 'text-blue-700',   bg: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-500'   },
   IN_PROGRESS:        { label: 'In Progress',         color: 'text-amber-700',  bg: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-500'  },
   COMPLETED:          { label: 'Completed',           color: 'text-emerald-700',bg: 'bg-emerald-50 border-emerald-200',dot: 'bg-emerald-500'},
-  DONE:               { label: 'Done',                color: 'text-emerald-700',bg: 'bg-emerald-50 border-emerald-200',dot: 'bg-emerald-500'},
   CANCELLED:          { label: 'Cancelled',           color: 'text-slate-500',  bg: 'bg-slate-50  border-slate-200',  dot: 'bg-slate-400'  },
 };
 
@@ -115,6 +114,14 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   const [custLoading, setCustLoading] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>();
 
+  // Existing-job heads-up — non-blocking notice shown when the entered phone
+  // number already has an open (Planned/Carry Forward/In Progress) or
+  // recently-completed (last 7 days) job. Helps Sales — who has no
+  // visibility into field work — avoid unknowingly creating a duplicate
+  // request for a customer who was just serviced or already has pending work.
+  const [existingJobMatches, setExistingJobMatches] = useState<any[]>([]);
+  const [checkingExistingJob, setCheckingExistingJob] = useState(false);
+
   // Schedule modal (TEAM_LEAD / ADMIN only)
   const [scheduleTarget, setScheduleTarget] = useState<SalesAppointmentRequest | null>(null);
   const [schedForm, setSchedForm] = useState({
@@ -126,6 +133,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   });
   const [schedErrors, setSchedErrors] = useState<Record<string, string>>({});
   const [scheduling, setScheduling]   = useState(false);
+  // Same heads-up check as the creation form, but for the Team Lead at
+  // scheduling time — this is where the actual link-or-create decision
+  // gets made (Sales only ever sees a notice, never decides).
+  const [schedExistingJobMatches, setSchedExistingJobMatches] = useState<any[]>([]);
+  const [schedCheckingExistingJob, setSchedCheckingExistingJob] = useState(false);
+  const [linkToExistingActivityId, setLinkToExistingActivityId] = useState<string>('');
 
   // Detail drawer
   const [detailItem, setDetailItem]   = useState<SalesAppointmentRequest | null>(null);
@@ -174,6 +187,46 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     }, 300);
     return () => clearTimeout(t);
   }, [custSearch]);
+
+  // ── Existing-job heads-up (debounced, fires on a complete phone number) ──
+  useEffect(() => {
+    const digits = custSearch.replace(/[^0-9]/g, '');
+    // Qatar mobile numbers are 8 local digits (optionally with +974/974/00974
+    // prefix) — only check once a complete-looking number has been entered,
+    // not on every partial keystroke.
+    if (digits.length < 8) { setExistingJobMatches([]); return; }
+    const t = setTimeout(async () => {
+      setCheckingExistingJob(true);
+      try {
+        const res = await api.checkExistingJob(custSearch);
+        setExistingJobMatches(res.matches || []);
+      } catch { /* non-critical — never block the form over this */ }
+      finally { setCheckingExistingJob(false); }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [custSearch]);
+
+  // Same check, but for the Team Lead's Schedule modal — runs once per
+  // request when the modal opens, since the phone number is already known
+  // and fixed (not being typed live like the creation form).
+  useEffect(() => {
+    setLinkToExistingActivityId('');
+    if (!scheduleTarget?.contactNumber) { setSchedExistingJobMatches([]); return; }
+    let cancelled = false;
+    (async () => {
+      setSchedCheckingExistingJob(true);
+      try {
+        const res = await api.checkExistingJob(scheduleTarget.contactNumber);
+        if (!cancelled) {
+          // Exclude the request's own already-linked activity, if any —
+          // re-scheduling shouldn't warn about the job it's already attached to.
+          setSchedExistingJobMatches((res.matches || []).filter((m: any) => m.activityId !== scheduleTarget.linkedActivityId));
+        }
+      } catch { /* non-critical */ }
+      finally { if (!cancelled) setSchedCheckingExistingJob(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [scheduleTarget?.id]);
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -346,6 +399,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
         assignedFieldEngineerId: schedForm.assignedFieldEngineerId,
         assistantTechIds:        schedForm.assistantTechIds,
         durationHours:           Number(schedForm.durationHours) || 2,
+        linkToExistingActivityId: linkToExistingActivityId || undefined,
       });
       setScheduleTarget(null);
       fetchRequests();
@@ -562,6 +616,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           submitting={submitting}
           custResults={custResults}
           custLoading={custLoading}
+          existingJobMatches={existingJobMatches}
+          checkingExistingJob={checkingExistingJob}
           onCustSearchChange={v => { setCustSearch(v); }}
           onSelectCustomer={selectCustomer}
           onToggleServiceCat={toggleServiceCat}
@@ -581,6 +637,10 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           scheduling={scheduling}
           fieldEngineers={fieldEngineers}
           technicalAssociates={technicalAssociates}
+          existingJobMatches={schedExistingJobMatches}
+          checkingExistingJob={schedCheckingExistingJob}
+          linkToExistingActivityId={linkToExistingActivityId}
+          onLinkChange={setLinkToExistingActivityId}
           onFieldChange={(f, v) => setSchedForm(p => ({ ...p, [f]: v }))}
           onToggleAssistant={(id) => setSchedForm(p => ({
             ...p,
@@ -1163,6 +1223,8 @@ interface FormModalProps {
   submitting: boolean;
   custResults: any[];
   custLoading: boolean;
+  existingJobMatches: any[];
+  checkingExistingJob: boolean;
   salesLeadName: string;
   onCustSearchChange: (v: string) => void;
   onSelectCustomer: (c: any) => void;
@@ -1174,7 +1236,7 @@ interface FormModalProps {
 
 const FormModal: React.FC<FormModalProps> = ({
   editing, formData, formErrors, submitting,
-  custResults, custLoading, salesLeadName,
+  custResults, custLoading, existingJobMatches, checkingExistingJob, salesLeadName,
   onCustSearchChange, onSelectCustomer, onToggleServiceCat, onFieldChange,
   onClose, onSubmit
 }) => (
@@ -1268,6 +1330,38 @@ const FormModal: React.FC<FormModalProps> = ({
             Type phone number to search — select existing client or enter name below to create new
           </p>
           <FieldError msg={formErrors.contactNumber} />
+
+          {/* Existing-job heads-up — non-blocking. Sales has no visibility
+              into field work, so this surfaces it before they submit. */}
+          {checkingExistingJob && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 size={12} className="animate-spin" /> Checking for existing jobs…
+            </div>
+          )}
+          {!checkingExistingJob && existingJobMatches.length > 0 && (
+            <div className="mt-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-1.5">
+                <AlertCircle size={14} />
+                {existingJobMatches.length === 1 ? 'This customer already has a job' : `This customer already has ${existingJobMatches.length} jobs`}
+              </div>
+              <div className="space-y-1.5">
+                {existingJobMatches.map((m: any) => (
+                  <div key={m.activityId} className="text-xs text-amber-700">
+                    <span className="font-mono font-semibold">{m.activityId}</span>
+                    {' — '}
+                    <span className="font-semibold">{m.status === 'CARRY_FORWARD' ? 'Carry Forward' : m.status === 'DONE' ? 'Completed' : m.status === 'IN_PROGRESS' ? 'In Progress' : 'Planned'}</span>
+                    {m.serviceCategory && <span> · {m.serviceCategory}</span>}
+                    {m.carryForwardNote && (
+                      <div className="mt-0.5 text-amber-600 italic">"{m.carryForwardNote}"</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-amber-600">
+                If this request is about the same work, mention it in Remarks below — your Team Lead can link it to the existing job instead of creating a new one.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Customer Name — auto-filled from client lookup, or enter manually for new client */}
@@ -1413,6 +1507,10 @@ interface ScheduleModalProps {
   scheduling: boolean;
   fieldEngineers: Technician[];
   technicalAssociates: Technician[];
+  existingJobMatches: any[];
+  checkingExistingJob: boolean;
+  linkToExistingActivityId: string;
+  onLinkChange: (activityId: string) => void;
   onFieldChange: (f: string, v: string) => void;
   onToggleAssistant: (id: string) => void;
   onClose: () => void;
@@ -1421,6 +1519,7 @@ interface ScheduleModalProps {
 
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
   request: r, schedForm, schedErrors, scheduling, fieldEngineers, technicalAssociates,
+  existingJobMatches, checkingExistingJob, linkToExistingActivityId, onLinkChange,
   onFieldChange, onToggleAssistant, onClose, onSubmit
 }) => (
   <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
@@ -1459,6 +1558,53 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Service</span><span className="text-slate-700">{r.serviceCategory}</span></div>
           {r.remarks && <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Remarks</span><span className="text-slate-600 italic">{r.remarks}</span></div>}
         </div>
+
+        {/* Existing-job heads-up — this is where the actual link-or-create
+            decision is made. Sales only ever saw a notice; the Team Lead
+            decides here whether this request is genuinely new work or an
+            add-on to something already open or recently completed. */}
+        {checkingExistingJob && (
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Loader2 size={12} className="animate-spin" /> Checking for existing jobs for this customer…
+          </div>
+        )}
+        {!checkingExistingJob && existingJobMatches.length > 0 && (
+          <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-2">
+              <AlertCircle size={14} />
+              This customer already has {existingJobMatches.length === 1 ? 'a job' : `${existingJobMatches.length} jobs`}
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-start gap-2 p-2 rounded-lg hover:bg-amber-100/50 cursor-pointer">
+                <input
+                  type="radio"
+                  name="linkChoice"
+                  checked={linkToExistingActivityId === ''}
+                  onChange={() => onLinkChange('')}
+                  className="mt-0.5"
+                />
+                <span className="text-xs text-amber-800">This is genuinely new work — create a separate job</span>
+              </label>
+              {existingJobMatches.map((m: any) => (
+                <label key={m.activityId} className="flex items-start gap-2 p-2 rounded-lg hover:bg-amber-100/50 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="linkChoice"
+                    checked={linkToExistingActivityId === m.activityId}
+                    onChange={() => onLinkChange(m.activityId)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-xs text-amber-800">
+                    Add this as extra scope on <span className="font-mono font-semibold">{m.activityId}</span>
+                    {' '}({m.status === 'CARRY_FORWARD' ? 'Carry Forward' : m.status === 'DONE' ? 'Completed' : m.status === 'IN_PROGRESS' ? 'In Progress' : 'Planned'}
+                    {m.serviceCategory ? ` — ${m.serviceCategory}` : ''})
+                    {m.carryForwardNote && <div className="mt-0.5 text-amber-600 italic">"{m.carryForwardNote}"</div>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Date */}
         <div>
