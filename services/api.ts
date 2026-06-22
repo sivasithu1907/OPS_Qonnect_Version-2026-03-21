@@ -176,6 +176,10 @@ export const api = {
     // unlike the old client-only merge which silently discarded on refresh)
     systemImport: (data: any) => api.post('/api/system/import', data),
 
+    // Non-blocking heads-up: does this customer already have an open or
+    // recently-completed job? Used by the Sales Appointment Request form.
+    checkExistingJob: (phone: string) => api.get(`/api/sales-appointment-requests/check-existing-job?phone=${encodeURIComponent(phone)}`),
+
     // On-demand full-detail fetches — used specifically for viewing photos.
     // Regular ticket/activity list responses only carry a lightweight
     // ['HAS_PHOTOS'] flag (no real image bytes) to keep the app fast; these
