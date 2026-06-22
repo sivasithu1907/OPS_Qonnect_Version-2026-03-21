@@ -1141,6 +1141,7 @@ useEffect(() => {
           onDeleteCustomer={handleDeleteCustomer}
           onCreateTicket={handleCreateTicket}
           onNavigateToSalesRequests={() => setActiveView('sales_requests')}
+          onActivityCreated={() => { loadActivities(); }}
           isStandalone={true}
 	  onLogout={handleLogout}
           onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
