@@ -1045,7 +1045,7 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
             // their own portal at all, active or completed. This is the same gap
             // already fixed in the Activity Planner / Operations Monitor / the
             // frontend completedJobs filter — now consistent here too.
-            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE (lead_tech_id = $1 OR details->>'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1 OR details->'supportingEngineerIds' ? $1)
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE (lead_tech_id = $1 OR details->'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1 OR details->'supportingEngineerIds' ? $1)
                         AND type != 'WHATSAPP_SUPPORT'
                         AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
                         ORDER BY planned_date DESC LIMIT 200`, [userId]),
@@ -3145,6 +3145,61 @@ function mapSAR(r) {
     };
 }
 
+/* ── GET /api/sales-appointment-requests/check-existing-job ── */
+// Non-blocking heads-up check: given a phone number, does this customer
+// already have an open job (Planned/Carry Forward/In Progress) or a job
+// completed in the last 7 days? Used by the Sales Appointment Request
+// creation form so Sales — who has no visibility into field work — finds
+// out a customer was just serviced or already has pending work, instead
+// of unknowingly creating a duplicate request for the same scope.
+//
+// This never blocks creation; it's purely informational. The actual
+// decision to link a new request to an existing job happens later, when a
+// Team Lead schedules it (see the `linkedActivityId` field on SAR PUT).
+app.get('/api/sales-appointment-requests/check-existing-job', authenticate, async (req, res) => {
+    try {
+        const rawPhone = String(req.query.phone || '').trim();
+        if (!rawPhone) return res.json({ matches: [] });
+
+        // Same normalisation used when a SAR is created, so the lookup
+        // matches however the number was actually stored.
+        let normPhone = rawPhone.replace(/[\s\-]/g, '');
+        if (/^[0-9]{8}$/.test(normPhone)) normPhone = `+974${normPhone}`;
+        else if (/^974[0-9]{8}$/.test(normPhone)) normPhone = `+${normPhone}`;
+        else if (normPhone.startsWith('00974')) normPhone = `+974${normPhone.slice(5)}`;
+
+        const { rows } = await pool.query(
+            `SELECT a.id, a.type, a.status, a.planned_date, a.completed_at, a.carry_forward_note, a.details
+             FROM activities a
+             JOIN customers c ON a.customer_id = c.id
+             WHERE REGEXP_REPLACE(c.phone, '[^0-9+]', '', 'g') = REGEXP_REPLACE($1, '[^0-9+]', '', 'g')
+               AND (
+                 a.status IN ('PLANNED', 'CARRY_FORWARD', 'IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED')
+                 OR (a.status = 'DONE' AND a.completed_at > NOW() - INTERVAL '7 days')
+               )
+             ORDER BY COALESCE(a.completed_at, a.planned_date) DESC
+             LIMIT 5`,
+            [normPhone]
+        );
+
+        res.json({
+            matches: rows.map(r => ({
+                activityId: r.id,
+                type: r.type,
+                status: r.status,
+                plannedDate: r.planned_date,
+                completedAt: r.completed_at,
+                carryForwardNote: r.carry_forward_note || (r.details || {}).carryForwardNote || null,
+                serviceCategory: (r.details || {}).serviceCategory || null,
+            })),
+        });
+    } catch (e) {
+        console.error('Check existing job error:', e);
+        // Non-critical lookup — fail soft so it never blocks SAR creation.
+        res.json({ matches: [] });
+    }
+});
+
 /* ── GET /api/sales-appointment-requests ── */
 app.get('/api/sales-appointment-requests', authenticate, async (req, res) => {
     try {
@@ -3378,16 +3433,30 @@ app.delete('/api/sales-appointment-requests/:id', authenticate, deleteRateLimit,
         }
         // ADMIN / TEAM_LEAD: can delete any status
 
-        // If the SAR has a linked planned activity, delete it too so the
-        // planner and operations monitor stay in sync.
+        // If the SAR has a linked activity, only delete it if THIS SAR was
+        // the one that created it (a fresh job created purely from this
+        // request, with no history of its own). If the SAR was instead
+        // linked to a pre-existing activity (the "additional scope on an
+        // existing job" path), that activity has its own independent
+        // history and must never be deleted just because this SAR is.
         const linkedActivityId = row.linked_activity_id;
+        let removedActivityId = null;
         if (linkedActivityId) {
-            await pool.query('DELETE FROM activities WHERE id = $1', [linkedActivityId]);
-            console.log(`SAR DELETE: removed linked activity ${linkedActivityId} with SAR ${id}`);
+            const linkedAct = await pool.query(
+                `SELECT details FROM activities WHERE id = $1`, [linkedActivityId]
+            );
+            const wasCreatedBySar = linkedAct.rows[0] && (linkedAct.rows[0].details || {}).salesRequestId === id;
+            if (wasCreatedBySar) {
+                await pool.query('DELETE FROM activities WHERE id = $1', [linkedActivityId]);
+                removedActivityId = linkedActivityId;
+                console.log(`SAR DELETE: removed linked activity ${linkedActivityId} with SAR ${id}`);
+            } else {
+                console.log(`SAR DELETE: ${id} was linked to pre-existing activity ${linkedActivityId} — not deleting it`);
+            }
         }
 
         await pool.query('DELETE FROM sales_appointment_requests WHERE id = $1', [id]);
-        res.json({ ok: true, id, removedActivityId: linkedActivityId || null });
+        res.json({ ok: true, id, removedActivityId });
     } catch (e) {
         console.error('SAR DELETE error:', e);
         res.status(500).json({ error: 'Failed to delete sales appointment request' });
@@ -3409,7 +3478,7 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRate
         }
 
         const { id } = req.params;
-        const { scheduledDate, scheduledStartTime, assignedFieldEngineerId, durationHours, assistantTechIds } = req.body;
+        const { scheduledDate, scheduledStartTime, assignedFieldEngineerId, durationHours, assistantTechIds, linkToExistingActivityId } = req.body;
 
         // Validate
         if (!scheduledDate)            return res.status(400).json({ error: 'scheduledDate is required' });
@@ -3436,6 +3505,72 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRate
         if (sar.customer_id) {
             const custRow = await pool.query('SELECT phone FROM customers WHERE id = $1', [sar.customer_id]);
             if (custRow.rows[0]?.phone) customerPhone = custRow.rows[0].phone;
+        }
+
+        // ── Linking to an existing activity instead of creating a new one ──
+        // Used when this request is really additional scope for a customer
+        // who already has open or recently-completed work (see the
+        // check-existing-job heads-up shown to Sales at creation time).
+        // Rather than spawning a disconnected duplicate job, the new ask is
+        // folded into the existing activity: its description gets the new
+        // scope appended, its status moves back to PLANNED if it had
+        // already finished, and it's rescheduled to the date/time chosen
+        // here, same as if it were freshly created.
+        if (linkToExistingActivityId) {
+            const existingAct = await pool.query('SELECT * FROM activities WHERE id = $1', [linkToExistingActivityId]);
+            if (!existingAct.rows[0]) return res.status(404).json({ error: 'Linked activity not found' });
+            const ea = existingAct.rows[0];
+            const existingDetails = ea.details || {};
+
+            const addOnNote = `\n\n— Additional scope added via ${id} (${sar.activity_type} / ${sar.service_category}):\n${sar.remarks?.trim() || '(no remarks)'}`;
+            const mergedDescription = `${ea.description || ''}${addOnNote}`.trim();
+            const mergedDetails = {
+                ...existingDetails,
+                serviceCategory: [existingDetails.serviceCategory, sar.service_category].filter(Boolean).join(', '),
+                linkedSalesRequestIds: [...(existingDetails.linkedSalesRequestIds || []), id],
+            };
+
+            const plannedDate = `${scheduledDate}T${scheduledStartTime}:00+03:00`;
+            await pool.query(
+                `UPDATE activities SET
+                    status = 'PLANNED',
+                    planned_date = $1,
+                    lead_tech_id = $2,
+                    description = $3,
+                    details = $4,
+                    updated_at = NOW()
+                 WHERE id = $5`,
+                [plannedDate, assignedFieldEngineerId, mergedDescription, JSON.stringify(mergedDetails), linkToExistingActivityId]
+            );
+
+            const updatedSar = await pool.query(
+                `UPDATE sales_appointment_requests SET
+                   status                     = 'SCHEDULED',
+                   scheduled_date             = $1,
+                   scheduled_start_time       = $2,
+                   assigned_field_engineer_id = $3,
+                   linked_activity_id         = $4,
+                   updated_by                 = $5,
+                   updated_at                 = now()
+                 WHERE id = $6
+                 RETURNING *`,
+                [scheduledDate, scheduledStartTime, assignedFieldEngineerId, linkToExistingActivityId, userId, id]
+            );
+
+            logAudit(req, {
+                action: 'UPDATE',
+                entityType: 'ACTIVITY',
+                entityId: linkToExistingActivityId,
+                entityLabel: sar.customer_name,
+                details: { linkedNewSalesRequest: id, reason: 'Additional scope added to existing job instead of creating a duplicate' },
+            });
+
+            return res.json({
+                ok: true,
+                request: mapSAR(updatedSar.rows[0]),
+                activityId: linkToExistingActivityId,
+                linkedExisting: true,
+            });
         }
 
         // Build the planned date/time string (combine scheduledDate + scheduledStartTime)
