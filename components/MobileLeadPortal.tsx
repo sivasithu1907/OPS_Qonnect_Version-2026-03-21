@@ -35,6 +35,7 @@ interface MobileLeadPortalProps {
   onDeleteCustomer?: (id: string) => void;
   onCreateTicket?: (data: any) => void;
   onNavigateToSalesRequests?: () => void; // desktop nav callback for Sales Requests
+  onActivityCreated?: () => void; // refresh activities after a Sales Appointment Request is scheduled into a real job
 
   isStandalone?: boolean;
   onLogout?: () => void;
@@ -81,7 +82,7 @@ const engineerTeamMap: Record<string, string> = {
 // --- MAIN COMPONENT ---
 export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({ 
     tickets, technicians, activities = [], teams = [], sites = [], customers = [],
-    onUpdateTicket, onUpdateActivity, onAddActivity, onDeleteActivity, onAddCustomer, onSaveCustomer, onDeleteCustomer, onCreateTicket, onNavigateToSalesRequests,
+    onUpdateTicket, onUpdateActivity, onAddActivity, onDeleteActivity, onAddCustomer, onSaveCustomer, onDeleteCustomer, onCreateTicket, onNavigateToSalesRequests, onActivityCreated,
     isStandalone = false, onLogout, onChangePassword, focusedTicketId, currentUserId
 }) => {
   // --- Responsive Check ---
@@ -1470,6 +1471,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     role:  (currentTech?.systemRole as Role) || Role.TEAM_LEAD,
                                   }}
                                   technicians={technicians}
+                                  activities={activities}
+                                  onActivityCreated={onActivityCreated}
                                 />
                               </Suspense>
                           </div>
