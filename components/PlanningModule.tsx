@@ -946,7 +946,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                  {viewMode === 'calendar' && <CalendarView />}
                  {viewMode === 'recurring' && (
                    <div className="flex-1 overflow-y-auto p-6">
-                     <div className="flex items-center justify-between mb-6">
+                     <div className="flex items-center justify-between mb-4">
                        <div>
                          <h3 className="font-bold text-slate-900 text-lg">Recurring Schedules</h3>
                          <p className="text-xs text-slate-400 mt-0.5">AMC contracts — auto-schedule monthly, quarterly, or annual visits</p>
@@ -971,6 +971,42 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                        </div>
                      </div>
 
+                     {/* Stats row — at-a-glance summary so "what's coming up" and
+                         "what's overdue" don't require manually reading every
+                         row's due date. */}
+                     {!recurringLoading && recurringSchedules.length > 0 && (() => {
+                       const today = new Date(); today.setHours(0,0,0,0);
+                       const weekFromNow = new Date(today.getTime() + 7 * 86400000);
+                       const activeCount = recurringSchedules.filter((s: any) => s.is_active).length;
+                       const overdueCount = recurringSchedules.filter((s: any) => s.is_active && new Date(s.next_due_date) < today).length;
+                       const dueThisWeekCount = recurringSchedules.filter((s: any) => {
+                         if (!s.is_active) return false;
+                         const d = new Date(s.next_due_date);
+                         return d >= today && d <= weekFromNow;
+                       }).length;
+                       const pausedCount = recurringSchedules.filter((s: any) => !s.is_active).length;
+                       return (
+                         <div className="grid grid-cols-4 gap-3 mb-5">
+                           <div className="bg-slate-50 rounded-xl p-3">
+                             <p className="text-[11px] text-slate-500 mb-1">Active contracts</p>
+                             <p className="text-2xl font-bold text-slate-800">{activeCount}</p>
+                           </div>
+                           <div className={`rounded-xl p-3 ${dueThisWeekCount > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                             <p className={`text-[11px] mb-1 ${dueThisWeekCount > 0 ? 'text-amber-700' : 'text-slate-500'}`}>Due this week</p>
+                             <p className={`text-2xl font-bold ${dueThisWeekCount > 0 ? 'text-amber-700' : 'text-slate-800'}`}>{dueThisWeekCount}</p>
+                           </div>
+                           <div className={`rounded-xl p-3 ${overdueCount > 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
+                             <p className={`text-[11px] mb-1 ${overdueCount > 0 ? 'text-red-700' : 'text-slate-500'}`}>Overdue</p>
+                             <p className={`text-2xl font-bold ${overdueCount > 0 ? 'text-red-700' : 'text-slate-800'}`}>{overdueCount}</p>
+                           </div>
+                           <div className="bg-slate-50 rounded-xl p-3">
+                             <p className="text-[11px] text-slate-500 mb-1">Paused</p>
+                             <p className="text-2xl font-bold text-slate-800">{pausedCount}</p>
+                           </div>
+                         </div>
+                       );
+                     })()}
+
                      {recurringLoading ? (
                        <div className="text-center py-12 text-slate-400">Loading schedules...</div>
                      ) : recurringSchedules.length === 0 ? (
@@ -979,61 +1015,90 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                          <p className="font-medium">No recurring schedules yet</p>
                          <p className="text-xs mt-1">Set up AMC contracts to auto-create activities</p>
                        </div>
-                     ) : (
-                       <div className="space-y-3">
-                         {recurringSchedules.map((s: any) => {
-                           const dueDate = new Date(s.next_due_date);
-                           const today = new Date(); today.setHours(0,0,0,0);
-                           const isOverdue = dueDate < today;
-                           const isDueToday = dueDate.toDateString() === today.toDateString();
-                           return (
-                             <div key={s.id} className={`bg-white rounded-xl border p-4 flex items-start justify-between gap-4 ${isOverdue ? 'border-red-200 bg-red-50/30' : isDueToday ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200'}`}>
-                               <div className="flex-1">
-                                 <div className="flex items-center gap-2 mb-1">
-                                   <span className="font-bold text-slate-800">{s.customer_name || 'Unknown'}</span>
-                                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{s.interval_type}</span>
-                                   {isOverdue && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-bold">OVERDUE</span>}
-                                   {isDueToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">DUE TODAY</span>}
-                                   {!s.is_active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-bold">PAUSED</span>}
-                                 </div>
-                                 <p className="text-xs text-slate-500">{s.type} · {s.category}</p>
-                                 <p className="text-xs text-slate-400 mt-0.5">
-                                   Next due: <span className={`font-bold ${isOverdue ? 'text-red-600' : isDueToday ? 'text-amber-600' : 'text-slate-700'}`}>
-                                     {dueDate.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}
-                                   </span>
-                                   {s.last_scheduled_date && ` · Last: ${new Date(s.last_scheduled_date).toLocaleDateString('en-GB', { day:'2-digit', month:'short' })}`}
-                                 </p>
-                                 {s.notes && <p className="text-xs text-slate-400 mt-1 italic">{s.notes}</p>}
+                     ) : (() => {
+                       // Group into sections so what needs attention (overdue) is
+                       // always visually separated from what's just upcoming or
+                       // paused — previously this was one flat list sorted only
+                       // by due date, so "what's overdue right now" required
+                       // reading every row rather than seeing it at a glance.
+                       const today = new Date(); today.setHours(0,0,0,0);
+                       const weekFromNow = new Date(today.getTime() + 7 * 86400000);
+                       const active = recurringSchedules.filter((s: any) => s.is_active);
+                       const paused = recurringSchedules.filter((s: any) => !s.is_active);
+                       const overdue = active.filter((s: any) => new Date(s.next_due_date) < today);
+                       const dueThisWeek = active.filter((s: any) => {
+                         const d = new Date(s.next_due_date);
+                         return d >= today && d <= weekFromNow;
+                       });
+                       const upcoming = active.filter((s: any) => new Date(s.next_due_date) > weekFromNow);
+
+                       const renderCard = (s: any) => {
+                         const dueDate = new Date(s.next_due_date);
+                         const isOverdue = dueDate < today;
+                         const isDueToday = dueDate.toDateString() === today.toDateString();
+                         return (
+                           <div key={s.id} className={`bg-white rounded-xl border p-4 flex items-start justify-between gap-4 ${isOverdue ? 'border-red-200 bg-red-50/30' : isDueToday ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200'}`}>
+                             <div className="flex-1">
+                               <div className="flex items-center gap-2 mb-1">
+                                 <span className="font-bold text-slate-800">{s.customer_name || 'Unknown'}</span>
+                                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">{s.interval_type}</span>
+                                 {isOverdue && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-bold">OVERDUE</span>}
+                                 {isDueToday && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">DUE TODAY</span>}
+                                 {!s.is_active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-bold">PAUSED</span>}
                                </div>
-                               <div className="flex items-center gap-2 shrink-0">
-                                 <button onClick={async () => {
-                                   try {
-                                       const res = await fetch(`/api/recurring-schedules/${s.id}`, {
-                                         method:'PUT', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
-                                         body: JSON.stringify({ isActive: !s.is_active })
-                                       });
-                                       if (!res.ok) throw new Error('Failed to update schedule');
-                                       await fetchRecurring();
-                                   } catch (e) { toast.error('Failed to update schedule.'); }
-                                 }} className={`text-[10px] font-bold px-2 py-1 rounded border ${s.is_active ? 'bg-white text-slate-500 border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>
-                                   {s.is_active ? 'Pause' : 'Resume'}
-                                 </button>
-                                 <button onClick={async () => {
-                                   if (!window.confirm(`Delete the AMC schedule for ${s.customer_name || 'this customer'}? This cannot be undone.`)) return;
-                                   try {
-                                       const res = await fetch(`/api/recurring-schedules/${s.id}`, { method:'DELETE', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`} });
-                                       if (!res.ok) throw new Error('Failed to delete schedule');
-                                       await fetchRecurring();
-                                   } catch (e) { toast.error('Failed to delete schedule.'); }
-                                 }} className="text-[10px] font-bold px-2 py-1 rounded border bg-white text-red-500 border-red-200 hover:bg-red-50">
-                                   Delete
-                                 </button>
-                               </div>
+                               <p className="text-xs text-slate-500">{s.type} · {s.category}</p>
+                               <p className="text-xs text-slate-400 mt-0.5">
+                                 Next due: <span className={`font-bold ${isOverdue ? 'text-red-600' : isDueToday ? 'text-amber-600' : 'text-slate-700'}`}>
+                                   {dueDate.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}
+                                 </span>
+                                 {s.last_scheduled_date && ` · Last: ${new Date(s.last_scheduled_date).toLocaleDateString('en-GB', { day:'2-digit', month:'short' })}`}
+                               </p>
+                               {s.notes && <p className="text-xs text-slate-400 mt-1 italic">{s.notes}</p>}
                              </div>
-                           );
-                         })}
-                       </div>
-                     )}
+                             <div className="flex items-center gap-2 shrink-0">
+                               <button onClick={async () => {
+                                 try {
+                                     const res = await fetch(`/api/recurring-schedules/${s.id}`, {
+                                       method:'PUT', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`,'Content-Type':'application/json'},
+                                       body: JSON.stringify({ isActive: !s.is_active })
+                                     });
+                                     if (!res.ok) throw new Error('Failed to update schedule');
+                                     await fetchRecurring();
+                                 } catch (e) { toast.error('Failed to update schedule.'); }
+                               }} className={`text-[10px] font-bold px-2 py-1 rounded border ${s.is_active ? 'bg-white text-slate-500 border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>
+                                 {s.is_active ? 'Pause' : 'Resume'}
+                               </button>
+                               <button onClick={async () => {
+                                 if (!window.confirm(`Delete the AMC schedule for ${s.customer_name || 'this customer'}? This cannot be undone.`)) return;
+                                 try {
+                                     const res = await fetch(`/api/recurring-schedules/${s.id}`, { method:'DELETE', headers:{'Authorization':`Bearer ${localStorage.getItem('qonnect_token')}`} });
+                                     if (!res.ok) throw new Error('Failed to delete schedule');
+                                     await fetchRecurring();
+                                 } catch (e) { toast.error('Failed to delete schedule.'); }
+                               }} className="text-[10px] font-bold px-2 py-1 rounded border bg-white text-red-500 border-red-200 hover:bg-red-50">
+                                 Delete
+                               </button>
+                             </div>
+                           </div>
+                         );
+                       };
+
+                       const section = (label: string, items: any[], labelClass = 'text-slate-400') => items.length === 0 ? null : (
+                         <div className="mb-5">
+                           <p className={`text-[11px] font-bold uppercase tracking-wide mb-2 ${labelClass}`}>{label} ({items.length})</p>
+                           <div className="space-y-3">{items.map(renderCard)}</div>
+                         </div>
+                       );
+
+                       return (
+                         <div>
+                           {section('Overdue — needs attention', overdue, 'text-red-500')}
+                           {section('Due this week', dueThisWeek, 'text-amber-600')}
+                           {section('Upcoming', upcoming)}
+                           {section('Paused', paused)}
+                         </div>
+                       );
+                     })()}
 
                      {/* New Schedule Form Modal */}
                      {showRecurringForm && (
