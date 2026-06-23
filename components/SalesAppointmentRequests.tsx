@@ -49,6 +49,7 @@ const STATUS_CONFIG: Record<SalesRequestStatus, { label: string; color: string; 
   SCHEDULED:          { label: 'Scheduled',          color: 'text-blue-700',   bg: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-500'   },
   IN_PROGRESS:        { label: 'In Progress',         color: 'text-amber-700',  bg: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-500'  },
   COMPLETED:          { label: 'Completed',           color: 'text-emerald-700',bg: 'bg-emerald-50 border-emerald-200',dot: 'bg-emerald-500'},
+  LINKED:             { label: 'Linked',               color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200', dot: 'bg-purple-500' },
   CANCELLED:          { label: 'Cancelled',           color: 'text-slate-500',  bg: 'bg-slate-50  border-slate-200',  dot: 'bg-slate-400'  },
 };
 
@@ -133,15 +134,20 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   });
   const [schedErrors, setSchedErrors] = useState<Record<string, string>>({});
   const [scheduling, setScheduling]   = useState(false);
-  // Same heads-up check as the creation form, but for the Team Lead at
-  // scheduling time — this is where the actual link-or-create decision
-  // gets made (Sales only ever sees a notice, never decides).
-  const [schedExistingJobMatches, setSchedExistingJobMatches] = useState<any[]>([]);
-  const [schedCheckingExistingJob, setSchedCheckingExistingJob] = useState(false);
-  const [linkToExistingActivityId, setLinkToExistingActivityId] = useState<string>('');
 
   // Detail drawer
   const [detailItem, setDetailItem]   = useState<SalesAppointmentRequest | null>(null);
+
+  // SAR → existing-activity linking (Team Lead / Admin only). Matching
+  // activities are fetched when the detail view opens for a pending
+  // request — this is the actual decision point per the rebuilt spec;
+  // Sales never sees this at all, only a read-only linked/unlinked status
+  // once a Team Lead has acted.
+  const [matchingActivities, setMatchingActivities] = useState<any[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
+  const [linkTargetActivityId, setLinkTargetActivityId] = useState<string>('');
+  const [linkNoteDraft, setLinkNoteDraft] = useState('');
+  const [linking, setLinking] = useState(false);
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<SalesAppointmentRequest | null>(null);
@@ -206,27 +212,27 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     return () => clearTimeout(t);
   }, [custSearch]);
 
-  // Same check, but for the Team Lead's Schedule modal — runs once per
-  // request when the modal opens, since the phone number is already known
-  // and fixed (not being typed live like the creation form).
+  // Matching activities for the SAR currently open in the detail drawer —
+  // this is the real decision point per the rebuilt spec. Only fetched for
+  // Team Lead / Admin (Sales never sees this at all), and only meaningful
+  // while the request is still pending (a request that's already linked or
+  // scheduled doesn't need a new match search).
   useEffect(() => {
-    setLinkToExistingActivityId('');
-    if (!scheduleTarget?.contactNumber) { setSchedExistingJobMatches([]); return; }
+    setLinkTargetActivityId('');
+    setLinkNoteDraft('');
+    if (!detailItem || isSales) { setMatchingActivities([]); return; }
+    if (detailItem.status !== 'PENDING_SCHEDULING') { setMatchingActivities([]); return; }
     let cancelled = false;
     (async () => {
-      setSchedCheckingExistingJob(true);
+      setLoadingMatches(true);
       try {
-        const res = await api.checkExistingJob(scheduleTarget.contactNumber);
-        if (!cancelled) {
-          // Exclude the request's own already-linked activity, if any —
-          // re-scheduling shouldn't warn about the job it's already attached to.
-          setSchedExistingJobMatches((res.matches || []).filter((m: any) => m.activityId !== scheduleTarget.linkedActivityId));
-        }
-      } catch { /* non-critical */ }
-      finally { if (!cancelled) setSchedCheckingExistingJob(false); }
+        const res = await api.salesRequests.matchingActivities(detailItem.id);
+        if (!cancelled) setMatchingActivities(res.matches || []);
+      } catch { /* non-critical — never block the detail view over this */ }
+      finally { if (!cancelled) setLoadingMatches(false); }
     })();
     return () => { cancelled = true; };
-  }, [scheduleTarget?.id]);
+  }, [detailItem?.id, detailItem?.status, isSales]);
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -399,7 +405,6 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
         assignedFieldEngineerId: schedForm.assignedFieldEngineerId,
         assistantTechIds:        schedForm.assistantTechIds,
         durationHours:           Number(schedForm.durationHours) || 2,
-        linkToExistingActivityId: linkToExistingActivityId || undefined,
       });
       setScheduleTarget(null);
       fetchRequests();
@@ -408,6 +413,39 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       setSchedErrors({ _global: e.message || 'Scheduling failed' });
     } finally {
       setScheduling(false);
+    }
+  };
+
+  // Links the currently open detail-view request to an existing activity
+  // instead of scheduling it as a new one. Mandatory note, per spec.
+  const handleLinkActivity = async () => {
+    if (!detailItem || !linkTargetActivityId || !linkNoteDraft.trim()) return;
+    setLinking(true);
+    try {
+      const res = await api.salesRequests.linkActivity(detailItem.id, linkTargetActivityId, linkNoteDraft.trim());
+      setDetailItem(res.request);
+      setLinkTargetActivityId('');
+      setLinkNoteDraft('');
+      fetchRequests();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to link request.');
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const handleUnlinkActivity = async () => {
+    if (!detailItem) return;
+    if (!window.confirm('Unlink this request? It will go back to Pending Scheduling and can be scheduled as a new activity.')) return;
+    setLinking(true);
+    try {
+      const res = await api.salesRequests.unlinkActivity(detailItem.id);
+      setDetailItem(res.request);
+      fetchRequests();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to unlink request.');
+    } finally {
+      setLinking(false);
     }
   };
 
@@ -637,10 +675,6 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           scheduling={scheduling}
           fieldEngineers={fieldEngineers}
           technicalAssociates={technicalAssociates}
-          existingJobMatches={schedExistingJobMatches}
-          checkingExistingJob={schedCheckingExistingJob}
-          linkToExistingActivityId={linkToExistingActivityId}
-          onLinkChange={setLinkToExistingActivityId}
           onFieldChange={(f, v) => setSchedForm(p => ({ ...p, [f]: v }))}
           onToggleAssistant={(id) => setSchedForm(p => ({
             ...p,
@@ -699,9 +733,19 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           canEdit={canEdit(detailItem)}
           canDelete={canDelete(detailItem)}
           isScheduler={isScheduler}
+          isSales={isSales}
           onEdit={() => { setDetailItem(null); openEdit(detailItem); }}
           onSchedule={() => { setDetailItem(null); openSchedule(detailItem); }}
           onDelete={() => { setDetailItem(null); setDeleteTarget(detailItem); }}
+          matchingActivities={matchingActivities}
+          loadingMatches={loadingMatches}
+          linkTargetActivityId={linkTargetActivityId}
+          onSelectLinkTarget={setLinkTargetActivityId}
+          linkNoteDraft={linkNoteDraft}
+          onLinkNoteDraftChange={setLinkNoteDraft}
+          linking={linking}
+          onLinkActivity={handleLinkActivity}
+          onUnlinkActivity={handleUnlinkActivity}
         />
       )}
     </div>
@@ -1507,10 +1551,6 @@ interface ScheduleModalProps {
   scheduling: boolean;
   fieldEngineers: Technician[];
   technicalAssociates: Technician[];
-  existingJobMatches: any[];
-  checkingExistingJob: boolean;
-  linkToExistingActivityId: string;
-  onLinkChange: (activityId: string) => void;
   onFieldChange: (f: string, v: string) => void;
   onToggleAssistant: (id: string) => void;
   onClose: () => void;
@@ -1519,7 +1559,6 @@ interface ScheduleModalProps {
 
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
   request: r, schedForm, schedErrors, scheduling, fieldEngineers, technicalAssociates,
-  existingJobMatches, checkingExistingJob, linkToExistingActivityId, onLinkChange,
   onFieldChange, onToggleAssistant, onClose, onSubmit
 }) => (
   <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
@@ -1558,53 +1597,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Service</span><span className="text-slate-700">{r.serviceCategory}</span></div>
           {r.remarks && <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Remarks</span><span className="text-slate-600 italic">{r.remarks}</span></div>}
         </div>
-
-        {/* Existing-job heads-up — this is where the actual link-or-create
-            decision is made. Sales only ever saw a notice; the Team Lead
-            decides here whether this request is genuinely new work or an
-            add-on to something already open or recently completed. */}
-        {checkingExistingJob && (
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Loader2 size={12} className="animate-spin" /> Checking for existing jobs for this customer…
-          </div>
-        )}
-        {!checkingExistingJob && existingJobMatches.length > 0 && (
-          <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
-            <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-2">
-              <AlertCircle size={14} />
-              This customer already has {existingJobMatches.length === 1 ? 'a job' : `${existingJobMatches.length} jobs`}
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-start gap-2 p-2 rounded-lg hover:bg-amber-100/50 cursor-pointer">
-                <input
-                  type="radio"
-                  name="linkChoice"
-                  checked={linkToExistingActivityId === ''}
-                  onChange={() => onLinkChange('')}
-                  className="mt-0.5"
-                />
-                <span className="text-xs text-amber-800">This is genuinely new work — create a separate job</span>
-              </label>
-              {existingJobMatches.map((m: any) => (
-                <label key={m.activityId} className="flex items-start gap-2 p-2 rounded-lg hover:bg-amber-100/50 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="linkChoice"
-                    checked={linkToExistingActivityId === m.activityId}
-                    onChange={() => onLinkChange(m.activityId)}
-                    className="mt-0.5"
-                  />
-                  <span className="text-xs text-amber-800">
-                    Add this as extra scope on <span className="font-mono font-semibold">{m.activityId}</span>
-                    {' '}({m.status === 'CARRY_FORWARD' ? 'Carry Forward' : m.status === 'DONE' ? 'Completed' : m.status === 'IN_PROGRESS' ? 'In Progress' : 'Planned'}
-                    {m.serviceCategory ? ` — ${m.serviceCategory}` : ''})
-                    {m.carryForwardNote && <div className="mt-0.5 text-amber-600 italic">"{m.carryForwardNote}"</div>}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Date */}
         <div>
@@ -1724,15 +1716,36 @@ interface DetailDrawerProps {
   canEdit: boolean;
   canDelete: boolean;
   isScheduler: boolean;
+  isSales: boolean;
   onClose: () => void;
   onEdit: () => void;
   onSchedule: () => void;
   onDelete: () => void;
+  matchingActivities: any[];
+  loadingMatches: boolean;
+  linkTargetActivityId: string;
+  onSelectLinkTarget: (id: string) => void;
+  linkNoteDraft: string;
+  onLinkNoteDraftChange: (v: string) => void;
+  linking: boolean;
+  onLinkActivity: () => void;
+  onUnlinkActivity: () => void;
 }
 
-const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, canEdit, canDelete, isScheduler, onClose, onEdit, onSchedule, onDelete }) => {
+const MATCH_STATUS_LABEL: Record<string, string> = {
+  PLANNED: 'Planned', SCHEDULED: 'Scheduled', CARRY_FORWARD: 'Carry Forward',
+  IN_PROGRESS: 'In Progress', DONE: 'Completed', COMPLETED: 'Completed',
+};
+
+const DetailDrawer: React.FC<DetailDrawerProps> = ({
+  request: r, technicians, canEdit, canDelete, isScheduler, isSales, onClose, onEdit, onSchedule, onDelete,
+  matchingActivities, loadingMatches, linkTargetActivityId, onSelectLinkTarget,
+  linkNoteDraft, onLinkNoteDraftChange, linking, onLinkActivity, onUnlinkActivity,
+}) => {
   const engineer = technicians.find(t => t.id === r.assignedFieldEngineerId);
   const isPending = r.status === SalesRequestStatus.PENDING_SCHEDULING;
+  const isLinked = r.status === SalesRequestStatus.LINKED;
+  const linkedByPerson = technicians.find(t => t.id === r.linkedBy);
 
   const row = (label: string, value?: string | null, href?: string) => {
     if (!value) return null;
@@ -1784,7 +1797,34 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
             {r.updatedAt !== r.createdAt && row('Updated', new Date(r.updatedAt).toLocaleString('en-GB'))}
           </div>
 
-          {r.linkedActivityId && (
+          {/* Linked-to-existing-activity status — distinct from a request
+              that got its OWN new activity via Schedule. A linked request
+              never has its own activity; it's purely a reference to
+              someone else's job, with a mandatory note explaining why. */}
+          {isLinked && r.linkedActivityId && (
+            <div className="mt-4 px-4 py-3 rounded-xl text-sm bg-purple-50 border border-purple-200 text-purple-800 space-y-1.5">
+              <div className="flex items-center gap-2 font-semibold">
+                <ArrowRight size={14} />
+                Linked to existing activity <span className="font-mono">{r.linkedActivityId}</span>
+              </div>
+              {r.linkNote && <p className="text-xs text-purple-700">"{r.linkNote}"</p>}
+              <p className="text-[11px] text-purple-500">
+                Linked by {linkedByPerson?.name || r.linkedBy || 'unknown'}
+                {r.linkedAt && ` on ${new Date(r.linkedAt).toLocaleString('en-GB')}`}
+              </p>
+              {/* Sales must never be able to unlink — read-only for them, per spec. */}
+              {isScheduler && (
+                <button onClick={onUnlinkActivity} disabled={linking}
+                  className="text-[11px] font-bold text-purple-600 underline disabled:opacity-50 mt-1">
+                  Unlink
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* A request that got its own brand-new activity via Schedule
+              (the normal, non-linked path) — unchanged from before. */}
+          {!isLinked && r.linkedActivityId && (
             <div className={`mt-4 px-4 py-3 rounded-xl text-sm flex items-center gap-2 border ${
                 r.status === 'COMPLETED'   ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
                 r.status === 'IN_PROGRESS' ? 'bg-amber-50 border-amber-200 text-amber-700' :
@@ -1802,6 +1842,87 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
             </div>
           )}
 
+          {/* Matching activities — the actual decision point. Team Lead /
+              Admin only; Sales never sees this section at all, per spec
+              rules #12-#14 (Sales cannot link, cannot schedule, read-only
+              once a Team Lead has acted). Only shown while still pending —
+              once linked or scheduled, the decision has already been made. */}
+          {isScheduler && !isSales && isPending && (
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              {loadingMatches && (
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <Loader2 size={12} className="animate-spin" /> Checking for existing activity plans for this client…
+                </div>
+              )}
+              {!loadingMatches && matchingActivities.length === 0 && (
+                <p className="text-xs text-slate-400">No matching activity plan found for this client in the last/next 7 days.</p>
+              )}
+              {!loadingMatches && matchingActivities.length > 0 && (
+                <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-2">
+                    <AlertCircle size={14} />
+                    Existing activity plan found for this client within the 7-day window
+                  </div>
+                  <div className="space-y-2">
+                    {matchingActivities.map((m: any) => {
+                      const eng = technicians.find(t => t.id === m.assignedEngineerId);
+                      const dateLabel = m.completedAt
+                        ? new Date(m.completedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                        : m.plannedDate
+                        ? new Date(m.plannedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                        : '—';
+                      return (
+                        <label key={m.activityId} className="flex items-start gap-2 p-2 rounded-lg hover:bg-amber-100/50 cursor-pointer bg-white border border-amber-100">
+                          <input
+                            type="radio"
+                            name="linkChoice"
+                            checked={linkTargetActivityId === m.activityId}
+                            onChange={() => onSelectLinkTarget(m.activityId)}
+                            className="mt-0.5"
+                          />
+                          <div className="text-xs text-slate-700 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono font-semibold text-amber-700">{m.activityId}</span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{MATCH_STATUS_LABEL[m.status] || m.status}</span>
+                            </div>
+                            <div className="mt-0.5 text-slate-600">
+                              {m.customerName} {m.contactNumber ? `· ${m.contactNumber}` : ''}
+                            </div>
+                            <div className="text-slate-400 mt-0.5">
+                              {dateLabel} {eng?.name ? `· ${eng.name}` : ''} {m.activityType ? `· ${m.activityType}` : ''} {m.serviceCategory ? `· ${m.serviceCategory}` : ''}
+                            </div>
+                            {m.carryForwardNote && <div className="mt-0.5 text-amber-600 italic">"{m.carryForwardNote}"</div>}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {linkTargetActivityId && (
+                    <div className="mt-3 pt-3 border-t border-amber-200">
+                      <label className="text-[11px] font-bold text-amber-700 uppercase block mb-1">Internal note <span className="text-red-500">*</span></label>
+                      <textarea
+                        value={linkNoteDraft}
+                        onChange={e => onLinkNoteDraftChange(e.target.value)}
+                        placeholder="Why is this being linked instead of scheduled as a new activity?"
+                        rows={2}
+                        className="w-full border border-amber-200 rounded-lg p-2 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      />
+                      <button
+                        onClick={onLinkActivity}
+                        disabled={!linkNoteDraft.trim() || linking}
+                        className="mt-2 w-full py-2 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                      >
+                        {linking && <Loader2 size={12} className="animate-spin" />}
+                        Link to {linkTargetActivityId}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-slate-100">
             {canEdit && (
               <button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
@@ -1815,7 +1936,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ request: r, technicians, ca
             )}
             {isScheduler && isPending && (
               <button onClick={onSchedule} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-xl transition-colors shadow-sm ml-auto">
-                <CalendarCheck size={13} /> Schedule Now
+                <CalendarCheck size={13} /> Create New Activity Anyway
               </button>
             )}
             {isScheduler && r.status === SalesRequestStatus.SCHEDULED && (
