@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import OperationsDashboard from './OperationsDashboard';
 import { Monitor, RefreshCw, Calendar, Activity as ActivityIcon, LayoutDashboard } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts';
+import { isInvolvedInJob } from '../utils/jobRoleUtils';
 
 const TVDisplayMode: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -214,7 +215,7 @@ const TVDisplayMode: React.FC = () => {
                     const dayActs = activities.filter((a: any) => {
                       if (!a.plannedDate) return false;
                       if (new Date(a.plannedDate).toDateString() !== d.toDateString()) return false;
-                      return a.leadTechId === lead.id || a.salesLeadId === lead.id;
+                      return isInvolvedInJob(a, lead.id);
                     });
                     return (
                       <div key={d.toString()} className={`p-1 border-r border-slate-100 last:border-0 ${d.toDateString() === new Date().toDateString() ? 'bg-amber-50/30' : ''}`}>
