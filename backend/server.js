@@ -2612,63 +2612,110 @@ function advanceInterval(fromDate, intervalType) {
     return d;
 }
 
-// Process all schedules that are due today or earlier: for each one, create
-// a real Activity (so it shows up in Activity Planner / Operations Monitor /
-// everyone's calendar exactly like a manually-created job), notify Team
-// Leads on WhatsApp, then roll the schedule forward to its next interval.
-// Can be called manually ("Process Due Now" button) or wired to a daily cron.
+// Days of lead time before a contract's actual due date that its visit
+// should already exist as a draft job in Activity Planner. The visit's own
+// planned_date is still the REAL due date — this only controls how early
+// the (unassigned) activity gets created, so a Team Lead has time to staff
+// it before the day actually arrives.
+const AMC_LEAD_TIME_DAYS = 2;
+
+// Creates a real Activity for every AMC contract due within AMC_LEAD_TIME_DAYS,
+// notifies Team Leads on WhatsApp, and rolls each processed schedule forward
+// to its next interval. Each created activity is intentionally left
+// unassigned (no lead_tech_id, no primaryEngineerId) — it lands in Activity
+// Planner under Planned exactly like a manually-created draft, and a Team
+// Lead picks the engineer and time from there, the same as any other
+// activity. Runs automatically (see the interval timer below) — there is no
+// "Process Due Now" button in the UI anymore, since nothing should depend
+// on someone remembering to click it.
+async function processAmcSchedules(actorContext) {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() + AMC_LEAD_TIME_DAYS);
+
+    const { rows: due } = await pool.query(
+        `SELECT * FROM recurring_schedules WHERE is_active = true AND next_due_date <= $1`,
+        [cutoff.toISOString().slice(0, 10)]
+    );
+
+    const created = [];
+    for (const s of due) {
+        try {
+            const activityId = await nextActivityId();
+            const plannedDate = new Date(s.next_due_date);
+            const [hh, mm] = (s.preferred_time || '09:00').split(':');
+            plannedDate.setHours(parseInt(hh, 10) || 9, parseInt(mm, 10) || 0, 0, 0);
+
+            await pool.query(
+                `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, description, duration_hours, details, customer_name)
+                 VALUES ($1,$2,$3,$4,'PLANNED',$5,$6,$7,$8,$9,$10)`,
+                [
+                    activityId, activityId, s.type || 'Maintenance', 'MEDIUM', plannedDate,
+                    s.customer_id, s.notes || `AMC ${s.interval_type} visit`, 2,
+                    JSON.stringify({ serviceCategory: s.category, amcScheduleId: s.id, customerName: s.customer_name }),
+                    s.customer_name,
+                ]
+            );
+
+            const nextDue = advanceInterval(s.next_due_date, s.interval_type);
+            await pool.query(
+                `UPDATE recurring_schedules SET last_scheduled_date = $1, next_due_date = $2, updated_at = now() WHERE id = $3`,
+                [s.next_due_date, nextDue.toISOString().slice(0, 10), s.id]
+            );
+
+            await logAudit({ user: actorContext, ip: null }, {
+                action: 'CREATE',
+                entityType: 'ACTIVITY',
+                entityId: activityId,
+                entityLabel: s.customer_name,
+                details: { source: 'AMC_SCHEDULE', scheduleId: s.id, type: s.type, dueDate: s.next_due_date },
+            });
+
+            created.push({ activityId, customerName: s.customer_name, scheduleId: s.id });
+        } catch (e) {
+            console.error('Failed to process recurring schedule', s.id, e.message);
+        }
+    }
+
+    if (created.length > 0) {
+        const lines = created.map(c => `• ${c.customerName} — ${c.activityId}`).join('\n');
+        await notifyTeamLeads(`*AMC: ${created.length} upcoming visit${created.length > 1 ? 's' : ''} added to Activity Planner*\n${lines}`);
+    }
+
+    return created;
+}
+
+// Runs automatically — checks hourly for any contract now due within
+// AMC_LEAD_TIME_DAYS. Hourly is more than precise enough for a 2-day lead
+// window; this deliberately avoids adding a cron dependency for something
+// this simple. Errors are caught and logged so one bad run can't crash the
+// server or stop future runs.
+// Note: this assumes a single backend instance (true for the current
+// docker-compose setup, which runs no replicas). If this is ever scaled to
+// multiple backend containers, two instances could both read the same
+// overdue schedule before either commits its next_due_date update, creating
+// a duplicate activity for the same visit — this is NOT safe to run
+// concurrently as written. Scaling to multiple replicas would need a lock
+// (e.g. a Postgres advisory lock around processAmcSchedules) or moving this
+// to a single dedicated worker process instead of running in every replica.
+const AMC_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+setInterval(() => {
+    processAmcSchedules({ id: null, name: 'AMC Scheduler', role: 'SYSTEM' })
+        .catch(e => console.error('Automatic AMC processing failed:', e.message));
+}, AMC_CHECK_INTERVAL_MS);
+// Also run once shortly after server start, so a restart doesn't mean
+// waiting up to an hour before the first check happens.
+setTimeout(() => {
+    processAmcSchedules({ id: null, name: 'AMC Scheduler', role: 'SYSTEM' })
+        .catch(e => console.error('Automatic AMC processing failed (startup run):', e.message));
+}, 30 * 1000);
+
+// Manual trigger — no longer surfaced in the UI (processing is automatic
+// now), but left in place in case it's ever useful to trigger on demand
+// without waiting for the hourly check.
 app.post("/api/recurring-schedules/process", authenticate, writeRateLimit, async (req, res) => {
     try {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const { rows: due } = await pool.query(
-            `SELECT * FROM recurring_schedules WHERE is_active = true AND next_due_date <= $1`,
-            [today.toISOString().slice(0, 10)]
-        );
-
-        const created = [];
-        for (const s of due) {
-            try {
-                const activityId = await nextActivityId();
-                const plannedDate = new Date(s.next_due_date);
-                const [hh, mm] = (s.preferred_time || '09:00').split(':');
-                plannedDate.setHours(parseInt(hh, 10) || 9, parseInt(mm, 10) || 0, 0, 0);
-
-                await pool.query(
-                    `INSERT INTO activities (id, reference, type, priority, status, planned_date, customer_id, description, duration_hours, details, customer_name)
-                     VALUES ($1,$2,$3,$4,'PLANNED',$5,$6,$7,$8,$9,$10)`,
-                    [
-                        activityId, activityId, s.type || 'Maintenance', 'MEDIUM', plannedDate,
-                        s.customer_id, s.notes || `AMC ${s.interval_type} visit`, 2,
-                        JSON.stringify({ serviceCategory: s.category, amcScheduleId: s.id, customerName: s.customer_name }),
-                        s.customer_name,
-                    ]
-                );
-
-                const nextDue = advanceInterval(s.next_due_date, s.interval_type);
-                await pool.query(
-                    `UPDATE recurring_schedules SET last_scheduled_date = $1, next_due_date = $2, updated_at = now() WHERE id = $3`,
-                    [s.next_due_date, nextDue.toISOString().slice(0, 10), s.id]
-                );
-
-                logAudit(req, {
-                    action: 'CREATE',
-                    entityType: 'ACTIVITY',
-                    entityId: activityId,
-                    entityLabel: s.customer_name,
-                    details: { source: 'AMC_SCHEDULE', scheduleId: s.id, type: s.type },
-                });
-
-                created.push({ activityId, customerName: s.customer_name, scheduleId: s.id });
-            } catch (e) {
-                console.error('Failed to process recurring schedule', s.id, e.message);
-            }
-        }
-
-        if (created.length > 0) {
-            const lines = created.map(c => `• ${c.customerName} — ${c.activityId}`).join('\n');
-            await notifyTeamLeads(`*AMC: ${created.length} scheduled visit${created.length > 1 ? 's' : ''} created*\n${lines}`);
-        }
-
+        const created = await processAmcSchedules(req.user);
         res.json({ ok: true, created: created.length, activities: created });
     } catch (e) {
         console.error('Recurring schedule process error:', e);
