@@ -4,10 +4,11 @@ import { Technician, Role, Team } from '../types';
 import { 
   Plus, Search, Edit, Trash2, Shield, Briefcase, 
   CheckCircle2, XCircle, Mail, Phone, Lock, UserCog,
-  Eye, EyeOff, KeyRound, Wrench, X, ZoomIn, ZoomOut, Move, Camera, TrendingUp
+  Eye, EyeOff, KeyRound, Wrench, X, ZoomIn, ZoomOut, Move, Camera, TrendingUp,
+  ArrowRightLeft
 } from 'lucide-react';
 import { generateTechId } from '../utils/idUtils';
-
+import ReassignmentModal from './ReassignmentModal';
 // ── Avatar Cropper Component (shared) ──
 const AvatarCropperUM: React.FC<{
   imageSrc: string;
@@ -130,13 +131,18 @@ interface UserManagementProps {
   onSaveUser: (user: Technician) => void;
   onDeleteUser: (id: string) => void;
   onChangePassword?: (userId: string, currentPassword: string, newPassword: string) => Promise<void>;
+  // Called after a bulk reassignment completes, so the parent can refresh
+  // tickets/activities — the jobs moved are otherwise stale in any data
+  // the parent is already holding.
+  onJobsReassigned?: () => void;
 }
 
 const UserManagement: React.FC<UserManagementProps> = ({ 
     users, 
     onSaveUser,
     onDeleteUser,
-    onChangePassword
+    onChangePassword,
+    onJobsReassigned
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Technician | null>(null);
@@ -145,6 +151,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [cropperImage, setCropperImage] = useState<string | null>(null);
   const [changePwdModal, setChangePwdModal] = useState<Technician | null>(null);
+  // Bulk reassignment — move all of a person's open jobs to another engineer
+  const [reassignSource, setReassignSource] = useState<Technician | null>(null);
   const [changePwdForm, setChangePwdForm] = useState({ current: '', next: '', confirm: '' });
   const [changePwdError, setChangePwdError] = useState('');
   const [changePwdSuccess, setChangePwdSuccess] = useState(false);
@@ -317,6 +325,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
                             {/* Actions — hover only */}
                             <td className="px-6 py-4 text-right">
                                 <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => setReassignSource(user)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Reassign Jobs">
+                                        <ArrowRightLeft size={15} />
+                                    </button>
                                     <button onClick={() => { setChangePwdModal(user); setChangePwdForm({ current: '', next: '', confirm: '' }); setChangePwdError(''); setChangePwdSuccess(false); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Change Password">
                                         <KeyRound size={15} />
                                     </button>
@@ -584,6 +595,16 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     setCropperImage(null);
                 }}
                 onCancel={() => setCropperImage(null)}
+            />
+        )}
+
+        {/* Bulk Reassignment Modal */}
+        {reassignSource && (
+            <ReassignmentModal
+                fromPerson={reassignSource}
+                allTechnicians={users}
+                onClose={() => setReassignSource(null)}
+                onComplete={() => { onJobsReassigned?.(); }}
             />
         )}
     </div>
