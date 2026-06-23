@@ -198,6 +198,45 @@ async function logAudit(req, { action, entityType, entityId, entityLabel, detail
   }
 }
 
+// Produces a compact { field: { from, to } } diff between a record's
+// before/after state — used so the audit log shows what actually changed
+// on an UPDATE, instead of just the names of every field that happened to
+// be present in the request body. The previous behavior (Object.keys of the
+// whole request body) was nearly useless: an edit form resending the full
+// record meant the "changed fields" list was the same long list every time,
+// regardless of what was genuinely different, with no values shown at all.
+//
+// - Skips fields whose value is unchanged (deep-equal via JSON comparison,
+//   sufficient here since values are plain strings/numbers/arrays/objects
+//   coming straight out of the database/request body).
+// - Skips a denylist of fields that are noisy or always differ for reasons
+//   unrelated to a genuine edit (timestamps, internal IDs).
+// - Caps at 15 changed fields and truncates long values, so a single
+//   large edit can't produce an unreadably huge audit entry.
+const AUDIT_DIFF_SKIP_FIELDS = new Set(['id', 'updatedAt', 'createdAt', 'updated_at', 'created_at']);
+function diffFields(before, after) {
+  const diff = {};
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  for (const key of keys) {
+    if (AUDIT_DIFF_SKIP_FIELDS.has(key)) continue;
+    const beforeVal = before?.[key];
+    const afterVal = after?.[key];
+    const beforeStr = JSON.stringify(beforeVal ?? null);
+    const afterStr = JSON.stringify(afterVal ?? null);
+    if (beforeStr === afterStr) continue;
+    const truncate = (v) => {
+      const s = typeof v === 'string' ? v : JSON.stringify(v);
+      return s && s.length > 200 ? s.slice(0, 200) + '…' : v;
+    };
+    diff[key] = { from: truncate(beforeVal ?? null), to: truncate(afterVal ?? null) };
+    if (Object.keys(diff).length >= 15) {
+      diff['…'] = { note: 'additional fields changed but omitted for brevity' };
+      break;
+    }
+  }
+  return diff;
+}
+
 const SALES_REDIRECT_MESSAGE =
   `Thank you for contacting Qonnect. This number is for after-sales support only.\n` +
   `For sales enquiries, kindly contact +974 3330 0319.\n` +
@@ -1310,6 +1349,18 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
         const { category, priority, type, customerId, customerName,
                 assignedTechId, appointmentTime, locationUrl, houseNumber, odooLink, notes, photos } = req.body;
         const { phoneNumber } = req.body; // also capture phoneNumber for update
+
+        // Previously this endpoint had no audit logging at all — editing a
+        // ticket's category, priority, location, etc. left zero trace.
+        // Fetching the before-state here so the audit entry shows a real
+        // diff, consistent with the activity-update fix above.
+        const before = await pool.query(
+            `SELECT category, priority, type, customer_id, customer_name, assigned_tech_id,
+                    appointment_time, location_url, house_number, odoo_link, notes, phone_number
+             FROM tickets WHERE id = $1`,
+            [id]
+        );
+
         await pool.query(
             `UPDATE tickets SET
                 category         = COALESCE($1,  category),
@@ -1338,6 +1389,21 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
                 photos ? JSON.stringify(photos) : null
             ]
         );
+
+        if (before.rows[0]) {
+            const b = before.rows[0];
+            logAudit(req, {
+                action: 'UPDATE',
+                entityType: 'TICKET',
+                entityId: id,
+                entityLabel: customerName || b.customer_name || id,
+                details: diffFields(
+                    { category: b.category, priority: b.priority, type: b.type, customerId: b.customer_id, customerName: b.customer_name, assignedTechId: b.assigned_tech_id, appointmentTime: b.appointment_time, locationUrl: b.location_url, houseNumber: b.house_number, odooLink: b.odoo_link, notes: b.notes, phoneNumber: b.phone_number },
+                    { category, priority, type, customerId, customerName, assignedTechId, appointmentTime, locationUrl, houseNumber, odooLink, notes, phoneNumber }
+                ),
+            });
+        }
+
         res.json({ ok: true });
     } catch (e) {
         console.error("Ticket update error:", e);
@@ -1787,6 +1853,11 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
     const id = req.params.id;
     const { name, phone, email, address, buildingNumber, notes, is_active } = req.body || {};
 
+    const before = await pool.query(
+      `SELECT name, phone, email, address, building_number, notes, is_active FROM customers WHERE id = $1`,
+      [id]
+    );
+
     const { rows } = await pool.query(
       `
       UPDATE customers
@@ -1821,7 +1892,10 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
       entityType: 'CUSTOMER',
       entityId: id,
       entityLabel: r.name,
-      details: { fieldsUpdated: Object.keys(req.body || {}) },
+      details: diffFields(
+        { name: before.rows[0]?.name, phone: before.rows[0]?.phone, email: before.rows[0]?.email, address: before.rows[0]?.address, buildingNumber: before.rows[0]?.building_number, notes: before.rows[0]?.notes, isActive: before.rows[0]?.is_active },
+        { name: r.name, phone: r.phone, email: r.email, address: r.address, buildingNumber: r.building_number, notes: r.notes, isActive: r.is_active }
+      ),
     });
     res.json({
       id: r.id, name: r.name, phone: r.phone || '',
@@ -2772,6 +2846,10 @@ app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
         if (password) {
             hashedPass = await bcrypt.hash(password, 10);
         }
+        const before = await pool.query(
+            `SELECT name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users WHERE id = $1`,
+            [id]
+        );
         const { rows } = await pool.query(
             `UPDATE users SET
                 name     = COALESCE($1, name),
@@ -2806,7 +2884,9 @@ app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
             entityId: id,
             entityLabel: r.name,
             details: {
-                fieldsUpdated: Object.keys(req.body).filter(k => k !== 'password'),
+                // Password is never part of the diff — even a hashed value
+                // has no place in an audit log, hence the separate boolean.
+                ...diffFields(before.rows[0] || {}, r),
                 passwordChanged: !!password,
             },
         });
@@ -3049,7 +3129,7 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
         delete details.updatedAt;
 
         // Fetch current row to detect transitions and merge details
-        const current = await pool.query("SELECT status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id, customer_id FROM activities WHERE id=$1", [req.params.id]);
+        const current = await pool.query("SELECT type, priority, status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id, customer_id, description, duration_hours FROM activities WHERE id=$1", [req.params.id]);
         if (!current.rows[0]) return res.status(404).json({ error: "Activity not found" });
         const prevStatus = current.rows[0]?.status;
         const alreadyStarted = current.rows[0]?.started_at;
@@ -3214,7 +3294,15 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
             entityType: 'ACTIVITY',
             entityId: req.params.id,
             entityLabel: mergedDetails.customerName || req.params.id,
-            details: prevStatus !== status ? { from: prevStatus, to: status } : { fieldsUpdated: Object.keys(req.body) },
+            details: prevStatus !== status
+                ? { from: prevStatus, to: status }
+                // Diff the row's own columns plus everything inside details,
+                // before vs. after — see diffFields() for why this replaced
+                // a plain list of touched field names.
+                : diffFields(
+                    { type: current.rows[0].type, priority: current.rows[0].priority, description: current.rows[0].description, durationHours: current.rows[0].duration_hours, plannedDate: current.rows[0].planned_date, leadTechId: current.rows[0].lead_tech_id, ...existingDetails },
+                    { type, priority, description, durationHours, plannedDate, leadTechId, ...mergedDetails }
+                  ),
         });
 
         // ── SAR Sync: if this activity was created from a Sales Appointment Request,
