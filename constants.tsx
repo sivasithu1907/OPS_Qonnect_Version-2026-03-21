@@ -1,5 +1,5 @@
 import { TicketStatus, Role, ActivityStatus } from './types';
-import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList, ShieldCheck, RefreshCw } from 'lucide-react';
 
 export const APP_NAME = "Qonnect";
 
@@ -79,6 +79,13 @@ export const NAVIGATION_ITEMS = [
     id: 'planning', 
     label: 'Activity Planner', 
     icon: <Calendar size={20} />, 
+    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    category: 'Operations'
+  },
+  { 
+    id: 'amc_contracts', 
+    label: 'AMC Contracts', 
+    icon: <RefreshCw size={20} />, 
     roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'Operations'
   },
