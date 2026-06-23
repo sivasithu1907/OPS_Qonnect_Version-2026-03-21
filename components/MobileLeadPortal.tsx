@@ -1332,7 +1332,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       if (mobileModule !== 'none') {
           return (
               <div className="h-full flex flex-col bg-slate-50">
-                  <div className="bg-white border-b border-slate-200 p-4 flex items-center gap-3 shrink-0 shadow-sm">
+                  <div className={`bg-white border-b border-slate-200 flex items-center gap-3 shrink-0 shadow-sm ${mobileModule === 'sales_requests' ? 'px-6 py-4' : 'p-4'}`}>
                       <button onClick={() => setMobileModule('none')} className="p-1 rounded-full hover:bg-slate-100">
                           <ChevronLeft size={24} className="text-slate-600"/>
                       </button>
