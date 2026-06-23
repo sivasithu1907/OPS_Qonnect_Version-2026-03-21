@@ -274,6 +274,10 @@ export enum SalesRequestStatus {
   // Renaming the enum to match the real, already-stored value avoids a
   // data migration entirely.
   COMPLETED = 'COMPLETED',
+  // A request linked to an existing activity instead of becoming its own
+  // new one. Distinct from SCHEDULED — a LINKED request never gets its own
+  // activity at all; it's purely a reference to someone else's job.
+  LINKED = 'LINKED',
   CANCELLED = 'CANCELLED'
 }
 
@@ -295,7 +299,10 @@ export interface SalesAppointmentRequest {
   scheduledStartTime?: string | null;
   scheduledEndTime?: string | null;
   assignedFieldEngineerId?: string | null;
-  linkedActivityId?: string | null;  // populated after scheduling converts to activity
+  linkedActivityId?: string | null;  // populated when SAR is linked to an existing activity instead of getting its own
+  linkNote?: string | null;          // mandatory internal note explaining why this was linked rather than scheduled new
+  linkedBy?: string | null;          // user ID of the Team Lead/Admin who linked it
+  linkedAt?: string | null;          // ISO timestamp of when it was linked
   createdBy: string;
   updatedBy?: string;
   createdAt: string;
