@@ -671,6 +671,14 @@ await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_sar_status       ON sales_appointment_requests(status);
       CREATE INDEX IF NOT EXISTS idx_sar_sales_lead   ON sales_appointment_requests(sales_lead_user_id);
       CREATE INDEX IF NOT EXISTS idx_sar_created      ON sales_appointment_requests(created_at DESC);
+
+      -- SAR → existing-activity linking (rebuilt per spec). status can now
+      -- also be 'LINKED' — no schema change needed for that, it's a plain
+      -- TEXT column with no CHECK constraint. These three columns are new;
+      -- all nullable, so existing rows are unaffected.
+      ALTER TABLE sales_appointment_requests ADD COLUMN IF NOT EXISTS link_note TEXT;
+      ALTER TABLE sales_appointment_requests ADD COLUMN IF NOT EXISTS linked_by TEXT;
+      ALTER TABLE sales_appointment_requests ADD COLUMN IF NOT EXISTS linked_at TIMESTAMPTZ;
     `);
 
     // ── Self-healing: fix SALES-level users who have role=NULL or role='NONE' ──
@@ -3357,12 +3365,277 @@ function mapSAR(r) {
         scheduledEndTime:         r.scheduled_end_time,
         assignedFieldEngineerId:  r.assigned_field_engineer_id,
         linkedActivityId:         r.linked_activity_id,
+        // SAR → existing-activity link metadata (rebuilt per spec)
+        linkNote:                 r.link_note || null,
+        linkedBy:                 r.linked_by || null,
+        linkedAt:                 r.linked_at || null,
         createdBy:                r.created_by,
         updatedBy:                r.updated_by,
         createdAt:                r.created_at,
         updatedAt:                r.updated_at,
     };
 }
+
+// Pulls the numeric Odoo CRM deal ID out of a reference URL, e.g.
+// "https://qonnect.qa/odoo/crm/1119/sales/684" → "1119". Used as a last-
+// resort fallback match when a SAR has no customer_id AND no usable phone
+// number — two records pointing at the same Odoo deal are almost certainly
+// the same real-world job, even if nothing else lines up.
+function extractOdooDealId(url) {
+    if (!url) return null;
+    const m = String(url).match(/\/crm\/(\d+)/);
+    return m ? m[1] : null;
+}
+
+function normalizePhoneForMatch(phone) {
+    if (!phone) return '';
+    return String(phone).replace(/[^0-9+]/g, '');
+}
+
+// ── GET /api/sales-appointment-requests/:id/matching-activities ──────────
+// TEAM_LEAD / ADMIN only. Finds activities for the same client as this SAR,
+// within a 7-day window, that the SAR could reasonably be linked to instead
+// of spawning a duplicate job.
+//
+// Matching order (per spec — client ID first, fallback only if missing):
+//   1. customer_id — exact match, if the SAR has one.
+//   2. normalized contact number — fallback if customer_id is missing/null.
+//   3. Odoo deal ID extracted from the reference URL — last-resort fallback,
+//      only tried if neither of the above is available.
+//
+// Status + date window (per spec):
+//   - PLANNED / SCHEDULED — only if planned within the next 7 days.
+//   - CARRY_FORWARD / IN_PROGRESS — always included regardless of date
+//     (these are inherently "happening now", not something with a future
+//     due date to be within a window of).
+//   - DONE / COMPLETED — only if completed within the last 7 days.
+//   - CANCELLED — never included, per spec rule #8.
+app.get('/api/sales-appointment-requests/:id/matching-activities', authenticate, async (req, res) => {
+    try {
+        if (req.user.role !== 'TEAM_LEAD' && req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Only Team Lead or Admin can view matching activities' });
+        }
+
+        const sarRow = await pool.query('SELECT * FROM sales_appointment_requests WHERE id = $1', [req.params.id]);
+        if (!sarRow.rows[0]) return res.status(404).json({ error: 'Request not found' });
+        const sar = sarRow.rows[0];
+
+        let rows = [];
+        let matchedBy = null;
+
+        // Per spec rule #5, the fallback chain is meant for when customer_id
+        // is missing — but it's deliberately also used when customer_id IS
+        // present but returns zero matches, since a phone-number fallback
+        // can still genuinely find the right activity (e.g. a duplicate or
+        // differently-linked customer record with the same real phone). This
+        // only ever adds more genuine candidates, never produces a false one.
+        if (sar.customer_id) {
+            matchedBy = 'customerId';
+            const r = await pool.query(
+                `SELECT a.*, c.name AS customer_name, c.phone AS customer_phone
+                 FROM activities a
+                 LEFT JOIN customers c ON a.customer_id = c.id
+                 WHERE a.customer_id = $1`,
+                [sar.customer_id]
+            );
+            rows = r.rows;
+        }
+
+        if (rows.length === 0) {
+            const normPhone = normalizePhoneForMatch(sar.contact_number);
+            if (normPhone) {
+                matchedBy = 'contactNumber';
+                const r = await pool.query(
+                    `SELECT a.*, c.name AS customer_name, c.phone AS customer_phone
+                     FROM activities a
+                     LEFT JOIN customers c ON a.customer_id = c.id
+                     WHERE REGEXP_REPLACE(COALESCE(c.phone, ''), '[^0-9+]', '', 'g') = $1`,
+                    [normPhone]
+                );
+                rows = r.rows;
+            }
+        }
+
+        if (rows.length === 0) {
+            const dealId = extractOdooDealId(sar.odoo_reference);
+            if (dealId) {
+                matchedBy = 'odooReference';
+                // odoo_link is stored as a plain TEXT column on activities,
+                // not inside details, so this can be matched directly.
+                const r = await pool.query(
+                    `SELECT a.*, c.name AS customer_name, c.phone AS customer_phone
+                     FROM activities a
+                     LEFT JOIN customers c ON a.customer_id = c.id
+                     WHERE a.odoo_link LIKE $1`,
+                    [`%/crm/${dealId}%`]
+                );
+                rows = r.rows;
+            }
+        }
+
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
+        const sevenDaysAhead = new Date(now.getTime() + 7 * 86400000);
+
+        const ALLOWED_STATUSES = ['PLANNED', 'SCHEDULED', 'CARRY_FORWARD', 'IN_PROGRESS', 'DONE', 'COMPLETED'];
+
+        const matches = rows
+            .filter(a => {
+                if (!ALLOWED_STATUSES.includes(a.status)) return false; // also excludes CANCELLED implicitly
+                if (a.status === 'CARRY_FORWARD' || a.status === 'IN_PROGRESS') return true;
+                if (a.status === 'PLANNED' || a.status === 'SCHEDULED') {
+                    if (!a.planned_date) return false;
+                    const pd = new Date(a.planned_date);
+                    return pd >= now && pd <= sevenDaysAhead;
+                }
+                if (a.status === 'DONE' || a.status === 'COMPLETED') {
+                    const completedAt = a.completed_at ? new Date(a.completed_at) : null;
+                    if (!completedAt) return false;
+                    return completedAt >= sevenDaysAgo && completedAt <= now;
+                }
+                return false;
+            })
+            .map(a => {
+                const d = a.details || {};
+                return {
+                    activityId: a.id,
+                    reference: a.reference || a.id,
+                    customerName: a.customer_name || d.customerName || '',
+                    contactNumber: a.customer_phone || d.customerPhone || '',
+                    plannedDate: a.planned_date,
+                    completedAt: a.completed_at,
+                    status: a.status,
+                    assignedEngineerId: a.lead_tech_id || d.primaryEngineerId || null,
+                    activityType: a.type,
+                    serviceCategory: d.serviceCategory || null,
+                    carryForwardNote: a.carry_forward_note || d.carryForwardNote || null,
+                };
+            })
+            .sort((x, y) => new Date(y.completedAt || y.plannedDate || 0).getTime() - new Date(x.completedAt || x.plannedDate || 0).getTime())
+            .slice(0, 10);
+
+        res.json({ matches, matchedBy, withinSevenDays: matches.length > 0 });
+    } catch (e) {
+        console.error('Matching activities error:', e);
+        res.status(500).json({ error: 'Failed to load matching activities' });
+    }
+});
+
+// ── POST /api/sales-appointment-requests/:id/link-activity ───────────────
+// TEAM_LEAD / ADMIN only. Links a SAR to an existing activity instead of
+// creating a new one. Requires a mandatory internal note. Does not touch
+// the activity's own scheduling fields — linking is a lightweight
+// "these two things are related" action; if the activity also needs new
+// scope folded into it, that happens separately via the normal activity
+// edit flow, not as a side effect of this endpoint.
+app.post('/api/sales-appointment-requests/:id/link-activity', authenticate, writeRateLimit, async (req, res) => {
+    try {
+        if (req.user.role !== 'TEAM_LEAD' && req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Only Team Lead or Admin can link a request to an existing activity' });
+        }
+
+        const { id } = req.params;
+        const { activityId, linkNote } = req.body || {};
+
+        if (!activityId) return res.status(400).json({ error: 'activityId is required' });
+        if (!linkNote || !String(linkNote).trim()) return res.status(400).json({ error: 'An internal note is required to link this request' });
+
+        const sarRow = await pool.query('SELECT * FROM sales_appointment_requests WHERE id = $1', [id]);
+        if (!sarRow.rows[0]) return res.status(404).json({ error: 'Request not found' });
+        const sar = sarRow.rows[0];
+
+        if (sar.status === 'LINKED') return res.status(409).json({ error: 'This request is already linked to an activity' });
+        if (sar.status === 'SCHEDULED' || sar.status === 'COMPLETED') {
+            return res.status(409).json({ error: 'This request has already been scheduled as its own activity — unschedule it first if you want to link it instead' });
+        }
+
+        const actRow = await pool.query('SELECT id FROM activities WHERE id = $1', [activityId]);
+        if (!actRow.rows[0]) return res.status(404).json({ error: 'Activity not found' });
+
+        const updated = await pool.query(
+            `UPDATE sales_appointment_requests SET
+                linked_activity_id = $1,
+                link_note          = $2,
+                linked_by          = $3,
+                linked_at          = now(),
+                status             = 'LINKED',
+                updated_by         = $3,
+                updated_at         = now()
+             WHERE id = $4
+             RETURNING *`,
+            [activityId, String(linkNote).trim(), req.user.id, id]
+        );
+
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'SALES_REQUEST',
+            entityId: id,
+            entityLabel: sar.customer_name,
+            details: { linkedActivityId: activityId, linkNote: String(linkNote).trim() },
+        });
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'ACTIVITY',
+            entityId: activityId,
+            entityLabel: sar.customer_name,
+            details: { linkedSalesRequestId: id, reason: 'Sales Appointment Request linked instead of creating a duplicate activity' },
+        });
+
+        res.json({ ok: true, request: mapSAR(updated.rows[0]) });
+    } catch (e) {
+        console.error('Link activity error:', e);
+        res.status(500).json({ error: 'Failed to link request to activity' });
+    }
+});
+
+// ── POST /api/sales-appointment-requests/:id/unlink-activity ─────────────
+// TEAM_LEAD / ADMIN only. Reverses a link, putting the SAR back to
+// PENDING_SCHEDULING so it can be scheduled as its own new activity instead
+// — referenced directly by the schedule endpoint's guard message above.
+// Does not touch or delete the activity that was linked; only clears the
+// SAR's own link fields.
+app.post('/api/sales-appointment-requests/:id/unlink-activity', authenticate, writeRateLimit, async (req, res) => {
+    try {
+        if (req.user.role !== 'TEAM_LEAD' && req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Only Team Lead or Admin can unlink a request' });
+        }
+
+        const { id } = req.params;
+        const sarRow = await pool.query('SELECT * FROM sales_appointment_requests WHERE id = $1', [id]);
+        if (!sarRow.rows[0]) return res.status(404).json({ error: 'Request not found' });
+        const sar = sarRow.rows[0];
+
+        if (sar.status !== 'LINKED') return res.status(409).json({ error: 'This request is not currently linked' });
+
+        const previousActivityId = sar.linked_activity_id;
+        const updated = await pool.query(
+            `UPDATE sales_appointment_requests SET
+                linked_activity_id = NULL,
+                link_note          = NULL,
+                linked_by          = NULL,
+                linked_at          = NULL,
+                status             = 'PENDING_SCHEDULING',
+                updated_by         = $1,
+                updated_at         = now()
+             WHERE id = $2
+             RETURNING *`,
+            [req.user.id, id]
+        );
+
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'SALES_REQUEST',
+            entityId: id,
+            entityLabel: sar.customer_name,
+            details: { unlinkedFromActivityId: previousActivityId },
+        });
+
+        res.json({ ok: true, request: mapSAR(updated.rows[0]) });
+    } catch (e) {
+        console.error('Unlink activity error:', e);
+        res.status(500).json({ error: 'Failed to unlink request' });
+    }
+});
 
 /* ── GET /api/sales-appointment-requests/check-existing-job ── */
 // Non-blocking heads-up check: given a phone number, does this customer
@@ -3697,7 +3970,7 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRate
         }
 
         const { id } = req.params;
-        const { scheduledDate, scheduledStartTime, assignedFieldEngineerId, durationHours, assistantTechIds, linkToExistingActivityId } = req.body;
+        const { scheduledDate, scheduledStartTime, assignedFieldEngineerId, durationHours, assistantTechIds } = req.body;
 
         // Validate
         if (!scheduledDate)            return res.status(400).json({ error: 'scheduledDate is required' });
@@ -3726,70 +3999,14 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRate
             if (custRow.rows[0]?.phone) customerPhone = custRow.rows[0].phone;
         }
 
-        // ── Linking to an existing activity instead of creating a new one ──
-        // Used when this request is really additional scope for a customer
-        // who already has open or recently-completed work (see the
-        // check-existing-job heads-up shown to Sales at creation time).
-        // Rather than spawning a disconnected duplicate job, the new ask is
-        // folded into the existing activity: its description gets the new
-        // scope appended, its status moves back to PLANNED if it had
-        // already finished, and it's rescheduled to the date/time chosen
-        // here, same as if it were freshly created.
-        if (linkToExistingActivityId) {
-            const existingAct = await pool.query('SELECT * FROM activities WHERE id = $1', [linkToExistingActivityId]);
-            if (!existingAct.rows[0]) return res.status(404).json({ error: 'Linked activity not found' });
-            const ea = existingAct.rows[0];
-            const existingDetails = ea.details || {};
-
-            const addOnNote = `\n\n— Additional scope added via ${id} (${sar.activity_type} / ${sar.service_category}):\n${sar.remarks?.trim() || '(no remarks)'}`;
-            const mergedDescription = `${ea.description || ''}${addOnNote}`.trim();
-            const mergedDetails = {
-                ...existingDetails,
-                serviceCategory: [existingDetails.serviceCategory, sar.service_category].filter(Boolean).join(', '),
-                linkedSalesRequestIds: [...(existingDetails.linkedSalesRequestIds || []), id],
-            };
-
-            const plannedDate = `${scheduledDate}T${scheduledStartTime}:00+03:00`;
-            await pool.query(
-                `UPDATE activities SET
-                    status = 'PLANNED',
-                    planned_date = $1,
-                    lead_tech_id = $2,
-                    description = $3,
-                    details = $4,
-                    updated_at = NOW()
-                 WHERE id = $5`,
-                [plannedDate, assignedFieldEngineerId, mergedDescription, JSON.stringify(mergedDetails), linkToExistingActivityId]
-            );
-
-            const updatedSar = await pool.query(
-                `UPDATE sales_appointment_requests SET
-                   status                     = 'SCHEDULED',
-                   scheduled_date             = $1,
-                   scheduled_start_time       = $2,
-                   assigned_field_engineer_id = $3,
-                   linked_activity_id         = $4,
-                   updated_by                 = $5,
-                   updated_at                 = now()
-                 WHERE id = $6
-                 RETURNING *`,
-                [scheduledDate, scheduledStartTime, assignedFieldEngineerId, linkToExistingActivityId, userId, id]
-            );
-
-            logAudit(req, {
-                action: 'UPDATE',
-                entityType: 'ACTIVITY',
-                entityId: linkToExistingActivityId,
-                entityLabel: sar.customer_name,
-                details: { linkedNewSalesRequest: id, reason: 'Additional scope added to existing job instead of creating a duplicate' },
-            });
-
-            return res.json({
-                ok: true,
-                request: mapSAR(updatedSar.rows[0]),
-                activityId: linkToExistingActivityId,
-                linkedExisting: true,
-            });
+        // A request already linked to an existing activity (via
+        // POST /.../link-activity) must not also be scheduled as its own
+        // new activity — that would defeat the entire point of linking,
+        // which is to avoid a duplicate job. Admin can intentionally
+        // reverse a link first (clear linked_activity_id/status) if this
+        // was a mistake, then schedule normally.
+        if (sar.status === 'LINKED') {
+            return res.status(409).json({ error: 'This request is linked to an existing activity. Unlink it first if you want to schedule it as a new activity instead.' });
         }
 
         // Build the planned date/time string (combine scheduledDate + scheduledStartTime)
