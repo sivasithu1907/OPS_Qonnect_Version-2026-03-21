@@ -76,6 +76,21 @@ function DetailsSummary({ details }: { details: Record<string, any> }) {
   if (details.from !== undefined && details.to !== undefined) {
     parts.push(`${details.from || '—'} → ${details.to}`);
   }
+  // New field-level diff shape — { fieldName: { from, to } } — produced by
+  // diffFields() on the backend for record UPDATEs. Replaces the old
+  // fieldsUpdated list (just field names, no values, often the same long
+  // list every time regardless of what genuinely changed).
+  const diffEntries = Object.entries(details).filter(
+    ([, v]) => v && typeof v === 'object' && 'from' in v && 'to' in v
+  );
+  if (diffEntries.length > 0) {
+    parts.push(diffEntries.slice(0, 3).map(([field, v]: [string, any]) => {
+      const from = v.from === null || v.from === undefined || v.from === '' ? '—' : String(v.from);
+      const to = v.to === null || v.to === undefined || v.to === '' ? '—' : String(v.to);
+      return `${field}: ${from} → ${to}`;
+    }).join(', '));
+    if (diffEntries.length > 3) parts.push(`+${diffEntries.length - 3} more`);
+  }
   if (details.fieldsUpdated) parts.push(`fields: ${Array.isArray(details.fieldsUpdated) ? details.fieldsUpdated.join(', ') : details.fieldsUpdated}`);
   if (details.carryForwardNote) parts.push(`reason: ${details.carryForwardNote}`);
   if (details.nextPlannedAt) parts.push(`next: ${formatWhen(details.nextPlannedAt)}`);
