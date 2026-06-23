@@ -71,6 +71,10 @@ function App() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  // Lifted up from SalesAppointmentRequests.tsx (which still fetches its own
+  // copy for its own live filtering) so other screens — Customer History —
+  // can show SAR data too, without needing their own separate fetch.
+  const [salesAppointmentRequests, setSalesAppointmentRequests] = useState<any[]>([]);
   const [portalDataReady, setPortalDataReady] = useState(false);
 
   // UI State - Persistent Sidebar
@@ -637,6 +641,16 @@ const loadTickets = async () => {
     }
   };
 
+  const loadSalesAppointmentRequests = async () => {
+    try {
+      const res = await fetch("/api/sales-appointment-requests", { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (Array.isArray(data)) setSalesAppointmentRequests(data);
+    } catch (e) {
+      console.error("Failed to load sales appointment requests", e);
+    }
+  };
+
   const loadTeams = async () => {
     try {
       const res = await fetch("/api/teams", { headers: getAuthHeaders() });
@@ -1002,6 +1016,11 @@ useEffect(() => {
         loadMobileData('tech');
     } else {
         loadAllData();
+        // Independent of /api/init — Sales Appointment Requests has always
+        // been loaded separately by its own screen; this just also loads it
+        // at the App level so Customer History can show it without needing
+        // its own redundant fetch.
+        loadSalesAppointmentRequests();
     }
   }, [currentUser?.id || currentUser?.techId]);
 
@@ -1671,6 +1690,7 @@ useEffect(() => {
                         tickets={tickets}
                         technicians={technicians}
                         sites={sites}
+                        salesAppointmentRequests={salesAppointmentRequests}
                         onSaveCustomer={handleUpdateCustomer}
                         onDeleteCustomer={handleDeleteCustomer}
                         onCreateTicket={(data) => { handleCreateTicket(data); setActiveView('tickets'); }}
@@ -1700,6 +1720,7 @@ useEffect(() => {
                         onSaveUser={handleSaveUser}
                         onDeleteUser={handleDeleteUser}
                         onChangePassword={handleChangePassword}
+                        onJobsReassigned={() => { loadTickets(); loadActivities(); }}
                     />
                 )}
                 {activeView === 'team' && (
@@ -1735,6 +1756,10 @@ useEffect(() => {
                                 .then(r => r.json())
                                 .then((data: any) => { if (data.activities) setActivities(data.activities); })
                                 .catch(() => {});
+                            // Also refresh the App-level copy of SAR data — used by
+                            // Customer History — since scheduling/linking changes
+                            // the SAR's status and linkedActivityId.
+                            loadSalesAppointmentRequests();
                         }}
                     />
                 )}
