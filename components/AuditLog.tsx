@@ -4,7 +4,7 @@ import api from '../services/api';
 import {
   ShieldCheck, Search, RefreshCw, ChevronLeft, ChevronRight,
   User, FileText, Ticket as TicketIcon, Activity as ActivityIcon,
-  Contact, Users, LogIn, LogOut, KeyRound, X
+  Contact, Users, LogIn, LogOut, KeyRound, X, ArrowRightLeft
 } from 'lucide-react';
 
 interface AuditLogEntry {
@@ -26,7 +26,7 @@ const ACTION_OPTIONS = [
   'LOGIN', 'LOGIN_FAILED', 'PASSWORD_CHANGE', 'IMPORT',
 ];
 
-const ENTITY_OPTIONS = ['TICKET', 'ACTIVITY', 'CUSTOMER', 'USER', 'TEAM', 'SALES_REQUEST', 'SYSTEM', 'RECURRING_SCHEDULE'];
+const ENTITY_OPTIONS = ['TICKET', 'ACTIVITY', 'CUSTOMER', 'USER', 'TEAM', 'SALES_REQUEST', 'SYSTEM', 'RECURRING_SCHEDULE', 'BULK_REASSIGNMENT'];
 
 const ENTITY_ICON: Record<string, React.ReactNode> = {
   TICKET: <TicketIcon size={14} />,
@@ -37,6 +37,7 @@ const ENTITY_ICON: Record<string, React.ReactNode> = {
   SALES_REQUEST: <FileText size={14} />,
   SYSTEM: <ShieldCheck size={14} />,
   RECURRING_SCHEDULE: <RefreshCw size={14} />,
+  BULK_REASSIGNMENT: <ArrowRightLeft size={14} />,
 };
 
 const ACTION_STYLE: Record<string, string> = {
