@@ -1045,7 +1045,7 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
             // their own portal at all, active or completed. This is the same gap
             // already fixed in the Activity Planner / Operations Monitor / the
             // frontend completedJobs filter — now consistent here too.
-            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE (lead_tech_id = $1 OR details->'assistantTechIds' ? $1 OR details->>'primaryEngineerId' = $1 OR details->'supportingEngineerIds' ? $1)
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE ${activityInvolvesPersonClause(1)}
                         AND type != 'WHATSAPP_SUPPORT'
                         AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
                         ORDER BY planned_date DESC LIMIT 200`, [userId]),
@@ -1630,6 +1630,24 @@ async function nextActivityId() {
   return `QNC-ACT-${String(lastNum + 1).padStart(6, '0')}`;
 }
 
+// ── Shared "is this person involved in this activity" SQL fragment ───────
+// Backend counterpart to utils/jobRoleUtils.ts on the frontend. Several
+// endpoints (mobile data sync, bulk reassignment) need to find every
+// activity a given person is on, in ANY role — lead, primary, supporting,
+// or technical associate. Before this helper existed, that WHERE clause was
+// written out by hand at each call site, and at least one of those copies
+// was missing supportingEngineerIds entirely (the exact bug behind the
+// Tech Portal's "I'm a supporting engineer but don't see my own jobs" issue).
+//
+// Takes the $N placeholder number for the person's ID (reused 4x — once per
+// role check — since all four checks compare against the same single
+// value, the same $N can be referenced multiple times in one query).
+// Returns just the clause string; the caller supplies paramN in their own
+// params array exactly once.
+function activityInvolvesPersonClause(paramN) {
+  return `(lead_tech_id = $${paramN} OR details->>'primaryEngineerId' = $${paramN} OR details->'supportingEngineerIds' ? $${paramN} OR details->'assistantTechIds' ? $${paramN})`;
+}
+
 // List customers (optional search: ?q=)
 app.get("/api/customers", authenticate, async (req, res) => {
   try {
@@ -1992,6 +2010,160 @@ app.get("/api/me", authenticate, async (req, res) => {
     res.status(500).json({ error: "Failed to verify session" });
   }
 });
+});
+
+// ── Bulk Reassignment ───────────────────────────────────────────────────
+// Lists every OPEN job a person is on, in any role, so a Team Lead can move
+// all of someone's work to another engineer in one action (e.g. when
+// someone goes on leave) instead of opening each job individually.
+app.get("/api/reassignment/open-jobs/:personId", authenticate, async (req, res) => {
+    try {
+        const { personId } = req.params;
+        const [ticketsR, activitiesR] = await Promise.all([
+            pool.query(
+                `SELECT id, customer_name, category, type, status, appointment_time, created_at
+                 FROM tickets
+                 WHERE assigned_tech_id = $1
+                   AND status NOT IN ('RESOLVED', 'CANCELLED')
+                 ORDER BY created_at DESC`,
+                [personId]
+            ),
+            pool.query(
+                `SELECT id, reference, type, status, planned_date, customer_name, lead_tech_id, details
+                 FROM activities
+                 WHERE ${activityInvolvesPersonClause(1)}
+                   AND status NOT IN ('DONE', 'CANCELLED')
+                 ORDER BY planned_date DESC`,
+                [personId]
+            ),
+        ]);
+
+        const jobs = [
+            ...ticketsR.rows.map(r => ({
+                id: r.id,
+                kind: 'ticket',
+                customerName: r.customer_name,
+                title: r.category || r.type,
+                status: r.status,
+                date: r.appointment_time || r.created_at,
+                role: 'ASSIGNED',
+            })),
+            ...activitiesR.rows.map(r => {
+                const d = r.details || {};
+                // Same role precedence as utils/jobRoleUtils.ts on the frontend —
+                // keep these in sync if either changes.
+                let role = null;
+                if (r.lead_tech_id === personId) role = 'LEAD';
+                else if (d.primaryEngineerId === personId) role = 'PRIMARY';
+                else if ((d.supportingEngineerIds || []).includes(personId)) role = 'SUPPORTING';
+                else if ((d.assistantTechIds || []).includes(personId)) role = 'TECHNICAL_ASSOCIATE';
+                return {
+                    id: r.id,
+                    kind: 'activity',
+                    customerName: r.customer_name || d.customerName || '',
+                    title: r.type,
+                    status: r.status,
+                    date: r.planned_date,
+                    role,
+                };
+            }),
+        ].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+
+        res.json({ jobs });
+    } catch (e) {
+        console.error('Reassignment open-jobs error:', e);
+        res.status(500).json({ error: 'Failed to load open jobs' });
+    }
+});
+
+// Executes the reassignment for a selected set of jobs. The new engineer
+// REPLACES the old one in whatever role they held — a job where the
+// original person was "Supporting" gets the new person as the supporting
+// engineer, not as the lead; a job where they were "Lead" gets the new
+// person as lead. This is a deliberate choice (confirmed before building):
+// replace, not add alongside.
+app.post("/api/reassignment/execute", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        const { fromPersonId, toPersonId, jobIds } = req.body || {};
+        if (!fromPersonId || !toPersonId) return res.status(400).json({ error: 'fromPersonId and toPersonId are required' });
+        if (!Array.isArray(jobIds) || jobIds.length === 0) return res.status(400).json({ error: 'jobIds must be a non-empty array' });
+
+        const toUserRow = await pool.query('SELECT id, name FROM users WHERE id = $1', [toPersonId]);
+        if (!toUserRow.rows[0]) return res.status(400).json({ error: 'Target engineer not found' });
+        const fromUserRow = await pool.query('SELECT id, name FROM users WHERE id = $1', [fromPersonId]);
+        const fromName = fromUserRow.rows[0]?.name || fromPersonId;
+        const toName = toUserRow.rows[0].name;
+
+        let movedTickets = 0, movedActivities = 0, failed = 0;
+        const movedJobIds = [];
+
+        for (const jobId of jobIds) {
+            try {
+                // Tickets: single assignee field, simple replace.
+                const ticketUpdate = await pool.query(
+                    `UPDATE tickets SET assigned_tech_id = $1, updated_at = NOW() WHERE id = $2 AND assigned_tech_id = $3`,
+                    [toPersonId, jobId, fromPersonId]
+                );
+                if (ticketUpdate.rowCount > 0) { movedTickets++; movedJobIds.push(jobId); continue; }
+
+                // Activities: replace fromPersonId in EVERY role field where it
+                // appears — a person can simultaneously be lead_tech_id AND
+                // primaryEngineerId on the same job (common, since the lead is
+                // often also the one actually doing the work), so this checks
+                // each field independently rather than stopping at the first match.
+                const actRow = await pool.query('SELECT lead_tech_id, details FROM activities WHERE id = $1', [jobId]);
+                if (!actRow.rows[0]) { failed++; continue; }
+                const d = actRow.rows[0].details || {};
+                let updated = false;
+                let newLeadTechId = actRow.rows[0].lead_tech_id;
+
+                if (actRow.rows[0].lead_tech_id === fromPersonId) {
+                    newLeadTechId = toPersonId;
+                    updated = true;
+                }
+                if (d.primaryEngineerId === fromPersonId) {
+                    d.primaryEngineerId = toPersonId;
+                    updated = true;
+                }
+                if ((d.supportingEngineerIds || []).includes(fromPersonId)) {
+                    d.supportingEngineerIds = d.supportingEngineerIds.map((id) => id === fromPersonId ? toPersonId : id);
+                    updated = true;
+                }
+                if ((d.assistantTechIds || []).includes(fromPersonId)) {
+                    d.assistantTechIds = d.assistantTechIds.map((id) => id === fromPersonId ? toPersonId : id);
+                    updated = true;
+                }
+
+                if (updated) {
+                    await pool.query(
+                        'UPDATE activities SET lead_tech_id = $1, details = $2, updated_at = NOW() WHERE id = $3',
+                        [newLeadTechId, JSON.stringify(d), jobId]
+                    );
+                    movedActivities++;
+                    movedJobIds.push(jobId);
+                } else {
+                    failed++; // job didn't actually have fromPersonId in any role — skip silently counted as failed
+                }
+            } catch (e) {
+                console.error('Reassignment failed for job', jobId, e.message);
+                failed++;
+            }
+        }
+
+        // One summary audit entry for the whole batch, not one per job —
+        // confirmed this is the right granularity before building.
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'BULK_REASSIGNMENT',
+            entityLabel: `${fromName} → ${toName}`,
+            details: { fromPersonId, toPersonId, movedTickets, movedActivities, failed, jobIds: movedJobIds },
+        });
+
+        res.json({ ok: true, movedTickets, movedActivities, failed });
+    } catch (e) {
+        console.error('Reassignment execute error:', e);
+        res.status(500).json({ error: 'Failed to reassign jobs' });
+    }
 });
 
 app.get("/api/users", authenticate, async (req, res) => {
