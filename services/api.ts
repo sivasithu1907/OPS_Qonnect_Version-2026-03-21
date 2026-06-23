@@ -180,6 +180,13 @@ export const api = {
     // recently-completed job? Used by the Sales Appointment Request form.
     checkExistingJob: (phone: string) => api.get(`/api/sales-appointment-requests/check-existing-job?phone=${encodeURIComponent(phone)}`),
 
+    // Bulk Reassignment — move all of someone's open work to another engineer
+    reassignment: {
+        openJobs: (personId: string) => api.get(`/api/reassignment/open-jobs/${personId}`),
+        execute: (fromPersonId: string, toPersonId: string, jobIds: string[]) =>
+            api.post('/api/reassignment/execute', { fromPersonId, toPersonId, jobIds }),
+    },
+
     // On-demand full-detail fetches — used specifically for viewing photos.
     // Regular ticket/activity list responses only carry a lightweight
     // ['HAS_PHOTOS'] flag (no real image bytes) to keep the app fast; these
