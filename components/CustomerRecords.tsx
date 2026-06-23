@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Customer, Activity, Technician, Site, Ticket } from '../types';
+import { Customer, Activity, Technician, Site, Ticket, SalesAppointmentRequest } from '../types';
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
-import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight } from 'lucide-react';
+import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight, ClipboardList } from 'lucide-react';
 
 interface CustomerRecordsProps {
   customers: Customer[];
@@ -10,6 +10,13 @@ interface CustomerRecordsProps {
   tickets: Ticket[];
   technicians: Technician[];
   sites: Site[];
+  // Optional — when provided, the Client History timeline also shows Sales
+  // Appointment Requests for this customer, not just tickets/activities.
+  // Previously a customer's history view had no way to show "Sales created
+  // a request for this same customer" at all — exactly the gap that let
+  // SAR-00004 get created without anyone noticing QNC-ACT-000172 already
+  // existed for the same person.
+  salesAppointmentRequests?: SalesAppointmentRequest[];
   onSaveCustomer: (customer: Customer) => void;
   onDeleteCustomer: (id: string) => void;
   readOnly?: boolean;
@@ -24,6 +31,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
     tickets,
     technicians,
     sites,
+    salesAppointmentRequests = [],
     onSaveCustomer,
     onDeleteCustomer,
     readOnly = false,
@@ -200,7 +208,7 @@ onSaveCustomer(data as Customer);
   // Unified Client History — activities + tickets, sorted newest first
   type TimelineItem = {
       id: string;
-      kind: 'activity' | 'ticket';
+      kind: 'activity' | 'ticket' | 'sar';
       ref: string;
       title: string;
       description: string;
@@ -220,6 +228,10 @@ onSaveCustomer(data as Customer);
       cancellationReason?: string;
       serviceCategory?: string;
       photos?: any[];
+      // SAR-specific — lets the timeline note "this became QNC-ACT-XXXXXX"
+      // once a request is scheduled, so the link between the two is visible
+      // without needing to cross-reference anything manually.
+      linkedActivityId?: string | null;
   };
 
   const getCustomerTimeline = (customerId: string): TimelineItem[] => {
@@ -280,6 +292,28 @@ onSaveCustomer(data as Customer);
           });
       });
 
+      // Sales Appointment Requests for this customer — matched by customerId.
+      // Once scheduled, a SAR is linked to the activity it created (or was
+      // merged into); show that link directly so it's obvious at a glance
+      // that this request became real field work, not a separate thing.
+      salesAppointmentRequests.filter(r => r.customerId === customerId).forEach(r => {
+          items.push({
+              id: r.id,
+              kind: 'sar',
+              ref: r.id,
+              title: r.activityType,
+              description: r.remarks || '',
+              status: r.status,
+              priority: 'MEDIUM',
+              date: new Date(r.scheduledDate ? `${r.scheduledDate}T${r.scheduledStartTime || '00:00'}` : r.createdAt),
+              dateLabel: new Date(r.createdAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }),
+              techName: r.salesLeadName,
+              location: r.houseNumber,
+              serviceCategory: r.serviceCategory,
+              linkedActivityId: r.linkedActivityId,
+          });
+      });
+
       return items.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
 
@@ -288,7 +322,7 @@ onSaveCustomer(data as Customer);
       if (!activeItem || modalType !== 'view') return [];
       return getCustomerTimeline(activeItem.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeItem?.id, modalType, activities, tickets]);
+  }, [activeItem?.id, modalType, activities, tickets, salesAppointmentRequests]);
 
 
   // Legacy wrapper for count badges
@@ -778,12 +812,14 @@ onSaveCustomer(data as Customer);
                             const timeline = activeTimeline;
                             const actCount = timeline.filter(i => i.kind === 'activity').length;
                             const ticketCount = timeline.filter(i => i.kind === 'ticket').length;
+                            const sarCount = timeline.filter(i => i.kind === 'sar').length;
                             const doneCount = timeline.filter(i => i.status === 'DONE' || i.status === 'RESOLVED').length;
                             const cfCount = timeline.filter(i => i.status === 'CARRY_FORWARD' || i.carryForwardNote).length;
                             return (
                                 <div className="flex flex-wrap gap-2 mb-4">
                                     <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{actCount} Activities</span>
                                     <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200">{ticketCount} Tickets</span>
+                                    {sarCount > 0 && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{sarCount} Sales Requests</span>}
                                     <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">{doneCount} Completed</span>
                                     {cfCount > 0 && <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{cfCount} Carry Forward</span>}
                                 </div>
@@ -800,19 +836,24 @@ onSaveCustomer(data as Customer);
                                 <div className="relative border-l-2 border-slate-100 ml-3 space-y-6 py-2">
                                     {activeTimeline.map((item, index) => {
                                         const isTicket = item.kind === 'ticket';
+                                        const isSar = item.kind === 'sar';
                                         const statusColor = 
-                                            item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-500' :
+                                            item.status === 'DONE' || item.status === 'RESOLVED' || item.status === 'COMPLETED' ? 'bg-emerald-500' :
                                             item.status === 'IN_PROGRESS' ? 'bg-blue-500' :
                                             item.status === 'CARRY_FORWARD' ? 'bg-amber-500' :
                                             item.status === 'CANCELLED' ? 'bg-slate-300' :
                                             item.status === 'ON_MY_WAY' || item.status === 'ARRIVED' ? 'bg-cyan-500' :
+                                            item.status === 'SCHEDULED' ? 'bg-indigo-500' :
+                                            item.status === 'PENDING_SCHEDULING' ? 'bg-amber-400' :
                                             'bg-amber-400';
                                         const statusBadge =
-                                            item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
+                                            item.status === 'DONE' || item.status === 'RESOLVED' || item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
                                             item.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
                                             item.status === 'CARRY_FORWARD' ? 'bg-amber-100 text-amber-700' :
                                             item.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
                                             item.status === 'ON_MY_WAY' || item.status === 'ARRIVED' ? 'bg-cyan-100 text-cyan-700' :
+                                            item.status === 'SCHEDULED' ? 'bg-indigo-100 text-indigo-700' :
+                                            item.status === 'PENDING_SCHEDULING' ? 'bg-amber-100 text-amber-700' :
                                             'bg-amber-100 text-amber-700';
                                         
                                         return (
@@ -820,31 +861,39 @@ onSaveCustomer(data as Customer);
                                                 {/* Timeline Dot */}
                                                 <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white shadow-sm ${statusColor}`}>
                                                     {isTicket && <TicketIcon size={8} className="text-white absolute top-0.5 left-0.5" />}
+                                                    {isSar && <ClipboardList size={8} className="text-white absolute top-0.5 left-0.5" />}
                                                 </div>
                                                 
                                                 <div className={`rounded-lg p-4 border hover:shadow-md transition-shadow cursor-pointer ${
-                                                    isTicket ? 'bg-purple-50/30 border-purple-100' : 'bg-slate-50 border-slate-100'
+                                                    isTicket ? 'bg-purple-50/30 border-purple-100' : isSar ? 'bg-amber-50/30 border-amber-100' : 'bg-slate-50 border-slate-100'
                                                 }`} onClick={() => setHistoryPreview(item)}>
                                                     {/* Header Row */}
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-2 mb-0.5">
-                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                                    {isTicket ? 'TICKET' : 'ACTIVITY'}
+                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : isSar ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-600'}`}>
+                                                                    {isTicket ? 'TICKET' : isSar ? 'SALES REQUEST' : 'ACTIVITY'}
                                                                 </span>
                                                                 <span className="text-[10px] font-mono text-slate-400">{item.ref}</span>
                                                             </div>
                                                             <div className="font-bold text-slate-800 text-sm">{item.title}</div>
                                                             {item.serviceCategory && <div className="text-[10px] text-indigo-600">{item.serviceCategory}</div>}
                                                             <div className="text-xs text-slate-500 font-mono mt-0.5">{item.dateLabel} at {item.date.toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</div>
+                                                            {isSar && item.linkedActivityId && (
+                                                                <div className="text-[10px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                                                                    <ArrowRight size={10} /> Scheduled as {item.linkedActivityId}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
                                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusBadge}`}>
                                                                 {item.status.replace(/_/g, ' ')}
                                                             </span>
-                                                            <span className={`text-[9px] font-bold ${
-                                                                item.priority === 'URGENT' ? 'text-red-600' : item.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'
-                                                            }`}>{item.priority}</span>
+                                                            {!isSar && (
+                                                                <span className={`text-[9px] font-bold ${
+                                                                    item.priority === 'URGENT' ? 'text-red-600' : item.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'
+                                                                }`}>{item.priority}</span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     
@@ -923,8 +972,9 @@ onSaveCustomer(data as Customer);
         {historyPreview && (() => {
             const h = historyPreview;
             const isTicket = h.kind === 'ticket';
+            const isSar = h.kind === 'sar';
             const fmtDt = (iso: string) => iso ? new Date(iso).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
-            const statusColor = h.status === 'DONE' || h.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' : h.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' : h.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : h.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
+            const statusColor = h.status === 'DONE' || h.status === 'RESOLVED' || h.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : h.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' : h.status === 'CANCELLED' ? 'bg-red-100 text-red-600' : h.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : h.status === 'SCHEDULED' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700';
             const photos = h.photos || [];
             return (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setHistoryPreview(null)}>
@@ -932,7 +982,7 @@ onSaveCustomer(data as Customer);
                         <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                             <div>
                                 <div className="flex items-center gap-2 mb-0.5">
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{isTicket ? 'TICKET' : 'ACTIVITY'}</span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : isSar ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-600'}`}>{isTicket ? 'TICKET' : isSar ? 'SALES REQUEST' : 'ACTIVITY'}</span>
                                     <span className="text-[10px] font-mono text-slate-400">{h.ref}</span>
                                 </div>
                                 <h3 className="font-bold text-slate-900">{h.title}</h3>
@@ -947,13 +997,20 @@ onSaveCustomer(data as Customer);
                             {/* Timing */}
                             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
-                                <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span className="text-slate-700">{h.dateLabel}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : isSar ? 'Requested' : 'Planned'}</span><span className="text-slate-700">{h.dateLabel}</span></div>
                                 {h.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(h.startedAt)}</span></div>}
                                 {h.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(h.completedAt)}</span></div>}
                                 {h.startedAt && h.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Duration</span><span className="font-bold text-slate-700">{Math.round((new Date(h.completedAt).getTime() - new Date(h.startedAt).getTime()) / 60000)}m</span></div>}
                             </div>
+                            {/* SAR → Activity link */}
+                            {isSar && h.linkedActivityId && (
+                                <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
+                                    <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Scheduled As</div>
+                                    <p className="text-xs text-emerald-800 font-mono">{h.linkedActivityId}</p>
+                                </div>
+                            )}
                             {/* Engineer */}
-                            {h.techName && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assigned To</div><div className="text-xs font-bold text-slate-700">{h.techName}</div></div>}
+                            {h.techName && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{isSar ? 'Sales Lead' : 'Assigned To'}</div><div className="text-xs font-bold text-slate-700">{h.techName}</div></div>}
                             {/* Description */}
                             {h.description && <div className="bg-slate-50 rounded-xl p-3 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-xs text-slate-700 whitespace-pre-wrap">{h.description}</p></div>}
                             {/* Completion */}
