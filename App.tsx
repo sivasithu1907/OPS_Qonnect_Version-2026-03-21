@@ -16,6 +16,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const TicketManagement = lazy(() => import('./components/TicketManagement'));
 const OperationsDashboard = lazy(() => import('./components/OperationsDashboard'));
 const PlanningModule = lazy(() => import('./components/PlanningModule'));
+const AMCContracts = lazy(() => import('./components/AMCContracts'));
 const UserManagement = lazy(() => import('./components/UserManagement'));
 const TeamCRM = lazy(() => import('./components/TeamCRM'));
 const MobileLeadPortal = lazy(() => import('./components/MobileLeadPortal').then(m => ({ default: m.MobileLeadPortal || m.default })));
@@ -1682,6 +1683,9 @@ useEffect(() => {
                         isSaving={isSavingActivity}
                         currentUserRole={currentUser?.role}
                     />
+                )}
+                {activeView === 'amc_contracts' && (
+                    <AMCContracts customers={customers} />
                 )}
                 {activeView === 'customers' && (
                     <CustomerRecords 
