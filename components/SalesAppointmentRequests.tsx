@@ -1187,9 +1187,19 @@ const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, canDelete, isSc
             </div>
             <h3 className="font-bold text-slate-900 text-base leading-snug">{r.customerName}</h3>
             <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm text-slate-500">
-              <span className="flex items-center gap-1"><Phone size={12} />{r.contactNumber}</span>
-              {r.houseNumber && <span className="flex items-center gap-1"><Building size={12} />{r.houseNumber}</span>}
-              {r.odooReference && <span className="flex items-center gap-1"><FileText size={12} />{r.odooReference}</span>}
+              <span className="flex items-center gap-1 min-w-0"><Phone size={12} className="shrink-0" />{r.contactNumber}</span>
+              {r.houseNumber && <span className="flex items-center gap-1 min-w-0"><Building size={12} className="shrink-0" /><span className="truncate">{r.houseNumber}</span></span>}
+              {/* Odoo reference is sometimes a long or occasionally malformed
+                  URL (e.g. two links pasted together with no separator) —
+                  truncated with an ellipsis so a card's height never grows
+                  taller than its siblings just because of this one field.
+                  The full value is still shown in the detail view. */}
+              {r.odooReference && (
+                <span className="flex items-center gap-1 min-w-0 max-w-[180px] sm:max-w-none" title={r.odooReference}>
+                  <FileText size={12} className="shrink-0" />
+                  <span className="truncate">{r.odooReference}</span>
+                </span>
+              )}
             </div>
             {r.serviceCategory && (
               <div className="flex flex-wrap gap-1 mt-2">
