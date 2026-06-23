@@ -196,7 +196,12 @@ export const api = {
         forActivity: (id: string) => api.get(`/api/activities/${id}/full`).then(a => (a.photos || []).filter((p: any) => p && p !== 'HAS_PHOTOS')),
     },
 
-    // Sales Appointment Requests
+    // Sales Appointment Requests — note: list/create/update/delete/schedule
+    // below are not currently called anywhere (SalesAppointmentRequests.tsx
+    // uses api.get/post/put/del with explicit URLs instead), kept as-is
+    // since removing them isn't necessary. matchingActivities/linkActivity/
+    // unlinkActivity are the new SAR-to-existing-activity linking endpoints
+    // (Team Lead / Admin only — enforced server-side).
     salesRequests: {
         list:     ()           => api.get('/api/sales-appointment-requests'),
         create:   (data: any)  => api.post('/api/sales-appointment-requests', data),
@@ -204,6 +209,10 @@ export const api = {
         delete:   (id: string) => api.del(`/api/sales-appointment-requests/${id}`),
         schedule: (id: string, data: any) => api.post(`/api/sales-appointment-requests/${id}/schedule`, data),
         pendingDashboard: () => api.get('/api/dashboard/pending-sales-requests'),
+        matchingActivities: (sarId: string) => api.get(`/api/sales-appointment-requests/${sarId}/matching-activities`),
+        linkActivity: (sarId: string, activityId: string, linkNote: string) =>
+            api.post(`/api/sales-appointment-requests/${sarId}/link-activity`, { activityId, linkNote }),
+        unlinkActivity: (sarId: string) => api.post(`/api/sales-appointment-requests/${sarId}/unlink-activity`, {}),
     },
 };
 
