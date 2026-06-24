@@ -450,8 +450,19 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   };
 
   // ── Render helpers ─────────────────────────────────────────────────────────
+  // Admin/Team Lead can edit any request at any time (the backend has
+  // always allowed this — PUT /api/sales-appointment-requests/:id only
+  // blocks SALES and FIELD_ENGINEER roles, never ADMIN/TEAM_LEAD). This
+  // frontend gate previously only checked for Sales, so the edit button
+  // never appeared for Admin/Team Lead even though the backend already
+  // supported it. The creating Sales person can still only edit their own
+  // request while it's pending — once scheduled or linked, only Admin/Team
+  // Lead can make further changes. created_at/created_by are never part of
+  // the update payload on the backend, so the original creation date and
+  // creator are preserved no matter who edits the request.
   const canEdit = (r: SalesAppointmentRequest) =>
-    isSales && r.createdBy === myId && r.status === SalesRequestStatus.PENDING_SCHEDULING;
+    isScheduler ||
+    (isSales && r.createdBy === myId && r.status === SalesRequestStatus.PENDING_SCHEDULING);
 
   const fieldEngineers = useMemo(
     () => technicians.filter(t =>
