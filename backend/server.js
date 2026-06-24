@@ -3981,6 +3981,21 @@ app.put('/api/sales-appointment-requests/:id', authenticate, writeRateLimit, asy
                 id,
             ]
         );
+
+        // Previously this endpoint had no audit logging at all — now that
+        // Admin/Team Lead can edit any request (not just the original Sales
+        // creator while pending), a record of who changed what matters more.
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'SALES_REQUEST',
+            entityId: id,
+            entityLabel: updated.rows[0]?.customer_name || id,
+            details: diffFields(
+                { customerId: row.customer_id, customerName: row.customer_name, contactNumber: row.contact_number, locationUrl: row.location_url, houseNumber: row.house_number, odooReference: row.odoo_reference, activityType: row.activity_type, serviceCategory: row.service_category, remarks: row.remarks },
+                { customerId: updated.rows[0]?.customer_id, customerName: updated.rows[0]?.customer_name, contactNumber: updated.rows[0]?.contact_number, locationUrl: updated.rows[0]?.location_url, houseNumber: updated.rows[0]?.house_number, odooReference: updated.rows[0]?.odoo_reference, activityType: updated.rows[0]?.activity_type, serviceCategory: updated.rows[0]?.service_category, remarks: updated.rows[0]?.remarks }
+            ),
+        });
+
         res.json(mapSAR(updated.rows[0]));
     } catch (e) {
         console.error('SAR PUT error:', e);
