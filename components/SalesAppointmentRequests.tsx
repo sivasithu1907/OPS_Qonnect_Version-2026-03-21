@@ -92,6 +92,9 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   const [error, setError]             = useState('');
   const [searchQ, setSearchQ]         = useState('');
   const [statusFilter, setStatusFilter] = useState<SalesRequestStatus | 'ALL'>('ALL');
+  // Filter by which Sales rep created the request — Admin/Team Lead only
+  // (Sales already only ever sees their own requests via the My/All tabs).
+  const [salesRepFilter, setSalesRepFilter] = useState<string>('ALL');
   // View toggle + calendar month
   const [view, setView]               = useState<'list' | 'calendar'>('list');
   // Sales: "my requests" tab vs "all requests" tab
@@ -240,6 +243,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       // Sales "My Requests" tab: show only own requests
       if (isSales && myOnly && r.createdBy !== myId) return false;
       if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
+      if (salesRepFilter !== 'ALL' && r.salesLeadUserId !== salesRepFilter) return false;
       if (searchQ.trim()) {
         const q = searchQ.toLowerCase();
         if (
@@ -251,7 +255,23 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       }
       return true;
     });
-  }, [requests, statusFilter, searchQ, isSales, myOnly, myId]);
+  }, [requests, statusFilter, salesRepFilter, searchQ, isSales, myOnly, myId]);
+
+  // Distinct sales reps actually present in the current request list — built
+  // from the requests themselves (not the full technicians/users list) so
+  // the dropdown only ever shows reps who genuinely have requests, sorted
+  // alphabetically by name for easy scanning.
+  const salesRepOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    requests.forEach(r => {
+      if (r.salesLeadUserId && !seen.has(r.salesLeadUserId)) {
+        seen.set(r.salesLeadUserId, r.salesLeadName || r.salesLeadUserId);
+      }
+    });
+    return Array.from(seen.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [requests]);
 
   const pendingCount = useMemo(
     () => requests.filter(r => r.status === SalesRequestStatus.PENDING_SCHEDULING).length,
@@ -573,6 +593,21 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
               className={SEARCH_INPUT_STYLES}
             />
           </div>
+          {/* Sales rep filter — Admin/Team Lead only. Sales already only
+              ever sees their own requests via the My/All tabs above, so a
+              "filter by rep" control would be redundant for them. */}
+          {isScheduler && salesRepOptions.length > 0 && (
+            <select
+              value={salesRepFilter}
+              onChange={e => setSalesRepFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition-colors"
+            >
+              <option value="ALL">All Sales Reps</option>
+              {salesRepOptions.map(rep => (
+                <option key={rep.id} value={rep.id}>{rep.name}</option>
+              ))}
+            </select>
+          )}
           <div className="flex gap-2 flex-wrap">
             {(['ALL', ...Object.values(SalesRequestStatus)] as const).map(s => (
               <button
