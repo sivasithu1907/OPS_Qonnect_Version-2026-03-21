@@ -141,6 +141,28 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [viewActivity, setViewActivity] = useState<Activity | null>(null);
   const [viewJob, setViewJob] = useState<{ type: 'ticket' | 'activity', data: any } | null>(null);
 
+  // Keep the open detail views in sync with the live tickets/activities data.
+  // Without this, viewTicket/viewActivity were one-time snapshots taken when
+  // the view was opened — pressing an action button (e.g. "I've Arrived")
+  // correctly updated the real ticket/activity in the parent's state, but
+  // the screen the user was actually looking at kept showing the OLD status,
+  // since it was reading from this now-stale local copy. The next action
+  // button to show up (e.g. "Start Work") never appeared until the user
+  // closed and reopened the view, which re-ran setViewTicket/setViewActivity
+  // with fresh data. This re-derives the open view from the latest props
+  // every time tickets/activities changes, so it can never go stale while open.
+  useEffect(() => {
+    if (!viewTicket) return;
+    const fresh = tickets.find(t => t.id === viewTicket.id);
+    if (fresh && fresh !== viewTicket) setViewTicket(fresh);
+  }, [tickets, viewTicket?.id]);
+
+  useEffect(() => {
+    if (!viewActivity) return;
+    const fresh = activities.find(a => a.id === viewActivity.id);
+    if (fresh && fresh !== viewActivity) setViewActivity(fresh);
+  }, [activities, viewActivity?.id]);
+
   // Action Form State
   const [actionNote, setActionNote] = useState('');
   const [carryIssue, setCarryIssue] = useState(''); // Issue field for carry forward
