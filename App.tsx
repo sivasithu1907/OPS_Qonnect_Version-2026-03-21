@@ -89,7 +89,15 @@ function App() {
       return false;
   });
 
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState('master_dashboard');
+
+  // Persist the current page so a browser refresh can restore it (see the
+  // session-restore effect below) — only meaningful for Admin/desktop Team
+  // Lead, who have free navigation across the app; other roles always
+  // re-route to their dedicated view on refresh regardless of this value.
+  useEffect(() => {
+    localStorage.setItem('qonnect_active_view', activeView);
+  }, [activeView]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [ticketFilter, setTicketFilter] = useState<TicketFilter | null>(null);
   const [prefillActivity, setPrefillActivity] = useState<any>(null);
@@ -333,7 +341,7 @@ const handleLogin = async (email: string, pass: string) => {
           } else if (data.user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
               setActiveView('lead_portal');
           } else {
-              setActiveView('dashboard');
+              setActiveView('master_dashboard');
           }
 
       } catch (error) {
@@ -345,8 +353,9 @@ const handleLogin = async (email: string, pass: string) => {
 const handleLogout = useCallback(() => {
       localStorage.removeItem('qonnect_token');
       localStorage.removeItem('qonnect_user');
+      localStorage.removeItem('qonnect_active_view');
       setCurrentUser(null);
-      setActiveView('dashboard');
+      setActiveView('master_dashboard');
   }, []);
 
   // --- Data Handlers ---
@@ -992,19 +1001,39 @@ const loadCustomers = async () => {
         // Token is valid — restore session
         localStorage.setItem('qonnect_user', JSON.stringify(user));
         setCurrentUser({ ...user, avatar: user.avatar || undefined });
-        // Auto-route based on role and device
+        // Auto-route based on role and device. Field Engineer / Sales /
+        // mobile Team Lead always land on their dedicated view on refresh —
+        // those roles don't have free navigation across the rest of the
+        // app, so there's no meaningful "page to preserve" for them.
         if (user.role === Role.FIELD_ENGINEER) {
           setActiveView('tech_portal');
         } else if (user.role === Role.SALES) {
           setActiveView('sales_requests');
         } else if (user.role === Role.TEAM_LEAD && window.innerWidth < 768) {
           setActiveView('lead_portal');
+        } else {
+          // Admin / desktop Team Lead — restore whichever page they were on
+          // before the refresh, per the "browser refresh should preserve
+          // the current page" requirement. Previously nothing was restored
+          // here at all, so a refresh always silently fell back to
+          // whatever activeView's default happened to be (Service
+          // Dashboard) — this is the actual fix for that, not just
+          // changing the default.
+          const savedView = localStorage.getItem('qonnect_active_view');
+          const isValidForRole = savedView && NAVIGATION_ITEMS.some(
+            item => item.id === savedView && item.roles.includes(user.role)
+          );
+          // If the saved view doesn't exist or isn't allowed for this role
+          // (e.g. stale data from a previous account), fall back to Master
+          // Dashboard rather than risk landing on a blank screen.
+          setActiveView(isValidForRole ? savedView : 'master_dashboard');
         }
       })
       .catch(() => {
         // Token expired or invalid — clear and show login
         localStorage.removeItem('qonnect_token');
         localStorage.removeItem('qonnect_user');
+        localStorage.removeItem('qonnect_active_view');
         setCurrentUser(null);
       });
   }, []);
@@ -1230,8 +1259,12 @@ useEffect(() => {
         {/* Sidebar - APPLE iOS LIGHT THEME */}
         <aside className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#E5E7EB] border-r-[3px] border-[#1E293B]/20 text-gray-900 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}>
             
-            {/* Sidebar Header */}
-            <div className={`flex items-center border-b border-[#0F172A]/[0.08] transition-all duration-300 ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}>
+            {/* Sidebar Header — clicking the logo navigates to Master Dashboard */}
+            <button
+                onClick={() => { setActiveView('master_dashboard'); setIsMobileMenuOpen(false); }}
+                className={`w-full flex items-center border-b border-[#0F172A]/[0.08] transition-all duration-300 text-left ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}
+                title="Go to Master Dashboard"
+            >
             <div className="shrink-0 transition-all duration-300 flex items-center justify-center">
                 <QonnectLogo size={sidebarCollapsed ? 36 : 32} />
             </div>
@@ -1242,7 +1275,7 @@ useEffect(() => {
                 Field Operations Platform
                 </div>
             </div>
-            </div>
+            </button>
             
             <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto overflow-x-hidden custom-scrollbar">
             {categoryOrder.map(cat => {
@@ -1251,10 +1284,17 @@ useEffect(() => {
                 
                 return (
                     <div key={cat}>
-                        {/* Section Header */}
+                        {/* Section Header — slightly bolder + better contrast than
+                            before, with a short underline beneath the label for
+                            clearer visual separation between nav groups. Still a
+                            plain text label, no background fill or animation, to
+                            stay consistent with the existing clean design. */}
                         {!sidebarCollapsed && (
-                            <h3 className="px-4 text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest mt-6 mb-2">
-                                {cat}
+                            <h3 className="px-4 mt-6 mb-2">
+                                <span className="text-[10.5px] font-bold text-[#6B7280] uppercase tracking-widest">
+                                    {cat}
+                                </span>
+                                <div className="h-[2px] w-6 bg-[#FFCC00]/60 rounded-full mt-1.5" />
                             </h3>
                         )}
                         
