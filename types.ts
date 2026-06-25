@@ -316,6 +316,15 @@ export enum ResolutionStatus {
   NOT_COMPLETED = 'NOT_COMPLETED',
 }
 
+// Not every customer is willing or able to rate the service — these are the
+// reasons an engineer can give instead, one tap, no typing required.
+export enum SkipReason {
+  CUSTOMER_UNAVAILABLE = 'CUSTOMER_UNAVAILABLE',
+  DECLINED = 'DECLINED',
+  LANGUAGE_BARRIER = 'LANGUAGE_BARRIER',
+  OTHER = 'OTHER',
+}
+
 export interface ServiceFeedback {
   id: number;
   activityId?: string | null;
@@ -323,11 +332,19 @@ export interface ServiceFeedback {
   engineerId?: string | null;
   engineerName?: string | null;
   customerName?: string | null;
-  rating: number; // 1-5
-  resolutionStatus: ResolutionStatus;
+  rating: number | null; // 1-5, null when skipped
+  resolutionStatus: ResolutionStatus | null; // null when skipped
   comment?: string | null;
   googleReviewPromptShown: boolean;
   followUpRequired: boolean;
   followUpResolved: boolean;
+  skipped: boolean;
+  skipReason?: SkipReason | null;
   createdAt: string;
+  // Only present on the single-item detail fetch (GET /api/service-feedback/:id)
+  // — joined live from the linked activity/ticket, not stored on the
+  // feedback row itself, so it stays accurate even if assignments change later.
+  serviceCategory?: string | null;
+  salesLeadName?: string | null;
+  assistantTechNames?: string[];
 }
