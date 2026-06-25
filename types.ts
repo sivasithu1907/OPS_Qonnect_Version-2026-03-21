@@ -308,3 +308,26 @@ export interface SalesAppointmentRequest {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Completion Feedback & Google Review QR flow ────────────────────────────
+export enum ResolutionStatus {
+  COMPLETED = 'COMPLETED',
+  PARTIALLY_COMPLETED = 'PARTIALLY_COMPLETED',
+  NOT_COMPLETED = 'NOT_COMPLETED',
+}
+
+export interface ServiceFeedback {
+  id: number;
+  activityId?: string | null;
+  ticketId?: string | null;
+  engineerId?: string | null;
+  engineerName?: string | null;
+  customerName?: string | null;
+  rating: number; // 1-5
+  resolutionStatus: ResolutionStatus;
+  comment?: string | null;
+  googleReviewPromptShown: boolean;
+  followUpRequired: boolean;
+  followUpResolved: boolean;
+  createdAt: string;
+}
