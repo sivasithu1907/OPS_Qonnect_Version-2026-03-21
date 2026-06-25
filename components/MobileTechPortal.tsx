@@ -21,13 +21,6 @@ interface MobileTechPortalProps {
   onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
   // Handler for custom actions
   onUpdateTicket?: (ticket: Ticket) => void; 
-  // Manual refresh — installed as a PWA, this app has no native browser
-  // refresh button or pull-to-refresh gesture, so stale data (a job marked
-  // done that doesn't show up yet, a new assignment that hasn't synced)
-  // had no real way to be force-refreshed short of closing and reopening
-  // the app. This re-fetches real data from the parent's normal data-load
-  // path — the same one the background polling already uses.
-  onRefresh?: () => void | Promise<void>;
 }
 
 const MobileTechPortal: React.FC<MobileTechPortalProps> = ({ 
@@ -41,7 +34,6 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
     isStandalone = false, 
     onLogout, onChangePassword,
     onUpdateTicket, // Optional if needed, but we can reuse onUpdateStatus for basic status changes
-    onRefresh,
 }) => {
   // --- Responsive Check ---
   // When embedded via fullscreen bypass (isStandalone=true), always render mobile
@@ -79,7 +71,6 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // called directly from it) — see handleComplete below, which is now only
   // ever invoked from this modal's onFinalComplete, never directly.
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   // Activity cancel state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTargetAct, setCancelTargetAct] = useState<any>(null);
@@ -722,21 +713,20 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
                             <span className="text-[10px] font-medium text-emerald-600">ONLINE</span>
                         </div>
-                        {onRefresh && (
-                            <button
-                                onClick={async () => {
-                                    if (isRefreshing) return;
-                                    setIsRefreshing(true);
-                                    try { await onRefresh(); }
-                                    finally { setIsRefreshing(false); }
-                                }}
-                                disabled={isRefreshing}
-                                title="Refresh"
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200 disabled:opacity-60 shrink-0"
-                            >
-                                <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
-                            </button>
-                        )}
+                        {/* Always a full page reload — not just a data refetch. This
+                            app runs as an installed PWA with no browser address bar
+                            or pull-to-refresh, so this is the only way to force a
+                            reload. A full reload also picks up any newly deployed
+                            app code, the same as the update banner's own refresh
+                            button — there's deliberately only one kind of "refresh"
+                            now, not two buttons that quietly behaved differently. */}
+                        <button
+                            onClick={() => window.location.reload()}
+                            title="Refresh"
+                            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200 shrink-0"
+                        >
+                            <RefreshCw size={15} />
+                        </button>
                         <div className="w-9 h-9 rounded-full ring-2 ring-amber-400 flex items-center justify-center overflow-hidden bg-amber-50">
                             {currentTech?.avatar ? (
                                 <img src={currentTech.avatar} className="w-full h-full object-cover" alt="" />
