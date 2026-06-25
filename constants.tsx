@@ -81,16 +81,16 @@ export const NAVIGATION_ITEMS = [
     category: 'Field Operations'
   },
   { 
-    id: 'service_feedback', 
-    label: 'Service Feedback', 
-    icon: <Star size={20} />, 
+    id: 'amc_contracts', 
+    label: 'AMC Contracts', 
+    icon: <RefreshCw size={20} />, 
     roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'Field Operations'
   },
   { 
-    id: 'amc_contracts', 
-    label: 'AMC Contracts', 
-    icon: <RefreshCw size={20} />, 
+    id: 'service_feedback', 
+    label: 'Service Feedback', 
+    icon: <Star size={20} />, 
     roles: [Role.ADMIN, Role.TEAM_LEAD],
     category: 'Field Operations'
   },
