@@ -7,7 +7,7 @@ import {
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
   CheckCircle2, History, AlertTriangle, X, XCircle, UserPlus,
   TrendingUp, Grid, Contact, Smartphone, ChevronRight, Clock, Briefcase, ExternalLink, Edit2, Play, CheckSquare, ChevronDown, KeyRound,
-  Home, Settings, ClipboardList, Zap, Lock, BellRing, LayoutGrid, Activity as ActivityIcon, Layers
+  Home, Settings, ClipboardList, Zap, Lock, BellRing, LayoutGrid, Activity as ActivityIcon, Layers, RefreshCw
 } from 'lucide-react';
 import ReportsModule from './ReportsModule';
 import PlanningModule from './PlanningModule';
@@ -1889,6 +1889,18 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
+                        {/* Always a full page reload — same as the Tech Portal's
+                            refresh button. This app runs as an installed PWA with
+                            no browser address bar or pull-to-refresh, so this is
+                            the only way to force one. A full reload also picks up
+                            any newly deployed app code. */}
+                        <button
+                            onClick={() => window.location.reload()}
+                            title="Refresh"
+                            className="p-1.5 rounded-full hover:bg-slate-100 transition-colors text-slate-400"
+                        >
+                            <RefreshCw size={19} />
+                        </button>
                         <button
                             onClick={() => setShowNotifications(true)}
                             className="relative p-1.5 rounded-full hover:bg-slate-100 transition-colors"
