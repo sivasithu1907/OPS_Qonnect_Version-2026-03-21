@@ -42,55 +42,60 @@ export const INPUT_STYLES = "w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded
 export const SEARCH_INPUT_STYLES = "w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl pl-10 pr-[14px] py-[12px] text-sm font-medium text-[#0F172A] placeholder-[#94A3B8] outline-none transition-all focus:bg-[#FFFFFF] focus:border-[#FFCC00] focus:ring-[4px] focus:ring-[#FFCC00]/25";
 
 export const NAVIGATION_ITEMS = [
-  // --- Master Dashboard (Top Level) ---
+  // ── 📊 Dashboards — management overview screens, grouped together ──
   {
     id: 'master_dashboard',
     label: 'Master Dashboard',
     icon: <LayoutDashboard size={20} />,
     roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'Dashboard'
+    category: 'Dashboards'
   },
-
-  // --- After-Sales ---
   { 
     id: 'dashboard', 
     label: 'Service Dashboard', 
     icon: <LayoutDashboard size={20} />, 
     roles: [Role.ADMIN],
-    category: 'After-Sales'
+    category: 'Dashboards'
+  },
+  { 
+    id: 'operations', 
+    label: 'Operations Monitor', 
+    icon: <ActivityIcon size={20} />, 
+    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    category: 'Dashboards'
+  },
+
+  // ── 🛠 Field Operations — field engineers, service, maintenance, support ──
+  { 
+    id: 'planning', 
+    label: 'Activity Planner', 
+    icon: <Calendar size={20} />, 
+    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    category: 'Field Operations'
   },
   { 
     id: 'tickets', 
     label: 'Active Tickets', 
     icon: <TicketIcon size={20} />, 
     roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'After-Sales'
-  },
-
-  // --- Operations ---
-  { 
-    id: 'operations', 
-    label: 'Operations Monitor', 
-    icon: <ActivityIcon size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'Operations'
+    category: 'Field Operations'
   },
   { 
-    id: 'planning', 
-    label: 'Activity Planner', 
-    icon: <Calendar size={20} />, 
+    id: 'service_feedback', 
+    label: 'Service Feedback', 
+    icon: <Star size={20} />, 
     roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'Operations'
+    category: 'Field Operations'
   },
   { 
     id: 'amc_contracts', 
     label: 'AMC Contracts', 
     icon: <RefreshCw size={20} />, 
     roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'Operations'
+    category: 'Field Operations'
   },
 
-  // --- Sales ---
+  // ── 💼 Sales — left intentionally light; future Sales modules slot in here ──
   {
     id: 'sales_requests',
     label: 'Sales Appointment Requests',
@@ -99,67 +104,64 @@ export const NAVIGATION_ITEMS = [
     category: 'Sales'
   },
 
-  // --- General ---
+  // ── 👥 Customers — Clients today; Customer 360°/Assets/Installations/
+  // Documents etc. are expected to join this same category later, so new
+  // items just need `category: 'Customers'` added, no structural change. ──
   { 
     id: 'customers', 
     label: 'Clients', 
     icon: <Contact size={20} />, 
     roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'General'
+    category: 'Customers'
   },
 
-  // --- Admin ---
+  // ── 👨‍💼 Administration — internal admin modules ──
   { 
     id: 'users', 
     label: 'User Management', 
     icon: <UserCog size={20} />, 
     roles: [Role.ADMIN],
-    category: 'Admin'
+    category: 'Administration'
   },
   { 
     id: 'team', 
     label: 'Team Management', 
     icon: <Users size={20} />, 
     roles: [Role.ADMIN],
-    category: 'Admin'
-  },
-  { 
-    id: 'system_tools', 
-    label: 'Data Tools', 
-    icon: <Database size={20} />, 
-    roles: [Role.ADMIN],
-    category: 'Admin'
-  },
-  { 
-    id: 'whatsapp_monitor', 
-    label: 'WhatsApp Monitor', 
-    icon: <MessageCircle size={20} />, 
-    roles: [Role.ADMIN],
-    category: 'Admin'
+    category: 'Administration'
   },
   { 
     id: 'audit_log', 
     label: 'Audit Log', 
     icon: <ShieldCheck size={20} />, 
     roles: [Role.ADMIN],
-    category: 'Admin'
+    category: 'Administration'
   },
   { 
-    id: 'service_feedback', 
-    label: 'Service Feedback', 
-    icon: <Star size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
-    category: 'Admin'
+    id: 'system_tools', 
+    label: 'Data Tools', 
+    icon: <Database size={20} />, 
+    roles: [Role.ADMIN],
+    category: 'Administration'
+  },
+
+  // ── ⚙ System — configuration & integrations ──
+  { 
+    id: 'whatsapp_monitor', 
+    label: 'WhatsApp Monitor', 
+    icon: <MessageCircle size={20} />, 
+    roles: [Role.ADMIN],
+    category: 'System'
   },
   { 
     id: 'settings', 
     label: 'Settings', 
     icon: <SettingsIcon size={20} />, 
     roles: [Role.ADMIN],
-    category: 'Admin'
+    category: 'System'
   },
 
-  // --- Portals & Tools ---
+  // --- Portals & Tools (unchanged — mobile portals, not part of this refactor) ---
   { 
     id: 'lead_portal', 
     label: 'Lead Portal (Mobile)', 
