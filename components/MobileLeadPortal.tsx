@@ -13,6 +13,7 @@ import ReportsModule from './ReportsModule';
 import PlanningModule from './PlanningModule';
 import CustomerRecords from './CustomerRecords';
 const SalesAppointmentRequests = lazy(() => import('./SalesAppointmentRequests'));
+const CompletionFeedbackModal = lazy(() => import('./CompletionFeedbackModal'));
 import { INPUT_STYLES, SEARCH_INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 
@@ -124,6 +125,18 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [modalType, setModalType] = useState<'dispatch' | 'cancel' | 'carry' | 'job_carry' | 'job_complete' | 'activity_job_carry' | 'activity_job_complete' | 'activity_dispatch' | 'manage_team' | null>(null);
   const [modalTicket, setModalTicket] = useState<Ticket | null>(null);
   const [modalActivity, setModalActivity] = useState<Activity | null>(null);
+  // Completion Feedback & Google Review QR flow — shared across all three
+  // places a Team Lead can finalize a job in this portal (the ticket
+  // completion modal, the activity completion modal, and the direct
+  // "Complete" button on an in-progress activity). Holds whichever job is
+  // currently being completed, plus the action that actually finalizes it
+  // — that action is always the SAME existing completion logic that ran
+  // before this feature, just deferred until feedback is captured.
+  const [pendingCompletion, setPendingCompletion] = useState<{
+      kind: 'ticket' | 'activity';
+      data: any;
+      finalize: () => void;
+  } | null>(null);
   
   // Create Ticket State
   const [showCreateTicket, setShowCreateTicket] = useState(false);
@@ -642,15 +655,23 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   const executeJobComplete = () => {
       if (!modalTicket || !onUpdateTicket) return;
-      onUpdateTicket({
-          ...modalTicket,
-          status: TicketStatus.RESOLVED,
-          completionNote: actionNote,
-          completedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-      });
+      const ticketToComplete = modalTicket;
+      const note = actionNote;
       closeModal();
-      setViewTicket(null);
+      setPendingCompletion({
+          kind: 'ticket',
+          data: ticketToComplete,
+          finalize: () => {
+              onUpdateTicket({
+                  ...ticketToComplete,
+                  status: TicketStatus.RESOLVED,
+                  completionNote: note,
+                  completedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+              });
+              setViewTicket(null);
+          },
+      });
   };
 
   const executeJobCarry = () => {
@@ -2432,7 +2453,16 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         className="bg-white border border-slate-300 text-slate-700 font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
                                         <History size={14}/> Carry Forward
                                     </button>
-                                    <button onClick={() => { onUpdateActivity({ ...act, status: 'DONE', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setViewActivity(null); }}
+                                    <button onClick={() => {
+                                        setViewActivity(null);
+                                        setPendingCompletion({
+                                            kind: 'activity',
+                                            data: act,
+                                            finalize: () => {
+                                                onUpdateActivity({ ...act, status: 'DONE', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+                                            },
+                                        });
+                                    }}
                                         className="bg-emerald-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-1 text-xs active:scale-[0.98]">
                                         <CheckSquare size={14}/> Complete
                                     </button>
@@ -3298,16 +3328,23 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     onClick={() => {
                         if (!modalActivity || !onUpdateActivity) return;
                         const a: any = modalActivity as any;
-                        onUpdateActivity({
-                            ...a,
-                            status: 'DONE',
-                            completionNote: actionNote,
-                            remarks: actionNote ? (a.remarks ? a.remarks + '\n' + actionNote : actionNote) : a.remarks,
-                            completedAt: new Date().toISOString(),
-                            updatedAt: new Date().toISOString()
-                        });
+                        const note = actionNote;
                         closeModal();
-                        setViewActivity(null);
+                        setPendingCompletion({
+                            kind: 'activity',
+                            data: a,
+                            finalize: () => {
+                                onUpdateActivity({
+                                    ...a,
+                                    status: 'DONE',
+                                    completionNote: note,
+                                    remarks: note ? (a.remarks ? a.remarks + '\n' + note : note) : a.remarks,
+                                    completedAt: new Date().toISOString(),
+                                    updatedAt: new Date().toISOString()
+                                });
+                                setViewActivity(null);
+                            },
+                        });
                     }} 
                     className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg"
                 >
@@ -4507,6 +4544,43 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 </div>
             </div>
         </div>
+    )}
+
+    {/* Completion Feedback & Google Review QR flow — shown before a ticket
+        or activity actually closes, from any of the three places a Team
+        Lead can complete a job in this portal. */}
+    {pendingCompletion && (
+        <Suspense fallback={null}>
+            <CompletionFeedbackModal
+                activityId={pendingCompletion.kind === 'activity' ? pendingCompletion.data.id : null}
+                ticketId={pendingCompletion.kind === 'ticket' ? pendingCompletion.data.id : null}
+                engineerId={
+                    pendingCompletion.kind === 'ticket'
+                        ? (pendingCompletion.data.assignedTechId || currentUserId)
+                        : (pendingCompletion.data.leadTechId || pendingCompletion.data.primaryEngineerId || currentUserId)
+                }
+                engineerName={
+                    technicians.find(t => t.id === (
+                        pendingCompletion.kind === 'ticket'
+                            ? (pendingCompletion.data.assignedTechId || currentUserId)
+                            : (pendingCompletion.data.leadTechId || pendingCompletion.data.primaryEngineerId || currentUserId)
+                    ))?.name || currentTech?.name || 'Field Engineer'
+                }
+                customerName={
+                    pendingCompletion.kind === 'activity'
+                        ? (customers.find(c => c.id === pendingCompletion.data.customerId)?.name || pendingCompletion.data.customerName || null)
+                        : (pendingCompletion.data.customerName || null)
+                }
+                onCancel={() => setPendingCompletion(null)}
+                onFinalComplete={() => {
+                    const finalize = pendingCompletion.finalize;
+                    setPendingCompletion(null);
+                    // Same completion logic that ran before this feature —
+                    // only invoked from here now, one step later than before.
+                    finalize();
+                }}
+            />
+        </Suspense>
     )}
 
     </div>
