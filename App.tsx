@@ -17,6 +17,8 @@ const TicketManagement = lazy(() => import('./components/TicketManagement'));
 const OperationsDashboard = lazy(() => import('./components/OperationsDashboard'));
 const PlanningModule = lazy(() => import('./components/PlanningModule'));
 const AMCContracts = lazy(() => import('./components/AMCContracts'));
+const SettingsPage = lazy(() => import('./components/SettingsPage'));
+const ServiceFeedbackPage = lazy(() => import('./components/ServiceFeedback'));
 const UserManagement = lazy(() => import('./components/UserManagement'));
 const TeamCRM = lazy(() => import('./components/TeamCRM'));
 const MobileLeadPortal = lazy(() => import('./components/MobileLeadPortal').then(m => ({ default: m.MobileLeadPortal || m.default })));
@@ -1686,6 +1688,12 @@ useEffect(() => {
                 )}
                 {activeView === 'amc_contracts' && (
                     <AMCContracts customers={customers} />
+                )}
+                {activeView === 'settings' && (
+                    <SettingsPage />
+                )}
+                {activeView === 'service_feedback' && (
+                    <ServiceFeedbackPage />
                 )}
                 {activeView === 'customers' && (
                     <CustomerRecords 
