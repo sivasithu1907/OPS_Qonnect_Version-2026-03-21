@@ -1229,6 +1229,7 @@ useEffect(() => {
           isStandalone={true}
           onLogout={handleLogout}
           onChangePassword={async (cur, nxt) => { await handleChangePassword(currentUser.techId ?? '', cur, nxt); }}
+          onRefresh={() => loadMobileData('tech')}
         />
         </Suspense>
         </ErrorBoundary>
@@ -1833,6 +1834,7 @@ useEffect(() => {
                         onUpdateActivity={handleUpdateActivity}
                         isStandalone={false}
                         onLogout={handleLogout}
+                        onRefresh={() => loadMobileData('tech')}
                     />
                 )}
               </Suspense>
