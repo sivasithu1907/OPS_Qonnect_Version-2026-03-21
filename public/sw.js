@@ -2,20 +2,39 @@
 // Strategy: Network-first for API calls, Cache-first for static assets
 // This ensures deploys always serve fresh code immediately
 
-const CACHE_NAME = 'qonnect-v1';
+const CACHE_NAME = 'qonnect-v3';
 const OFFLINE_URL = '/offline.html';
 
-// Static assets to pre-cache on install
+// Static assets to pre-cache on install. Deliberately does NOT include the
+// built CSS/JS bundle files — those have content-hashed filenames that
+// change on every build (e.g. /assets/index-XXXXXXXX.css), which a
+// hand-written service worker can't know in advance. They get cached
+// automatically by the fetch handler below the first time the page
+// actually loads them, instead.
+//
+// Found and fixed: this list previously included '/index.css', a path
+// that has never matched the real built output. cache.addAll() is
+// all-or-nothing — one failing URL fails the ENTIRE install event, which
+// silently meant this service worker has likely never successfully
+// installed for anyone, on any previous version, confirmed by testing
+// directly against the live server (fetch('/index.css') returns a real
+// 404). install() below is also now resilient per-URL, so a single bad
+// entry can never again take down the whole precache step.
 const PRECACHE_ASSETS = [
   '/',
   '/offline.html',
-  '/index.css',
 ];
 
 // ── Install: pre-cache critical assets ──
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE_ASSETS))
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(
+        PRECACHE_ASSETS.map(url =>
+          cache.add(url).catch(err => console.warn('[SW] Precache failed for', url, err))
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
