@@ -198,7 +198,9 @@ export const api = {
     serviceFeedback: {
         create: (data: any) => api.post('/api/service-feedback', data),
         list: (followUpOnly?: boolean) => api.get(`/api/service-feedback${followUpOnly ? '?followUpOnly=true' : ''}`),
+        get: (id: number | string) => api.get(`/api/service-feedback/${id}`),
         resolveFollowup: (id: number | string) => api.put(`/api/service-feedback/${id}/resolve-followup`, {}),
+        delete: (id: number | string) => api.del(`/api/service-feedback/${id}`),
     },
 
     // On-demand full-detail fetches — used specifically for viewing photos.
