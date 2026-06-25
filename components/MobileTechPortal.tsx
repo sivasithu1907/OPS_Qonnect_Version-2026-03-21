@@ -6,6 +6,7 @@ import { Ticket, TicketStatus, Technician, Activity } from '../types';
 import { ChevronLeft, Search, X, XCircle, CalendarDays, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
+import CompletionFeedbackModal from './CompletionFeedbackModal';
 
 interface MobileTechPortalProps {
   tickets: Ticket[];
@@ -64,6 +65,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [completionStep, setCompletionStep] = useState(false);
+  // Completion Feedback & Google Review QR flow — shown between "Submit &
+  // Close" and the actual completion logic. The job is NOT closed until
+  // this step finishes (or is explicitly skipped via handleComplete being
+  // called directly from it) — see handleComplete below, which is now only
+  // ever invoked from this modal's onFinalComplete, never directly.
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   // Activity cancel state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTargetAct, setCancelTargetAct] = useState<any>(null);
@@ -909,7 +916,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             </div>
                             <div className="flex gap-3 pt-4">
                                 <button onClick={() => setCompletionStep(false)} className="flex-1 py-4 text-slate-500 font-bold">Back</button>
-                                <button onClick={handleComplete} className="flex-[2] py-4 rounded-xl bg-emerald-600 text-white font-bold shadow-xl active:bg-emerald-700">Submit & Close</button>
+                                <button onClick={() => setShowFeedbackModal(true)} className="flex-[2] py-4 rounded-xl bg-emerald-600 text-white font-bold shadow-xl active:bg-emerald-700">Submit & Close</button>
                             </div>
                         </div>
                     </div>
@@ -1550,6 +1557,31 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                   </div>
               </div>
           </div>
+      )}
+
+      {/* Completion Feedback & Google Review QR flow — shown when "Submit &
+          Close" is pressed, before the job actually closes. */}
+      {showFeedbackModal && activeJob && (
+          <CompletionFeedbackModal
+              activityId={activeJobItem?.type === 'activity' ? (activeJob as any).id : null}
+              ticketId={activeJobItem?.type === 'ticket' ? (activeJob as any).id : null}
+              engineerId={currentTechId}
+              engineerName={currentTech?.name || 'Field Engineer'}
+              customerName={
+                  activeJobItem?.type === 'activity'
+                      ? ((customers as any[]).find((c: any) => c.id === (activeJob as any).customerId)?.name || (activeJob as any).customerName || null)
+                      : ((activeJob as any).customerName || null)
+              }
+              onCancel={() => setShowFeedbackModal(false)}
+              onFinalComplete={() => {
+                  setShowFeedbackModal(false);
+                  // This is the SAME completion logic that existed before
+                  // this feature — only ever called from here now, so the
+                  // job still doesn't close until feedback is captured (or
+                  // the engineer cancels back out without completing).
+                  handleComplete();
+              }}
+          />
       )}
 
     </>
