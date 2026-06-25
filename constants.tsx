@@ -1,5 +1,5 @@
 import { TicketStatus, Role, ActivityStatus } from './types';
-import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList, ShieldCheck, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList, ShieldCheck, RefreshCw, Settings as SettingsIcon, Star } from 'lucide-react';
 
 export const APP_NAME = "Qonnect";
 
@@ -141,6 +141,20 @@ export const NAVIGATION_ITEMS = [
     id: 'audit_log', 
     label: 'Audit Log', 
     icon: <ShieldCheck size={20} />, 
+    roles: [Role.ADMIN],
+    category: 'Admin'
+  },
+  { 
+    id: 'service_feedback', 
+    label: 'Service Feedback', 
+    icon: <Star size={20} />, 
+    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    category: 'Admin'
+  },
+  { 
+    id: 'settings', 
+    label: 'Settings', 
+    icon: <SettingsIcon size={20} />, 
     roles: [Role.ADMIN],
     category: 'Admin'
   },
