@@ -187,6 +187,20 @@ export const api = {
             api.post('/api/reassignment/execute', { fromPersonId, toPersonId, jobIds }),
     },
 
+    // App Settings — currently just the Google Review URL, but generic
+    // enough for future admin-configurable values.
+    settings: {
+        get: (key: string) => api.get(`/api/settings/${key}`),
+        set: (key: string, value: string) => api.put(`/api/settings/${key}`, { value }),
+    },
+
+    // Completion Feedback & Google Review QR flow
+    serviceFeedback: {
+        create: (data: any) => api.post('/api/service-feedback', data),
+        list: (followUpOnly?: boolean) => api.get(`/api/service-feedback${followUpOnly ? '?followUpOnly=true' : ''}`),
+        resolveFollowup: (id: number | string) => api.put(`/api/service-feedback/${id}/resolve-followup`, {}),
+    },
+
     // On-demand full-detail fetches — used specifically for viewing photos.
     // Regular ticket/activity list responses only carry a lightweight
     // ['HAS_PHOTOS'] flag (no real image bytes) to keep the app fast; these
