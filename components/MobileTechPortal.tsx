@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import toast from './Toast';
 import api from '../services/api';
 import { Ticket, TicketStatus, Technician, Activity } from '../types';
-import { ChevronLeft, Search, X, XCircle, CalendarDays, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase } from 'lucide-react';
+import { ChevronLeft, Search, X, XCircle, CalendarDays, ChevronRight, MapPin, Navigation, CheckCircle2, Camera, LogOut, Clock, AlertTriangle, Play, Check, Smartphone, X, Calendar, KeyRound, Phone, Car, Home, History, RotateCcw, Grid, Briefcase, RefreshCw } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 import CompletionFeedbackModal from './CompletionFeedbackModal';
@@ -21,6 +21,13 @@ interface MobileTechPortalProps {
   onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
   // Handler for custom actions
   onUpdateTicket?: (ticket: Ticket) => void; 
+  // Manual refresh — installed as a PWA, this app has no native browser
+  // refresh button or pull-to-refresh gesture, so stale data (a job marked
+  // done that doesn't show up yet, a new assignment that hasn't synced)
+  // had no real way to be force-refreshed short of closing and reopening
+  // the app. This re-fetches real data from the parent's normal data-load
+  // path — the same one the background polling already uses.
+  onRefresh?: () => void | Promise<void>;
 }
 
 const MobileTechPortal: React.FC<MobileTechPortalProps> = ({ 
@@ -33,7 +40,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
     onUpdateActivity,
     isStandalone = false, 
     onLogout, onChangePassword,
-    onUpdateTicket // Optional if needed, but we can reuse onUpdateStatus for basic status changes
+    onUpdateTicket, // Optional if needed, but we can reuse onUpdateStatus for basic status changes
+    onRefresh,
 }) => {
   // --- Responsive Check ---
   // When embedded via fullscreen bypass (isStandalone=true), always render mobile
@@ -71,6 +79,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
   // called directly from it) — see handleComplete below, which is now only
   // ever invoked from this modal's onFinalComplete, never directly.
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   // Activity cancel state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTargetAct, setCancelTargetAct] = useState<any>(null);
@@ -713,6 +722,21 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
                             <span className="text-[10px] font-medium text-emerald-600">ONLINE</span>
                         </div>
+                        {onRefresh && (
+                            <button
+                                onClick={async () => {
+                                    if (isRefreshing) return;
+                                    setIsRefreshing(true);
+                                    try { await onRefresh(); }
+                                    finally { setIsRefreshing(false); }
+                                }}
+                                disabled={isRefreshing}
+                                title="Refresh"
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 active:bg-slate-200 disabled:opacity-60 shrink-0"
+                            >
+                                <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
+                            </button>
+                        )}
                         <div className="w-9 h-9 rounded-full ring-2 ring-amber-400 flex items-center justify-center overflow-hidden bg-amber-50">
                             {currentTech?.avatar ? (
                                 <img src={currentTech.avatar} className="w-full h-full object-cover" alt="" />
