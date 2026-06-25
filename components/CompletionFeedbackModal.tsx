@@ -19,11 +19,80 @@
  */
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Star, X, Copy, Check, AlertTriangle, Loader2 } from 'lucide-react';
+import { Star, X, Copy, Check, AlertTriangle, Loader2, Languages } from 'lucide-react';
 import { INPUT_STYLES } from '../constants';
 import api from '../services/api';
 import toast from './Toast';
-import { ResolutionStatus } from '../types';
+import { ResolutionStatus, SkipReason } from '../types';
+
+type Lang = 'en' | 'ar';
+
+// Every customer-facing string in this screen, in both languages. The
+// engineer-facing pieces (loading/error toasts, etc.) stay English-only —
+// this is specifically about what the CUSTOMER reads and taps, since
+// they're the one being handed the device.
+const T: Record<Lang, Record<string, string>> = {
+  en: {
+    title: 'Customer Feedback',
+    handDevice: 'Please hand the device to the customer, or ask them to rate the service before we finish.',
+    rateService: "How would you rate the engineer's service?",
+    starsOf5: 'of 5 stars',
+    workCompleted: 'Was the work completed?',
+    comments: 'Comments (optional)',
+    commentsPlaceholder: 'Anything the customer would like to add…',
+    submit: 'Submit Feedback',
+    skipLink: 'Customer unavailable or unable to rate',
+    skipWhy: 'Why are you skipping?',
+    skipBack: 'Never mind, go back',
+    skippedTitle: 'No problem.',
+    skippedBody: 'Feedback was skipped for this job.',
+    reviewPrompt: 'Thank you! Would you mind leaving us a Google review?',
+    copyLink: 'Copy Review Link',
+    linkCopied: 'Link Copied',
+    noReviewUrl: "Google Review link hasn't been set up yet. Ask an Admin to add it under Settings.",
+    thanksGreat: 'Thank you for the great feedback!',
+    thanksLow: 'Thank you for your feedback.',
+    followUp: "Our team will follow up.",
+    finish: 'I have completed this step',
+    completed: 'Completed',
+    partiallyCompleted: 'Partially Completed',
+    notCompleted: 'Not Completed',
+    customerUnavailable: 'Customer unavailable',
+    declined: 'Customer declined to rate',
+    languageBarrier: 'Language barrier',
+    other: 'Other',
+  },
+  ar: {
+    title: 'تقييم الخدمة',
+    handDevice: 'يرجى تسليم الجهاز للعميل، أو طلب تقييم الخدمة قبل الإنهاء.',
+    rateService: 'كيف تقيّم خدمة المهندس؟',
+    starsOf5: 'من 5 نجوم',
+    workCompleted: 'هل تم إنجاز العمل؟',
+    comments: 'تعليقات (اختياري)',
+    commentsPlaceholder: 'أي شيء يرغب العميل بإضافته…',
+    submit: 'إرسال التقييم',
+    skipLink: 'العميل غير متاح أو لا يمكنه التقييم',
+    skipWhy: 'لماذا تتخطى هذه الخطوة؟',
+    skipBack: 'تراجع',
+    skippedTitle: 'لا بأس.',
+    skippedBody: 'تم تخطي التقييم لهذه المهمة.',
+    reviewPrompt: 'شكراً لك! هل تود ترك تقييم لنا على جوجل؟',
+    copyLink: 'نسخ رابط التقييم',
+    linkCopied: 'تم نسخ الرابط',
+    noReviewUrl: 'لم يتم إعداد رابط تقييم جوجل بعد. يرجى التواصل مع المسؤول لإضافته في الإعدادات.',
+    thanksGreat: 'شكراً لتقييمك الرائع!',
+    thanksLow: 'شكراً لملاحظاتك.',
+    followUp: 'سيتواصل فريقنا معك قريباً.',
+    finish: 'لقد أتممت هذه الخطوة',
+    completed: 'تم الإنجاز',
+    partiallyCompleted: 'إنجاز جزئي',
+    notCompleted: 'لم يتم الإنجاز',
+    customerUnavailable: 'العميل غير متاح',
+    declined: 'رفض العميل التقييم',
+    languageBarrier: 'حاجز اللغة',
+    other: 'أخرى',
+  },
+};
 
 interface CompletionFeedbackModalProps {
   activityId?: string | null;
@@ -35,23 +104,43 @@ interface CompletionFeedbackModalProps {
   onFinalComplete: () => void;
 }
 
-const RESOLUTION_OPTIONS: { value: ResolutionStatus; label: string }[] = [
-  { value: ResolutionStatus.COMPLETED, label: 'Completed' },
-  { value: ResolutionStatus.PARTIALLY_COMPLETED, label: 'Partially Completed' },
-  { value: ResolutionStatus.NOT_COMPLETED, label: 'Not Completed' },
+const RESOLUTION_OPTIONS = (t: Record<string, string>): { value: ResolutionStatus; label: string }[] => [
+  { value: ResolutionStatus.COMPLETED, label: t.completed },
+  { value: ResolutionStatus.PARTIALLY_COMPLETED, label: t.partiallyCompleted },
+  { value: ResolutionStatus.NOT_COMPLETED, label: t.notCompleted },
+];
+
+// Not every customer is willing or available to rate the service — one tap,
+// no typing required, so this never becomes a reason to get stuck mid-job.
+const SKIP_REASON_OPTIONS = (t: Record<string, string>): { value: SkipReason; label: string }[] => [
+  { value: SkipReason.CUSTOMER_UNAVAILABLE, label: t.customerUnavailable },
+  { value: SkipReason.DECLINED, label: t.declined },
+  { value: SkipReason.LANGUAGE_BARRIER, label: t.languageBarrier },
+  { value: SkipReason.OTHER, label: t.other },
 ];
 
 const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
   activityId, ticketId, engineerId, engineerName, customerName,
   onCancel, onFinalComplete,
 }) => {
+  const [lang, setLang] = useState<Lang>('en');
+  const t = T[lang];
+  const isRtl = lang === 'ar';
+
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [resolutionStatus, setResolutionStatus] = useState<ResolutionStatus | ''>('');
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [wasSkipped, setWasSkipped] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Skip picker — a small, deliberately understated link beneath the main
+  // form, never a competing button. Tapping it reveals one-tap reason
+  // options instead of immediately skipping, so a skip is still a real,
+  // recorded action rather than a silent shortcut.
+  const [showSkipOptions, setShowSkipOptions] = useState(false);
 
   const [reviewUrl, setReviewUrl] = useState<string | null>(null);
   const [reviewUrlLoading, setReviewUrlLoading] = useState(true);
@@ -98,6 +187,29 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
     }
   };
 
+  const handleSkip = async (reason: SkipReason) => {
+    setSubmitting(true);
+    try {
+      await api.serviceFeedback.create({
+        activityId: activityId || undefined,
+        ticketId: ticketId || undefined,
+        engineerId,
+        engineerName,
+        customerName: customerName || undefined,
+        skipped: true,
+        skipReason: reason,
+      });
+    } catch {
+      // Same as a real submission — saving the skip record is best-effort;
+      // it never blocks the engineer from finishing the job either way.
+      toast.error('Could not record the skip, but you can still complete the job.');
+    } finally {
+      setSubmitting(false);
+      setWasSkipped(true);
+      setSubmitted(true);
+    }
+  };
+
   const handleCopyLink = async () => {
     if (!reviewUrl) return;
     try {
@@ -111,25 +223,38 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/50 flex items-end sm:items-center justify-center">
-      <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div dir={isRtl ? 'rtl' : 'ltr'} className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white">
-          <h2 className="font-bold text-slate-900">Customer Feedback</h2>
-          {!submitted && (
-            <button onClick={onCancel} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
-              <X size={18} />
+          <h2 className="font-bold text-slate-900">{t.title}</h2>
+          <div className="flex items-center gap-2">
+            {/* Language toggle — the customer picks, since the engineer
+                can't know in advance whether English or Arabic suits a
+                given household, and not every customer reads Arabic
+                despite it being the majority. */}
+            <button
+              onClick={() => setLang(l => l === 'en' ? 'ar' : 'en')}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+            >
+              <Languages size={14} />
+              {lang === 'en' ? 'العربية' : 'English'}
             </button>
-          )}
+            {!submitted && (
+              <button onClick={onCancel} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+                <X size={18} />
+              </button>
+            )}
+          </div>
         </div>
 
         {!submitted ? (
           <div className="p-5 space-y-5">
             <p className="text-sm text-slate-500">
-              Please hand the device to the customer, or ask them to rate the service before we finish.
+              {t.handDevice}
             </p>
 
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2 text-center">
-                How would you rate the engineer's service? <span className="text-red-500">*</span>
+                {t.rateService} <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center justify-center gap-2">
                 {[1, 2, 3, 4, 5].map(n => (
@@ -150,16 +275,16 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
                 ))}
               </div>
               {rating > 0 && (
-                <p className="text-center text-xs text-slate-400 mt-1">{rating} of 5 stars</p>
+                <p className="text-center text-xs text-slate-400 mt-1">{rating} {t.starsOf5}</p>
               )}
             </div>
 
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">
-                Was the work completed? <span className="text-red-500">*</span>
+                {t.workCompleted} <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-1 gap-2">
-                {RESOLUTION_OPTIONS.map(opt => (
+                {RESOLUTION_OPTIONS(t).map(opt => (
                   <button
                     key={opt.value}
                     type="button"
@@ -177,12 +302,12 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1.5">Comments (optional)</label>
+              <label className="block text-sm font-bold text-slate-700 mb-1.5">{t.comments}</label>
               <textarea
                 value={comment}
                 onChange={e => setComment(e.target.value)}
                 rows={3}
-                placeholder="Anything the customer would like to add…"
+                placeholder={t.commentsPlaceholder}
                 className={INPUT_STYLES}
               />
             </div>
@@ -193,19 +318,63 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
               className="w-full py-4 rounded-xl bg-emerald-600 text-white font-bold shadow-lg active:scale-[0.98] disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {submitting && <Loader2 size={16} className="animate-spin" />}
-              Submit Feedback
+              {t.submit}
             </button>
+
+            {/* Skip — deliberately small and understated, never competing
+                visually with the main Submit button, since the goal is a
+                real exception path, not a one-tap default everyone reaches
+                for out of habit. */}
+            {!showSkipOptions ? (
+              <button
+                type="button"
+                onClick={() => setShowSkipOptions(true)}
+                className="w-full text-center text-xs text-slate-400 underline hover:text-slate-500"
+              >
+                {t.skipLink}
+              </button>
+            ) : (
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-2">{t.skipWhy}</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {SKIP_REASON_OPTIONS(t).map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => handleSkip(opt.value)}
+                      className="py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 text-left px-4 flex items-center justify-between"
+                    >
+                      {opt.label}
+                      {submitting && <Loader2 size={14} className="animate-spin" />}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSkipOptions(false)}
+                  className="w-full text-center text-xs text-slate-400 underline mt-3"
+                >
+                  {t.skipBack}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-5 space-y-5">
-            {isPositive ? (
+            {wasSkipped ? (
+              <div className="text-center space-y-2 py-4">
+                <p className="font-bold text-slate-900">{t.skippedTitle}</p>
+                <p className="text-sm text-slate-500">{t.skippedBody}</p>
+              </div>
+            ) : isPositive ? (
               reviewUrlLoading ? (
                 <div className="flex items-center justify-center gap-2 text-slate-400 py-10">
                   <Loader2 size={16} className="animate-spin" /> Loading…
                 </div>
               ) : reviewUrl ? (
                 <div className="text-center space-y-4">
-                  <p className="font-bold text-slate-900">Thank you! Would you mind leaving us a Google review?</p>
+                  <p className="font-bold text-slate-900">{t.reviewPrompt}</p>
                   <div className="flex justify-center">
                     <div className="p-4 bg-white border border-slate-200 rounded-2xl inline-block">
                       <QRCodeSVG value={reviewUrl} size={200} />
@@ -216,7 +385,7 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
                     className="w-full py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold flex items-center justify-center gap-2 hover:bg-slate-50"
                   >
                     {copied ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                    {copied ? 'Link Copied' : 'Copy Review Link'}
+                    {copied ? t.linkCopied : t.copyLink}
                   </button>
                 </div>
               ) : (
@@ -224,16 +393,16 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
                   <div className="flex items-center justify-center gap-2 text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                     <AlertTriangle size={16} className="shrink-0" />
                     <p className="text-xs text-left">
-                      Google Review link hasn't been set up yet. Ask an Admin to add it under Settings.
+                      {t.noReviewUrl}
                     </p>
                   </div>
-                  <p className="text-sm text-slate-500">Thank you for the great feedback!</p>
+                  <p className="text-sm text-slate-500">{t.thanksGreat}</p>
                 </div>
               )
             ) : (
               <div className="text-center space-y-2 py-4">
-                <p className="font-bold text-slate-900">Thank you for your feedback.</p>
-                <p className="text-sm text-slate-500">Our team will follow up.</p>
+                <p className="font-bold text-slate-900">{t.thanksLow}</p>
+                <p className="text-sm text-slate-500">{t.followUp}</p>
               </div>
             )}
 
@@ -241,7 +410,7 @@ const CompletionFeedbackModal: React.FC<CompletionFeedbackModalProps> = ({
               onClick={onFinalComplete}
               className="w-full py-4 rounded-xl bg-slate-900 text-white font-bold shadow-lg active:scale-[0.98]"
             >
-              I have completed this step
+              {t.finish}
             </button>
           </div>
         )}
