@@ -104,6 +104,20 @@
 </head>
   <body class="bg-slate-50 text-slate-900 antialiased">
     <div id="root"></div>
+    <!-- Update banner — shown when a new app version has been installed in
+         the background but this open tab is still running the old code.
+         Previously there was no detection for this at all: skipWaiting()
+         in sw.js makes a new service worker take over quickly, but nothing
+         told the page itself to reload, so a PWA left open across a deploy
+         could silently keep running old JavaScript indefinitely — no pull-
+         to-refresh, no browser reload button available to work around it.
+         Reloading automatically and silently would risk interrupting
+         someone mid-job (e.g. a half-filled completion form), so this asks
+         instead of forcing it. -->
+    <div id="sw-update-banner" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#0f172a;color:white;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:system-ui,sans-serif;font-size:13px;">
+      <span>A new version is available.</span>
+      <button onclick="window.location.reload()" style="background:#FFCC00;color:#0f172a;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer;">Refresh now</button>
+    </div>
   <script type="module" src="/index.tsx"></script>
   <script>
     if ('serviceWorker' in navigator) {
@@ -111,6 +125,16 @@
         navigator.serviceWorker.register('/sw.js')
           .then(reg => console.log('[SW] Registered:', reg.scope))
           .catch(err => console.warn('[SW] Registration failed:', err));
+      });
+
+      // Fires when a new service worker has just taken control of this
+      // page — meaning a new version was deployed while this tab was open.
+      // Show the banner rather than reloading immediately/silently.
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        const banner = document.getElementById('sw-update-banner');
+        if (banner) banner.style.display = 'flex';
       });
     }
   </script>
