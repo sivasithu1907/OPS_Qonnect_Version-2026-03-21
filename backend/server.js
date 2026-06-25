@@ -494,6 +494,43 @@ async function initDb() {
         updated_at TIMESTAMPTZ DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS idx_recurring_due ON recurring_schedules(next_due_date) WHERE is_active = true;
+
+      -- 5d. App Settings — simple key/value store for admin-configurable
+      -- values. Starts with the Google Review URL (Completion Feedback
+      -- feature) but the shape is generic so future settings don't each
+      -- need their own table/migration.
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_by TEXT,
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+
+      -- 5e. Service Feedback — customer feedback captured at job completion,
+      -- before the job is allowed to finally close. One row per completed
+      -- job (ticket or activity); activity_id/ticket_id is whichever
+      -- applies, the other stays null. Never blocks or alters the existing
+      -- completion logic itself — this is purely additive data captured
+      -- alongside it.
+      CREATE TABLE IF NOT EXISTS service_feedback (
+        id BIGSERIAL PRIMARY KEY,
+        activity_id TEXT,
+        ticket_id TEXT,
+        engineer_id TEXT,
+        engineer_name TEXT,
+        customer_name TEXT,
+        rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        resolution_status TEXT NOT NULL CHECK (resolution_status IN ('COMPLETED', 'PARTIALLY_COMPLETED', 'NOT_COMPLETED')),
+        comment TEXT,
+        google_review_prompt_shown BOOLEAN DEFAULT false,
+        follow_up_required BOOLEAN DEFAULT false,
+        follow_up_resolved BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_feedback_followup ON service_feedback(follow_up_required) WHERE follow_up_required = true AND follow_up_resolved = false;
+      CREATE INDEX IF NOT EXISTS idx_feedback_activity ON service_feedback(activity_id);
+      CREATE INDEX IF NOT EXISTS idx_feedback_ticket ON service_feedback(ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_feedback_created ON service_feedback(created_at DESC);
     `);
 
     // 6. Sites Table
@@ -1080,7 +1117,7 @@ app.get("/api/mobile/lead", authenticate, async (req, res) => {
 app.get("/api/mobile/tech", authenticate, async (req, res) => {
     try {
         const userId = req.user.id;
-        const [ticketsR, activitiesR, customersR] = await Promise.all([
+        const [ticketsR, activitiesR, customersR, techsR] = await Promise.all([
             pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
                 location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
                 odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
@@ -1096,12 +1133,21 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
                         AND type != 'WHATSAPP_SUPPORT'
                         AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
                         ORDER BY planned_date DESC LIMIT 200`, [userId]),
-            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200")
+            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200"),
+            // Previously this lightweight endpoint never returned technicians
+            // at all — meaning anything resolving "my own name" (e.g. the
+            // Completion Feedback flow's auto-filled engineer name) from the
+            // technicians list could come back empty right after a fresh
+            // mobile-portal login, before some other call happened to
+            // populate it. Just this one user's own record is enough here —
+            // their name/role for display purposes, not the full roster.
+            pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users WHERE id = $1', [userId]),
         ]);
         res.json({
             tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivityLite),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
+            technicians: techsR.rows,
         });
     } catch (e) {
         console.error("Mobile tech API error:", e);
@@ -2802,6 +2848,188 @@ app.post("/api/recurring-schedules/process", authenticate, writeRateLimit, async
     } catch (e) {
         console.error('Recurring schedule process error:', e);
         res.status(500).json({ error: "Failed to process recurring schedules" });
+    }
+});
+
+// ── App Settings ──────────────────────────────────────────────────────────
+// Simple key/value store. GET is open to any authenticated user (the
+// Google Review URL needs to be readable by Field Engineers completing a
+// job, not just Admins), PUT is Admin only.
+app.get("/api/settings/:key", authenticate, async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT key, value, updated_at FROM app_settings WHERE key = $1', [req.params.key]);
+        if (!rows[0]) return res.json({ key: req.params.key, value: null });
+        res.json({ key: rows[0].key, value: rows[0].value, updatedAt: rows[0].updated_at });
+    } catch (e) {
+        console.error('Get setting error:', e);
+        res.status(500).json({ error: 'Failed to load setting' });
+    }
+});
+
+app.put("/api/settings/:key", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        if (req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Only Admin can change settings' });
+        }
+        const { value } = req.body || {};
+
+        // Specific validation for the Google Review URL setting — per spec,
+        // must start with https://. Other settings (if any are added later)
+        // aren't validated this strictly here; this check is deliberately
+        // scoped to this one key rather than a generic "looks like a URL"
+        // rule that might reject a future, differently-shaped setting.
+        if (req.params.key === 'google_review_url' && value) {
+            if (!/^https:\/\//i.test(value.trim())) {
+                return res.status(400).json({ error: 'Google Review URL must start with https://' });
+            }
+        }
+
+        const { rows } = await pool.query(
+            `INSERT INTO app_settings (key, value, updated_by, updated_at)
+             VALUES ($1, $2, $3, now())
+             ON CONFLICT (key) DO UPDATE SET value = $2, updated_by = $3, updated_at = now()
+             RETURNING key, value, updated_at`,
+            [req.params.key, value?.trim() || null, req.user.id]
+        );
+
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'SYSTEM',
+            entityId: req.params.key,
+            entityLabel: `Setting: ${req.params.key}`,
+            details: { value: rows[0].value },
+        });
+
+        res.json({ key: rows[0].key, value: rows[0].value, updatedAt: rows[0].updated_at });
+    } catch (e) {
+        console.error('Update setting error:', e);
+        res.status(500).json({ error: 'Failed to save setting' });
+    }
+});
+
+// ── Service Feedback (Completion Feedback & Google Review QR flow) ───────
+// Submitted by a Field Engineer at job completion, before the job is
+// allowed to finally close. Never blocks completion if this call fails —
+// the calling frontend code treats this as best-effort, consistent with
+// the spec's "do not break existing completion logic" requirement.
+app.post("/api/service-feedback", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        const { activityId, ticketId, engineerId, engineerName, customerName, rating, resolutionStatus, comment, googleReviewPromptShown } = req.body || {};
+
+        if (!activityId && !ticketId) {
+            return res.status(400).json({ error: 'activityId or ticketId is required' });
+        }
+        const ratingNum = Number(rating);
+        if (!ratingNum || ratingNum < 1 || ratingNum > 5) {
+            return res.status(400).json({ error: 'rating must be between 1 and 5' });
+        }
+        const validResolutions = ['COMPLETED', 'PARTIALLY_COMPLETED', 'NOT_COMPLETED'];
+        if (!validResolutions.includes(resolutionStatus)) {
+            return res.status(400).json({ error: 'resolutionStatus must be one of ' + validResolutions.join(', ') });
+        }
+
+        // Per spec alert rule: low rating OR incomplete resolution flags
+        // this for Team Lead/Admin follow-up.
+        const followUpRequired = ratingNum <= 3 || resolutionStatus === 'PARTIALLY_COMPLETED' || resolutionStatus === 'NOT_COMPLETED';
+
+        const { rows } = await pool.query(
+            `INSERT INTO service_feedback
+                (activity_id, ticket_id, engineer_id, engineer_name, customer_name, rating, resolution_status, comment, google_review_prompt_shown, follow_up_required)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+             RETURNING *`,
+            [
+                activityId || null, ticketId || null, engineerId || null, engineerName || null,
+                customerName || null, ratingNum, resolutionStatus, comment?.trim() || null,
+                !!googleReviewPromptShown, followUpRequired,
+            ]
+        );
+
+        const f = rows[0];
+        logAudit(req, {
+            action: 'CREATE',
+            entityType: 'SERVICE_FEEDBACK',
+            entityId: String(f.id),
+            entityLabel: f.customer_name || f.activity_id || f.ticket_id,
+            details: { rating: f.rating, resolutionStatus: f.resolution_status, followUpRequired: f.follow_up_required },
+        });
+
+        // Notify Team Leads when a follow-up is genuinely needed — same
+        // pattern already used for new tickets / AMC visits.
+        if (followUpRequired) {
+            notifyTeamLeads(
+                `*Service feedback needs follow-up*\n` +
+                `${f.customer_name ? `Customer: ${f.customer_name}\n` : ''}` +
+                `Engineer: ${f.engineer_name || 'Unknown'}\n` +
+                `Rating: ${f.rating}/5 · ${f.resolution_status.replace(/_/g, ' ')}\n` +
+                `${f.comment ? `Comment: ${f.comment}\n` : ''}` +
+                `Ref: ${f.activity_id || f.ticket_id}`
+            ).catch(() => {});
+        }
+
+        res.status(201).json({
+            id: f.id, activityId: f.activity_id, ticketId: f.ticket_id, engineerId: f.engineer_id,
+            engineerName: f.engineer_name, customerName: f.customer_name, rating: f.rating,
+            resolutionStatus: f.resolution_status, comment: f.comment,
+            googleReviewPromptShown: f.google_review_prompt_shown, followUpRequired: f.follow_up_required,
+            followUpResolved: f.follow_up_resolved, createdAt: f.created_at,
+        });
+    } catch (e) {
+        console.error('Service feedback create error:', e);
+        res.status(500).json({ error: 'Failed to save feedback' });
+    }
+});
+
+// List feedback — Admin / Team Lead only, matches the spec's "Feedback /
+// Service Quality" section. Supports an optional ?followUpOnly=true filter
+// for the dashboard's alert view.
+app.get("/api/service-feedback", authenticate, async (req, res) => {
+    try {
+        if (req.user.role !== 'ADMIN' && req.user.role !== 'TEAM_LEAD') {
+            return res.status(403).json({ error: 'Only Admin or Team Lead can view service feedback' });
+        }
+        const followUpOnly = req.query.followUpOnly === 'true';
+        const { rows } = await pool.query(
+            `SELECT * FROM service_feedback
+             ${followUpOnly ? 'WHERE follow_up_required = true AND follow_up_resolved = false' : ''}
+             ORDER BY created_at DESC LIMIT 300`
+        );
+        res.json(rows.map(f => ({
+            id: f.id, activityId: f.activity_id, ticketId: f.ticket_id, engineerId: f.engineer_id,
+            engineerName: f.engineer_name, customerName: f.customer_name, rating: f.rating,
+            resolutionStatus: f.resolution_status, comment: f.comment,
+            googleReviewPromptShown: f.google_review_prompt_shown, followUpRequired: f.follow_up_required,
+            followUpResolved: f.follow_up_resolved, createdAt: f.created_at,
+        })));
+    } catch (e) {
+        console.error('Service feedback list error:', e);
+        res.status(500).json({ error: 'Failed to load feedback' });
+    }
+});
+
+// Mark a flagged feedback's follow-up as resolved — Admin / Team Lead only.
+app.put("/api/service-feedback/:id/resolve-followup", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        if (req.user.role !== 'ADMIN' && req.user.role !== 'TEAM_LEAD') {
+            return res.status(403).json({ error: 'Only Admin or Team Lead can resolve follow-ups' });
+        }
+        const { rows } = await pool.query(
+            `UPDATE service_feedback SET follow_up_resolved = true WHERE id = $1 RETURNING id, customer_name, activity_id, ticket_id`,
+            [req.params.id]
+        );
+        if (!rows[0]) return res.status(404).json({ error: 'Feedback not found' });
+
+        logAudit(req, {
+            action: 'UPDATE',
+            entityType: 'SERVICE_FEEDBACK',
+            entityId: String(rows[0].id),
+            entityLabel: rows[0].customer_name || rows[0].activity_id || rows[0].ticket_id,
+            details: { followUpResolved: true },
+        });
+
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('Resolve followup error:', e);
+        res.status(500).json({ error: 'Failed to resolve follow-up' });
     }
 });
 
