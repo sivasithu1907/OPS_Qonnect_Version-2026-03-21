@@ -519,18 +519,62 @@ async function initDb() {
         engineer_id TEXT,
         engineer_name TEXT,
         customer_name TEXT,
-        rating SMALLINT NOT NULL CHECK (rating >= 1 AND rating <= 5),
-        resolution_status TEXT NOT NULL CHECK (resolution_status IN ('COMPLETED', 'PARTIALLY_COMPLETED', 'NOT_COMPLETED')),
+        rating SMALLINT CHECK (rating IS NULL OR (rating >= 1 AND rating <= 5)),
+        resolution_status TEXT CHECK (resolution_status IS NULL OR resolution_status IN ('COMPLETED', 'PARTIALLY_COMPLETED', 'NOT_COMPLETED')),
         comment TEXT,
         google_review_prompt_shown BOOLEAN DEFAULT false,
         follow_up_required BOOLEAN DEFAULT false,
         follow_up_resolved BOOLEAN DEFAULT false,
-        created_at TIMESTAMPTZ DEFAULT now()
+        -- Skip support: not every customer is willing or available to rate
+        -- the service. When skipped is true, rating/resolution_status are
+        -- both null and skip_reason records why — a real submission still
+        -- requires a genuine rating, this only opens an alternate path for
+        -- when one genuinely can't be captured.
+        skipped BOOLEAN NOT NULL DEFAULT false,
+        skip_reason TEXT,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        CONSTRAINT service_feedback_rating_or_skip CHECK (
+          (skipped = false AND rating IS NOT NULL AND resolution_status IS NOT NULL)
+          OR
+          (skipped = true AND skip_reason IS NOT NULL)
+        )
       );
+      -- Existing installs: relax the old NOT NULL constraints and add the
+      -- new columns. Safe to run repeatedly — IF NOT EXISTS / DROP IF EXISTS
+      -- guards on every statement, and existing rows (all real ratings, all
+      -- already satisfying the new CHECK) are unaffected either way.
+      ALTER TABLE service_feedback ALTER COLUMN rating DROP NOT NULL;
+      ALTER TABLE service_feedback ALTER COLUMN resolution_status DROP NOT NULL;
+      ALTER TABLE service_feedback ADD COLUMN IF NOT EXISTS skipped BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE service_feedback ADD COLUMN IF NOT EXISTS skip_reason TEXT;
+      DO $$ BEGIN
+        ALTER TABLE service_feedback ADD CONSTRAINT service_feedback_rating_or_skip CHECK (
+          (skipped = false AND rating IS NOT NULL AND resolution_status IS NOT NULL)
+          OR
+          (skipped = true AND skip_reason IS NOT NULL)
+        );
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
       CREATE INDEX IF NOT EXISTS idx_feedback_followup ON service_feedback(follow_up_required) WHERE follow_up_required = true AND follow_up_resolved = false;
       CREATE INDEX IF NOT EXISTS idx_feedback_activity ON service_feedback(activity_id);
       CREATE INDEX IF NOT EXISTS idx_feedback_ticket ON service_feedback(ticket_id);
       CREATE INDEX IF NOT EXISTS idx_feedback_created ON service_feedback(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_feedback_skipped ON service_feedback(skipped) WHERE skipped = true;
+
+      -- SLA alert acknowledgements — per-user, not global. Acknowledging
+      -- only dismisses an alert from the acknowledging person's own view;
+      -- it can still show up for a different Team Lead, and reappears for
+      -- everyone (including the original acknowledger) once the ticket
+      -- crosses into the next alert level (e.g. WARNING acknowledged, then
+      -- it later escalates to STALLED_72H — that's a new, distinct alert).
+      CREATE TABLE IF NOT EXISTS sla_acknowledgements (
+        ticket_id TEXT NOT NULL,
+        alert_type TEXT NOT NULL,
+        acknowledged_by TEXT NOT NULL,
+        acknowledged_at TIMESTAMPTZ DEFAULT now(),
+        PRIMARY KEY (ticket_id, alert_type, acknowledged_by)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sla_ack_user ON sla_acknowledgements(acknowledged_by);
     `);
 
     // 6. Sites Table
@@ -2914,11 +2958,50 @@ app.put("/api/settings/:key", authenticate, writeRateLimit, async (req, res) => 
 // the spec's "do not break existing completion logic" requirement.
 app.post("/api/service-feedback", authenticate, writeRateLimit, async (req, res) => {
     try {
-        const { activityId, ticketId, engineerId, engineerName, customerName, rating, resolutionStatus, comment, googleReviewPromptShown } = req.body || {};
+        const { activityId, ticketId, engineerId, engineerName, customerName, rating, resolutionStatus, comment, googleReviewPromptShown, skipped, skipReason } = req.body || {};
 
         if (!activityId && !ticketId) {
             return res.status(400).json({ error: 'activityId or ticketId is required' });
         }
+
+        // Not every customer is willing or available to rate the service —
+        // this is the alternate path for that, separate from a real rating.
+        // A skip still gets recorded (so Admin/Team Lead can see how often
+        // and why it happens) but never blocks completion, never triggers a
+        // follow-up alert (there's no quality signal to act on), and never
+        // shows the Google review prompt.
+        if (skipped) {
+            const VALID_SKIP_REASONS = ['CUSTOMER_UNAVAILABLE', 'DECLINED', 'LANGUAGE_BARRIER', 'OTHER'];
+            if (!VALID_SKIP_REASONS.includes(skipReason)) {
+                return res.status(400).json({ error: 'skipReason must be one of ' + VALID_SKIP_REASONS.join(', ') });
+            }
+
+            const { rows } = await pool.query(
+                `INSERT INTO service_feedback
+                    (activity_id, ticket_id, engineer_id, engineer_name, customer_name, skipped, skip_reason, follow_up_required)
+                 VALUES ($1,$2,$3,$4,$5,true,$6,false)
+                 RETURNING *`,
+                [activityId || null, ticketId || null, engineerId || null, engineerName || null, customerName || null, skipReason]
+            );
+
+            const f = rows[0];
+            logAudit(req, {
+                action: 'CREATE',
+                entityType: 'SERVICE_FEEDBACK',
+                entityId: String(f.id),
+                entityLabel: f.customer_name || f.activity_id || f.ticket_id,
+                details: { skipped: true, skipReason: f.skip_reason },
+            });
+
+            return res.status(201).json({
+                id: f.id, activityId: f.activity_id, ticketId: f.ticket_id, engineerId: f.engineer_id,
+                engineerName: f.engineer_name, customerName: f.customer_name, rating: null,
+                resolutionStatus: null, comment: null, googleReviewPromptShown: false,
+                followUpRequired: false, followUpResolved: f.follow_up_resolved,
+                skipped: true, skipReason: f.skip_reason, createdAt: f.created_at,
+            });
+        }
+
         const ratingNum = Number(rating);
         if (!ratingNum || ratingNum < 1 || ratingNum > 5) {
             return res.status(400).json({ error: 'rating must be between 1 and 5' });
@@ -2971,7 +3054,7 @@ app.post("/api/service-feedback", authenticate, writeRateLimit, async (req, res)
             engineerName: f.engineer_name, customerName: f.customer_name, rating: f.rating,
             resolutionStatus: f.resolution_status, comment: f.comment,
             googleReviewPromptShown: f.google_review_prompt_shown, followUpRequired: f.follow_up_required,
-            followUpResolved: f.follow_up_resolved, createdAt: f.created_at,
+            followUpResolved: f.follow_up_resolved, skipped: false, skipReason: null, createdAt: f.created_at,
         });
     } catch (e) {
         console.error('Service feedback create error:', e);
@@ -2998,7 +3081,7 @@ app.get("/api/service-feedback", authenticate, async (req, res) => {
             engineerName: f.engineer_name, customerName: f.customer_name, rating: f.rating,
             resolutionStatus: f.resolution_status, comment: f.comment,
             googleReviewPromptShown: f.google_review_prompt_shown, followUpRequired: f.follow_up_required,
-            followUpResolved: f.follow_up_resolved, createdAt: f.created_at,
+            followUpResolved: f.follow_up_resolved, skipped: f.skipped, skipReason: f.skip_reason, createdAt: f.created_at,
         })));
     } catch (e) {
         console.error('Service feedback list error:', e);
@@ -3030,6 +3113,171 @@ app.put("/api/service-feedback/:id/resolve-followup", authenticate, writeRateLim
     } catch (e) {
         console.error('Resolve followup error:', e);
         res.status(500).json({ error: 'Failed to resolve follow-up' });
+    }
+});
+
+// Full detail for a single feedback entry — joins against the linked
+// activity or ticket for context the feedback row itself doesn't store
+// (service category, sales lead, technical associates). Falls back
+// gracefully if the linked job no longer exists (e.g. a test activity that
+// was itself deleted) — the feedback's own fields still display either way.
+app.get("/api/service-feedback/:id", authenticate, async (req, res) => {
+    try {
+        if (req.user.role !== 'ADMIN' && req.user.role !== 'TEAM_LEAD') {
+            return res.status(403).json({ error: 'Only Admin or Team Lead can view service feedback' });
+        }
+        const { rows } = await pool.query('SELECT * FROM service_feedback WHERE id = $1', [req.params.id]);
+        const f = rows[0];
+        if (!f) return res.status(404).json({ error: 'Feedback not found' });
+
+        let serviceCategory = null, salesLeadName = null, assistantTechIds = [], assistantTechNames = [];
+        if (f.activity_id) {
+            const actRow = await pool.query('SELECT details FROM activities WHERE id = $1', [f.activity_id]);
+            const d = actRow.rows[0]?.details || {};
+            serviceCategory = d.serviceCategory || null;
+            salesLeadName = d.salesLeadName || null;
+            assistantTechIds = d.assistantTechIds || [];
+            if (assistantTechIds.length > 0) {
+                const techRows = await pool.query('SELECT id, name FROM users WHERE id = ANY($1)', [assistantTechIds]);
+                assistantTechNames = techRows.rows.map(t => t.name);
+            }
+        } else if (f.ticket_id) {
+            const tixRow = await pool.query('SELECT category FROM tickets WHERE id = $1', [f.ticket_id]);
+            serviceCategory = tixRow.rows[0]?.category || null;
+            // Tickets have no sales lead / technical associate concept — left null/empty.
+        }
+
+        res.json({
+            id: f.id, activityId: f.activity_id, ticketId: f.ticket_id, engineerId: f.engineer_id,
+            engineerName: f.engineer_name, customerName: f.customer_name, rating: f.rating,
+            resolutionStatus: f.resolution_status, comment: f.comment,
+            googleReviewPromptShown: f.google_review_prompt_shown, followUpRequired: f.follow_up_required,
+            followUpResolved: f.follow_up_resolved, skipped: f.skipped, skipReason: f.skip_reason,
+            createdAt: f.created_at, serviceCategory, salesLeadName, assistantTechNames,
+        });
+    } catch (e) {
+        console.error('Service feedback detail error:', e);
+        res.status(500).json({ error: 'Failed to load feedback detail' });
+    }
+});
+
+// Admin-only hard delete — primarily for clearing out test entries created
+// while verifying this feature. Permanently removes the row; there is no
+// undo. Audit-logged before deletion so the record of who deleted what
+// survives even though the feedback row itself doesn't.
+app.delete("/api/service-feedback/:id", authenticate, deleteRateLimit, async (req, res) => {
+    try {
+        if (req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Only Admin can delete service feedback' });
+        }
+        const { rows } = await pool.query('SELECT id, customer_name, activity_id, ticket_id FROM service_feedback WHERE id = $1', [req.params.id]);
+        if (!rows[0]) return res.status(404).json({ error: 'Feedback not found' });
+
+        await pool.query('DELETE FROM service_feedback WHERE id = $1', [req.params.id]);
+
+        logAudit(req, {
+            action: 'DELETE',
+            entityType: 'SERVICE_FEEDBACK',
+            entityId: String(rows[0].id),
+            entityLabel: rows[0].customer_name || rows[0].activity_id || rows[0].ticket_id,
+            details: {},
+        });
+
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('Service feedback delete error:', e);
+        res.status(500).json({ error: 'Failed to delete feedback' });
+    }
+});
+
+// ── SLA Alerts ─────────────────────────────────────────────────────────────
+// Real implementation — this endpoint previously didn't exist at all
+// (the frontend's notification bell has always silently 404'd here,
+// meaning it never once surfaced a real alert). Business rules confirmed
+// directly:
+//   - WARNING  at 48h since creation, still unresolved
+//   - STALLED_72H at 72h since creation, still unresolved
+//   - Excludes RESOLVED, CANCELLED, and CARRY_FORWARD (already actively
+//     worked, not sitting untouched)
+//   - Acknowledging is per-user only (sla_acknowledgements), not global —
+//     it can still surface for a different Team Lead, and reappears for
+//     everyone (including the acknowledger) if the SAME ticket later
+//     escalates to a higher alert_type, since that's tracked as a
+//     genuinely distinct row.
+const SLA_WARNING_HOURS = 48;
+const SLA_STALLED_HOURS = 72;
+const SLA_EXCLUDED_STATUSES = ['RESOLVED', 'CANCELLED', 'CARRY_FORWARD'];
+
+app.get("/api/sla/alerts", authenticate, async (req, res) => {
+    try {
+        if (req.user.role !== 'ADMIN' && req.user.role !== 'TEAM_LEAD') {
+            return res.json({ allOverdue: [] }); // Other roles see no SLA panel at all in the UI; fail quiet, not an error.
+        }
+
+        const { rows: tickets } = await pool.query(
+            `SELECT t.id, t.customer_name, t.category, t.status, t.created_at, t.assigned_tech_id, u.name AS assigned_tech_name
+             FROM tickets t
+             LEFT JOIN users u ON t.assigned_tech_id = u.id
+             WHERE t.status NOT IN ('RESOLVED', 'CANCELLED', 'CARRY_FORWARD')
+               AND t.created_at < NOW() - INTERVAL '${SLA_WARNING_HOURS} hours'`
+        );
+
+        const { rows: acked } = await pool.query(
+            `SELECT ticket_id, alert_type FROM sla_acknowledgements WHERE acknowledged_by = $1`,
+            [req.user.id]
+        );
+        const ackedSet = new Set(acked.map(a => `${a.ticket_id}::${a.alert_type}`));
+
+        const now = Date.now();
+        const allOverdue = tickets
+            .map(t => {
+                const hoursOpen = Math.floor((now - new Date(t.created_at).getTime()) / (1000 * 60 * 60));
+                const alertType = hoursOpen >= SLA_STALLED_HOURS ? 'STALLED_72H' : 'WARNING';
+                return {
+                    ticketId: t.id,
+                    customerName: t.customer_name,
+                    category: t.category,
+                    assignedTech: t.assigned_tech_name || 'Unassigned',
+                    hoursOpen,
+                    alertType,
+                    alreadyAlerted: ackedSet.has(`${t.id}::${alertType}`),
+                };
+            })
+            // Most urgent first — stalled before warning, then longest-open first.
+            .sort((a, b) => {
+                if (a.alertType !== b.alertType) return a.alertType === 'STALLED_72H' ? -1 : 1;
+                return b.hoursOpen - a.hoursOpen;
+            });
+
+        res.json({ allOverdue });
+    } catch (e) {
+        console.error('SLA alerts error:', e);
+        res.status(500).json({ error: 'Failed to load SLA alerts' });
+    }
+});
+
+app.post("/api/sla/alerts/:ticketId/acknowledge", authenticate, writeRateLimit, async (req, res) => {
+    try {
+        // alertType isn't in the URL (the existing frontend only sends the
+        // ticketId) — re-derive it the same way the GET above does, so the
+        // acknowledgement is recorded against whichever alert level is
+        // currently showing, not guessed.
+        const { rows: tRows } = await pool.query('SELECT created_at FROM tickets WHERE id = $1', [req.params.ticketId]);
+        if (!tRows[0]) return res.status(404).json({ error: 'Ticket not found' });
+        const hoursOpen = Math.floor((Date.now() - new Date(tRows[0].created_at).getTime()) / (1000 * 60 * 60));
+        const alertType = hoursOpen >= SLA_STALLED_HOURS ? 'STALLED_72H' : 'WARNING';
+
+        await pool.query(
+            `INSERT INTO sla_acknowledgements (ticket_id, alert_type, acknowledged_by)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (ticket_id, alert_type, acknowledged_by) DO NOTHING`,
+            [req.params.ticketId, alertType, req.user.id]
+        );
+
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('SLA acknowledge error:', e);
+        res.status(500).json({ error: 'Failed to acknowledge alert' });
     }
 });
 
