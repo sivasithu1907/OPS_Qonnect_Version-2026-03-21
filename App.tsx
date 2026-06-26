@@ -4,7 +4,7 @@ import { generateActivityId } from './utils/idUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
 import {
-  Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2, KeyRound, EyeOff, Eye as EyeIcon
+  Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2, KeyRound, EyeOff, Eye as EyeIcon, RefreshCw
 } from 'lucide-react';
 
 // Login + ErrorBoundary load eagerly (needed immediately)
@@ -1485,7 +1485,22 @@ useEffect(() => {
                          )}
                      </div>
 
-                     {/* Key icon (password) for SALES — before bell */}
+                     {/* Refresh + key icon (password) for SALES — before bell.
+                         Sales uses this same shared header, but typically on a
+                         phone, not a desktop browser — so they get the same
+                         full-reload refresh button the Lead/Tech portals have,
+                         scoped specifically to this role rather than the whole
+                         header (Admin/Team Lead on actual desktop don't need
+                         it; they have their browser's own refresh). */}
+                     {currentUser.role === Role.SALES && (
+                         <button
+                             onClick={() => window.location.reload()}
+                             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                             title="Refresh"
+                         >
+                             <RefreshCw size={18} />
+                         </button>
+                     )}
                      {currentUser.role === Role.SALES && (
                          <button
                              onClick={() => setShowSalesPwModal(true)}
