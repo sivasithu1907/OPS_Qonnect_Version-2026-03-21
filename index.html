@@ -121,18 +121,27 @@
   <script type="module" src="/index.tsx"></script>
   <script>
     if ('serviceWorker' in navigator) {
+      // IMPORTANT: controllerchange fires whenever the controller for this
+      // page changes — including the very FIRST time a service worker ever
+      // takes control of a freshly loaded page (no previous controller to
+      // replace). It cannot tell that apart from a genuine update event by
+      // itself. Recording whether a controller already existed at script
+      // load time is what lets this distinguish "this is the first install"
+      // from "an old worker was just replaced by a new one" — without this,
+      // the banner showed on ordinary fresh page loads, not just real
+      // updates, which is exactly the bug reported (banner appearing even
+      // right after a refresh, on desktop too, where none of the
+      // PWA-specific caching behavior should even be a factor).
+      const hadControllerAtLoad = !!navigator.serviceWorker.controller;
+
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
           .then(reg => console.log('[SW] Registered:', reg.scope))
           .catch(err => console.warn('[SW] Registration failed:', err));
       });
 
-      // Fires when a new service worker has just taken control of this
-      // page — meaning a new version was deployed while this tab was open.
-      // Show the banner rather than reloading immediately/silently.
-      let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
+        if (!hadControllerAtLoad) return; // first-ever install, not a real update
         const banner = document.getElementById('sw-update-banner');
         if (banner) banner.style.display = 'flex';
       });
