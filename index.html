@@ -121,29 +121,53 @@
   <script type="module" src="/index.tsx"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      // IMPORTANT: controllerchange fires whenever the controller for this
-      // page changes — including the very FIRST time a service worker ever
-      // takes control of a freshly loaded page (no previous controller to
-      // replace). It cannot tell that apart from a genuine update event by
-      // itself. Recording whether a controller already existed at script
-      // load time is what lets this distinguish "this is the first install"
-      // from "an old worker was just replaced by a new one" — without this,
-      // the banner showed on ordinary fresh page loads, not just real
-      // updates, which is exactly the bug reported (banner appearing even
-      // right after a refresh, on desktop too, where none of the
-      // PWA-specific caching behavior should even be a factor).
-      const hadControllerAtLoad = !!navigator.serviceWorker.controller;
+      // Two previous attempts at detecting "a new version was deployed"
+      // both relied on the controllerchange event firing only for genuine
+      // updates. Confirmed directly against the live server that this
+      // assumption is wrong — that event can fire for reasons unrelated to
+      // an actual new deploy (exact browser timing/internals vary), so it
+      // showed the banner on ordinary page loads with nothing new at all.
+      //
+      // This version checks the actual fact of the matter instead of
+      // inferring it from an event: it records the version this page
+      // loaded with, then independently re-checks the live sw.js content
+      // against that recorded version. The banner only shows if those two
+      // genuinely differ — not based on whether or why an event fired.
+      let loadedVersion = null;
+
+      const extractVersion = (text) => {
+        const m = text.match(/CACHE_NAME\s*=\s*'([^']+)'/);
+        return m ? m[1] : null;
+      };
+
+      const checkForNewVersion = async () => {
+        try {
+          const res = await fetch('/sw.js', { cache: 'no-store' });
+          const text = await res.text();
+          const liveVersion = extractVersion(text);
+          if (loadedVersion === null) { loadedVersion = liveVersion; return; }
+          if (liveVersion && liveVersion !== loadedVersion) {
+            const banner = document.getElementById('sw-update-banner');
+            if (banner) banner.style.display = 'flex';
+          }
+        } catch {
+          // Network hiccup checking for an update is not worth surfacing —
+          // just try again on the next trigger.
+        }
+      };
 
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
           .then(reg => console.log('[SW] Registered:', reg.scope))
           .catch(err => console.warn('[SW] Registration failed:', err));
+        checkForNewVersion(); // records loadedVersion on this page's first check
       });
 
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!hadControllerAtLoad) return; // first-ever install, not a real update
-        const banner = document.getElementById('sw-update-banner');
-        if (banner) banner.style.display = 'flex';
+      // Re-check whenever the tab becomes visible again — covers the real
+      // case this banner exists for (PWA left open across a deploy) without
+      // depending on controllerchange's exact firing semantics at all.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkForNewVersion();
       });
     }
   </script>
