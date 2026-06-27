@@ -416,7 +416,15 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     isScheduler ||
     (isSales && r.createdBy === myId && r.status === SalesRequestStatus.PENDING_SCHEDULING);
 
-  const handleSchedule = async () => {    if (!scheduleTarget || !validateSchedule()) return;
+  const handleSchedule = async () => {
+    if (!scheduleTarget || !validateSchedule()) return;
+    // Guard against a second invocation firing before React has re-rendered
+    // the Confirm button as disabled (a fast double-tap, or any other path
+    // that calls this twice in quick succession). The backend now also
+    // guards against this independently and atomically — this is just
+    // defense in depth so a double-tap feels like nothing happened, rather
+    // than surfacing a "already scheduled" error to the user.
+    if (scheduling) return;
     setScheduling(true);
     try {
       await api.post(`/api/sales-appointment-requests/${scheduleTarget.id}/schedule`, {
