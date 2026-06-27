@@ -4112,6 +4112,9 @@ app.post('/api/sales-appointment-requests/:id/link-activity', authenticate, writ
         if (sar.status === 'SCHEDULED' || sar.status === 'COMPLETED') {
             return res.status(409).json({ error: 'This request has already been scheduled as its own activity — unschedule it first if you want to link it instead' });
         }
+        if (sar.status === 'SCHEDULING') {
+            return res.status(409).json({ error: 'This request is currently being scheduled — please try again in a moment' });
+        }
 
         const actRow = await pool.query('SELECT id FROM activities WHERE id = $1', [activityId]);
         if (!actRow.rows[0]) return res.status(404).json({ error: 'Activity not found' });
@@ -4540,6 +4543,12 @@ app.delete('/api/sales-appointment-requests/:id', authenticate, deleteRateLimit,
 // then creates a corresponding planned Activity so it appears in
 // Activity Planner and Operations Monitor immediately.
 app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRateLimit, async (req, res) => {
+    // Declared here (not inside the try block) so the catch block's
+    // rollback can actually see the real value — a const declared inside
+    // try is out of scope in catch, which would have made the rollback
+    // below silently always fall back to a hardcoded default instead of
+    // the SAR's true prior status.
+    let priorStatus = null;
     try {
         const role   = req.user.role;
         const userId = req.user.id;
@@ -4587,6 +4596,44 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRate
         if (sar.status === 'LINKED') {
             return res.status(409).json({ error: 'This request is linked to an existing activity. Unlink it first if you want to schedule it as a new activity instead.' });
         }
+
+        // A request that's already been scheduled must not be scheduled
+        // AGAIN — this is the actual fix for a real, reported bug: a
+        // near-simultaneous second call to this endpoint (a fast
+        // double-tap before the Schedule button's disabled state visually
+        // took effect, a flaky network causing a client retry, anything)
+        // previously had no guard at all stopping it from running this
+        // whole endpoint a second time, generating its own new activity ID
+        // and creating a genuinely separate, duplicate activity for the
+        // same request.
+        //
+        // A plain read-then-write check (read sar.status, decide, then
+        // write later) is NOT actually safe against two truly concurrent
+        // calls — both could read the same old status before either one's
+        // UPDATE commits. So this claims the SAR right now, atomically: the
+        // UPDATE's WHERE clause requires the row to STILL be in an
+        // unclaimed state at the exact moment it runs. Only one concurrent
+        // call can ever actually change a row; Postgres serializes
+        // concurrent UPDATEs to the same row, so there is no window for
+        // both to succeed. If this affects zero rows, scheduling has
+        // already happened (or is happening right now in another request),
+        // and this call bails out immediately, before ever generating an
+        // activity ID or touching the activities table at all.
+        const claim = await pool.query(
+            `UPDATE sales_appointment_requests
+             SET status = 'SCHEDULING', updated_by = $1, updated_at = now()
+             WHERE id = $2 AND status NOT IN ('SCHEDULED', 'LINKED', 'SCHEDULING')
+             RETURNING id`,
+            [userId, id]
+        );
+        if (claim.rowCount === 0) {
+            return res.status(409).json({ error: 'This request has already been scheduled (or is being scheduled right now).' });
+        }
+        // Remember the real prior status so it can be restored if anything
+        // below fails — a SAR must never get permanently stuck in the
+        // transitional SCHEDULING state just because, say, the activity
+        // insert happened to fail for an unrelated reason.
+        priorStatus = sar.status;
 
         // Build the planned date/time string (combine scheduledDate + scheduledStartTime)
         const plannedDate = `${scheduledDate}T${scheduledStartTime}:00+03:00`; // Qatar timezone offset
@@ -4661,6 +4708,25 @@ app.post('/api/sales-appointment-requests/:id/schedule', authenticate, writeRate
         });
     } catch (e) {
         console.error('SAR schedule error:', e);
+        // If the claim above succeeded but something failed afterward
+        // (e.g. the activity insert), the SAR would otherwise be stuck
+        // permanently in the transitional SCHEDULING state, unable to ever
+        // be scheduled again. Best-effort revert back to its real prior
+        // status. priorStatus stays null if the claim itself never
+        // succeeded (e.g. validation failed before reaching it) — in that
+        // case there is nothing to roll back, so the WHERE clause below
+        // (status = 'SCHEDULING') simply won't match anything, which is
+        // exactly the correct no-op.
+        if (priorStatus !== null) {
+            try {
+                await pool.query(
+                    `UPDATE sales_appointment_requests SET status = $1 WHERE id = $2 AND status = 'SCHEDULING'`,
+                    [priorStatus, req.params.id]
+                );
+            } catch (rollbackErr) {
+                console.error('SAR schedule rollback also failed:', rollbackErr);
+            }
+        }
         res.status(500).json({ error: 'Failed to schedule appointment', detail: e.message });
     }
 });
