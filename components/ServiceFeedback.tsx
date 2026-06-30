@@ -239,7 +239,9 @@ const ServiceFeedbackPage: React.FC = () => {
             ) : (
               <div className="flex items-center gap-3 mt-2">
                 <StarRow rating={f.rating || 0} />
-                <span className="text-xs font-semibold text-slate-600">{(f.resolutionStatus && RESOLUTION_LABEL[f.resolutionStatus]) || f.resolutionStatus}</span>
+                {f.resolutionStatus && (
+                  <span className="text-xs font-semibold text-slate-600">{RESOLUTION_LABEL[f.resolutionStatus] || f.resolutionStatus}</span>
+                )}
               </div>
             )}
             {f.comment && <p className="text-xs text-slate-500 mt-2 italic">"{f.comment}"</p>}
