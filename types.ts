@@ -333,7 +333,7 @@ export interface ServiceFeedback {
   engineerName?: string | null;
   customerName?: string | null;
   rating: number | null; // 1-5, null when skipped
-  resolutionStatus: ResolutionStatus | null; // null when skipped
+  resolutionStatus: ResolutionStatus | null; // optional — null when skipped, or simply not collected for this submission
   comment?: string | null;
   googleReviewPromptShown: boolean;
   followUpRequired: boolean;
