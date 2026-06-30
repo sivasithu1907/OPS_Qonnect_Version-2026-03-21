@@ -533,8 +533,15 @@ async function initDb() {
         skipped BOOLEAN NOT NULL DEFAULT false,
         skip_reason TEXT,
         created_at TIMESTAMPTZ DEFAULT now(),
+        -- resolution_status ("was the work completed?") is intentionally
+        -- NOT required here — confirmed product decision: the feedback step
+        -- only needs a star rating (+ optional comment), since requiring an
+        -- extra field was part of what made the original two-screen flow
+        -- feel like more than customers were willing to do. follow_up_required
+        -- (see the POST endpoint) now derives from rating alone when
+        -- resolution_status isn't provided.
         CONSTRAINT service_feedback_rating_or_skip CHECK (
-          (skipped = false AND rating IS NOT NULL AND resolution_status IS NOT NULL)
+          (skipped = false AND rating IS NOT NULL)
           OR
           (skipped = true AND skip_reason IS NOT NULL)
         )
@@ -547,9 +554,14 @@ async function initDb() {
       ALTER TABLE service_feedback ALTER COLUMN resolution_status DROP NOT NULL;
       ALTER TABLE service_feedback ADD COLUMN IF NOT EXISTS skipped BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE service_feedback ADD COLUMN IF NOT EXISTS skip_reason TEXT;
+      -- A constraint can't be re-added under the same name with different
+      -- rules — it has to be dropped first. DROP ... IF EXISTS makes this
+      -- safe whether or not a previous round already created the old,
+      -- stricter version of this same constraint name.
+      ALTER TABLE service_feedback DROP CONSTRAINT IF EXISTS service_feedback_rating_or_skip;
       DO $$ BEGIN
         ALTER TABLE service_feedback ADD CONSTRAINT service_feedback_rating_or_skip CHECK (
-          (skipped = false AND rating IS NOT NULL AND resolution_status IS NOT NULL)
+          (skipped = false AND rating IS NOT NULL)
           OR
           (skipped = true AND skip_reason IS NOT NULL)
         );
@@ -3006,14 +3018,26 @@ app.post("/api/service-feedback", authenticate, writeRateLimit, async (req, res)
         if (!ratingNum || ratingNum < 1 || ratingNum > 5) {
             return res.status(400).json({ error: 'rating must be between 1 and 5' });
         }
+        // resolutionStatus ("was the work completed?") is now optional —
+        // confirmed product decision: the feedback step only needs a star
+        // rating plus an optional comment, since the extra required field
+        // was part of why customers were stopping after the rating and
+        // never reaching the actual Google review step. Still validated
+        // if it IS provided, so a genuinely invalid value never sneaks in.
         const validResolutions = ['COMPLETED', 'PARTIALLY_COMPLETED', 'NOT_COMPLETED'];
-        if (!validResolutions.includes(resolutionStatus)) {
+        const resolutionStatusValue = resolutionStatus || null;
+        if (resolutionStatusValue && !validResolutions.includes(resolutionStatusValue)) {
             return res.status(400).json({ error: 'resolutionStatus must be one of ' + validResolutions.join(', ') });
         }
 
-        // Per spec alert rule: low rating OR incomplete resolution flags
-        // this for Team Lead/Admin follow-up.
-        const followUpRequired = ratingNum <= 3 || resolutionStatus === 'PARTIALLY_COMPLETED' || resolutionStatus === 'NOT_COMPLETED';
+        // Per spec alert rule: low rating still flags this for Team
+        // Lead/Admin follow-up regardless of whether resolution_status was
+        // provided. An explicitly incomplete resolution (when it IS
+        // provided) also flags it — but its absence is no longer treated
+        // as a problem in itself, since it's an optional field now.
+        const followUpRequired = ratingNum <= 3
+            || resolutionStatusValue === 'PARTIALLY_COMPLETED'
+            || resolutionStatusValue === 'NOT_COMPLETED';
 
         const { rows } = await pool.query(
             `INSERT INTO service_feedback
@@ -3022,7 +3046,7 @@ app.post("/api/service-feedback", authenticate, writeRateLimit, async (req, res)
              RETURNING *`,
             [
                 activityId || null, ticketId || null, engineerId || null, engineerName || null,
-                customerName || null, ratingNum, resolutionStatus, comment?.trim() || null,
+                customerName || null, ratingNum, resolutionStatusValue, comment?.trim() || null,
                 !!googleReviewPromptShown, followUpRequired,
             ]
         );
