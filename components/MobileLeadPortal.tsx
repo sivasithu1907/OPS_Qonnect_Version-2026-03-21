@@ -841,9 +841,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                   </div>
               </div>
 
-              <h4 className="font-bold text-slate-800 text-sm mb-0.5">{ticket.customerName}</h4>
-              <div className="text-xs text-slate-500 mb-1">{ticket.type}{ticket.category ? ` · ${ticket.category}` : ''}</div>
-
+              <h4 className="font-bold text-slate-800 text-sm mb-1">{ticket.customerName}</h4>
+              
               <div className="flex items-center gap-1 text-xs text-slate-500">
                   <MapPin size={12} />
                   <span className="truncate max-w-[200px]">{locationDisplay}</span>
@@ -4591,4 +4590,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     // Same completion logic that ran before this feature —
                     // only invoked from here now, one step later than before.
                     finalize();
-           
+                }}
+            />
+        </Suspense>
+    )}
+
+    </div>
+  );
+};
+
+export default React.memo(MobileLeadPortal);
