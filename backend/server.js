@@ -1339,7 +1339,7 @@ app.get("/api/tickets/:id/full", authenticate, async (req, res) => {
 app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
   const client = await pool.connect();
   try {
-    let { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber } = req.body;
+    let { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber, initialMessage } = req.body;
 
     // Ticket IDs are always assigned by the server via an atomic Postgres
     // sequence — any client-supplied id is ignored. This is the fix for the
@@ -1396,9 +1396,14 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
     }
 
     // STEP B: Now create the ticket safely
+    // NOTE: phone_number and ai_summary (the ticket "description" shown in the
+    // UI, submitted by the client as `initialMessage`) were previously missing
+    // from this INSERT entirely — they were accepted from the request body
+    // but never written to the tickets table, so every newly created ticket
+    // showed a blank description and no phone number. Both are now persisted.
     const result = await client.query(
-      `INSERT INTO tickets (id, customer_id, customer_name, category, type, priority, status, location_url, house_number, messages, assigned_tech_id, appointment_time)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      `INSERT INTO tickets (id, customer_id, customer_name, category, type, priority, status, location_url, house_number, messages, assigned_tech_id, appointment_time, phone_number, ai_summary)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
       [id, actualCustomerId, customerName, category,
        req.body.type || 'Under Warranty',
        priority,
@@ -1406,7 +1411,9 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
        locationUrl, houseNumber,
        JSON.stringify(messages || []),
        req.body.assignedTechId || null,
-       req.body.appointmentTime || null
+       req.body.appointmentTime || null,
+       phoneNumber || null,
+       initialMessage || null
       ]
     );
 
