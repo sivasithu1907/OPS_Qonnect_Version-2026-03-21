@@ -47,21 +47,21 @@ export const NAVIGATION_ITEMS = [
     id: 'master_dashboard',
     label: 'Master Dashboard',
     icon: <LayoutDashboard size={20} />,
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
     category: 'Dashboards'
   },
   { 
     id: 'dashboard', 
     label: 'Service Dashboard', 
     icon: <LayoutDashboard size={20} />, 
-    roles: [Role.ADMIN],
+    roles: [Role.ADMIN, Role.VIEWER],
     category: 'Dashboards'
   },
   { 
     id: 'operations', 
     label: 'Operations Monitor', 
     icon: <ActivityIcon size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
     category: 'Dashboards'
   },
 
@@ -70,28 +70,28 @@ export const NAVIGATION_ITEMS = [
     id: 'planning', 
     label: 'Activity Planner', 
     icon: <Calendar size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
     category: 'Field Operations'
   },
   { 
     id: 'tickets', 
     label: 'Active Tickets', 
     icon: <TicketIcon size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
     category: 'Field Operations'
   },
   { 
     id: 'amc_contracts', 
     label: 'AMC Contracts', 
     icon: <RefreshCw size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
     category: 'Field Operations'
   },
   { 
     id: 'service_feedback', 
     label: 'Service Feedback', 
     icon: <Star size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
     category: 'Field Operations'
   },
 
@@ -100,7 +100,7 @@ export const NAVIGATION_ITEMS = [
     id: 'sales_requests',
     label: 'Sales Appointment Requests',
     icon: <ClipboardList size={20} />,
-    roles: [Role.ADMIN, Role.TEAM_LEAD, Role.SALES],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD, Role.SALES],
     category: 'Sales'
   },
 
@@ -111,7 +111,7 @@ export const NAVIGATION_ITEMS = [
     id: 'customers', 
     label: 'Clients', 
     icon: <Contact size={20} />, 
-    roles: [Role.ADMIN, Role.TEAM_LEAD],
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
     category: 'Customers'
   },
 
@@ -120,28 +120,28 @@ export const NAVIGATION_ITEMS = [
     id: 'users', 
     label: 'User Management', 
     icon: <UserCog size={20} />, 
-    roles: [Role.ADMIN],
+    roles: [Role.ADMIN, Role.VIEWER],
     category: 'Administration'
   },
   { 
     id: 'team', 
     label: 'Team Management', 
     icon: <Users size={20} />, 
-    roles: [Role.ADMIN],
+    roles: [Role.ADMIN, Role.VIEWER],
     category: 'Administration'
   },
   { 
     id: 'audit_log', 
     label: 'Audit Log', 
     icon: <ShieldCheck size={20} />, 
-    roles: [Role.ADMIN],
+    roles: [Role.ADMIN, Role.VIEWER],
     category: 'Administration'
   },
   { 
     id: 'system_tools', 
     label: 'Data Tools', 
     icon: <Database size={20} />, 
-    roles: [Role.ADMIN],
+    roles: [Role.ADMIN, Role.VIEWER],
     category: 'Administration'
   },
 
@@ -150,14 +150,14 @@ export const NAVIGATION_ITEMS = [
     id: 'whatsapp_monitor', 
     label: 'WhatsApp Monitor', 
     icon: <MessageCircle size={20} />, 
-    roles: [Role.ADMIN],
+    roles: [Role.ADMIN, Role.VIEWER],
     category: 'System'
   },
   { 
     id: 'settings', 
     label: 'Settings', 
     icon: <SettingsIcon size={20} />, 
-    roles: [Role.ADMIN],
+    roles: [Role.ADMIN, Role.VIEWER],
     category: 'System'
   },
 
