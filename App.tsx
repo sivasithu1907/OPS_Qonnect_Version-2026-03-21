@@ -43,6 +43,34 @@ const LoadingFallback = () => (
     </div>
 );
 
+// ── Client-side safety net for VIEWER (read-only) accounts ──────────────
+// Real enforcement lives server-side: backend/server.js's `authenticate`
+// middleware hard-blocks every non-GET/HEAD/OPTIONS request for a VIEWER
+// account, on every route that uses it (i.e. virtually everything). This
+// wrapper is just a UX nicety — it avoids a wasted round trip and shows a
+// clear message instead of a raw failed-request error. Installed once at
+// module load; re-reads the saved user from localStorage on every call so
+// it stays correct across login/logout without requiring a page reload.
+if (typeof window !== 'undefined' && !(window as any).__qonnectFetchGuarded) {
+  (window as any).__qonnectFetchGuarded = true;
+  const _originalFetch = window.fetch.bind(window);
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    try {
+      const method = (init?.method || 'GET').toUpperCase();
+      const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+      if (url.includes('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        const saved = localStorage.getItem('qonnect_user');
+        const role = saved ? JSON.parse(saved)?.role : null;
+        if (role === 'VIEWER') {
+          toast.error("You have view-only access and can't make changes.");
+          return Promise.reject(new Error('View-only account: action blocked'));
+        }
+      }
+    } catch {}
+    return _originalFetch(input as any, init);
+  }) as typeof window.fetch;
+}
+
 const QonnectLogo = ({ className, size = 30 }: { className?: string; size?: number }) => (
   <svg viewBox="0 0 578 578" xmlns="http://www.w3.org/2000/svg" className={className} width={size} height={size}>
     <path d="M409.18,407.51a113.86,113.86,0,1,0-225.35,32.32l45-36.75a69.77,69.77,0,0,1,135.75,4.43Z" transform="translate(-8.5 -132)" fill="#fdbb40"/>
@@ -1247,6 +1275,13 @@ useEffect(() => {
           error:   { duration: 5000, iconTheme: { primary: '#ef4444', secondary: '#fff' } },
         }}
       />
+
+      {currentUser.role === Role.VIEWER && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg">
+          <EyeIcon size={14} />
+          View Only — changes are disabled for this account
+        </div>
+      )}
         
         {/* Mobile Overlay */}
         {isMobileMenuOpen && (
