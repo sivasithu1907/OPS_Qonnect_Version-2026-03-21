@@ -899,6 +899,17 @@ const authenticate = (req, res, next) => {
     const token = authHeader.split(' ')[1];
     try {
         req.user = jwt.verify(token, process.env.JWT_SECRET);
+        // VIEWER accounts are strictly read-only. Blocking it here — inside
+        // the shared authenticate() middleware that virtually every route
+        // already calls — means every existing and future mutating endpoint
+        // is covered automatically, instead of relying on each individual
+        // route remembering to check the role itself (several routes, e.g.
+        // ticket/user create & update, currently have no per-route role
+        // check at all, so this is the one place that reliably closes it
+        // off for VIEWER regardless of which endpoint they hit).
+        if (req.user.role === 'VIEWER' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+            return res.status(403).json({ error: 'View-only accounts cannot make changes.' });
+        }
         next();
     } catch (e) {
         return res.status(401).json({ error: 'Unauthorized — invalid token' });
