@@ -690,19 +690,27 @@ await pool.query(`
   );
 `);
 
-// ── Ensure default admin always exists with correct bcrypt password ──
-    const hashedAdminPass = await bcrypt.hash("admin123", 10);
+// ── Ensure a default admin exists on first boot only ──────────────────
+    // Previously this ran an UPDATE on every single server start that reset
+    // admin@qonnect.qa's password back to the hardcoded "admin123" default,
+    // even if someone had deliberately changed it — any container
+    // restart/rebuild silently clobbered the real admin password. Now the
+    // password (and hashing work) only happens the first time the account
+    // is created; once it exists, restarts leave its credentials alone.
+    // Role/status are still kept in sync defensively (cheap, non-destructive
+    // to credentials) so this designated account can't accidentally end up
+    // demoted or deactivated by stale data.
     const adminCheck = await pool.query("SELECT id FROM users WHERE email = 'admin@qonnect.qa'");
     if (adminCheck.rows.length === 0) {
+        const hashedAdminPass = await bcrypt.hash("admin123", 10);
         await pool.query(
             "INSERT INTO users (id, name, email, password, role, status) VALUES ($1, $2, $3, $4, $5, $6)",
             ["u-admin", "System Admin", "admin@qonnect.qa", hashedAdminPass, "ADMIN", "ACTIVE"]
         );
         console.log("✅ Default admin created: admin@qonnect.qa / admin123");
     } else {
-        // Always sync password so a DB wipe + restart always works
-        await pool.query("UPDATE users SET password = $1, role = 'ADMIN', status = 'ACTIVE' WHERE email = 'admin@qonnect.qa'", [hashedAdminPass]);
-        console.log("✅ Default admin password synced");
+        await pool.query("UPDATE users SET role = 'ADMIN', status = 'ACTIVE' WHERE email = 'admin@qonnect.qa'");
+        console.log("✅ Default admin present — password left untouched");
     }
     // Fix any legacy role values
     await pool.query("UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER'");
