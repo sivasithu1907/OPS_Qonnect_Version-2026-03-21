@@ -252,6 +252,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
           case Role.SALES:
           case 'SALES':
               return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700"><TrendingUp size={10} /> Sales</span>;
+          case Role.VIEWER:
+          case 'VIEWER':
+              return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-200 text-slate-600"><Eye size={10} /> Viewer</span>;
           default:
               return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600"><UserCog size={10} /> {role || 'User'}</span>;
       }
@@ -351,6 +354,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const teamLeads = filteredUsers.filter(u => u.systemRole === Role.TEAM_LEAD);
   const fieldEngineers = filteredUsers.filter(u => u.systemRole === Role.FIELD_ENGINEER);
   const salesUsers = filteredUsers.filter(u => u.systemRole === Role.SALES);
+  const viewers = filteredUsers.filter(u => u.systemRole === Role.VIEWER);
 
   return (
     <div className="p-8 space-y-6 animate-in fade-in duration-300">
@@ -390,6 +394,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
             {renderUserGroup(teamLeads, "Team Lead", Briefcase, "bg-purple-100 text-purple-600")}
             {renderUserGroup(fieldEngineers, "Field Engineers", Wrench, "bg-blue-100 text-blue-600")}
             {renderUserGroup(salesUsers, "Sales", TrendingUp, "bg-amber-100 text-amber-700")}
+            {renderUserGroup(viewers, "Viewers (Read-Only)", Eye, "bg-slate-200 text-slate-600")}
         </div>
 
         {/* Modal */}
@@ -464,6 +469,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                     <option value={Role.TEAM_LEAD}>Team Lead</option>
                                     <option value={Role.FIELD_ENGINEER}>Field Engineer</option>
                                     <option value={Role.SALES}>Sales</option>
+                                    <option value={Role.VIEWER}>Viewer (read-only)</option>
                                 </select>
                             </div>
                             <div className="space-y-1">
