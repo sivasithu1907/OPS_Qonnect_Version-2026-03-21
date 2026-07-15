@@ -2,15 +2,20 @@ export enum Role {
   ADMIN = 'ADMIN',
   TEAM_LEAD = 'TEAM_LEAD',
   FIELD_ENGINEER = 'FIELD_ENGINEER',
-  SALES = 'SALES'
+  SALES = 'SALES',
+  // Read-only account: can log in and see everything, but every mutating
+  // request is hard-blocked server-side in backend/server.js's `authenticate`
+  // middleware, regardless of which screen or button they use.
+  VIEWER = 'VIEWER'
 }
 
-export const ROLE_VALUES = [Role.ADMIN, Role.TEAM_LEAD, Role.FIELD_ENGINEER, Role.SALES];
+export const ROLE_VALUES = [Role.ADMIN, Role.TEAM_LEAD, Role.FIELD_ENGINEER, Role.SALES, Role.VIEWER];
 
 export const isAdmin = (role: Role) => role === Role.ADMIN;
 export const isTeamLead = (role: Role) => role === Role.TEAM_LEAD;
 export const isFieldEngineer = (role: Role) => role === Role.FIELD_ENGINEER;
 export const isSales = (role: Role) => role === Role.SALES;
+export const isViewer = (role: Role) => role === Role.VIEWER;
 
 export enum TicketStatus {
   NEW = 'NEW',
