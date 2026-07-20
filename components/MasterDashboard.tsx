@@ -209,7 +209,17 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     const now = new Date();
     const todayStr = qatarDay(now);
 
-    const todaysActivities = activities.filter(a => a.plannedDate && qatarDay(a.plannedDate) === todayStr);
+    // "Today's Activities" = Planned / In Progress / Completed activities
+    // planned for today, PLUS any Carry Forward activity regardless of its
+    // original planned date — carry-forward jobs stay relevant until
+    // resolved, exactly like the same convention already used for the
+    // Activity Log's date-range filter further down this file.
+    const relevantStatuses = ['PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE'];
+    const todaysActivities = activities.filter(a => {
+      if (!relevantStatuses.includes(a.status)) return false;
+      if (a.status === 'CARRY_FORWARD') return true;
+      return !!a.plannedDate && qatarDay(a.plannedDate) === todayStr;
+    });
     const activeTickets = tickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
     const carryForward = activities.filter(a => a.status === 'CARRY_FORWARD').length;
     // "Completed Today" = activities completed today (per spec — tickets are
@@ -332,8 +342,14 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   // Today's Schedule — chronological, today only, independent of the log table's filters
   const todaysSchedule = useMemo(() => {
     return [...execToday.todaysActivities]
-      .sort((a, b) => new Date(a.plannedDate).getTime() - new Date(b.plannedDate).getTime())
-      .slice(0, 8)
+      .sort((a, b) => {
+        // Carry-forward items surface first — they're the ones most likely
+        // to need a decision today, regardless of their stale original time.
+        if (a.status === 'CARRY_FORWARD' && b.status !== 'CARRY_FORWARD') return -1;
+        if (b.status === 'CARRY_FORWARD' && a.status !== 'CARRY_FORWARD') return 1;
+        return new Date(a.plannedDate).getTime() - new Date(b.plannedDate).getTime();
+      })
+      .slice(0, 10)
       .map(a => {
         const cust = customers.find(c => c.id === a.customerId);
         const tech = technicians.find(t => t.id === ((a as any).primaryEngineerId || a.leadTechId));
@@ -750,14 +766,16 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                       className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"
                     >
                       <span className="text-xs font-mono font-semibold text-slate-500 w-12 shrink-0">
-                        {new Date(activity.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })}
+                        {activity.status === 'CARRY_FORWARD'
+                          ? 'CF'
+                          : new Date(activity.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })}
                       </span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${statusColors[activity.status] || 'bg-slate-100 text-slate-500'}`}>
                         {activity.status.replace(/_/g, ' ')}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs font-bold text-slate-800 truncate">{customerName}</span>
-                        <span className="block text-[10px] text-slate-400 truncate">{engineerName}</span>
+                        <span className="block text-[10px] text-slate-400 truncate">{engineerName} · {activity.type}</span>
                       </span>
                     </button>
                   ))}
