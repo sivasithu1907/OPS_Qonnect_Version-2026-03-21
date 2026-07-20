@@ -2,11 +2,8 @@ import React, { useState, useMemo } from 'react';
 import toast from './Toast';
 import { Ticket, Activity, Technician, Customer, TicketStatus, User } from '../types';
 import {
-  PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid
-} from 'recharts';
-import {
-  Search, Eye, X, Clock, User as UserIcon, MapPin, Phone, Camera, Download,
-  ChevronDown, Filter, FileText, FileSpreadsheet, AlertTriangle, CheckCircle2,
+  Search, Eye, X, Clock, User as UserIcon, Download,
+  ChevronDown, FileText, FileSpreadsheet, AlertTriangle, CheckCircle2,
   Plus, Ticket as TicketIcon, ClipboardList, Calendar as CalendarIcon,
   RefreshCw, ArrowRight, Wrench, TrendingUp, Users, Contact, UserX
 } from 'lucide-react';
@@ -22,8 +19,6 @@ interface MasterDashboardProps {
 }
 
 // Photo lightbox handled via React state (see lightboxSrc state in component)
-
-const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#06b6d4', '#f97316'];
 
 // Qatar work week helpers
 const getQatarWeekStart = (): Date => {
@@ -42,7 +37,6 @@ const ACTIVITY_TYPES = ['Installation', 'Service', 'Maintenance', 'Inspection', 
 const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, technicians, customers, salesAppointmentRequests = [], currentUser, onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState<'all' | 'tickets' | 'activities'>('all');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedActTypes, setSelectedActTypes] = useState<string[]>([]);
@@ -52,9 +46,6 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   const [showExport, setShowExport] = useState(false);
   const [showCatDropdown, setShowCatDropdown] = useState(false);
   const [showActTypeDropdown, setShowActTypeDropdown] = useState(false);
-  // Charts panel is collapsed by default so the activity table gets nearly
-  // the full page on load — charts are one click away when actually wanted.
-  const [showCharts, setShowCharts] = useState(false);
 
   // Export state
   const [exportFormat, setExportFormat] = useState<'pdf' | 'excel'>('pdf');
@@ -149,11 +140,6 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
     if (typeFilter === 'tickets') combined = combined.filter(j => j.kind === 'ticket');
     else if (typeFilter === 'activities') combined = combined.filter(j => j.kind === 'activity');
-    // KPI group filters
-    if (statusFilter === 'ACTIVE') combined = combined.filter(j => ['IN_PROGRESS','ON_MY_WAY','ARRIVED','ASSIGNED'].includes(j.status));
-    else if (statusFilter === 'PENDING') combined = combined.filter(j => ['PLANNED','NEW','OPEN'].includes(j.status));
-    else if (statusFilter === 'COMPLETED') combined = combined.filter(j => ['DONE','RESOLVED'].includes(j.status));
-    else if (statusFilter !== 'ALL') combined = combined.filter(j => j.status === statusFilter);
 
     // Multi-select category filter
     if (selectedCategories.length > 0) combined = combined.filter(j =>
@@ -184,57 +170,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
     // Sort: most recently worked on first (completedAt > updatedAt > date)
     return combined.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [tickets, activities, technicians, customers, searchQuery, statusFilter, typeFilter, selectedCategories, selectedActTypes, assignedFilter, dateRange]);
-
-  const metrics = useMemo(() => {
-    const all = allJobs;
-    return {
-      total: all.length,
-      active: all.filter(j => ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED', 'ASSIGNED'].includes(j.status)).length,
-      planned: all.filter(j => ['PLANNED', 'NEW', 'OPEN'].includes(j.status)).length,
-      completed: all.filter(j => ['DONE', 'RESOLVED'].includes(j.status)).length,
-      carryForward: all.filter(j => j.status === 'CARRY_FORWARD').length,
-      cancelled: all.filter(j => j.status === 'CANCELLED').length,
-    };
-  }, [allJobs]);
-
-  const statusPieData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    allJobs.forEach(j => { counts[j.status] = (counts[j.status] || 0) + 1; });
-    return Object.entries(counts).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value }));
-  }, [allJobs]);
-
-  const engineerBarData = useMemo(() => {
-    const counts: Record<string, { name: string, tickets: number, activities: number }> = {};
-    allJobs.forEach(j => {
-      if (!counts[j.techName]) counts[j.techName] = { name: j.techName, tickets: 0, activities: 0 };
-      if (j.kind === 'ticket') counts[j.techName].tickets++;
-      else counts[j.techName].activities++;
-    });
-    return Object.values(counts).sort((a, b) => (b.tickets + b.activities) - (a.tickets + a.activities)).slice(0, 8);
-  }, [allJobs]);
-
-  const velocityData = useMemo(() => {
-    const days: Record<string, { date: string, created: number, completed: number }> = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const key = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-      days[key] = { date: key, created: 0, completed: 0 };
-    }
-    // Use RAW unfiltered data — velocity is a system-wide metric, not filtered view
-    const rawJobs = [...tickets.map(t => ({ date: new Date(t.createdAt), raw: t })),
-                     ...activities.map(a => ({ date: new Date(a.plannedDate || a.createdAt), raw: a }))];
-    rawJobs.forEach(j => {
-      const key = j.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-      if (days[key]) days[key].created++;
-      const completedAt = (j.raw as any).completedAt;
-      if (completedAt) {
-        const ck = new Date(completedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-        if (days[ck]) days[ck].completed++;
-      }
-    });
-    return Object.values(days);
-  }, [allJobs]);
+  }, [tickets, activities, technicians, customers, searchQuery, typeFilter, selectedCategories, selectedActTypes, assignedFilter, dateRange]);
 
   const statusColors: Record<string, string> = {
     'NEW': 'bg-purple-100 text-purple-700', 'OPEN': 'bg-blue-100 text-blue-700',
@@ -263,20 +199,31 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   }, []);
   const firstName = currentUser?.name?.trim()?.split(' ')[0] || '';
 
+  // Qatar-local calendar day as YYYY-MM-DD — every "is this today" comparison
+  // below uses this instead of the browser's own timezone, since a viewer
+  // outside Qatar (or a server render) would otherwise land on the wrong
+  // calendar day right around midnight and silently zero out "today" cards.
+  const qatarDay = (d: string | Date) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Qatar' });
+
   const execToday = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toDateString();
+    const todayStr = qatarDay(now);
 
-    const todaysActivities = activities.filter(a => a.plannedDate && new Date(a.plannedDate).toDateString() === todayStr);
+    const todaysActivities = activities.filter(a => a.plannedDate && qatarDay(a.plannedDate) === todayStr);
     const activeTickets = tickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
     const carryForward = activities.filter(a => a.status === 'CARRY_FORWARD').length;
-    const completedTodayActivities = activities.filter(a => a.status === 'DONE' && (a as any).completedAt && new Date((a as any).completedAt).toDateString() === todayStr).length;
-    const completedTodayTickets = tickets.filter(t => t.status === TicketStatus.RESOLVED && (t as any).completedAt && new Date((t as any).completedAt).toDateString() === todayStr).length;
+    // "Completed Today" = activities completed today (per spec — tickets are
+    // tracked separately elsewhere, not folded into this metric).
+    const completedToday = activities.filter(a => a.status === 'DONE' && (a as any).completedAt && qatarDay((a as any).completedAt) === todayStr).length;
     const openSAR = (salesAppointmentRequests || []).filter((r: any) => r.status === 'PENDING_SCHEDULING').length;
 
+    // "Engineers Working" = engineers currently assigned to an IN_PROGRESS
+    // activity, right now — regardless of which day that activity was
+    // originally planned for (a job started yesterday and still open today
+    // still means that engineer is working today).
     const engineersWorkingIds = new Set(
-      todaysActivities
-        .filter(a => ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status))
+      activities
+        .filter(a => a.status === 'IN_PROGRESS')
         .map(a => (a as any).primaryEngineerId || a.leadTechId)
         .filter(Boolean)
     );
@@ -299,7 +246,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       todaysActivities,
       activeTicketsCount: activeTickets.length,
       carryForward,
-      completedToday: completedTodayActivities + completedTodayTickets,
+      completedToday,
       openSAR,
       engineersWorking: engineersWorkingIds.size,
       overdueTickets,
@@ -347,32 +294,40 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   }, [execToday, onNavigate]);
 
   // Department Overview — one real metric + destination per department
-  const departmentOverview = useMemo(() => [
-    {
-      label: 'Operations', icon: <Wrench size={18} />,
-      metric: `${execToday.todaysActivitiesCount} today`,
-      sub: `${execToday.carryForward} carried forward`,
-      view: 'operations',
-    },
-    {
-      label: 'Sales', icon: <TrendingUp size={18} />,
-      metric: `${execToday.openSAR} pending`,
-      sub: 'Sales appointment requests',
-      view: 'sales_requests',
-    },
-    {
-      label: 'Engineers', icon: <Users size={18} />,
-      metric: `${execToday.engineersWorking} working now`,
-      sub: `${technicians.filter(t => t.isActive !== false).length} total active`,
-      view: 'team',
-    },
-    {
-      label: 'Clients', icon: <Contact size={18} />,
-      metric: `${customers.length} total`,
-      sub: 'Managed client records',
-      view: 'customers',
-    },
-  ], [execToday, technicians, customers]);
+  const departmentOverview = useMemo(() => {
+    // Same "currently active engineer" population used in Business Health
+    // below — Team Lead or Field Engineer, active, not on leave.
+    const activeEngineerCount = technicians.filter(t =>
+      (t.systemRole === 'TEAM_LEAD' || t.systemRole === 'FIELD_ENGINEER') && t.isActive !== false && t.status !== 'LEAVE'
+    ).length;
+
+    return [
+      {
+        label: 'Operations', icon: <Wrench size={18} />,
+        metric: `${execToday.todaysActivitiesCount} today`,
+        sub: `${execToday.carryForward} carried forward`,
+        view: 'operations',
+      },
+      {
+        label: 'Sales', icon: <TrendingUp size={18} />,
+        metric: `${execToday.openSAR} pending`,
+        sub: 'Sales appointment requests',
+        view: 'sales_requests',
+      },
+      {
+        label: 'Engineers', icon: <Users size={18} />,
+        metric: `${activeEngineerCount} active`,
+        sub: `${execToday.engineersWorking} working right now`,
+        view: 'team',
+      },
+      {
+        label: 'Clients', icon: <Contact size={18} />,
+        metric: `${customers.length} total`,
+        sub: 'Managed client records',
+        view: 'customers',
+      },
+    ];
+  }, [execToday, technicians, customers]);
 
   // Today's Schedule — chronological, today only, independent of the log table's filters
   const todaysSchedule = useMemo(() => {
@@ -411,7 +366,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     const doneActivities = activities.filter(a => a.status === 'DONE').length;
     const activityCompletionRate = totalActivities > 0 ? Math.round((doneActivities / totalActivities) * 100) : 0;
 
-    const activeEngineers = technicians.filter(t => t.isActive !== false && (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD')).length;
+    const activeEngineers = technicians.filter(t => t.isActive !== false && t.status !== 'LEAVE' && (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD')).length;
     const utilisation = activeEngineers > 0 ? Math.round((execToday.engineersWorking / activeEngineers) * 100) : 0;
 
     return { completionRate, activityCompletionRate, resolvedTickets, totalTickets, doneActivities, totalActivities, utilisation, activeEngineers };
@@ -581,86 +536,10 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           </div>
         </div>
 
-        {/* KPI Strip — filters the Activity Log table below. Kept compact so it
-            doesn't compete with the Executive Summary in the scrollable body. */}
-        <div className="flex items-center gap-1.5 mb-1.5">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Activity Log totals</span>
-        </div>
-        <div className="grid grid-cols-6 gap-2 mb-3">
-          {[
-            { label: 'Total', value: metrics.total, color: 'bg-slate-900 text-white', filter: 'ALL' },
-            { label: 'Active', value: metrics.active, color: 'bg-blue-50 text-blue-700 border border-blue-200', filter: 'ACTIVE' },
-            { label: 'Planned', value: metrics.planned, color: 'bg-amber-50 text-amber-700 border border-amber-200', filter: 'PENDING' },
-            { label: 'Completed', value: metrics.completed, color: 'bg-emerald-50 text-emerald-700 border border-emerald-200', filter: 'COMPLETED' },
-            { label: 'Carry Fwd', value: metrics.carryForward, color: 'bg-orange-50 text-orange-700 border border-orange-200', filter: 'CARRY_FORWARD' },
-            { label: 'Cancelled', value: metrics.cancelled, color: 'bg-slate-50 text-slate-500 border border-slate-200', filter: 'CANCELLED' },
-          ].map(kpi => (
-            <button key={kpi.label} onClick={() => setStatusFilter(statusFilter === kpi.filter ? 'ALL' : kpi.filter)}
-              className={`p-2 rounded-lg text-center transition-all hover:shadow-md ${statusFilter === kpi.filter ? 'ring-2 ring-slate-900 shadow-md scale-[1.02]' : ''} ${kpi.color}`}>
-              <div className="text-base font-black leading-tight">{kpi.value}</div>
-              <div className="text-[9px] font-bold uppercase tracking-wider opacity-70">{kpi.label}</div>
-            </button>
-          ))}
-        </div>
-
-        {/* Charts & Analytics — collapsed by default so the activity table below
-            gets nearly the full page on load. Charts are a click away, not gone. */}
-        <div className="mb-3">
-          <button
-            onClick={() => setShowCharts(v => !v)}
-            className="w-full flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-          >
-            <ChevronDown size={14} className={`transition-transform ${showCharts ? 'rotate-0' : '-rotate-90'}`} />
-            <span>Charts &amp; analytics</span>
-            <span className="ml-auto text-[10px] font-medium text-slate-400 normal-case">
-              {showCharts ? 'tap to collapse' : 'tap to expand'}
-            </span>
-          </button>
-
-          {showCharts && (
-            <div className="grid grid-cols-3 gap-4 mt-3">
-              <div className="bg-white rounded-xl border border-slate-200 p-4">
-                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Status Distribution</h3>
-                <ResponsiveContainer width="100%" height={140}>
-                  <PieChart><Pie data={statusPieData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2} dataKey="value">
-                    {statusPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                  </Pie><RTooltip /></PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {statusPieData.map((d, i) => (
-                    <span key={d.name} className="text-[8px] flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />{d.name} ({d.value})
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-4">
-                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Jobs by Engineer</h3>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={engineerBarData} layout="vertical" margin={{ left: 0, right: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 9 }} />
-                    <RTooltip /><Bar dataKey="activities" stackId="a" fill="#3b82f6" name="Activities" /><Bar dataKey="tickets" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Tickets" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-4">
-                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">7-Day Velocity</h3>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={velocityData} margin={{ left: -10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 9 }} /><YAxis tick={{ fontSize: 9 }} />
-                    <RTooltip /><Bar dataKey="created" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Created" /><Bar dataKey="completed" fill="#10b981" radius={[4, 4, 0, 0]} name="Completed" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* Filters Row */}
         <div className="flex items-center gap-3 flex-wrap">
-          {(searchQuery || statusFilter !== 'ALL' || typeFilter !== 'all' || selectedCategories.length > 0 || selectedActTypes.length > 0 || assignedFilter !== 'ALL' || dateRange !== 'month') && (
-            <button onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); setTypeFilter('all'); setSelectedCategories([]); setSelectedActTypes([]); setAssignedFilter('ALL'); setDateRange('month'); }}
+          {(searchQuery || typeFilter !== 'all' || selectedCategories.length > 0 || selectedActTypes.length > 0 || assignedFilter !== 'ALL' || dateRange !== 'month') && (
+            <button type="button" onClick={() => { setSearchQuery(''); setTypeFilter('all'); setSelectedCategories([]); setSelectedActTypes([]); setAssignedFilter('ALL'); setDateRange('month'); }}
               className="flex items-center gap-1.5 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 hover:bg-red-100">
               <X size={12} /> Clear Filters
             </button>
