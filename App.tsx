@@ -1339,61 +1339,58 @@ useEffect(() => {
             />
         )}
 
-        {/* Sidebar — off-white surface, restrained border, Qonnect yellow reserved for active state only */}
+        {/* Sidebar — solid dark anchor (no glass/blur here by design); Qonnect
+            yellow reserved strictly for the active-item accent. */}
         <aside
             aria-label="Main navigation"
-            className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-white border-r border-slate-200 text-gray-900 z-50 transition-transform duration-200 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}
+            className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#15171A] border-r border-white/10 text-white z-50 transition-transform duration-200 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}
         >
             
-            {/* Sidebar Header — clicking the logo navigates to Master Dashboard */}
+            {/* Sidebar Header — clicking the logo navigates to Master Dashboard.
+                Reduced height + a subtle divider keeps this a clean, compact
+                anchor rather than a heavy banner. */}
             <button
                 type="button"
                 onClick={() => { setActiveView('master_dashboard'); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center border-b border-slate-100 transition-all duration-200 text-left ${FOCUS_RING} ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}
+                className={`w-full flex items-center border-b border-white/10 transition-all duration-200 text-left ${FOCUS_RING} ${sidebarCollapsed ? 'justify-center py-4' : 'px-5 py-4 gap-3'}`}
                 title="Go to Master Dashboard"
             >
             <div className="shrink-0 transition-all duration-300 flex items-center justify-center">
-                <QonnectLogo size={sidebarCollapsed ? 36 : 32} />
+                <QonnectLogo size={sidebarCollapsed ? 34 : 30} />
             </div>
             
             <div className={`flex flex-col justify-center overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>
-                <h1 className="text-[18px] font-semibold text-[#111827] leading-tight tracking-tight whitespace-nowrap">{APP_NAME}</h1>
-                <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest whitespace-nowrap mt-0.5">
+                <h1 className="text-[17px] font-semibold text-white leading-tight tracking-tight whitespace-nowrap">{APP_NAME}</h1>
+                <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest whitespace-nowrap mt-0.5">
                 Field Operations Platform
                 </div>
             </div>
             </button>
             
-            <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto overflow-x-hidden custom-scrollbar">
+            <nav className="flex-1 px-3 py-4 space-y-3 overflow-y-auto overflow-x-hidden custom-scrollbar">
             {categoryOrder.map(cat => {
                 const items = groupedNavItems[cat];
                 if (!items || items.length === 0) return null;
-                
-                // A group heading with only one item underneath just adds
-                // clutter — skip the label (item still renders normally) so
-                // the sidebar stays scannable as more single-item categories
-                // get added over time.
-                const showGroupHeading = items.length > 1;
 
                 return (
                     <div key={cat}>
-                        {/* Section Header — short underline beneath the label for
-                            clear visual separation between nav groups. Still a
-                            plain text label, no background fill or animation, to
-                            stay consistent with the existing clean design. */}
-                        {!sidebarCollapsed && showGroupHeading && (
-                            <h3 className="px-4 mt-6 mb-2">
-                                <span className="text-[10.5px] font-bold text-[#6B7280] uppercase tracking-widest">
+                        {/* Section Header — small, quiet uppercase label. Each
+                            section (including single-item ones like Sales/Data)
+                            keeps its heading so the grouping itself communicates
+                            structure — Sales and Data are deliberately their own
+                            sections to make room for future modules. */}
+                        {!sidebarCollapsed && (
+                            <h3 className="px-4 mb-1.5 first:mt-1 mt-5">
+                                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-[0.08em]">
                                     {cat}
                                 </span>
-                                <div className="h-[2px] w-6 bg-[#FFCC00]/60 rounded-full mt-1.5" />
                             </h3>
                         )}
                         
                         {/* Collapsed Divider */}
-                        {sidebarCollapsed && <div className="border-b border-gray-200 mb-3 mx-4 mt-3" />}
+                        {sidebarCollapsed && <div className="border-b border-white/10 mb-3 mx-4 mt-3" />}
 
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                             {items.map(item => {
                                 const isActive = activeView === item.id;
                                 return (
@@ -1412,15 +1409,15 @@ useEffect(() => {
                                         }}
                                         className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm transition-all duration-200 rounded-[10px] border-l-[3px] ${FOCUS_RING} ${
                                             isActive 
-                                            ? 'border-[#FFCC00] bg-[rgba(255,204,0,0.12)] text-slate-900 font-semibold' 
-                                            : 'border-transparent font-medium text-[#111827] hover:bg-slate-100'
+                                            ? 'border-[#FFCC00] bg-[#FFCC00]/[0.12] text-white font-semibold' 
+                                            : 'border-transparent font-medium text-white/80 hover:bg-white/5 hover:text-white'
                                         }`}
                                     >
                                         <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center w-full' : 'w-full'}`}>
-                                            <span className={`shrink-0 flex items-center justify-center transition-colors ${
+                                            <span className={`shrink-0 flex items-center justify-center transition-colors rounded-md ${
                                                 isActive
-                                                    ? (sidebarCollapsed ? 'text-[#FFCC00] bg-white shadow-sm ring-1 ring-slate-200 rounded-lg p-1.5 -m-1.5' : 'text-[#FFCC00]')
-                                                    : 'text-gray-500 group-hover:text-gray-700'
+                                                    ? 'text-[#FFCC00] bg-[#FFCC00]/10 p-1.5 -m-1.5'
+                                                    : 'text-slate-400 group-hover:text-slate-200'
                                             }`}>
                                                 {item.icon}
                                             </span>
@@ -1434,7 +1431,7 @@ useEffect(() => {
                                                     {activeUserNotifications.length}
                                                 </span>
                                             ) : (
-                                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#F3F4F6]" />
+                                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#15171A]" />
                                             )
                                         )}
 
