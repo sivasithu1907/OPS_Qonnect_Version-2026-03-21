@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import toast from './Toast';
-import { Ticket, Activity, Technician, Customer, TicketStatus } from '../types';
+import { Ticket, Activity, Technician, Customer, TicketStatus, User } from '../types';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid
 } from 'recharts';
 import {
-  Search, Eye, X, Clock, User, MapPin, Phone, Camera, Download,
-  ChevronDown, Filter, FileText, FileSpreadsheet
+  Search, Eye, X, Clock, User as UserIcon, MapPin, Phone, Camera, Download,
+  ChevronDown, Filter, FileText, FileSpreadsheet, AlertTriangle, CheckCircle2,
+  Plus, Ticket as TicketIcon, ClipboardList, Calendar as CalendarIcon,
+  RefreshCw, ArrowRight, Wrench, TrendingUp, Users, Contact, UserX
 } from 'lucide-react';
 
 interface MasterDashboardProps {
@@ -14,6 +16,9 @@ interface MasterDashboardProps {
   activities: Activity[];
   technicians: Technician[];
   customers: Customer[];
+  salesAppointmentRequests?: any[];
+  currentUser?: User | null;
+  onNavigate?: (type: 'ticket' | 'activity' | 'view', id: string) => void;
 }
 
 // Photo lightbox handled via React state (see lightboxSrc state in component)
@@ -34,7 +39,7 @@ const getQatarWeekStart = (): Date => {
 const UNIFIED_CATEGORIES = ['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'];
 const ACTIVITY_TYPES = ['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'];
 
-const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, technicians, customers }) => {
+const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, technicians, customers, salesAppointmentRequests = [], currentUser, onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -244,6 +249,174 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
   const fmtTime = (iso: string) => iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) : '—';
   const fmtDate = (iso: string) => iso ? new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
+  // ============================================================
+  // EXECUTIVE OVERVIEW — everything below is derived directly from
+  // the raw tickets/activities/customers/SAR props (NOT from allJobs,
+  // which reflects the activity-log table's own filter state further
+  // down the page). This keeps "what's happening today" independent
+  // of whatever the user has filtered the log table to.
+  // ============================================================
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  }, []);
+  const firstName = currentUser?.name?.trim()?.split(' ')[0] || '';
+
+  const execToday = useMemo(() => {
+    const now = new Date();
+    const todayStr = now.toDateString();
+
+    const todaysActivities = activities.filter(a => a.plannedDate && new Date(a.plannedDate).toDateString() === todayStr);
+    const activeTickets = tickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
+    const carryForward = activities.filter(a => a.status === 'CARRY_FORWARD').length;
+    const completedTodayActivities = activities.filter(a => a.status === 'DONE' && (a as any).completedAt && new Date((a as any).completedAt).toDateString() === todayStr).length;
+    const completedTodayTickets = tickets.filter(t => t.status === TicketStatus.RESOLVED && (t as any).completedAt && new Date((t as any).completedAt).toDateString() === todayStr).length;
+    const openSAR = (salesAppointmentRequests || []).filter((r: any) => r.status === 'PENDING_SCHEDULING').length;
+
+    const engineersWorkingIds = new Set(
+      todaysActivities
+        .filter(a => ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status))
+        .map(a => (a as any).primaryEngineerId || a.leadTechId)
+        .filter(Boolean)
+    );
+
+    // "Overdue" mirrors the same >72h open-ticket threshold already used on
+    // the Service Dashboard — no new SLA rule invented here.
+    const overdueTickets = tickets.filter(t => {
+      if (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED) return false;
+      return (now.getTime() - new Date(t.createdAt).getTime()) > 72 * 60 * 60 * 1000;
+    });
+
+    const unassignedActivities = activities.filter(a =>
+      a.status !== 'DONE' && a.status !== 'CANCELLED' && !a.leadTechId && !(a as any).primaryEngineerId && ((a as any).freelancers || []).length === 0
+    );
+
+    const urgentOpenTickets = tickets.filter(t => t.priority === 'URGENT' && t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
+
+    return {
+      todaysActivitiesCount: todaysActivities.length,
+      todaysActivities,
+      activeTicketsCount: activeTickets.length,
+      carryForward,
+      completedToday: completedTodayActivities + completedTodayTickets,
+      openSAR,
+      engineersWorking: engineersWorkingIds.size,
+      overdueTickets,
+      unassignedActivities,
+      urgentOpenTickets,
+    };
+  }, [tickets, activities, salesAppointmentRequests]);
+
+  const operationalSummary = useMemo(() => {
+    const critical = execToday.overdueTickets.length + execToday.urgentOpenTickets.length;
+    let s = `Today there ${execToday.todaysActivitiesCount === 1 ? 'is' : 'are'} ${execToday.todaysActivitiesCount} scheduled activit${execToday.todaysActivitiesCount === 1 ? 'y' : 'ies'} and ${execToday.activeTicketsCount} active ticket${execToday.activeTicketsCount === 1 ? '' : 's'}`;
+    s += critical > 0 ? `, with ${critical} critical issue${critical === 1 ? '' : 's'} requiring attention.` : ', all on track.';
+    return s;
+  }, [execToday]);
+
+  // Critical Attention — only genuinely urgent items, and only shown if data exists
+  const criticalAttention = useMemo(() => {
+    const items: { label: string; count: number; icon: React.ReactNode; tone: string; onClick?: () => void }[] = [];
+    if (execToday.overdueTickets.length > 0) items.push({
+      label: 'Overdue Tickets (>3 days)', count: execToday.overdueTickets.length,
+      icon: <AlertTriangle size={18} />, tone: 'red',
+      onClick: () => onNavigate?.('view', 'tickets'),
+    });
+    if (execToday.urgentOpenTickets.length > 0) items.push({
+      label: 'Urgent Tickets', count: execToday.urgentOpenTickets.length,
+      icon: <AlertTriangle size={18} />, tone: 'red',
+      onClick: () => onNavigate?.('view', 'tickets'),
+    });
+    if (execToday.carryForward > 0) items.push({
+      label: 'Carry Forward Activities', count: execToday.carryForward,
+      icon: <RefreshCw size={18} />, tone: 'orange',
+      onClick: () => onNavigate?.('view', 'planning'),
+    });
+    if (execToday.unassignedActivities.length > 0) items.push({
+      label: 'Activities Without Engineer', count: execToday.unassignedActivities.length,
+      icon: <UserX size={18} />, tone: 'amber',
+      onClick: () => onNavigate?.('view', 'planning'),
+    });
+    if (execToday.openSAR > 0) items.push({
+      label: 'Pending SAR Approval', count: execToday.openSAR,
+      icon: <ClipboardList size={18} />, tone: 'blue',
+      onClick: () => onNavigate?.('view', 'sales_requests'),
+    });
+    return items;
+  }, [execToday, onNavigate]);
+
+  // Department Overview — one real metric + destination per department
+  const departmentOverview = useMemo(() => [
+    {
+      label: 'Operations', icon: <Wrench size={18} />,
+      metric: `${execToday.todaysActivitiesCount} today`,
+      sub: `${execToday.carryForward} carried forward`,
+      view: 'operations',
+    },
+    {
+      label: 'Sales', icon: <TrendingUp size={18} />,
+      metric: `${execToday.openSAR} pending`,
+      sub: 'Sales appointment requests',
+      view: 'sales_requests',
+    },
+    {
+      label: 'Engineers', icon: <Users size={18} />,
+      metric: `${execToday.engineersWorking} working now`,
+      sub: `${technicians.filter(t => t.isActive !== false).length} total active`,
+      view: 'team',
+    },
+    {
+      label: 'Clients', icon: <Contact size={18} />,
+      metric: `${customers.length} total`,
+      sub: 'Managed client records',
+      view: 'customers',
+    },
+  ], [execToday, technicians, customers]);
+
+  // Today's Schedule — chronological, today only, independent of the log table's filters
+  const todaysSchedule = useMemo(() => {
+    return [...execToday.todaysActivities]
+      .sort((a, b) => new Date(a.plannedDate).getTime() - new Date(b.plannedDate).getTime())
+      .slice(0, 8)
+      .map(a => {
+        const cust = customers.find(c => c.id === a.customerId);
+        const tech = technicians.find(t => t.id === ((a as any).primaryEngineerId || a.leadTechId));
+        return { activity: a, customerName: cust?.name || 'Unknown', engineerName: tech?.name || 'Unassigned' };
+      });
+  }, [execToday.todaysActivities, customers, technicians]);
+
+  // Recent Activity — most recent real events across tickets + activities,
+  // independent of the log table's filter state.
+  const recentActivityFeed = useMemo(() => {
+    type Event = { id: string; kind: 'ticket' | 'activity'; label: string; who: string; time: Date; status: string };
+    const events: Event[] = [];
+    tickets.forEach(t => {
+      events.push({ id: t.id, kind: 'ticket', label: t.customerName || 'Ticket', who: technicians.find(tc => tc.id === t.assignedTechId)?.name || 'Unassigned', time: new Date(t.updatedAt || t.createdAt), status: t.status });
+    });
+    activities.forEach(a => {
+      const cust = customers.find(c => c.id === a.customerId);
+      events.push({ id: a.id, kind: 'activity', label: cust?.name || a.type, who: technicians.find(tc => tc.id === ((a as any).primaryEngineerId || a.leadTechId))?.name || 'Unassigned', time: new Date(a.updatedAt || a.plannedDate || a.createdAt), status: a.status });
+    });
+    return events.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 8);
+  }, [tickets, activities, customers, technicians]);
+
+  // Business Health — only metrics that are already reliably calculable
+  const businessHealth = useMemo(() => {
+    const totalTickets = tickets.length;
+    const resolvedTickets = tickets.filter(t => t.status === TicketStatus.RESOLVED).length;
+    const completionRate = totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 0;
+
+    const totalActivities = activities.length;
+    const doneActivities = activities.filter(a => a.status === 'DONE').length;
+    const activityCompletionRate = totalActivities > 0 ? Math.round((doneActivities / totalActivities) * 100) : 0;
+
+    const activeEngineers = technicians.filter(t => t.isActive !== false && (t.systemRole === 'FIELD_ENGINEER' || t.systemRole === 'TEAM_LEAD')).length;
+    const utilisation = activeEngineers > 0 ? Math.round((execToday.engineersWorking / activeEngineers) * 100) : 0;
+
+    return { completionRate, activityCompletionRate, resolvedTickets, totalTickets, doneActivities, totalActivities, utilisation, activeEngineers };
+  }, [tickets, activities, technicians, execToday]);
+
   // Toggle multi-select helpers
   const toggleCat = (cat: string) => setSelectedCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
   const toggleActType = (t: string) => setSelectedActTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
@@ -375,23 +548,44 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     <div className="h-full flex flex-col overflow-hidden bg-slate-50">
       {/* Header */}
       <div className="px-6 pt-5 pb-4 bg-white border-b border-slate-200 shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-black text-slate-900">Master Dashboard</h1>
-            <p className="text-slate-500 text-sm">Complete operational overview</p>
+        <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-black text-slate-900">
+                {greeting}{firstName ? `, ${firstName}` : ''}
+              </h1>
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
+                <span className="relative flex h-1.5 w-1.5" aria-hidden="true">
+                  <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                Live
+              </span>
+            </div>
+            <p className="text-slate-500 text-sm mt-0.5">{operationalSummary}</p>
           </div>
-          <button onClick={() => {
-            // Inherit active date range into export defaults
-            const now = new Date();
-            if (dateRange === 'today') { setExportDateStart(now.toISOString().slice(0,10)); setExportDateEnd(now.toISOString().slice(0,10)); }
-            else if (dateRange === 'week') { setExportDateStart(getQatarWeekStart().toISOString().slice(0,10)); setExportDateEnd(now.toISOString().slice(0,10)); }
-            setShowExport(true);
-          }} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors">
-            <Download size={14} /> Export Data
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-sm font-medium">
+              <CalendarIcon size={16} className="text-slate-500" aria-hidden="true" />
+              {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+            </div>
+            <button type="button" onClick={() => {
+              // Inherit active date range into export defaults
+              const now = new Date();
+              if (dateRange === 'today') { setExportDateStart(now.toISOString().slice(0,10)); setExportDateEnd(now.toISOString().slice(0,10)); }
+              else if (dateRange === 'week') { setExportDateStart(getQatarWeekStart().toISOString().slice(0,10)); setExportDateEnd(now.toISOString().slice(0,10)); }
+              setShowExport(true);
+            }} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1">
+              <Download size={14} /> Export Data
+            </button>
+          </div>
         </div>
 
-        {/* KPI Strip — slightly more compact than before so it takes less vertical space */}
+        {/* KPI Strip — filters the Activity Log table below. Kept compact so it
+            doesn't compete with the Executive Summary in the scrollable body. */}
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Activity Log totals</span>
+        </div>
         <div className="grid grid-cols-6 gap-2 mb-3">
           {[
             { label: 'Total', value: metrics.total, color: 'bg-slate-900 text-white', filter: 'ALL' },
@@ -540,6 +734,218 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
 
       {/* Table */}
       <div className="flex-1 overflow-y-auto pb-20">
+
+        {/* ============ EXECUTIVE OVERVIEW ============ */}
+        <div className="p-6 space-y-6 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
+
+          {/* Executive Summary */}
+          <div>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">Executive Summary</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {[
+                { label: "Today's Activities", value: execToday.todaysActivitiesCount, icon: <CalendarIcon size={20} />, tone: 'blue', view: 'planning' },
+                { label: 'Active Tickets', value: execToday.activeTicketsCount, icon: <TicketIcon size={20} />, tone: 'purple', view: 'tickets' },
+                { label: 'Carry Forward', value: execToday.carryForward, icon: <RefreshCw size={20} />, tone: 'orange', view: 'planning' },
+                { label: 'Completed Today', value: execToday.completedToday, icon: <CheckCircle2 size={20} />, tone: 'emerald', view: undefined },
+                { label: 'Open SAR', value: execToday.openSAR, icon: <ClipboardList size={20} />, tone: 'indigo', view: 'sales_requests' },
+                { label: 'Engineers Working', value: execToday.engineersWorking, icon: <Users size={20} />, tone: 'cyan', view: 'team' },
+                { label: 'Overdue Tickets', value: execToday.overdueTickets.length, icon: <AlertTriangle size={20} />, tone: 'red', view: 'tickets' },
+              ].map(kpi => {
+                const toneClasses: Record<string, string> = {
+                  blue: 'bg-blue-50 text-blue-600', purple: 'bg-purple-50 text-purple-600',
+                  orange: 'bg-orange-50 text-orange-600', emerald: 'bg-emerald-50 text-emerald-600',
+                  indigo: 'bg-indigo-50 text-indigo-600', cyan: 'bg-cyan-50 text-cyan-600',
+                  red: 'bg-red-50 text-red-600', amber: 'bg-amber-50 text-amber-600',
+                };
+                const clickable = !!kpi.view && !!onNavigate;
+                const Wrapper: any = clickable ? 'button' : 'div';
+                return (
+                  <Wrapper
+                    key={kpi.label}
+                    type={clickable ? 'button' : undefined}
+                    onClick={clickable ? () => onNavigate?.('view', kpi.view as string) : undefined}
+                    className={`text-left bg-white p-4 rounded-2xl border border-slate-200 shadow-sm ${clickable ? 'hover:shadow-md hover:border-slate-300 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]' : ''}`}
+                  >
+                    <div className={`inline-flex p-2 rounded-xl mb-3 ${toneClasses[kpi.tone]}`}>{kpi.icon}</div>
+                    <div className="text-2xl font-black text-slate-900 leading-none">{kpi.value}</div>
+                    <div className="text-xs font-semibold text-slate-500 mt-1">{kpi.label}</div>
+                  </Wrapper>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Critical Attention */}
+          {criticalAttention.length > 0 && (
+            <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle size={18} className="text-red-600" aria-hidden="true" />
+                <h2 className="text-sm font-bold text-slate-800">Critical Attention</h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {criticalAttention.map(item => {
+                  const toneMap: Record<string, string> = {
+                    red: 'bg-red-50 border-red-100 hover:bg-red-100/70 text-red-700',
+                    orange: 'bg-orange-50 border-orange-100 hover:bg-orange-100/70 text-orange-700',
+                    amber: 'bg-amber-50 border-amber-100 hover:bg-amber-100/70 text-amber-700',
+                    blue: 'bg-blue-50 border-blue-100 hover:bg-blue-100/70 text-blue-700',
+                  };
+                  return (
+                    <button
+                      type="button"
+                      key={item.label}
+                      onClick={item.onClick}
+                      className={`text-left flex items-center gap-3 p-3.5 rounded-xl border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${toneMap[item.tone]}`}
+                    >
+                      <span className="shrink-0">{item.icon}</span>
+                      <span className="min-w-0">
+                        <span className="block text-xl font-bold leading-none">{item.count}</span>
+                        <span className="block text-xs font-medium mt-0.5 opacity-90">{item.label}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">Quick Actions</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'New Activity', icon: <Plus size={20} />, view: 'planning' },
+                { label: 'New Ticket', icon: <TicketIcon size={20} />, view: 'tickets' },
+                { label: 'New SAR', icon: <ClipboardList size={20} />, view: 'sales_requests' },
+                { label: 'AMC Contracts', icon: <FileText size={20} />, view: 'amc_contracts' },
+              ].map(action => (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={() => onNavigate?.('view', action.view)}
+                  className="flex flex-col items-center gap-2 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-[#FFCC00] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"
+                >
+                  <span className="p-2.5 rounded-xl bg-[#FFCC00]/15 text-slate-800">{action.icon}</span>
+                  <span className="text-xs font-bold text-slate-700">{action.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Department Overview */}
+          <div>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">Department Overview</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {departmentOverview.map(dept => (
+                <button
+                  key={dept.label}
+                  type="button"
+                  onClick={() => onNavigate?.('view', dept.view)}
+                  className="text-left bg-white border border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2 rounded-xl bg-slate-100 text-slate-600 group-hover:bg-slate-200 transition-colors">{dept.icon}</span>
+                    <ArrowRight size={14} className="text-slate-300 group-hover:text-slate-500 transition-colors" aria-hidden="true" />
+                  </div>
+                  <div className="font-bold text-slate-900 text-sm">{dept.label}</div>
+                  <div className="text-lg font-black text-slate-800 mt-1">{dept.metric}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">{dept.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Today's Schedule + Recent Activity, side by side on desktop */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <h2 className="text-sm font-bold text-slate-800 mb-3">Today's Schedule</h2>
+              {todaysSchedule.length === 0 ? (
+                <div className="text-center text-slate-400 text-sm py-6">No activities scheduled today</div>
+              ) : (
+                <div className="space-y-1">
+                  {todaysSchedule.map(({ activity, customerName, engineerName }) => (
+                    <button
+                      key={activity.id}
+                      type="button"
+                      onClick={() => onNavigate?.('activity', activity.id)}
+                      className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"
+                    >
+                      <span className="text-xs font-mono font-semibold text-slate-500 w-12 shrink-0">
+                        {new Date(activity.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${statusColors[activity.status] || 'bg-slate-100 text-slate-500'}`}>
+                        {activity.status.replace(/_/g, ' ')}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-bold text-slate-800 truncate">{customerName}</span>
+                        <span className="block text-[10px] text-slate-400 truncate">{engineerName}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <h2 className="text-sm font-bold text-slate-800 mb-3">Recent Activity</h2>
+              {recentActivityFeed.length === 0 ? (
+                <div className="text-center text-slate-400 text-sm py-6">No recent activity</div>
+              ) : (
+                <div className="space-y-1">
+                  {recentActivityFeed.map(ev => {
+                    const isDone = ev.status === 'DONE' || ev.status === 'RESOLVED';
+                    const diffMin = Math.floor((Date.now() - ev.time.getTime()) / 60000);
+                    const timeStr = diffMin < 1 ? 'just now' : diffMin < 60 ? `${diffMin}m ago` : diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago` : `${Math.floor(diffMin / 1440)}d ago`;
+                    return (
+                      <button
+                        key={`${ev.kind}-${ev.id}`}
+                        type="button"
+                        onClick={() => onNavigate?.(ev.kind, ev.id)}
+                        className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"
+                      >
+                        {isDone ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> : <Clock size={14} className="text-slate-400 shrink-0" />}
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-bold text-slate-800 truncate">{ev.label}</span>
+                          <span className="block text-[10px] text-slate-400 truncate">{ev.who} · {ev.status.replace(/_/g, ' ')}</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 shrink-0">{timeStr}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Business Health */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <h2 className="text-sm font-bold text-slate-800 mb-4">Business Health</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <div className="text-2xl font-black text-slate-900">{businessHealth.completionRate}%</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Ticket Completion ({businessHealth.resolvedTickets}/{businessHealth.totalTickets})</div>
+              </div>
+              <div>
+                <div className="text-2xl font-black text-slate-900">{businessHealth.activityCompletionRate}%</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Activities Completed ({businessHealth.doneActivities}/{businessHealth.totalActivities})</div>
+              </div>
+              <div>
+                <div className="text-2xl font-black text-slate-900">{businessHealth.utilisation}%</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Engineer Utilisation ({execToday.engineersWorking}/{businessHealth.activeEngineers})</div>
+              </div>
+              <div>
+                <div className="text-2xl font-black text-slate-900">{execToday.activeTicketsCount} / {businessHealth.resolvedTickets}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Open vs Closed Tickets</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-2">
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide">Activity Log &amp; Reports</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Full searchable, filterable, exportable record of every ticket and activity</p>
+          </div>
+        </div>
+
         <table className="w-full text-sm text-left table-fixed">
           <thead className="bg-white text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
             <tr>
