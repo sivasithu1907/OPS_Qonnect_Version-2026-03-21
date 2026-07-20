@@ -156,6 +156,9 @@ function App() {
   // --- Notification State ---
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
+  // --- Profile Menu State (shared app-shell dropdown) ---
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
   // SALES password change modal (triggered from key icon in header)
   const [showSalesPwModal, setShowSalesPwModal] = useState(false);
   const [salesPwForm, setSalesPwForm] = useState({ current: '', next: '', confirm: '' });
@@ -1012,6 +1015,40 @@ const loadCustomers = async () => {
     return () => document.removeEventListener('mousedown', handler);
   }, [isNotifOpen]);
 
+  // Close profile dropdown on outside click (same pattern as the notification panel above)
+  useEffect(() => {
+    if (!isProfileOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-profile-panel]')) setIsProfileOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isProfileOpen]);
+
+  // Lock background scroll while the mobile navigation drawer is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prevOverflow; };
+    }
+  }, [isMobileMenuOpen]);
+
+  // Escape closes any open shell overlay (mobile drawer, notifications, profile menu)
+  useEffect(() => {
+    if (!isMobileMenuOpen && !isNotifOpen && !isProfileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMobileMenuOpen(false);
+        setIsNotifOpen(false);
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isMobileMenuOpen, isNotifOpen, isProfileOpen]);
+
 // --- Persistent Auth Check — validates token with server on every startup ---
   useEffect(() => {
     const savedToken = localStorage.getItem('qonnect_token');
@@ -1179,6 +1216,17 @@ useEffect(() => {
 
   const categoryOrder = useMemo(() => Object.keys(groupedNavItems), [groupedNavItems]);
 
+  // Current nav entry — drives the small contextual label in the shared
+  // header (category + page name), reusing the same NAVIGATION_ITEMS config
+  // as the sidebar rather than a second source of truth.
+  const currentNavItem = useMemo(
+    () => NAVIGATION_ITEMS.find(item => item.id === activeView),
+    [activeView]
+  );
+
+  // Shared focus-visible ring for shell controls (sidebar, header, dropdowns)
+  const FOCUS_RING = 'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1';
+
   // --- Render ---
 
   // ── TV Display Mode — Fullscreen read-only, NO LOGIN REQUIRED ──
@@ -1291,13 +1339,17 @@ useEffect(() => {
             />
         )}
 
-        {/* Sidebar - APPLE iOS LIGHT THEME */}
-        <aside className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#E5E7EB] border-r-[3px] border-[#1E293B]/20 text-gray-900 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}>
+        {/* Sidebar — off-white surface, restrained border, Qonnect yellow reserved for active state only */}
+        <aside
+            aria-label="Main navigation"
+            className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-white border-r border-slate-200 text-gray-900 z-50 transition-transform duration-200 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}
+        >
             
             {/* Sidebar Header — clicking the logo navigates to Master Dashboard */}
             <button
+                type="button"
                 onClick={() => { setActiveView('master_dashboard'); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center border-b border-[#0F172A]/[0.08] transition-all duration-300 text-left ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}
+                className={`w-full flex items-center border-b border-slate-100 transition-all duration-200 text-left ${FOCUS_RING} ${sidebarCollapsed ? 'justify-center py-5' : 'px-5 py-5 gap-3'}`}
                 title="Go to Master Dashboard"
             >
             <div className="shrink-0 transition-all duration-300 flex items-center justify-center">
@@ -1317,14 +1369,19 @@ useEffect(() => {
                 const items = groupedNavItems[cat];
                 if (!items || items.length === 0) return null;
                 
+                // A group heading with only one item underneath just adds
+                // clutter — skip the label (item still renders normally) so
+                // the sidebar stays scannable as more single-item categories
+                // get added over time.
+                const showGroupHeading = items.length > 1;
+
                 return (
                     <div key={cat}>
-                        {/* Section Header — slightly bolder + better contrast than
-                            before, with a short underline beneath the label for
-                            clearer visual separation between nav groups. Still a
+                        {/* Section Header — short underline beneath the label for
+                            clear visual separation between nav groups. Still a
                             plain text label, no background fill or animation, to
                             stay consistent with the existing clean design. */}
-                        {!sidebarCollapsed && (
+                        {!sidebarCollapsed && showGroupHeading && (
                             <h3 className="px-4 mt-6 mb-2">
                                 <span className="text-[10.5px] font-bold text-[#6B7280] uppercase tracking-widest">
                                     {cat}
@@ -1341,8 +1398,11 @@ useEffect(() => {
                                 const isActive = activeView === item.id;
                                 return (
                                     <button
+                                        type="button"
                                         key={item.id}
                                         title={sidebarCollapsed ? item.label : ''}
+                                        aria-label={item.label}
+                                        aria-current={isActive ? 'page' : undefined}
                                         onClick={() => {
                                             setActiveView(item.id);
                                             setIsMobileMenuOpen(false); // <--- Auto-close on mobile
@@ -1350,14 +1410,18 @@ useEffect(() => {
                                             if (item.id !== 'lead_portal') setFocusedTicketId(null);
                                             if (item.id !== 'planning') setTargetActivityId(null);
                                         }}
-                                        className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm font-medium transition-all duration-200 rounded-[10px] border-l-[3px] ${
+                                        className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm transition-all duration-200 rounded-[10px] border-l-[3px] ${FOCUS_RING} ${
                                             isActive 
-                                            ? 'border-[#FFCC00] bg-[rgba(255,204,0,0.12)] text-black' 
-                                            : 'border-transparent text-[#111827] hover:bg-black/5'
+                                            ? 'border-[#FFCC00] bg-[rgba(255,204,0,0.12)] text-slate-900 font-semibold' 
+                                            : 'border-transparent font-medium text-[#111827] hover:bg-slate-100'
                                         }`}
                                     >
                                         <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center w-full' : 'w-full'}`}>
-                                            <span className={`${isActive ? 'text-[#FFCC00]' : 'text-gray-500 group-hover:text-gray-700 transition-colors'} shrink-0`}>
+                                            <span className={`shrink-0 flex items-center justify-center transition-colors ${
+                                                isActive
+                                                    ? (sidebarCollapsed ? 'text-[#FFCC00] bg-white shadow-sm ring-1 ring-slate-200 rounded-lg p-1.5 -m-1.5' : 'text-[#FFCC00]')
+                                                    : 'text-gray-500 group-hover:text-gray-700'
+                                            }`}>
                                                 {item.icon}
                                             </span>
                                             {!sidebarCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
@@ -1423,20 +1487,37 @@ useEffect(() => {
                         <>
                             {/* Desktop Toggle (Minimizes Sidebar) */}
                             <button 
+                                type="button"
                                 onClick={toggleSidebar}
-                                className="hidden md:block p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
+                                className={`hidden md:block p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer ${FOCUS_RING}`}
                                 title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                             >
                                 <Menu size={24} />
                             </button>
                             {/* Mobile Toggle (Slides Sidebar Out) */}
                             <button 
+                                type="button"
                                 onClick={() => setIsMobileMenuOpen(true)}
-                                className="md:hidden p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
+                                className={`md:hidden p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-lg transition-colors cursor-pointer ${FOCUS_RING}`}
                                 title="Open Menu"
+                                aria-label="Open navigation menu"
                             >
                                 <Menu size={24} />
                             </button>
+
+                            {/* Contextual page label — small, muted, no visual competition
+                                with each page's own in-content title. Skips the category
+                                segment when it would just repeat the page name. */}
+                            {currentNavItem && (
+                                <div className="hidden sm:block min-w-0 leading-tight">
+                                    <div className="text-sm font-semibold text-slate-700 truncate max-w-[220px]">
+                                        {currentNavItem.category && currentNavItem.category !== currentNavItem.label
+                                            ? `${currentNavItem.category} / ${currentNavItem.label}`
+                                            : currentNavItem.label}
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
@@ -1456,7 +1537,7 @@ useEffect(() => {
                                 className="bg-transparent border-none outline-none text-sm ml-2 w-64 text-slate-700 placeholder:text-slate-400" 
                              />
                              {globalSearchQuery && (
-                                 <button onClick={() => setGlobalSearchQuery('')} className="ml-2 text-slate-400 hover:text-slate-600"><X size={14}/></button>
+                                 <button type="button" onClick={() => setGlobalSearchQuery('')} aria-label="Clear search" className={`ml-2 text-slate-400 hover:text-slate-600 rounded ${FOCUS_RING}`}><X size={14}/></button>
                              )}
                          </div>
 
@@ -1529,40 +1610,37 @@ useEffect(() => {
                          it; they have their browser's own refresh). */}
                      {currentUser.role === Role.SALES && (
                          <button
+                             type="button"
                              onClick={() => window.location.reload()}
-                             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                             className={`p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors ${FOCUS_RING}`}
                              title="Refresh"
+                             aria-label="Refresh page"
                          >
                              <RefreshCw size={18} />
                          </button>
                      )}
                      {currentUser.role === Role.SALES && (
                          <button
+                             type="button"
                              onClick={() => setShowSalesPwModal(true)}
-                             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                             className={`p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors ${FOCUS_RING}`}
                              title="Change Password"
+                             aria-label="Change password"
                          >
                              <KeyRound size={18} />
                          </button>
-                     )}
-
-                     {/* Avatar for non-SALES roles — before bell */}
-                     {currentUser.role !== Role.SALES && (
-                         currentUser.avatar ? (
-                             <img src={currentUser.avatar} alt={currentUser.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" />
-                         ) : (
-                             <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
-                                 {currentUser.name.charAt(0)}
-                             </div>
-                         )
                      )}
 
 
                      {/* Notification Bell — single bell, SLA as inner tab */}
                      <div className="relative" data-notif-panel>
                          <button
+                             type="button"
                              onClick={() => setIsNotifOpen(prev => !prev)}
-                             className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                             className={`relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors ${FOCUS_RING}`}
+                             aria-haspopup="menu"
+                             aria-expanded={isNotifOpen}
+                             aria-label="Notifications"
                          >
                              <Bell size={20} className={slaAlerts.filter((a:any)=>!a.alreadyAlerted).length > 0 ? 'text-amber-500' : ''} />
                              {(activeUserNotifications.filter(n => !readNotifIds.has(n.id)).length + slaAlerts.filter((a:any)=>!a.alreadyAlerted).length) > 0 && (
@@ -1573,7 +1651,7 @@ useEffect(() => {
                          </button>
 
                          {isNotifOpen && (
-                             <div className="absolute right-0 top-10 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                             <div role="menu" className="absolute right-0 top-10 w-80 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150">
                                  {/* Tab header */}
                                  <div className="px-3 py-2.5 border-b border-slate-100 flex items-center justify-between">
                                      <div className="flex gap-1">
@@ -1594,7 +1672,7 @@ useEffect(() => {
                                              </button>
                                          )}
                                      </div>
-                                     <button onClick={() => setIsNotifOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                                     <button type="button" onClick={() => setIsNotifOpen(false)} aria-label="Close notifications" className={`text-slate-400 hover:text-slate-600 rounded ${FOCUS_RING}`}><X size={16}/></button>
                                  </div>
 
                                  {/* SLA Tab */}
@@ -1647,7 +1725,7 @@ useEffect(() => {
                                                              {n.type === 'urgent' ? '🚨' : n.type === 'carry_forward' ? '⟲' : n.type === 'overdue' ? '⚠️' : '🆕'}
                                                          </span>
                                                          <div className="flex-1 min-w-0">
-                                                             <p className={`text-xs leading-snug ${isRead ? 'text-slate-400' : 'text-slate-700 font-medium'}`}
+                                                             <p className={`text-xs leading-snug line-clamp-2 ${isRead ? 'text-slate-400' : 'text-slate-700 font-medium'}`}
                                                                  onClick={(e) => { e.stopPropagation(); if (n.ticketId) { setTicketFilter({ ticketId: n.ticketId }); setActiveView('tickets'); setIsNotifOpen(false); } }}>
                                                                  {n.message}
                                                              </p>
@@ -1673,19 +1751,71 @@ useEffect(() => {
                      {/* Divider */}
                      <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
 
-                     {/* User Identity Block */}
-                     <div className="flex items-center gap-3">
-                        <div className="text-right hidden md:block leading-tight">
-                            <div className="text-sm font-bold text-slate-800">{currentUser.name}</div>
-                            <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{currentUser.role}</div>
-                        </div>
-                        <button 
-                            onClick={handleLogout}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
-                            title="Sign Out"
+                     {/* Profile Menu */}
+                     <div className="relative" data-profile-panel>
+                        <button
+                            type="button"
+                            onClick={() => setIsProfileOpen(prev => !prev)}
+                            className={`flex items-center gap-2 pl-1 pr-1.5 md:pr-2 py-1 rounded-lg hover:bg-slate-100 transition-colors ${FOCUS_RING}`}
+                            aria-haspopup="menu"
+                            aria-expanded={isProfileOpen}
+                            aria-label={`Account menu for ${currentUser.name}`}
                         >
-                            <LogOut size={18} />
+                            {currentUser.avatar ? (
+                                <img src={currentUser.avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
+                                    {currentUser.name.charAt(0)}
+                                </div>
+                            )}
+                            <div className="text-right hidden md:block leading-tight">
+                                <div className="text-sm font-bold text-slate-800">{currentUser.name}</div>
+                                <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{currentUser.role}</div>
+                            </div>
+                            <ChevronDown size={14} aria-hidden="true" className={`hidden md:block text-slate-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
                         </button>
+
+                        {isProfileOpen && (
+                            <div
+                                role="menu"
+                                aria-label="Account menu"
+                                className="absolute right-0 top-11 w-64 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+                            >
+                                <div className="px-4 py-3 border-b border-slate-100">
+                                    <div className="text-sm font-bold text-slate-900 truncate">{currentUser.name}</div>
+                                    {currentUser.email && (
+                                        <div className="text-xs text-slate-500 truncate mt-0.5">{currentUser.email}</div>
+                                    )}
+                                    <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                                        {currentUser.role}
+                                    </span>
+                                </div>
+                                {currentUser.role !== Role.VIEWER && (
+                                    <div className="py-1">
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => { setIsProfileOpen(false); setShowSalesPwModal(true); }}
+                                            className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors ${FOCUS_RING}`}
+                                        >
+                                            <KeyRound size={16} className="text-slate-400" aria-hidden="true" />
+                                            Change Password
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="border-t border-slate-100 py-1">
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setIsProfileOpen(false); handleLogout(); }}
+                                        className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors ${FOCUS_RING}`}
+                                    >
+                                        <LogOut size={16} aria-hidden="true" />
+                                        Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                      </div>
                 </div>
             </header>
@@ -1922,8 +2052,11 @@ useEffect(() => {
 
         </main>
 
-        {/* ── SALES Change Password Modal (triggered from key icon in header) ── */}
-        {showSalesPwModal && currentUser.role === Role.SALES && (
+        {/* ── Change Password Modal — originally SALES-only (key icon in header),
+             now also reachable from the shared Account menu's "Change Password"
+             action for every role. Logic is unchanged; only the trigger surface
+             grew. ── */}
+        {showSalesPwModal && (
           <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowSalesPwModal(false)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-5">
