@@ -436,6 +436,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     );
   };
 
+  // Shared section label — gives every grouping in the ticket workspace
+  // (Client, Site, Issue, Timeline, Attachments...) the same eyebrow style,
+  // so the eye learns one pattern instead of re-parsing ad-hoc headers.
+  const SectionLabel: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({ icon, children }) => (
+    <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+      <span className="text-slate-400">{icon}</span>{children}
+    </div>
+  );
+
   
   const updateField = (field: keyof NonNullable<typeof editForm>, value: any) => {
       if (!selectedTicket) return;
@@ -793,21 +802,39 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       return groups;
   }, [filteredTickets]);
 
+  // Shared metric-pill for the operational summary strip — one visual
+  // vocabulary for every KPI, so the strip reads as a system, not four
+  // one-off badges.
+  const SummaryPill: React.FC<{ icon: React.ReactNode; value: number; label: string; tone?: 'neutral' | 'alert' | 'caution' }> = ({ icon, value, label, tone = 'neutral' }) => {
+    const toneStyles = tone === 'alert' ? { wrap: 'bg-red-50/70 border-red-200', chip: 'bg-red-100 text-red-600', val: 'text-red-700' }
+      : tone === 'caution' ? { wrap: 'bg-amber-50/70 border-amber-200', chip: 'bg-amber-100 text-amber-600', val: 'text-amber-700' }
+      : { wrap: 'bg-white border-slate-200', chip: 'bg-slate-100 text-slate-500', val: 'text-slate-900' };
+    return (
+      <div className={`flex items-center gap-2.5 pl-2.5 pr-3.5 py-2 rounded-xl border ${toneStyles.wrap}`}>
+        <span className={`flex items-center justify-center w-7 h-7 rounded-lg ${toneStyles.chip}`}>{icon}</span>
+        <div className="leading-tight">
+          <div className={`text-sm font-bold tabular-nums ${toneStyles.val}`}>{value}</div>
+          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-4.5rem)] overflow-hidden bg-slate-50">
 
       {/* ── Header: title + operational summary ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
+      <div className="bg-white border-b border-slate-200 px-6 pt-5 pb-4 shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <h2 className="font-bold text-slate-900 text-xl">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <h2 className="font-bold text-slate-900 text-[22px] tracking-tight">
               {activeFilter ? 'Filtered Tickets' : viewMode === 'active' ? 'Active Tickets' : 'History'}
             </h2>
-            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filteredTickets.length}</span>
+            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full tabular-nums">{filteredTickets.length}</span>
           </div>
           {!activeFilter && (
             <button type="button" onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1">
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 active:scale-[0.98] transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1">
               <Plus size={16}/> New Ticket
             </button>
           )}
@@ -815,29 +842,21 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
         {/* Operational Summary — reflects ALL tickets, independent of the list's local filters */}
         {!activeFilter && (
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
-              <Clock size={12} className="text-blue-500" /> {headerSummary.openCount} Open
-            </span>
-            <span className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border ${headerSummary.overdueCount > 0 ? 'text-red-700 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
-              <AlertTriangle size={12} className={headerSummary.overdueCount > 0 ? 'text-red-600' : 'text-slate-400'} /> {headerSummary.overdueCount} Overdue
-            </span>
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
-              <UserCheck size={12} className="text-purple-500" /> {headerSummary.assignedCount} Assigned
-            </span>
-            <span className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border ${headerSummary.unassignedCount > 0 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
-              <AlertCircle size={12} className={headerSummary.unassignedCount > 0 ? 'text-amber-600' : 'text-slate-400'} /> {headerSummary.unassignedCount} Unassigned
-            </span>
+          <div className="flex items-center gap-2 mt-4 flex-wrap">
+            <SummaryPill icon={<Clock size={13}/>} value={headerSummary.openCount} label="Open" />
+            <SummaryPill icon={<AlertTriangle size={13}/>} value={headerSummary.overdueCount} label="Overdue" tone={headerSummary.overdueCount > 0 ? 'alert' : 'neutral'} />
+            <SummaryPill icon={<UserCheck size={13}/>} value={headerSummary.assignedCount} label="Assigned" />
+            <SummaryPill icon={<AlertCircle size={13}/>} value={headerSummary.unassignedCount} label="Unassigned" tone={headerSummary.unassignedCount > 0 ? 'caution' : 'neutral'} />
           </div>
         )}
       </div>
 
       {/* ── Filters row ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap shrink-0">
+      <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center gap-2.5 flex-wrap shrink-0">
         {!activeFilter && (
           <div className="flex bg-slate-100 p-0.5 rounded-xl shrink-0">
-            <button type="button" onClick={() => setViewMode('active')} className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode==='active' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}>Active</button>
-            <button type="button" onClick={() => setViewMode('history')} className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode==='history' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'}`}><History size={11}/>History</button>
+            <button type="button" onClick={() => setViewMode('active')} className={`text-xs font-bold px-3 py-1.5 rounded-[10px] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode==='active' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Active</button>
+            <button type="button" onClick={() => setViewMode('history')} className={`text-xs font-bold px-3 py-1.5 rounded-[10px] transition-all flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode==='history' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><History size={11}/>History</button>
           </div>
         )}
 
@@ -847,10 +866,12 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
             <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" placeholder="Search tickets, client, phone..."
               value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-8 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 bg-white" />
-            {searchTerm && <button type="button" onClick={() => setSearchTerm('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X size={13}/></button>}
+              className="w-full pl-8 pr-8 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 bg-slate-50/50 focus:bg-white transition-colors" />
+            {searchTerm && <button type="button" onClick={() => setSearchTerm('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={13}/></button>}
           </div>
         )}
+
+        <div className="w-px h-6 bg-slate-200 shrink-0 hidden sm:block" />
 
         {/* Aging pills */}
         {!activeFilter && (
@@ -858,14 +879,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
             {(['Fresh','Warning','Stalled'] as const).map(type => (
               <button key={type} type="button" onClick={() => setAgingFilter(agingFilter===type ? null : type)}
                 aria-pressed={agingFilter === type}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${
                   agingFilter===type
                     ? type==='Fresh' ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
                     : type==='Warning' ? 'bg-amber-100 text-amber-700 border-amber-300'
                     : 'bg-red-100 text-red-700 border-red-300'
                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                 }`}>
-                {type} <span className="px-1 py-0.5 rounded text-[9px] bg-black/10">{agingCounts[type]}</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${type==='Fresh'?'bg-emerald-500':type==='Warning'?'bg-amber-500':'bg-red-500'}`} />
+                {type} <span className="px-1 py-0.5 rounded text-[9px] bg-black/10 tabular-nums">{agingCounts[type]}</span>
               </button>
             ))}
           </div>
@@ -873,7 +895,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
         {/* Dropdowns */}
         {!activeFilter && (
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <div className="flex items-center gap-2 flex-wrap shrink-0 ml-auto">
             {[
               { val: priorityFilter, set: setPriorityFilter, opts: Object.values(Priority), label: 'Priority' },
               { val: statusFilter,   set: setStatusFilter,   opts: [TicketStatus.NEW,TicketStatus.OPEN,TicketStatus.ASSIGNED,TicketStatus.IN_PROGRESS,TicketStatus.CARRY_FORWARD,TicketStatus.RESOLVED,TicketStatus.CANCELLED], label: 'Status' },
@@ -881,7 +903,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
             ].map((f,i) => (
               <div key={i} className="relative">
                 <select value={f.val} onChange={e => f.set(e.target.value as any)}
-                  className="appearance-none bg-white border border-slate-200 rounded-xl py-1.5 pl-2 pr-6 text-[11px] font-medium text-slate-600 focus:outline-none focus:border-slate-400 cursor-pointer">
+                  className="appearance-none bg-white border border-slate-200 rounded-xl py-1.5 pl-2.5 pr-6 text-[11px] font-semibold text-slate-600 hover:border-slate-300 focus:outline-none focus:border-slate-400 cursor-pointer">
                   <option value="ALL">All {f.label}s</option>
                   {f.opts.map((o:any) => <option key={f.valKey?o[f.valKey]:o} value={f.valKey?o[f.valKey]:o}>{toTitleCase(f.nameKey?o[f.nameKey]:String(o))}</option>)}
                 </select>
@@ -894,9 +916,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
         {/* Active-filter banner */}
         {activeFilter && (
-          <div className="ml-auto flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100">
+          <div className="ml-auto flex items-center gap-2 text-xs font-semibold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100">
             <Filter size={12}/> {activeFilter.description || 'Filtered'}
-            <button type="button" onClick={onClearFilter} aria-label="Clear filter" className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] rounded"><X size={12}/></button>
+            <button type="button" onClick={onClearFilter} aria-label="Clear filter" className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] rounded hover:text-blue-900"><X size={12}/></button>
           </div>
         )}
       </div>
@@ -920,9 +942,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
             {groupedTickets.map(group => (
               <div key={group.label}>
                 {/* Date group header */}
-                <div className="sticky top-0 z-10 px-4 py-1.5 bg-slate-50 border-b border-slate-100">
+                <div className="sticky top-0 z-10 px-4 py-1.5 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100 flex items-center gap-2">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{group.label}</span>
-                  <span className="ml-2 text-[9px] text-slate-400">{group.tickets.length} ticket{group.tickets.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[9px] text-slate-400 tabular-nums">{group.tickets.length}</span>
                 </div>
                 {group.tickets.map(ticket => {
                 const health = getTicketHealth(ticket);
@@ -934,30 +956,33 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 const ageMs = Date.now() - new Date(ticket.createdAt).getTime();
                 const ageHours = Math.floor(ageMs / 3600000);
                 const ageLabel = ageHours < 1 ? '<1h' : ageHours < 24 ? `${ageHours}h` : `${Math.floor(ageHours / 24)}d`;
+                const isSelected = selectedTicketId === ticket.id;
+                const railColor = isSelected ? 'bg-blue-500' : ticket.priority === 'URGENT' ? 'bg-red-500' : ticket.priority === 'HIGH' ? 'bg-orange-400' : 'bg-transparent';
                 return (
                     <button
                         type="button"
                         key={ticket.id}
                         onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }}
-                        aria-current={selectedTicketId === ticket.id ? 'true' : undefined}
-                        className={`w-full text-left p-3.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-inset ${
-                        selectedTicketId === ticket.id ? 'bg-blue-50/50 border-l-4 border-l-blue-500' :
-                        ticket.priority === 'URGENT' ? 'border-l-4 border-l-red-500 bg-red-50/20' :
-                        ticket.priority === 'HIGH' ? 'border-l-4 border-l-orange-400 bg-orange-50/10' :
+                        aria-current={isSelected ? 'true' : undefined}
+                        className={`relative w-full text-left pl-4 pr-3.5 py-3.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-inset ${
+                        isSelected ? 'bg-blue-50/60' :
+                        ticket.priority === 'URGENT' ? 'bg-red-50/20' :
+                        ticket.priority === 'HIGH' ? 'bg-orange-50/10' :
                         ''}`}>
-                        <div className="flex justify-between items-start gap-2 mb-1.5">
-                            <span className="font-semibold text-slate-900 truncate">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
+                        <span className={`absolute left-0 top-0 bottom-0 w-[3px] ${railColor}`} />
+                        <div className="flex justify-between items-start gap-2 mb-1">
+                            <span className="font-semibold text-[13.5px] text-slate-900 truncate">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
                             <StatusBadge status={ticket.status} className="shrink-0" />
                         </div>
-                        <div className="text-xs text-slate-500 mb-2.5 truncate">
+                        <div className="text-[11px] text-slate-500 mb-2.5 truncate">
                             <span className="text-slate-400 font-mono font-medium">{ticket.id}</span> · {(safeString(ticket.type) || '—')} · {ticket.category}
                         </div>
 
-                        {/* Engineer + Site — previously missing from the card entirely */}
-                        <div className="flex items-center gap-3 mb-2 text-xs text-slate-600">
-                            <span className="flex items-center gap-1 min-w-0">
-                                <User size={11} className={engineer ? 'text-slate-400' : 'text-amber-500'} />
-                                <span className={`truncate ${engineer ? '' : 'text-amber-600 font-medium'}`}>{engineer?.name || 'Unassigned'}</span>
+                        {/* Engineer + Site — ownership at a glance */}
+                        <div className="flex items-center gap-3 mb-2.5 text-xs text-slate-600">
+                            <span className={`flex items-center gap-1 min-w-0 ${engineer ? '' : 'px-1.5 py-0.5 rounded-md bg-amber-50'}`}>
+                                <User size={11} className={engineer ? 'text-slate-400 shrink-0' : 'text-amber-500 shrink-0'} />
+                                <span className={`truncate ${engineer ? '' : 'text-amber-700 font-semibold'}`}>{engineer?.name || 'Unassigned'}</span>
                             </span>
                             {siteLabel && (
                                 <span className="flex items-center gap-1 min-w-0 text-slate-400">
@@ -967,12 +992,12 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             )}
                         </div>
 
-                        <div className="flex justify-between items-center text-xs">
-                            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600"><span className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(ticket.priority)}`}/>{toTitleCase(ticket.priority)}</span>
+                        <div className="flex justify-between items-center text-[11px]">
+                            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-600 font-medium"><span className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(ticket.priority)}`}/>{toTitleCase(ticket.priority)}</span>
                             <div className="flex items-center gap-2">
                                 {/* Appointment time — prominently shown if set */}
                                 {ticket.appointmentTime && (
-                                    <span className="flex items-center gap-1 text-blue-600 font-bold text-[10px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                    <span className="flex items-center gap-1 text-blue-600 font-bold text-[10px] bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100">
                                         <Clock size={9} />
                                         {new Date(ticket.appointmentTime).toLocaleDateString('en-GB',{timeZone:'Asia/Qatar',day:'2-digit',month:'short'})}
                                         {' '}
@@ -983,9 +1008,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                 {health && (
                                     <div className={`w-2.5 h-2.5 rounded-full ${healthColor} shadow-sm border border-white`} title={`${health?.toUpperCase()} Status`} />
                                 )}
-                                <span className="text-slate-400" title="Age since created">{ageLabel} old</span>
+                                <span className="text-slate-400 tabular-nums" title="Age since created">{ageLabel} old</span>
                                 <span className="text-slate-300">·</span>
-                                <span className="text-slate-400" title="Last updated">{new Date(ticket.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span className="text-slate-400 tabular-nums" title="Last updated">{new Date(ticket.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                             </div>
                         </div>
                     </button>
@@ -1003,21 +1028,24 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         <div className="flex-1 flex flex-col bg-white">
           {/* ── Unified Detail Header ── */}
           <div className="px-6 py-5 border-b border-slate-200 flex items-start justify-between bg-white shrink-0">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] font-mono text-slate-400">{selectedTicket.id}</span>
-                <StatusBadge status={selectedTicket.status} />
-                {(() => { const h = getTicketHealth(selectedTicket); const hc = getHealthColor(h); return h ? <span className={`w-2 h-2 rounded-full ${hc}`} title={h}/> : null; })()}
+            <div className="flex-1 min-w-0 flex items-start gap-3">
+              <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${getPriorityDot(selectedTicket.priority)}`} title={`${toTitleCase(selectedTicket.priority)} priority`} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-mono font-semibold text-slate-400">{selectedTicket.id}</span>
+                  <StatusBadge status={selectedTicket.status} />
+                  {(() => { const h = getTicketHealth(selectedTicket); const hc = getHealthColor(h); return h ? <span className={`w-2 h-2 rounded-full ${hc}`} title={h}/> : null; })()}
+                </div>
+                <h3 className="font-bold text-[22px] tracking-tight text-slate-900 truncate">{editForm.customerName}</h3>
+                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">{formatPhoneDisplay(editForm.phoneNumber)} <span className="text-slate-300">·</span> {editForm.category}</p>
               </div>
-              <h3 className="font-bold text-xl text-slate-900 truncate">{editForm.customerName}</h3>
-              <p className="text-xs text-slate-500 mt-1">{formatPhoneDisplay(editForm.phoneNumber)} · {editForm.category}</p>
             </div>
             <div className="flex items-center gap-2 ml-4 shrink-0">
               <button type="button" onClick={() => setPanelMode(panelMode==='edit'?'view':'edit')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${panelMode==='edit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${panelMode==='edit' ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
                 <Edit size={12}/> {panelMode==='edit' ? 'Editing' : 'Edit'}
               </button>
-              <button type="button" onClick={() => setSelectedTicketId(null)} aria-label="Close ticket detail" className="p-2 hover:bg-slate-100 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"><X size={15} className="text-slate-400"/></button>
+              <button type="button" onClick={() => setSelectedTicketId(null)} aria-label="Close ticket detail" className="p-2 hover:bg-slate-100 rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"><X size={15} className="text-slate-400"/></button>
             </div>
           </div>
 
@@ -1091,25 +1119,49 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <div className="text-[10px] text-slate-400 mb-1.5">Category</div>
                     <div className="text-sm font-bold text-slate-800">{editForm?.category || selectedTicket.category}</div>
                   </div>
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
+
+                  {/* ── Client Information ── */}
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                    <SectionLabel icon={<User size={11}/>}>Client Information</SectionLabel>
                     <div className="text-sm font-bold text-slate-800">{cust?.name || editForm.customerName}</div>
                     {editForm.phoneNumber && <div className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(editForm.phoneNumber)}</div>}
-                    {(selectedTicket.houseNumber || selectedTicket.locationUrl) && <div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><MapPin size={10} />{selectedTicket.houseNumber && !selectedTicket.houseNumber.startsWith('http') && <span>{selectedTicket.houseNumber}</span>}{selectedTicket.locationUrl && <a href={selectedTicket.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">View Map</a>}</div>}
                   </div>
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
+
+                  {/* ── Site Information ── */}
+                  {(selectedTicket.houseNumber || selectedTicket.locationUrl) && (
+                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                      <SectionLabel icon={<MapPin size={11}/>}>Site Information</SectionLabel>
+                      <div className="flex items-center gap-2 text-xs text-slate-600">
+                        {selectedTicket.houseNumber && !selectedTicket.houseNumber.startsWith('http') && <span className="font-semibold text-slate-700">{selectedTicket.houseNumber}</span>}
+                        {selectedTicket.locationUrl && <a href={selectedTicket.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline font-medium">View Map</a>}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-1.5">
+                    <SectionLabel icon={<Clock size={11}/>}>Timing</SectionLabel>
                     <div className="flex justify-between text-xs"><span className="text-slate-400">Created</span><span>{new Date(selectedTicket.createdAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}</span></div>
                     {(selectedTicket as any).startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{new Date((selectedTicket as any).startedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
                     {(selectedTicket as any).completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{new Date((selectedTicket as any).completedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
                     {selectedTicket.appointmentTime && <div className="flex justify-between text-xs"><span className="text-slate-400">Appointment</span><span className="text-blue-600">{new Date(selectedTicket.appointmentTime).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</span></div>}
                   </div>
-                  {issueText && <div className="bg-slate-50 rounded-xl p-4 border border-slate-100"><div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Description</div><p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{issueText}</p></div>}
-                  {visitHist.length === 0 && (selectedTicket as any).completionNote && <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100"><div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Completion Summary</div><p className="text-sm text-emerald-800 whitespace-pre-wrap">{(selectedTicket as any).completionNote}</p></div>}
-                  {visitHist.length === 0 && (selectedTicket as any).carryForwardNote && <div className="bg-amber-50 rounded-xl p-4 border border-amber-200"><div className="text-[10px] font-bold text-amber-600 uppercase mb-1">Carry Forward</div><p className="text-sm text-amber-800 whitespace-pre-wrap">{(selectedTicket as any).carryForwardNote}</p>{(selectedTicket as any).nextPlannedAt && <div className="text-xs text-amber-600 mt-1">Re-scheduled: {new Date((selectedTicket as any).nextPlannedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</div>}</div>}
+
+                  {/* ── Issue Details ── */}
+                  {issueText && (
+                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                      <SectionLabel icon={<AlertCircle size={11}/>}>Issue Details</SectionLabel>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{issueText}</p>
+                    </div>
+                  )}
+
+                  {/* ── Notes ── */}
+                  {visitHist.length === 0 && (selectedTicket as any).completionNote && <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100"><SectionLabel icon={<CheckCircle2 size={11} className="text-emerald-500"/>}><span className="text-emerald-600">Completion Summary</span></SectionLabel><p className="text-sm text-emerald-800 whitespace-pre-wrap">{(selectedTicket as any).completionNote}</p></div>}
+                  {visitHist.length === 0 && (selectedTicket as any).carryForwardNote && <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200"><SectionLabel icon={<History size={11} className="text-amber-500"/>}><span className="text-amber-600">Carry Forward</span></SectionLabel><p className="text-sm text-amber-800 whitespace-pre-wrap">{(selectedTicket as any).carryForwardNote}</p>{(selectedTicket as any).nextPlannedAt && <div className="text-xs text-amber-600 mt-1 font-medium">Re-scheduled: {new Date((selectedTicket as any).nextPlannedAt).toLocaleString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}</div>}</div>}
+
+                  {/* ── Timeline / History ── */}
                   {visitHist.length > 0 && (
                     <div className="space-y-3">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase">Visit History ({visitHist.length} visit{visitHist.length > 1 ? 's' : ''})</div>
+                      <SectionLabel icon={<History size={11}/>}>Timeline · {visitHist.length} visit{visitHist.length > 1 ? 's' : ''}</SectionLabel>
                       <div className="relative border-l-2 border-slate-200 ml-2 space-y-3">
                         {visitHist.map((v: any, i: number) => {
                           const isCF = v.status === 'CARRY_FORWARD'; const isDone = v.status === 'DONE';
@@ -1136,13 +1188,18 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                       </div>
                     </div>
                   )}
-                  {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-xl border cursor-pointer hover:shadow-md" onClick={() => { const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';ov.onclick=()=>ov.remove();const im=document.createElement('img');im.src=p.url||p;im.style.cssText='max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';ov.appendChild(im);document.body.appendChild(ov); }} />)}</div></div>}
-                  {selectedTicket.odooLink && <div className="flex items-center gap-2 text-xs text-slate-500 p-3 bg-slate-50 rounded-xl border border-slate-100"><ExternalLink size={10} /><span className="text-slate-400">Odoo</span><a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate font-medium">{selectedTicket.odooLink}</a></div>}
+                  {photos.length > 0 && (
+                    <div>
+                      <SectionLabel icon={<Eye size={11}/>}>Attachments · {photos.length}</SectionLabel>
+                      <div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-xl border border-slate-200 cursor-pointer hover:shadow-md hover:border-slate-300 transition-all" onClick={() => { const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';ov.onclick=()=>ov.remove();const im=document.createElement('img');im.src=p.url||p;im.style.cssText='max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';ov.appendChild(im);document.body.appendChild(ov); }} />)}</div>
+                    </div>
+                  )}
+                  {selectedTicket.odooLink && <div className="flex items-center gap-2 text-xs text-slate-500 p-3 bg-slate-50 rounded-xl border border-slate-100"><ExternalLink size={11} className="text-slate-400 shrink-0" /><span className="text-slate-400 font-medium">Odoo</span><a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate font-medium">{selectedTicket.odooLink}</a></div>}
                   </div>{/* end left col */}
 
-                  {/* RIGHT col — quick edit fields */}
+                  {/* RIGHT col — quick edit fields (Engineer Assignment + Actions) */}
                   <div className="p-5 space-y-4 overflow-y-auto bg-slate-50/30">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Edit</div>
+                    <SectionLabel icon={<Wrench size={11}/>}>Engineer Assignment &amp; Actions</SectionLabel>
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Priority</label>
@@ -1210,7 +1267,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
                     {hasUnsavedChanges() && (
                       <button type="button" onClick={() => { handleSaveChanges(); }}
-                        className="w-full py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 text-sm flex items-center justify-center gap-2">
+                        className="w-full py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 active:scale-[0.99] transition-all text-sm flex items-center justify-center gap-2 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1">
                         <Save size={14}/> Save Changes
                       </button>
                     )}
@@ -1445,7 +1502,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               <select
                 value={editForm?.assignedTechId || ''}
                 onChange={e => { updateField('assignedTechId', e.target.value); }}
-                className="appearance-none text-xs font-bold pl-3 pr-7 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer">
+                className="appearance-none text-xs font-bold pl-3 pr-7 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 hover:border-slate-300 focus:outline-none focus:border-slate-400 cursor-pointer transition-colors">
                 <option value="">Unassigned</option>
                 {teamLeads.map(t => <option key={t.id} value={t.id}>TL: {t.name}</option>)}
                 {fieldEngineers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -1454,27 +1511,27 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
             </div>
             {/* AI Analyse */}
             <button type="button" onClick={handleAIAnalysis} disabled={isAnalyzing}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-xl hover:bg-purple-100 transition-colors disabled:opacity-50">
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-xl hover:bg-purple-100 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">
               <Sparkles size={12}/> {isAnalyzing ? 'Analysing...' : 'AI Analyse'}
             </button>
             {/* Save — only when editing and has changes */}
             {panelMode === 'edit' && hasUnsavedChanges() && (
               <button type="button" onClick={() => { handleSaveChanges(); setPanelMode('view'); }}
                 disabled={!isDetailValid()}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:bg-slate-300 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:bg-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">
                 <Save size={12}/> Save Changes
               </button>
             )}
             {/* Cancel ticket */}
             {selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED && (
               <button type="button" onClick={() => setShowCancelConfirm(true)}
-                className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors">
+                className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">
                 <X size={12}/> Cancel Ticket
               </button>
             )}
             {/* Admin override */}
             <button type="button" onClick={() => { setShowAdminOverride(true); setOverrideStatus(selectedTicket?.status||''); setOverrideStartedAt(''); setOverrideCompletedAt(''); setOverrideNote(''); }}
-              className={`${selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED ? '' : 'ml-auto'} flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors`}>
+              className={`${selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED ? '' : 'ml-auto'} flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]`}>
               Override
             </button>
           </div>
@@ -1483,8 +1540,10 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       ) : (
         <div className="hidden lg:flex flex-1 items-center justify-center bg-slate-50 text-slate-400">
           <div className="text-center">
-            <MoreHorizontal size={48} className="mx-auto mb-2 opacity-50" />
-            <p>Select a ticket to view details</p>
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+              <MoreHorizontal size={22} className="opacity-40" />
+            </div>
+            <p className="text-sm font-medium">Select a ticket to view details</p>
           </div>
         </div>
       )}
