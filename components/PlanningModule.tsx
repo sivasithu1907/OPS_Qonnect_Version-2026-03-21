@@ -3,9 +3,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import toast from './Toast';
 import { Activity, Team, Site, Customer, ActivityStatus, Priority, ActivityType, Technician, ServiceCategory, Role } from '../types';
 import { 
-  Calendar, List, Layout, Plus, Search, Filter, Clock, 
-  MoreHorizontal, ChevronLeft, ChevronRight, User, MapPin, 
-  CheckCircle2, AlertCircle, X, Save, BriefcaseBusiness, Link as LinkIcon, Home
+  Calendar, List, Layout, Plus, Clock, 
+  ChevronLeft, ChevronRight, User, MapPin, 
+  CheckCircle2, AlertCircle, X, Save, BriefcaseBusiness, Link as LinkIcon
 } from 'lucide-react';
 import CustomerSelector from './CustomerSelector';
 import { getActivityStatusLabel } from '../constants';
@@ -248,6 +248,36 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       return 'N/A';
   };
 
+  // Shared status presentation — every status carries an icon + label +
+  // colour together, so nothing in the planner relies on colour alone.
+  // Purely presentational: does not touch the underlying status values.
+  const STATUS_META: Record<string, { label: string; icon: React.ReactNode; badge: string; dot: string }> = {
+      PLANNED:       { label: 'Planned',        icon: <Clock size={11} />,             badge: 'bg-blue-50 text-blue-700 border border-blue-200',       dot: 'bg-blue-500' },
+      ON_MY_WAY:     { label: 'On the Way',      icon: <MapPin size={11} />,            badge: 'bg-amber-50 text-amber-700 border border-amber-200',    dot: 'bg-amber-500' },
+      ARRIVED:       { label: 'Arrived',         icon: <MapPin size={11} />,            badge: 'bg-orange-50 text-orange-700 border border-orange-200', dot: 'bg-orange-500' },
+      IN_PROGRESS:   { label: 'In Progress',     icon: <BriefcaseBusiness size={11} />, badge: 'bg-indigo-50 text-indigo-700 border border-indigo-200', dot: 'bg-indigo-500' },
+      CARRY_FORWARD: { label: 'Carry Forward',   icon: <AlertCircle size={11} />,       badge: 'bg-orange-50 text-orange-700 border border-orange-200', dot: 'bg-orange-500' },
+      DONE:          { label: 'Completed',       icon: <CheckCircle2 size={11} />,      badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: 'bg-emerald-500' },
+      CANCELLED:     { label: 'Cancelled',       icon: <X size={11} />,                 badge: 'bg-slate-100 text-slate-500 border border-slate-200',   dot: 'bg-slate-400' },
+  };
+  const getStatusMeta = (status: string) => STATUS_META[status] || {
+      label: getActivityStatusLabel(status as ActivityStatus),
+      icon: <Clock size={11} />,
+      badge: 'bg-slate-100 text-slate-600 border border-slate-200',
+      dot: 'bg-slate-400'
+  };
+
+  // Small reusable status pill — icon + text + colour together
+  const StatusBadge: React.FC<{ status: string; className?: string }> = ({ status, className = '' }) => {
+      const meta = getStatusMeta(status);
+      return (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${meta.badge} ${className}`}>
+              {meta.icon}
+              {meta.label}
+          </span>
+      );
+  };
+
   // Determine available associates — ONLY block on TIME OVERLAP, allow multiple jobs per day
   const selectedDateString = useMemo(() => {
       if (!plannedDatetime) return '';
@@ -324,37 +354,50 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
         // Note: leadTechId now points to a FIELD_ENGINEER or Self-Assigned Team Lead
         const lead = technicians.find(t => t.id === act.leadTechId);
         const isDelayed = (act.escalationLevel || 0) > 0;
-        
+        const customerDisplayName = customer?.name || (act as any).customerName || 'Unassigned client';
+
         return (
           <div 
             onClick={() => setViewingActivity(act)} 
-            className={`bg-white rounded-lg shadow-sm border cursor-pointer hover:shadow-md transition-all group ${
+            className={`bg-white rounded-xl shadow-sm border cursor-pointer hover:shadow-md hover:border-slate-300 transition-all group ${
                 isDelayed ? 'border-red-300 ring-1 ring-red-100' : 'border-slate-200'
-            } ${isMobileCard ? 'p-4 mb-3 mx-1' : 'p-4'}`}
+            } ${isMobileCard ? 'p-4 mb-3 mx-1' : 'p-3.5'}`}
           >
-             <div className="flex justify-between items-start mb-2">
-                <span className="font-mono text-[10px] text-slate-400">{act.reference}</span>
-                <div className="flex gap-1">
-                   {isDelayed && <span className="bg-red-500 text-white text-[9px] px-1 rounded font-bold">L{act.escalationLevel}</span>}
-                   <MoreHorizontal size={14} className="text-slate-300 group-hover:text-emerald-600"/>
+             <div className="flex justify-between items-start gap-2 mb-2.5">
+                <span className="font-mono text-[10px] text-slate-400 truncate">{act.reference}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                   {isDelayed && (
+                       <span className="inline-flex items-center gap-0.5 bg-red-50 text-red-700 border border-red-200 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                           <AlertCircle size={9} /> L{act.escalationLevel}
+                       </span>
+                   )}
+                   <StatusBadge status={act.status} />
                 </div>
              </div>
-             <h4 className="font-bold text-slate-800 text-sm mb-1">{act.type}</h4>
-             {act.serviceCategory && <p className="text-[10px] text-indigo-600 mb-1">{act.serviceCategory}</p>}
-             <p className="text-xs text-slate-500 mb-3 line-clamp-2">{act.description}</p>
+
+             <h4 className="font-bold text-slate-800 text-sm mb-0.5 truncate">{act.type}</h4>
+             {act.serviceCategory && <p className="text-[10px] font-medium text-indigo-600 mb-1.5 truncate">{act.serviceCategory}</p>}
+             {act.description && <p className="text-xs text-slate-500 mb-3 line-clamp-2">{act.description}</p>}
              
-             <div className="space-y-2">
+             <div className="space-y-1.5 pt-2.5 border-t border-slate-100">
                 <div className="flex items-center gap-2 text-xs text-slate-600">
-                   <User size={12} className="text-slate-400" />
-                   <span className="truncate font-medium">{customer?.name}</span>
+                   <User size={12} className="text-slate-400 shrink-0" />
+                   <span className="truncate font-medium">{customerDisplayName}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-600">
-                   <MapPin size={12} className="text-slate-400" />
+                   <MapPin size={12} className="text-slate-400 shrink-0" />
                    <span className="truncate">{getDisplayLocation(act)}</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-600">
-                   <Clock size={12} className="text-slate-400" />
-                   <span>{new Date(act.plannedDate).toLocaleDateString()}</span>
+                <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                   <span className="flex items-center gap-2 min-w-0">
+                       <Clock size={12} className="text-slate-400 shrink-0" />
+                       <span className="truncate">{new Date(act.plannedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>
+                   </span>
+                   {lead && (
+                       <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5 truncate max-w-[110px]">
+                           {lead.name}
+                       </span>
+                   )}
                 </div>
              </div>
           </div>
@@ -370,27 +413,29 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     ? [...activities].sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime())
     : activities.filter(a => a.status === listFilter).sort((a, b) => new Date(b.plannedDate || b.createdAt).getTime() - new Date(a.plannedDate || a.createdAt).getTime());
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
-      <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50/80 overflow-x-auto">
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+      <div className="flex gap-2 p-3 border-b border-slate-100 bg-slate-50/60 overflow-x-auto">
         {statusFilters.map(f => (
-          <button key={f} onClick={() => setListFilter(f)}
-            className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${listFilter === f ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}>
-            {f.replace('_',' ')} ({f === 'ALL' ? activities.length : activities.filter(a => a.status === f).length})
+          <button key={f} type="button" onClick={() => setListFilter(f)}
+            aria-pressed={listFilter === f}
+            className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${listFilter === f ? 'bg-[#FFCC00]/20 border-[#FFCC00] text-slate-900 font-bold' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100'}`}>
+            {f === 'ALL' ? 'All' : getActivityStatusLabel(f as ActivityStatus)} ({f === 'ALL' ? activities.length : activities.filter(a => a.status === f).length})
           </button>
         ))}
       </div>
       <div className="overflow-x-auto flex-1 overflow-y-auto">
       <table className="w-full text-sm text-left table-fixed">
-        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs border-b border-slate-200">
+        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-[11px] tracking-wide border-b border-slate-200 sticky top-0 z-10">
           <tr>
-            <th className="px-4 py-4 w-[10%]">Ref</th>
-            <th className="px-4 py-4 w-[10%]">Type</th>
-            <th className="px-4 py-4 w-[24%]">Customer / Location</th>
-            <th className="px-4 py-4 w-[8%]">Priority</th>
-            <th className="px-4 py-4 w-[10%]">Status</th>
-            <th className="px-4 py-4 w-[12%]">Planned</th>
-            <th className="px-4 py-4 w-[18%]">Resources</th>
-            <th className="px-4 py-4 text-right w-[8%]">Actions</th>
+            <th className="px-4 py-3.5 w-[10%]">Ref</th>
+            <th className="px-4 py-3.5 w-[10%]">Type</th>
+
+            <th className="px-4 py-3.5 w-[24%]">Customer / Location</th>
+            <th className="px-4 py-3.5 w-[8%]">Priority</th>
+            <th className="px-4 py-3.5 w-[10%]">Status</th>
+            <th className="px-4 py-3.5 w-[12%]">Planned</th>
+            <th className="px-4 py-3.5 w-[18%]">Resources</th>
+            <th className="px-4 py-3.5 text-right w-[8%]">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -404,8 +449,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             const isDelayed = (act.escalationLevel || 0) > 0;
 
             return (
-              <tr key={act.id} className={`hover:bg-slate-50 group ${isDelayed ? 'bg-red-50/30' : ''}`}>
-                <td className="px-4 py-4 font-mono text-xs text-slate-500">
+              <tr key={act.id} className={`hover:bg-slate-50/80 transition-colors group ${isDelayed ? 'bg-red-50/30' : ''}`}>
+                <td className="px-4 py-3.5 font-mono text-xs text-slate-500">
                     <div className="flex items-center gap-2">
                         {act.reference}
                         {isDelayed && <AlertCircle size={12} className="text-red-500" />}
@@ -416,11 +461,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         </a>
                     )}
                 </td>
-                <td className="px-4 py-4 font-medium text-slate-800">
+                <td className="px-4 py-3.5 font-medium text-slate-800">
                     {act.type}
                     {act.serviceCategory && <div className="text-[10px] text-slate-500 font-normal">{act.serviceCategory}</div>}
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-4 py-3.5">
                   <div className="font-medium text-slate-900 truncate">{customerDisplayName}</div>
                   <div className="text-xs text-slate-500 flex items-center gap-1 truncate">
                       <MapPin size={10} className="shrink-0" /> {getDisplayLocation(act)}
@@ -431,23 +476,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       </a>
                   )}
                 </td>
-                <td className="px-4 py-4">
-                  <span className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                <td className="px-4 py-3.5">
+                  <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${
                     act.priority === 'URGENT' ? 'bg-red-50 text-red-700 border-red-200' :
                     act.priority === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                     'bg-slate-50 text-slate-600 border-slate-200'
                   }`}>{act.priority}</span>
                 </td>
-                <td className="px-4 py-4">
-                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                    act.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
-                    act.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                    act.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                    act.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>{getActivityStatusLabel(act.status)}</span>
+                <td className="px-4 py-3.5">
+                  <StatusBadge status={act.status} />
                 </td>
-                <td className="px-4 py-4 text-slate-600">
+                <td className="px-4 py-3.5 text-slate-600">
                   <div className="flex items-center gap-1">
                       <Calendar size={12} /> {new Date(act.plannedDate).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})}
                   </div>
@@ -455,7 +494,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <Clock size={12} /> {new Date(act.plannedDate).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
                   </div>
                 </td>
-                <td className="px-4 py-4">
+                <td className="px-4 py-3.5">
                      <div className="flex flex-col gap-1">
                        {lead ? (
                          <div className="flex items-center gap-2">
@@ -484,11 +523,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                        )}
                      </div>
                 </td>
-                <td className="px-4 py-4 text-right">
+                <td className="px-4 py-3.5 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => setViewingActivity(act)} className="text-slate-400 hover:text-blue-600 font-medium text-xs">View</button>
+                    <button type="button" onClick={() => setViewingActivity(act)} className="text-slate-400 hover:text-blue-600 font-medium text-xs rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">View</button>
                     <span className="text-slate-200">|</span>
-                    <button onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} className="text-slate-400 hover:text-emerald-600 font-medium text-xs">Edit</button>
+                    <button type="button" onClick={() => { setEditingActivity(act); setIsModalOpen(true); }} className="text-slate-400 hover:text-emerald-600 font-medium text-xs rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">Edit</button>
                   </div>
                 </td>
               </tr>
@@ -505,28 +544,32 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     const columns: ActivityStatus[] = ['PLANNED', 'ON_MY_WAY', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE', 'CANCELLED'];
     
     return (
-      <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-14rem)]">
-        {columns.map(status => (
-          <div key={status} className="flex-1 min-w-[280px] flex flex-col bg-slate-100/50 rounded-xl border border-slate-200/60">
-            <div className={`p-4 border-b border-slate-200 flex justify-between items-center ${
-              status === 'PLANNED' ? 'bg-amber-50/50' : 
-              status === 'IN_PROGRESS' ? 'bg-blue-50/50' : 
-              status === 'CARRY_FORWARD' ? 'bg-orange-50/50' :
-              status === 'DONE' ? 'bg-emerald-50/50' : 'bg-slate-50'
-            }`}>
-              <h3 className="font-bold text-slate-700 text-sm">{getActivityStatusLabel(status)}</h3>
-              <span className="bg-white px-2 py-0.5 rounded text-xs font-bold text-slate-400 border border-slate-200">
-                {activities.filter(a => a.status === status).length}
-              </span>
+      <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-14rem)]">
+        {columns.map(status => {
+          const colActs = activities.filter(a => a.status === status);
+          const meta = getStatusMeta(status);
+          return (
+            <div key={status} className="flex-1 min-w-[280px] flex flex-col bg-slate-50 rounded-2xl border border-slate-200">
+              <div className="px-4 py-3.5 border-b border-slate-200 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${meta.dot}`} aria-hidden="true" />
+                  <h3 className="font-semibold text-slate-700 text-sm">{meta.label}</h3>
+                </div>
+                <span className="bg-white px-2 py-0.5 rounded-full text-xs font-bold text-slate-500 border border-slate-200">
+                  {colActs.length}
+                </span>
+              </div>
+              
+              <div className="p-3 flex-1 overflow-y-auto space-y-2.5 custom-scrollbar">
+                {colActs.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-slate-400">No activities</div>
+                ) : (
+                    colActs.map(act => <ActivityCard key={act.id} act={act} />)
+                )}
+              </div>
             </div>
-            
-            <div className="p-3 flex-1 overflow-y-auto space-y-3 custom-scrollbar">
-              {activities.filter(a => a.status === status).map(act => (
-                  <ActivityCard key={act.id} act={act} />
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -544,7 +587,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <button 
                         key={t}
                         onClick={() => setMobileTab(t)}
-                        className={`flex-1 py-2 px-3 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all ${
+                        className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold whitespace-nowrap transition-all ${
                             mobileTab === t ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'
                         }`}
                       >
@@ -607,10 +650,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     const hasUnassignedActs = activities.some(a => !a.leadTechId && ((a as any).freelancers || []).length > 0);
     
     return (
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-[calc(100vh-14rem)]">
         {/* Calendar Navigation Bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-white">
-            <button onClick={goToPrevWeek} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-800">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white">
+            <button type="button" onClick={goToPrevWeek} aria-label="Previous week" className="p-1.5 hover:bg-slate-100 rounded-xl transition-colors text-slate-500 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">
                 <ChevronLeft size={18} />
             </button>
             <div className="flex items-center gap-3">
@@ -618,12 +661,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     {days[0].toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} — {days[6].toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </span>
                 {!isCurrentWeek && (
-                    <button onClick={goToThisWeek} className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full hover:bg-blue-100 transition-colors">
+                    <button type="button" onClick={goToThisWeek} className="text-[10px] font-bold text-slate-900 bg-[#FFCC00]/20 border border-[#FFCC00] px-2 py-1 rounded-full hover:bg-[#FFCC00]/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">
                         Today
                     </button>
                 )}
             </div>
-            <button onClick={goToNextWeek} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-800">
+            <button type="button" onClick={goToNextWeek} aria-label="Next week" className="p-1.5 hover:bg-slate-100 rounded-xl transition-colors text-slate-500 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">
                 <ChevronRight size={18} />
             </button>
         </div>
@@ -735,7 +778,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         <div 
                           key={act.id} 
                           onClick={() => setViewingActivity(act)}
-                          className={`mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all ${
+                          className={`mb-2 p-2.5 rounded-xl border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all ${
                             (act.escalationLevel || 0) > 0 ? 'bg-red-50 border-red-400 border-l-4' :
                             displayStatus === 'DONE' ? 'bg-emerald-50 border-emerald-200' :
                             displayStatus === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200 border-l-4 border-l-orange-400' :
@@ -832,7 +875,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           <div 
                             key={act.id + '-' + d.toISOString()} 
                             onClick={() => setViewingActivity(act)}
-                            className="mb-2 p-2 rounded border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all bg-amber-50 border-amber-200 border-l-4 border-l-amber-400"
+                            className="mb-2 p-2.5 rounded-xl border text-xs shadow-sm cursor-pointer hover:shadow-md transition-all bg-amber-50 border-amber-200 border-l-4 border-l-amber-400"
                           >
                             <div className="font-bold truncate text-amber-800">{act.type}</div>
                             <div className="text-[10px] text-amber-600 truncate mt-0.5">{getDisplayLocation(act)}</div>
@@ -855,38 +898,77 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
     );
   };
 
+  // Today's operational summary — derived straight from the existing
+  // `activities` list, no new business rules or thresholds invented.
+  const todayStr = new Date().toDateString();
+  const todaysActivities = activities.filter(a => a.plannedDate && new Date(a.plannedDate).toDateString() === todayStr);
+  const carryForwardCount = activities.filter(a => a.status === 'CARRY_FORWARD').length;
+  const activeEngineerIds = new Set(
+      todaysActivities
+          .filter(a => ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status))
+          .map(a => a.leadTechId)
+          .filter(Boolean)
+  );
+  const plannerDateLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long' });
+
   return (
     <div className={isMobile ? "p-4 h-full flex flex-col bg-slate-50" : "p-6 h-full flex flex-col"}>
       {/* Header Toolbar - Hidden on Mobile to save space if needed, or simplified */}
       {!isMobile && (
-          <div className="flex justify-between items-center mb-6 shrink-0">
-            <div>
-               <h1 className="text-2xl font-bold text-slate-900">Activity Planner</h1>
-               <p className="text-slate-500 text-sm">Schedule and manage field operations</p>
-            </div>
-            
-            <div className="flex items-center gap-3">
-               <div className="bg-white border border-slate-200 rounded-lg p-1 flex">
-                  <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                    <List size={20} />
-                  </button>
-                  <button onClick={() => setViewMode('kanban')} className={`p-2 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                    <Layout size={20} />
-                  </button>
-                  <button onClick={() => setViewMode('calendar')} className={`p-2 rounded-md transition-colors ${viewMode === 'calendar' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                    <Calendar size={20} />
-                  </button>
-               </div>
-               
-               {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
+          <div className="mb-5 shrink-0">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <div>
+                 <h1 className="text-2xl font-bold text-slate-900">Activity Planner</h1>
+                 <p className="text-slate-500 text-sm mt-1">
+                     {plannerDateLabel} · {todaysActivities.length} scheduled today
+                     {carryForwardCount > 0 ? ` · ${carryForwardCount} carried forward` : ''}
+                     {activeEngineerIds.size > 0 ? ` · ${activeEngineerIds.size} engineer${activeEngineerIds.size > 1 ? 's' : ''} active now` : ''}
+                 </p>
+              </div>
+
+              {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
                  <button 
+                   type="button"
                    onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
-                   className="bg-slate-900 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all"
+                   className="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/10 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1"
                  >
                    <Plus size={18} />
                    <span>Plan Activity</span>
                  </button>
                )}
+            </div>
+
+            {/* Toolbar — view switcher */}
+            <div className="flex items-center justify-between mt-4 gap-3 flex-wrap">
+               <div className="bg-slate-100 border border-slate-200 rounded-xl p-1 flex gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('list')}
+                    aria-pressed={viewMode === 'list'}
+                    aria-label="List view"
+                    className={`px-3 py-2 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <List size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('kanban')}
+                    aria-pressed={viewMode === 'kanban'}
+                    aria-label="Board view"
+                    className={`px-3 py-2 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode === 'kanban' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <Layout size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('calendar')}
+                    aria-pressed={viewMode === 'calendar'}
+                    aria-label="Calendar view"
+                    className={`px-3 py-2 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode === 'calendar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <Calendar size={18} />
+                  </button>
+               </div>
             </div>
           </div>
       )}
@@ -896,8 +978,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
               <h2 className="font-bold text-slate-800 text-lg">My Planner</h2>
               {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD || !currentUserRole) && (
                  <button 
+                   type="button"
                    onClick={() => { setEditingActivity(null); setIsModalOpen(true); }}
-                   className="bg-slate-900 text-white p-2 rounded-lg shadow-sm"
+                   className="bg-slate-900 text-white p-2.5 rounded-xl shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"
+                   aria-label="Plan new activity"
                  >
                    <Plus size={20} />
                  </button>
@@ -920,13 +1004,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
             <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-2xl max-h-[90vh] rounded-2xl'} overflow-hidden flex flex-col`}>
-               <div className="px-4 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                   <h3 className="font-bold text-lg text-slate-900">
                       {editingActivity ? `Edit Activity` : 'Plan New Activity'}
                   </h3>
-                  <button onClick={() => setIsModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Close" className="p-1 rounded-full hover:bg-slate-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                </div>
                
                <form
@@ -1005,13 +1089,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase">Activity Type</label>
-                          <select value={activityType} onChange={e => setActivityType(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                          <select value={activityType} onChange={e => setActivityType(e.target.value)} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm">
                              {['Installation', 'Service', 'Maintenance', 'Inspection', 'Survey'].map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                       </div>
                       <div className="space-y-1">
                           <label className="text-xs font-semibold text-slate-500 uppercase">Priority</label>
-                          <select value={activityPriority} onChange={e => setActivityPriority(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm">
+                          <select value={activityPriority} onChange={e => setActivityPriority(e.target.value)} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm">
                              {Object.values(Priority).map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
                       </div>
@@ -1020,12 +1104,12 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {/* Service Category (multi-select) */}
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Service Category <span className="text-red-500">*</span></label>
-                      <div className="flex flex-wrap gap-2 p-2.5 bg-white border border-slate-300 rounded-lg min-h-[40px]">
+                      <div className="flex flex-wrap gap-2 p-2.5 bg-white border border-slate-300 rounded-xl min-h-[40px]">
                         {['Wi-Fi & Networking', 'CCTV', 'Home Automation', 'Intercom', 'Smart Speaker', 'Other'].map(cat => {
                           const sel = serviceCats.includes(cat);
                           return (
                             <button key={cat} type="button" onClick={() => setServiceCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
-                              className={`text-xs px-3 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                              className={`text-xs px-3 py-1.5 rounded-xl border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                               {sel && <span className="mr-1">✓</span>}{cat}
                             </button>
                           );
@@ -1041,11 +1125,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">Location URL</label>
-                              <input type="text" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="text" name="locationUrl" value={locationUrl} onChange={e => setLocationUrl(e.target.value)} placeholder="https://maps.google..." className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm" />
                           </div>
                           <div className="space-y-1">
                               <label className="text-xs font-semibold text-slate-500 uppercase">House Number</label>
-                              <input type="text" name="houseNumber" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              <input type="text" name="houseNumber" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm" />
                           </div>
                       </div>
                   </div>
@@ -1064,7 +1148,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               onChange={e => setPlannedDatetime(e.target.value)}
                               required
                               min={new Date().toISOString().slice(0,16)}
-                              className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                              className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
                           />
                       </div>
                   </div>
@@ -1072,7 +1156,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {/* Estimated Duration */}
                   <div className="space-y-1 pt-2">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Estimated Duration</label>
-                      <div className="flex items-stretch shadow-sm rounded-lg overflow-hidden border border-slate-300">
+                      <div className="flex items-stretch shadow-sm rounded-xl overflow-hidden border border-slate-300">
                           <input 
                               type="number" 
                               value={durationState.val}
@@ -1105,7 +1189,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         value={odooLinkState}
                         onChange={e => setOdooLinkState(e.target.value)}
                         placeholder="https://odoo.crm..." 
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
+                        className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
                        />
                   </div>
                   
@@ -1121,7 +1205,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"/>
                                   <label className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sales Lead</label>
                               </div>
-                              <select value={salesLeadIdState} onChange={e => setSalesLeadIdState(e.target.value)} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
+                              <select value={salesLeadIdState} onChange={e => setSalesLeadIdState(e.target.value)} disabled={salesTeam.length === 0} className={`w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm ${salesTeam.length === 0 ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`}>
                                   <option value="">— Unassigned —</option>
                                   {salesTeam.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
@@ -1142,7 +1226,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                       value={selectedLeadTechId}
                                       onChange={e => setSelectedLeadTechId(e.target.value)}
                                       disabled={(teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign}
-                                      className={`w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm ${
+                                      className={`w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm ${
                                         (teamLeads.length + fieldEngineers.length) === 0 && !canSelfAssign
                                           ? "bg-slate-50 text-slate-400 cursor-not-allowed"
                                           : ""
@@ -1192,7 +1276,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500"/>
                                         <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">Supporting Engineers (Optional)</label>
                                     </div>
-                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                    <div className="bg-white border border-slate-300 rounded-xl p-2.5 max-h-32 overflow-y-auto space-y-2">
                                         {[...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).length > 0 ?
                                           [...fieldEngineers, ...teamLeads].filter(t => t.id !== selectedLeadTechId).map(t => (
                                             <div key={t.id} className="flex items-center gap-2">
@@ -1219,7 +1303,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <div className="w-1.5 h-1.5 rounded-full bg-teal-500"/>
                                         <label className="text-xs font-bold text-teal-700 uppercase tracking-wider">Technical Associates</label>
                                     </div>
-                                    <div className="bg-white border border-slate-300 rounded-lg p-2.5 max-h-32 overflow-y-auto space-y-2">
+                                    <div className="bg-white border border-slate-300 rounded-xl p-2.5 max-h-32 overflow-y-auto space-y-2">
                                         {availableAssociates.length > 0 ? availableAssociates.map(t => (
                                             <div key={t.id} className="flex items-center gap-2">
                                                 <input 
@@ -1258,7 +1342,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                         <p className="text-[10px] text-slate-400 italic">No freelancers added. Click "+ Add Freelancer" to attach temporary resources.</p>
                                     )}
                                     {freelancers.map((fl, idx) => (
-                                        <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 relative">
+                                        <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2 relative">
                                             <button
                                                 type="button"
                                                 onClick={() => setFreelancers(prev => prev.filter((_, i) => i !== idx))}
@@ -1279,7 +1363,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                                             setFreelancers(updated);
                                                         }}
                                                         placeholder="e.g. Ahmed (Freelancer)"
-                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                        className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm"
                                                         required
                                                     />
                                                 </div>
@@ -1292,7 +1376,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                                             updated[idx] = { ...updated[idx], role: e.target.value };
                                                             setFreelancers(updated);
                                                         }}
-                                                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                        className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm"
                                                     >
                                                         <option value="TECHNICAL_ASSOCIATE">Technical Associate</option>
                                                         <option value="FIELD_ENGINEER">Field Engineer</option>
@@ -1310,7 +1394,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                                                         setFreelancers(updated);
                                                     }}
                                                     placeholder="+974 XXXX XXXX"
-                                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm"
+                                                    className="w-full bg-white border border-slate-300 rounded-xl p-2 text-sm"
                                                 />
                                             </div>
                                         </div>
@@ -1324,7 +1408,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         <div className="space-y-1">
                            <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
                            {/* Status is read-only in edit form — use Admin Override to change status */}
-                           <div className={`w-full border rounded-lg p-2.5 text-sm font-medium ${
+                           <div className={`w-full border rounded-xl p-2.5 text-sm font-medium ${
                                activityStatus === 'DONE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
                                activityStatus === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-700' :
                                activityStatus === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200 text-orange-700' :
@@ -1339,13 +1423,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">Description / Scope of Work</label>
-                      <textarea value={descriptionState} onChange={e => setDescriptionState(e.target.value)} rows={3} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
+                      <textarea value={descriptionState} onChange={e => setDescriptionState(e.target.value)} rows={3} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="What work needs to be done..."></textarea>
                   </div>
 
                   {/* General Remarks (separate from carry forward reason) */}
                   <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 uppercase">General Remarks</label>
-                      <textarea value={remarksState} onChange={e => setRemarksState(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
+                      <textarea value={remarksState} onChange={e => setRemarksState(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Any additional notes or observations..."></textarea>
                   </div>
 
                   {editingActivity && currentUserRole === Role.ADMIN && (
@@ -1357,13 +1441,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   )}
 
                   <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
-                        <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+                        <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">Cancel</button>
                         {formError && (
-                            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                                 ⚠ {formError}
                             </p>
                         )}
-                        <button type="submit" disabled={isSaving} className={`px-6 py-2 font-medium rounded-lg shadow-lg transition-all flex items-center gap-2 ${isSaving ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}>
+                        <button type="submit" disabled={isSaving} className={`px-6 py-2 font-medium rounded-xl shadow-lg transition-all flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1 ${isSaving ? 'bg-slate-400 text-white cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}`}>
                             <Save size={18} /> {isSaving ? 'Saving...' : editingActivity ? 'Update Activity' : 'Plan Activity'}
                         </button>
                   </div>
@@ -1399,7 +1483,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     va.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
                     'bg-amber-100 text-amber-700'
                   }`}>{va.status}</span>
-                  <button onClick={() => setViewingActivity(null)} className="p-1 hover:bg-slate-200 rounded-lg">
+                  <button type="button" onClick={() => setViewingActivity(null)} className="p-1 hover:bg-slate-200 rounded-xl">
                     <X size={18} className="text-slate-400"/>
                   </button>
                 </div>
@@ -1464,7 +1548,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                     <div className="text-xs font-bold text-slate-400 uppercase">Completion Photos ({va.photos.length})</div>
                     <div className="grid grid-cols-4 gap-2">
                       {va.photos.map((p: any, i: number) => (
-                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border border-slate-200 cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />
+                        <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-xl border border-slate-200 cursor-pointer hover:shadow-md" onClick={() => showPhotoLightbox(p.url || p)} />
                       ))}
                     </div>
                   </div>
@@ -1524,9 +1608,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                             <div className={`rounded-xl p-3 border ${cardBg}`}>
                               <div className="flex justify-between items-center mb-1.5"><span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} — {fD(v.date)}</span><span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span></div>
                               <div className="text-[10px] text-slate-500">{fT(v.startedAt)} → {v.completedAt ? fT(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
-                              {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
-                              {v.completionNote && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
-                              {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
+                              {v.remarks && <div className="bg-white/60 rounded-xl p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
+                              {v.completionNote && <div className="bg-emerald-50/50 rounded-xl p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
+                              {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-xl p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
                             </div>
                           </div>
                         );
@@ -1541,13 +1625,13 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 <div className="flex gap-2">
                     {/* Edit — Admin and Team Lead can edit */}
                     {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD) && (
-                        <button onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 text-sm">
+                        <button type="button" onClick={() => { setEditingActivity(viewingActivity); setViewingActivity(null); setIsModalOpen(true); }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 text-sm">
                             Edit Activity
                         </button>
                     )}
                     {/* Admin Override — Admin only */}
                     {currentUserRole === Role.ADMIN && (
-                        <button onClick={() => {
+                        <button type="button" onClick={() => {
                             setActOverrideTarget(va);
                             setActOverrideStatus(va.status || 'PLANNED');
                             setActOverrideStartedAt(va.startedAt ? new Date(va.startedAt).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : '');
@@ -1561,7 +1645,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 </div>
                 {/* Reschedule — for carry-forward or any status */}
                 {(currentUserRole === Role.ADMIN || currentUserRole === Role.TEAM_LEAD) && (va.status === 'CARRY_FORWARD' || va.status === 'PLANNED' || va.status === 'DONE' || va.status === 'IN_PROGRESS') && (
-                    <button onClick={() => {
+                    <button type="button" onClick={() => {
                         setRescheduleTarget(va);
                         // Default: next day at same time
                         const nextDay = new Date(va.plannedDate || Date.now());
@@ -1579,7 +1663,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         {va.status === 'CARRY_FORWARD' ? 'Reschedule (Carry Forward)' : 'Reschedule to New Date'}
                     </button>
                 )}
-                <button onClick={() => setViewingActivity(null)} className="w-full py-2 text-slate-400 font-medium hover:bg-slate-100 rounded-xl text-sm">Close</button>
+                <button type="button" onClick={() => setViewingActivity(null)} className="w-full py-2 text-slate-400 font-medium hover:bg-slate-100 rounded-xl text-sm">Close</button>
               </div>
             </div>
           </div>
@@ -1594,7 +1678,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <p className="text-indigo-200 text-xs mt-0.5">Force status change with custom timestamps</p>
                   </div>
                   <div className="p-5 space-y-4">
-                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
                           <div className="text-[10px] font-bold text-slate-400 uppercase">Activity</div>
                           <div className="text-sm font-bold text-slate-900">{actOverrideTarget.reference || actOverrideTarget.id} — {actOverrideTarget.type}</div>
                           <div className="text-xs text-slate-500">Current: {(actOverrideTarget.status || 'PLANNED').replace(/_/g,' ')}</div>
@@ -1602,7 +1686,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">New Status *</label>
                           <select value={actOverrideStatus} onChange={e => setActOverrideStatus(e.target.value)}
-                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm">
+                              className="w-full border border-slate-300 rounded-xl p-2.5 text-sm">
                               {['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE','CARRY_FORWARD','CANCELLED'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
                           </select>
                       </div>
@@ -1610,30 +1694,30 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Planned Date & Time</label>
                           <input type="datetime-local" value={actOverrideTarget?.plannedDate ? new Date(actOverrideTarget.plannedDate).toLocaleString('sv-SE', {timeZone: 'Asia/Qatar'}).slice(0,16) : ''} 
                               onChange={e => { if (actOverrideTarget) setActOverrideTarget({...actOverrideTarget, plannedDate: new Date(e.target.value).toISOString()} as any); }}
-                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              className="w-full border border-slate-300 rounded-xl p-2.5 text-sm" />
                           <p className="text-[10px] text-slate-400 mt-0.5">Modify the scheduled date/time</p>
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Started At</label>
                           <input type="datetime-local" value={actOverrideStartedAt} onChange={e => setActOverrideStartedAt(e.target.value)}
-                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              className="w-full border border-slate-300 rounded-xl p-2.5 text-sm" />
                           <p className="text-[10px] text-slate-400 mt-0.5">When work actually started (even retroactively)</p>
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Completed At</label>
                           <input type="datetime-local" value={actOverrideCompletedAt} onChange={e => setActOverrideCompletedAt(e.target.value)}
-                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              className="w-full border border-slate-300 rounded-xl p-2.5 text-sm" />
                           <p className="text-[10px] text-slate-400 mt-0.5">When the job was actually finished (even past dates)</p>
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Admin Note</label>
                           <textarea value={actOverrideNote} onChange={e => setActOverrideNote(e.target.value)} rows={2} placeholder="Reason for override..."
-                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" />
+                              className="w-full border border-slate-300 rounded-xl p-2.5 text-sm" />
                       </div>
                   </div>
                   <div className="p-4 border-t border-slate-200 flex gap-3">
-                      <button onClick={() => setShowActOverride(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
-                      <button onClick={() => {
+                      <button type="button" onClick={() => setShowActOverride(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl hover:bg-slate-50">Cancel</button>
+                      <button type="button" onClick={() => {
                           const updates: any = {
                               ...actOverrideTarget,
                               status: actOverrideStatus,
@@ -1647,7 +1731,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           onUpdateActivity(updates);
                           setShowActOverride(false);
                           setViewingActivity(null);
-                      }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Apply Override</button>
+                      }} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700">Apply Override</button>
                   </div>
               </div>
           </div>
@@ -1670,7 +1754,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               value={rescheduleDate}
                               onChange={e => setRescheduleDate(e.target.value)}
                               min={new Date().toISOString().slice(0,16)}
-                              className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                              className="w-full border border-slate-300 rounded-xl p-2.5 text-sm"
                           />
                       </div>
                       <p className="text-xs text-slate-400">
@@ -1679,7 +1763,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       </p>
                   </div>
                   <div className="p-4 border-t border-slate-200 flex gap-3">
-                      <button onClick={() => setShowRescheduleModal(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button type="button" onClick={() => setShowRescheduleModal(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl hover:bg-slate-50">Cancel</button>
                       <button
                           disabled={!rescheduleDate}
                           onClick={() => {
@@ -1699,7 +1783,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               setShowRescheduleModal(false);
                               setRescheduleTarget(null);
                           }}
-                          className="flex-1 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                          className="flex-1 py-2.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 disabled:bg-slate-300 disabled:cursor-not-allowed"
                       >
                           Reschedule
                       </button>
@@ -1720,14 +1804,14 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       <p className="text-sm text-slate-700">This action is <span className="font-bold text-red-600">permanent</span> and cannot be undone. All visit history and data for this activity will be lost.</p>
                   </div>
                   <div className="p-4 border-t border-slate-200 flex gap-3">
-                      <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                      <button type="button" onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl hover:bg-slate-50">Cancel</button>
                       <button
                           onClick={() => {
                               onDeleteActivity(editingActivity.id);
                               setShowDeleteConfirm(false);
                               setIsModalOpen(false);
                           }}
-                          className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+                          className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700"
                       >
                           Delete Permanently
                       </button>
