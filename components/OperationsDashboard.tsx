@@ -50,7 +50,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   const TOTAL_HOURS = TIMELINE_END - TIMELINE_START; 
   const totalGridWidth = TOTAL_HOURS * zoomLevel;
   const LEFT_COL_WIDTH = tvMode ? 240 : 280;
-  const ROW_HEIGHT = tvMode ? 'h-28' : 'h-24'; // Taller rows for TV readability
+  const ROW_HEIGHT = tvMode ? 'h-32' : 'h-28'; // Taller rows for TV readability — bumped one step for distance readability
 
   // Filters
   const [bodyScrollLeft, setBodyScrollLeft] = useState(0);
@@ -349,21 +349,21 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   // priority, carry-forward. No fabricated alert types.
   const criticalAlerts = useMemo(() => {
       const now = Date.now();
-      type Alert = { id: string; icon: React.ReactNode; label: string; sub: string; tone: 'red' | 'amber'; onClick: () => void };
+      type Alert = { id: string; icon: React.ReactNode; label: string; ref: string; client: string; tone: 'red' | 'amber'; onClick: () => void };
       const alerts: Alert[] = [];
       tickets.forEach(t => {
           if (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED) return;
           const hours = (now - new Date(t.createdAt).getTime()) / 36e5;
-          if (hours > 72) alerts.push({ id: `ov-${t.id}`, icon: <Clock size={12} />, label: 'Overdue', sub: `${t.id} · ${t.customerName}`, tone: 'red', onClick: () => handleItemClick('ticket', t.id) });
-          if (!t.assignedTechId) alerts.push({ id: `wa-${t.id}`, icon: <AlertCircle size={12} />, label: 'Waiting Assignment', sub: `${t.id} · ${t.customerName}`, tone: 'amber', onClick: () => handleItemClick('ticket', t.id) });
-          if (t.priority === Priority.URGENT) alerts.push({ id: `ur-${t.id}`, icon: <ShieldAlert size={12} />, label: 'Urgent', sub: `${t.id} · ${t.customerName}`, tone: 'red', onClick: () => handleItemClick('ticket', t.id) });
-          if (t.status === TicketStatus.CARRY_FORWARD) alerts.push({ id: `cft-${t.id}`, icon: <History size={12} />, label: 'Carry Forward', sub: `${t.id} · ${t.customerName}`, tone: 'amber', onClick: () => handleItemClick('ticket', t.id) });
+          if (hours > 72) alerts.push({ id: `ov-${t.id}`, icon: <Clock size={12} />, label: 'Overdue', ref: t.id, client: t.customerName, tone: 'red', onClick: () => handleItemClick('ticket', t.id) });
+          if (!t.assignedTechId) alerts.push({ id: `wa-${t.id}`, icon: <AlertCircle size={12} />, label: 'Waiting Assignment', ref: t.id, client: t.customerName, tone: 'amber', onClick: () => handleItemClick('ticket', t.id) });
+          if (t.priority === Priority.URGENT) alerts.push({ id: `ur-${t.id}`, icon: <ShieldAlert size={12} />, label: 'Urgent', ref: t.id, client: t.customerName, tone: 'red', onClick: () => handleItemClick('ticket', t.id) });
+          if (t.status === TicketStatus.CARRY_FORWARD) alerts.push({ id: `cft-${t.id}`, icon: <History size={12} />, label: 'Carry Forward', ref: t.id, client: t.customerName, tone: 'amber', onClick: () => handleItemClick('ticket', t.id) });
       });
       activities.forEach(a => {
           if (a.status === 'CANCELLED' || a.status === 'DONE') return;
           const custLabel = customers.find(c => c.id === a.customerId)?.name || a.houseNumber || a.reference || a.id;
-          if (a.status === 'CARRY_FORWARD') alerts.push({ id: `cfa-${a.id}`, icon: <History size={12} />, label: 'Carry Forward', sub: `${a.reference || a.id} · ${custLabel}`, tone: 'amber', onClick: () => handleItemClick('activity', a.id) });
-          if ((a.escalationLevel || 0) > 0) alerts.push({ id: `esc-${a.id}`, icon: <ShieldAlert size={12} />, label: 'Escalated', sub: `${a.reference || a.id} · ${custLabel}`, tone: 'red', onClick: () => handleItemClick('activity', a.id) });
+          if (a.status === 'CARRY_FORWARD') alerts.push({ id: `cfa-${a.id}`, icon: <History size={12} />, label: 'Carry Forward', ref: a.reference || a.id, client: custLabel, tone: 'amber', onClick: () => handleItemClick('activity', a.id) });
+          if ((a.escalationLevel || 0) > 0) alerts.push({ id: `esc-${a.id}`, icon: <ShieldAlert size={12} />, label: 'Escalated', ref: a.reference || a.id, client: custLabel, tone: 'red', onClick: () => handleItemClick('activity', a.id) });
       });
       return alerts;
   }, [tickets, activities, customers]);
@@ -458,6 +458,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <Calendar size={13} className="text-slate-400"/>
                     </div>
                     <span className="text-xl font-bold text-slate-800 leading-none mt-1 tabular-nums">{metrics.plannedToday}</span>
+                    <span className="text-[9px] text-slate-400 mt-0.5">Scheduled for today</span>
                 </div>
                 <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/40 shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
@@ -465,6 +466,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <ActivityIcon size={13} className="text-blue-500"/>
                     </div>
                     <span className="text-xl font-bold text-blue-700 leading-none mt-1 tabular-nums">{metrics.inProgressCount}</span>
+                    <span className="text-[9px] text-blue-400 mt-0.5">Currently active</span>
                 </div>
                 <div className={`p-2.5 rounded-xl border shadow-sm flex flex-col justify-between ${metrics.carryForwardCount > 0 ? 'border-orange-200 bg-orange-50/40' : 'border-slate-200 bg-white'}`}>
                     <div className="flex justify-between items-start">
@@ -472,6 +474,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <History size={13} className={metrics.carryForwardCount > 0 ? 'text-orange-500' : 'text-slate-300'}/>
                     </div>
                     <span className={`text-xl font-bold leading-none mt-1 tabular-nums ${metrics.carryForwardCount > 0 ? 'text-orange-700' : 'text-slate-800'}`}>{metrics.carryForwardCount}</span>
+                    <span className={`text-[9px] mt-0.5 ${metrics.carryForwardCount > 0 ? 'text-orange-400' : 'text-slate-400'}`}>Outstanding workload</span>
                 </div>
                 <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
@@ -479,6 +482,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <CheckCircle2 size={13} className="text-emerald-500"/>
                     </div>
                     <span className="text-xl font-bold text-emerald-700 leading-none mt-1 tabular-nums">{metrics.completedToday}</span>
+                    <span className="text-[9px] text-emerald-400 mt-0.5">Completed today</span>
                 </div>
                 <div className="p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/40 shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
@@ -489,6 +493,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                       <span className="text-xl font-bold text-indigo-700 leading-none tabular-nums">{metrics.crewsOnSite}</span>
                       <span className="text-[10px] font-medium text-indigo-400 mb-0.5">/ {operationsStaff.length}</span>
                     </div>
+                    <span className="text-[9px] text-indigo-400 mt-0.5">Working now</span>
                 </div>
                 <div className="p-2.5 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
@@ -496,6 +501,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <TicketIcon size={13} className="text-slate-400"/>
                     </div>
                     <span className="text-xl font-bold text-slate-800 leading-none mt-1 tabular-nums">{metrics.openTickets}</span>
+                    <span className="text-[9px] text-slate-400 mt-0.5">Currently unresolved</span>
                 </div>
                 <div className={`p-2.5 rounded-xl border shadow-sm flex flex-col justify-between ${metrics.urgentTickets > 0 ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-white'}`}>
                     <div className="flex justify-between items-start">
@@ -503,6 +509,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         <ShieldAlert size={13} className={metrics.urgentTickets > 0 ? 'text-red-600 animate-pulse' : 'text-slate-300'}/>
                     </div>
                     <span className={`text-xl font-bold leading-none mt-1 tabular-nums ${metrics.urgentTickets > 0 ? 'text-red-700' : 'text-slate-800'}`}>{metrics.urgentTickets}</span>
+                    <span className={`text-[9px] mt-0.5 ${metrics.urgentTickets > 0 ? 'text-red-400' : 'text-slate-400'}`}>Requires attention</span>
                 </div>
             </div>
 
@@ -512,10 +519,15 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1"><ShieldAlert size={11}/> Critical Alerts</span>
                 {criticalAlerts.slice(0, 25).map(a => (
                   <button key={a.id} type="button" onClick={a.onClick}
-                    className={`shrink-0 flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-lg border text-[10px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${
-                      a.tone === 'red' ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                    className={`shrink-0 flex items-center gap-2 pl-2.5 pr-3 py-2 rounded-lg border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${
+                      a.tone === 'red' ? 'bg-red-50 border-red-200 hover:bg-red-100' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'
                     }`}>
-                    {a.icon}<span className="font-bold">{a.label}</span><span className="opacity-70 font-medium">{a.sub}</span>
+                    <span className={a.tone === 'red' ? 'text-red-500 shrink-0' : 'text-amber-500 shrink-0'}>{a.icon}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wide shrink-0 ${a.tone === 'red' ? 'text-red-700' : 'text-amber-700'}`}>{a.label}</span>
+                    <span className={`w-px h-3 shrink-0 ${a.tone === 'red' ? 'bg-red-200' : 'bg-amber-200'}`} />
+                    <span className={`text-[10px] font-mono font-semibold shrink-0 ${a.tone === 'red' ? 'text-red-600' : 'text-amber-600'}`}>{a.ref}</span>
+                    <span className={`w-px h-3 shrink-0 ${a.tone === 'red' ? 'bg-red-200' : 'bg-amber-200'}`} />
+                    <span className={`text-[10px] font-medium truncate max-w-[130px] ${a.tone === 'red' ? 'text-red-800' : 'text-amber-800'}`}>{a.client}</span>
                   </button>
                 ))}
               </div>
@@ -626,7 +638,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         const isActiveNow = activeActs.length > 0;
 
                         return (
-                            <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center`}>
+                            <div key={tech.id} className={`${tvMode ? "h-32" : "h-28"} border-b border-slate-200 p-3 flex flex-col justify-center`}>
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="relative">
                                         <img src={tech.avatar} className="w-9 h-9 rounded-full bg-slate-200 border border-slate-100 object-cover" alt=""/>
@@ -692,9 +704,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                 </div>
 
                                 
-                                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                                     <div 
-                                        className={`h-full rounded-full ${utilization > 100 ? 'bg-red-500' : utilization > 80 ? 'bg-amber-400' : 'bg-emerald-400'}`} 
+                                        className={`h-full rounded-full ${utilization > 100 ? 'bg-red-500' : utilization > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
                                         style={{ width: `${utilization}%` }} 
                                     />
                                 </div>
@@ -710,7 +722,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         const uniqueTAs = Array.from(new Map(taFreelancers.map((t: any) => [t.name, t])).values());
                         
                         return (
-                            <div key={`fe-fl-${feIdx}`} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center bg-orange-50/20`}>
+                            <div key={`fe-fl-${feIdx}`} className={`${tvMode ? "h-32" : "h-28"} border-b border-slate-200 p-3 flex flex-col justify-center bg-orange-50/20`}>
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="relative">
                                         <div className="w-9 h-9 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-700 text-xs font-bold">
@@ -743,7 +755,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                     })}
                     {/* Freelancer-only Jobs Row (no internal engineer assigned) */}
                     {unassignedFreelancerActs.length > 0 && (
-                        <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 p-3 flex flex-col justify-center bg-amber-50/30`}>
+                        <div className={`${tvMode ? "h-32" : "h-28"} border-b border-slate-200 p-3 flex flex-col justify-center bg-amber-50/30`}>
                             <div className="flex items-center gap-3 mb-2">
                                 <div className="w-9 h-9 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 text-[10px] font-bold">FL</div>
                                 <div className="min-w-0 flex-1">
@@ -1027,7 +1039,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                             const timelineItems = [...techActivities, ...techTickets];
 
                             return (
-                                <div key={tech.id} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full hover:bg-slate-100/50 transition-colors`}>
+                                <div key={tech.id} className={`${tvMode ? "h-32" : "h-28"} border-b border-slate-200 relative w-full hover:bg-slate-100/50 transition-colors`}>
                                     {timelineItems.map((item: any) => {
                                         const style = getPositionStyle(item.plannedDate, item.durationHours);
                                         const isTicket = item.type === 'ticket';
@@ -1056,20 +1068,20 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                 onClick={() => handleItemClick(isTicket ? 'ticket' : 'activity', item.id)}
                                                 title={`${item.description} - ${new Date(item.plannedDate).toLocaleTimeString()}`}
                                             >
-                                                <div className="flex items-center gap-1 font-bold text-[10px] leading-tight truncate">
-                                                    {isTicket && <TicketIcon size={10} />}
+                                                <div className="flex items-center gap-1 font-bold text-[11px] leading-snug truncate">
+                                                    {isTicket && <TicketIcon size={11} />}
                                                     {item.reference}
                                                     {item.supportCount > 0 && (
-                                                        <span className="ml-auto text-[8px] font-bold bg-blue-100 text-blue-600 px-1 rounded shrink-0">+{item.supportCount}</span>
+                                                        <span className="ml-auto text-[9px] font-bold bg-blue-100 text-blue-600 px-1 rounded shrink-0">+{item.supportCount}</span>
                                                     )}
                                                     {isPlanned && (
-                                                        <span className="ml-auto text-[8px] font-medium text-slate-400 italic shrink-0">planned</span>
+                                                        <span className="ml-auto text-[9px] font-medium text-slate-400 italic shrink-0">planned</span>
                                                     )}
                                                 </div>
                                                 {item.clientLine && (
-                                                    <div className="text-[8px] font-medium truncate opacity-90 leading-tight">{item.clientLine}</div>
+                                                    <div className="text-[9px] font-medium truncate opacity-90 leading-snug mt-0.5">{item.clientLine}</div>
                                                 )}
-                                                <div className="text-[9px] truncate opacity-80 leading-tight">
+                                                <div className="text-[10px] truncate opacity-80 leading-snug mt-0.5">
                                                     {item.description}
                                                 </div>
                                                 {(item.status === 'IN_PROGRESS' || item.status === 'ON_MY_WAY' || item.status === 'ARRIVED') && !isPlanned && (
@@ -1085,7 +1097,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         })}
                         {/* Freelancer Field Engineer timeline rows */}
                         {freelancerEngineers.map((fe, feIdx) => (
-                            <div key={`fe-tl-${feIdx}`} className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full bg-orange-50/10`}>
+                            <div key={`fe-tl-${feIdx}`} className={`${tvMode ? "h-32" : "h-28"} border-b border-slate-200 relative w-full bg-orange-50/10`}>
                                 {fe.activities.map(a => {
                                     const s = normalizeStatus(a.status);
                                     const actualStart = (a as any).startedAt;
@@ -1115,9 +1127,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             s === 'ON_MY_WAY' ? 'bg-cyan-50 border-cyan-200 text-cyan-800' :
                                             'bg-orange-50 border-dashed border-orange-300 text-orange-700 opacity-70'
                                         }`} style={style} onClick={() => handleItemClick('activity', a.id)}>
-                                            <span className="text-[9px] font-bold truncate">{a.reference || a.id}</span>
-                                            <span className="text-[8px] truncate opacity-80">{custName}</span>
-                                            <span className="text-[7px] truncate opacity-60">{a.type}{a.serviceCategory ? ` · ${a.serviceCategory}` : ''}</span>
+                                            <span className="text-[10px] font-bold truncate leading-snug">{a.reference || a.id}</span>
+                                            <span className="text-[9px] truncate opacity-80 leading-snug mt-0.5">{custName}</span>
+                                            <span className="text-[8px] truncate opacity-60 leading-snug">{a.type}{a.serviceCategory ? ` · ${a.serviceCategory}` : ''}</span>
                                         </div>
                                     );
                                 })}
@@ -1125,7 +1137,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                         ))}
                         {/* Freelancer-only timeline row */}
                         {unassignedFreelancerActs.length > 0 && (
-                            <div className={`${tvMode ? "h-28" : "h-24"} border-b border-slate-200 relative w-full bg-amber-50/20`}>
+                            <div className={`${tvMode ? "h-32" : "h-28"} border-b border-slate-200 relative w-full bg-amber-50/20`}>
                                 {unassignedFreelancerActs.map(a => {
                                     const s = normalizeStatus(a.status);
                                     const actualStart = (a as any).startedAt;
@@ -1157,13 +1169,13 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             onClick={() => handleItemClick('activity', a.id)}
                                             title={`${a.description} — Freelancer: ${((a as any).freelancers || []).map((f: any) => f.name).join(', ')}`}
                                         >
-                                            <div className="flex items-center gap-1 font-bold text-[10px] leading-tight truncate">
+                                            <div className="flex items-center gap-1 font-bold text-[11px] leading-snug truncate">
                                                 {a.reference}
                                                 {flCount > 0 && (
-                                                    <span className="ml-auto text-[8px] font-bold bg-amber-200 text-amber-700 px-1 rounded shrink-0">FL +{flCount}</span>
+                                                    <span className="ml-auto text-[9px] font-bold bg-amber-200 text-amber-700 px-1 rounded shrink-0">FL +{flCount}</span>
                                                 )}
                                             </div>
-                                            <div className="text-[9px] truncate opacity-80 leading-tight">
+                                            <div className="text-[10px] truncate opacity-80 leading-snug mt-0.5">
                                                 {a.description || a.type}
                                             </div>
                                             {(s === 'IN_PROGRESS' || s === 'ON_MY_WAY') && (
@@ -1188,15 +1200,15 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                     </span>
                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-0">
+                <div className="flex-1 overflow-y-auto p-0 divide-y divide-slate-100">
                     {liveFeed.map((item, i) => (
                         <div 
                             key={`${item.id}-${i}`} 
                             onClick={() => handleItemClick(item.type, item.id)}
-                            className="p-3 border-b border-slate-50 hover:bg-black/[0.03] transition-colors group cursor-pointer relative"
+                            className="p-3 hover:bg-black/[0.03] transition-colors group cursor-pointer relative"
                         >
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-[9px] font-mono text-slate-400">{item.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded tabular-nums">{item.time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
                                     normalizeStatus(item.status) === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
                                     item.status === 'DONE' || item.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
@@ -1209,8 +1221,8 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     {item.type === 'ticket' ? <TicketIcon size={10} /> : <ActivityIcon size={10} />}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-[10px] font-bold text-slate-800 leading-tight">{item.refLine}</p>
-                                    <p className="text-[10px] text-slate-600 mt-0.5 font-medium truncate">{item.clientLine}</p>
+                                    <p className="text-[11px] font-bold text-slate-900 leading-snug">{item.refLine}</p>
+                                    <p className="text-[10px] text-slate-600 mt-0.5 font-semibold truncate">{item.clientLine}</p>
                                     <p className="text-[9px] text-slate-400 mt-0.5 truncate">{item.descLine}</p>
                                 </div>
                             </div>
