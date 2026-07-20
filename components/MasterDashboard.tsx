@@ -209,18 +209,45 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     const now = new Date();
     const todayStr = qatarDay(now);
 
-    // "Today's Activities" = Planned / In Progress / Completed activities
-    // planned for today, PLUS any Carry Forward activity regardless of its
-    // original planned date — carry-forward jobs stay relevant until
-    // resolved, exactly like the same convention already used for the
-    // Activity Log's date-range filter further down this file.
+    // "Today's Activities" — each activity counted at most once (a single
+    // .filter() pass over the activities array can't double-count), matched
+    // per status against the field that actually carries today's relevance:
+    //   PLANNED        -> plannedDate is today
+    //   IN_PROGRESS    -> plannedDate is today, OR startedAt is today
+    //   CARRY_FORWARD  -> nextPlannedAt (the NEW rescheduled date, set by the
+    //                      Reschedule flow) is today — NOT plannedDate, which
+    //                      stays frozen at the ORIGINAL date once an activity
+    //                      is carried forward (see MobileLeadPortal's carry-
+    //                      forward handler: "Do NOT send plannedDate — backend
+    //                      keeps the original visit date"). Using plannedDate
+    //                      or "any Carry Forward record" here is exactly what
+    //                      previously pulled in every historical carry-forward
+    //                      activity regardless of date.
+    //   DONE           -> completedAt is today
     const relevantStatuses = ['PLANNED', 'IN_PROGRESS', 'CARRY_FORWARD', 'DONE'];
     const todaysActivities = activities.filter(a => {
       if (!relevantStatuses.includes(a.status)) return false;
-      if (a.status === 'CARRY_FORWARD') return true;
+
+      if (a.status === 'CARRY_FORWARD') {
+        const nextDate = (a as any).nextPlannedAt;
+        return !!nextDate && qatarDay(nextDate) === todayStr;
+      }
+      if (a.status === 'DONE') {
+        const completedAt = (a as any).completedAt;
+        return !!completedAt && qatarDay(completedAt) === todayStr;
+      }
+      if (a.status === 'IN_PROGRESS') {
+        const plannedToday = !!a.plannedDate && qatarDay(a.plannedDate) === todayStr;
+        const startedToday = !!(a as any).startedAt && qatarDay((a as any).startedAt) === todayStr;
+        return plannedToday || startedToday;
+      }
+      // PLANNED
       return !!a.plannedDate && qatarDay(a.plannedDate) === todayStr;
     });
     const activeTickets = tickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
+    // Carry Forward KPI — intentionally the GLOBAL outstanding count (kept
+    // separate from the date-qualified set above per the two-concepts rule:
+    // this is total outstanding workload, not "carry-forward due today").
     const carryForward = activities.filter(a => a.status === 'CARRY_FORWARD').length;
     // "Completed Today" = activities completed today (per spec — tickets are
     // tracked separately elsewhere, not folded into this metric).
@@ -339,21 +366,43 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     ];
   }, [execToday, technicians, customers]);
 
-  // Today's Schedule — chronological, today only, independent of the log table's filters
+  // Today's Schedule — chronological, today only, independent of the log
+  // table's filters. Each item's sort/display time is the field that
+  // actually made it qualify as "today" for its status (not always
+  // plannedDate — a carry-forward item's plannedDate is its stale original
+  // date, not today's relevant time).
   const todaysSchedule = useMemo(() => {
+    const getRelevantTime = (a: Activity): number | null => {
+      if (a.status === 'CARRY_FORWARD') {
+        const d = (a as any).nextPlannedAt;
+        return d ? new Date(d).getTime() : null;
+      }
+      if (a.status === 'DONE') {
+        const d = (a as any).completedAt;
+        return d ? new Date(d).getTime() : null;
+      }
+      if (a.status === 'IN_PROGRESS') {
+        const started = (a as any).startedAt;
+        if (started && qatarDay(started) === qatarDay(new Date())) return new Date(started).getTime();
+        return a.plannedDate ? new Date(a.plannedDate).getTime() : null;
+      }
+      return a.plannedDate ? new Date(a.plannedDate).getTime() : null;
+    };
+
     return [...execToday.todaysActivities]
-      .sort((a, b) => {
-        // Carry-forward items surface first — they're the ones most likely
-        // to need a decision today, regardless of their stale original time.
-        if (a.status === 'CARRY_FORWARD' && b.status !== 'CARRY_FORWARD') return -1;
-        if (b.status === 'CARRY_FORWARD' && a.status !== 'CARRY_FORWARD') return 1;
-        return new Date(a.plannedDate).getTime() - new Date(b.plannedDate).getTime();
+      .map(a => ({ activity: a, sortTime: getRelevantTime(a) }))
+      .sort((x, y) => {
+        // Untimed activities sort after every timed activity.
+        if (x.sortTime === null && y.sortTime === null) return 0;
+        if (x.sortTime === null) return 1;
+        if (y.sortTime === null) return -1;
+        return x.sortTime - y.sortTime;
       })
       .slice(0, 10)
-      .map(a => {
+      .map(({ activity: a, sortTime }) => {
         const cust = customers.find(c => c.id === a.customerId);
         const tech = technicians.find(t => t.id === ((a as any).primaryEngineerId || a.leadTechId));
-        return { activity: a, customerName: cust?.name || 'Unknown', engineerName: tech?.name || 'Unassigned' };
+        return { activity: a, customerName: cust?.name || 'Unknown', engineerName: tech?.name || 'Unassigned', displayTime: sortTime };
       });
   }, [execToday.todaysActivities, customers, technicians]);
 
@@ -758,7 +807,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 <div className="text-center text-slate-400 text-sm py-6">No activities scheduled today</div>
               ) : (
                 <div className="space-y-1">
-                  {todaysSchedule.map(({ activity, customerName, engineerName }) => (
+                  {todaysSchedule.map(({ activity, customerName, engineerName, displayTime }) => (
                     <button
                       key={activity.id}
                       type="button"
@@ -766,9 +815,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                       className="w-full text-left flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"
                     >
                       <span className="text-xs font-mono font-semibold text-slate-500 w-12 shrink-0">
-                        {activity.status === 'CARRY_FORWARD'
-                          ? 'CF'
-                          : new Date(activity.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })}
+                        {displayTime !== null
+                          ? new Date(displayTime).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' })
+                          : '—'}
                       </span>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${statusColors[activity.status] || 'bg-slate-100 text-slate-500'}`}>
                         {activity.status.replace(/_/g, ' ')}
