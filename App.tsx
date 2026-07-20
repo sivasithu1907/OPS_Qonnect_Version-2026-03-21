@@ -1407,16 +1407,16 @@ useEffect(() => {
                                             if (item.id !== 'lead_portal') setFocusedTicketId(null);
                                             if (item.id !== 'planning') setTargetActivityId(null);
                                         }}
-                                        className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm transition-all duration-200 rounded-[10px] border-l-[3px] ${FOCUS_RING} ${
+                                        className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm transition-all duration-200 rounded-xl border-l-[3px] ${FOCUS_RING} ${
                                             isActive 
                                             ? 'border-[#FFCC00] bg-[#FFCC00]/[0.16] text-slate-900 font-semibold' 
                                             : 'border-transparent font-medium text-slate-700 hover:bg-black/[0.04] hover:text-slate-900'
                                         }`}
                                     >
                                         <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center w-full' : 'w-full'}`}>
-                                            <span className={`shrink-0 flex items-center justify-center transition-colors rounded-md ${
+                                            <span className={`shrink-0 flex items-center justify-center transition-colors ${
                                                 isActive
-                                                    ? 'text-slate-900 bg-[#FFCC00]/25 p-1.5 -m-1.5'
+                                                    ? 'text-slate-900 bg-[#FFCC00]/25 p-1.5 -m-1.5 rounded-xl'
                                                     : 'text-slate-500 group-hover:text-slate-700'
                                             }`}>
                                                 {item.icon}
