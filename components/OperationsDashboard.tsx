@@ -329,13 +329,78 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
     const capacityHours = (operationsStaff.length || 1) * 8;
     const utilization = Math.min(100, Math.round((totalScheduledHours / capacityHours) * 100));
 
-    return { activeJobs, crewsOnSite, plannedToday, alertsCount, utilization, completedToday };
+    // Additional KPIs for the Mission Control summary bar — reuses the same
+    // arrays and status/priority values already in use elsewhere, nothing invented.
+    const inProgressCount = activities.filter(a => a.status === 'IN_PROGRESS').length + tickets.filter(t => normalizeStatus(t.status) === 'IN_PROGRESS').length;
+    const carryForwardCount = activities.filter(a => a.status === 'CARRY_FORWARD').length + tickets.filter(t => normalizeStatus(t.status) === 'CARRY_FORWARD').length;
+    const openTickets = tickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED).length;
+    const urgentTickets = tickets.filter(t => t.priority === Priority.URGENT && t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED).length;
+
+    return { activeJobs, crewsOnSite, plannedToday, alertsCount, utilization, completedToday, inProgressCount, carryForwardCount, openTickets, urgentTickets };
   }, [activities, tickets, operationsStaff]);
 
   const timeMarkers = Array.from(
       { length: TOTAL_HOURS }, // Strictly 0 to 23
       (_, i) => TIMELINE_START + i
   );
+
+  // Genuine operational issues only — overdue (>72h, same threshold as the
+  // Ticket Management aging pills), unassigned open tickets, high/urgent
+  // priority, carry-forward. No fabricated alert types.
+  const criticalAlerts = useMemo(() => {
+      const now = Date.now();
+      type Alert = { id: string; icon: React.ReactNode; label: string; sub: string; tone: 'red' | 'amber'; onClick: () => void };
+      const alerts: Alert[] = [];
+      tickets.forEach(t => {
+          if (t.status === TicketStatus.RESOLVED || t.status === TicketStatus.CANCELLED) return;
+          const hours = (now - new Date(t.createdAt).getTime()) / 36e5;
+          if (hours > 72) alerts.push({ id: `ov-${t.id}`, icon: <Clock size={12} />, label: 'Overdue', sub: `${t.id} · ${t.customerName}`, tone: 'red', onClick: () => handleItemClick('ticket', t.id) });
+          if (!t.assignedTechId) alerts.push({ id: `wa-${t.id}`, icon: <AlertCircle size={12} />, label: 'Waiting Assignment', sub: `${t.id} · ${t.customerName}`, tone: 'amber', onClick: () => handleItemClick('ticket', t.id) });
+          if (t.priority === Priority.URGENT) alerts.push({ id: `ur-${t.id}`, icon: <ShieldAlert size={12} />, label: 'Urgent', sub: `${t.id} · ${t.customerName}`, tone: 'red', onClick: () => handleItemClick('ticket', t.id) });
+          if (t.status === TicketStatus.CARRY_FORWARD) alerts.push({ id: `cft-${t.id}`, icon: <History size={12} />, label: 'Carry Forward', sub: `${t.id} · ${t.customerName}`, tone: 'amber', onClick: () => handleItemClick('ticket', t.id) });
+      });
+      activities.forEach(a => {
+          if (a.status === 'CANCELLED' || a.status === 'DONE') return;
+          const custLabel = customers.find(c => c.id === a.customerId)?.name || a.houseNumber || a.reference || a.id;
+          if (a.status === 'CARRY_FORWARD') alerts.push({ id: `cfa-${a.id}`, icon: <History size={12} />, label: 'Carry Forward', sub: `${a.reference || a.id} · ${custLabel}`, tone: 'amber', onClick: () => handleItemClick('activity', a.id) });
+          if ((a.escalationLevel || 0) > 0) alerts.push({ id: `esc-${a.id}`, icon: <ShieldAlert size={12} />, label: 'Escalated', sub: `${a.reference || a.id} · ${custLabel}`, tone: 'red', onClick: () => handleItemClick('activity', a.id) });
+      });
+      return alerts;
+  }, [tickets, activities, customers]);
+
+  // Live status per engineer — reuses the same involvement rules (primary /
+  // lead / supporting) already established for the timeline rows below,
+  // simplified to "what is this person doing right now, if anything".
+  const engineerLiveStatus = useMemo(() => {
+      return operationsStaff.map(tech => {
+          const activeActivity = activities.find(a =>
+              ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(a.status) &&
+              (a.leadTechId === tech.id || (a as any).primaryEngineerId === tech.id || ((a as any).supportingEngineerIds || []).includes(tech.id))
+          );
+          const activeTicket = !activeActivity ? tickets.find(t => t.assignedTechId === tech.id && ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(normalizeStatus(t.status))) : undefined;
+
+          let liveStatus: 'Travelling' | 'Working' | 'Available' | 'Busy' = 'Available';
+          if (activeActivity) liveStatus = activeActivity.status === 'ON_MY_WAY' ? 'Travelling' : 'Working';
+          else if (activeTicket) liveStatus = normalizeStatus(activeTicket.status) === 'ON_MY_WAY' ? 'Travelling' : 'Working';
+          else if (tech.status === 'BUSY') liveStatus = 'Busy';
+
+          const clientName = activeActivity
+              ? (customers.find(c => c.id === activeActivity.customerId)?.name || sites.find(s => s.id === activeActivity.siteId)?.name || activeActivity.houseNumber || null)
+              : activeTicket ? (customers.find(c => c.id === activeTicket.customerId)?.name || activeTicket.customerName || null) : null;
+
+          const refLabel = activeActivity ? (activeActivity.reference || activeActivity.id) : activeTicket ? activeTicket.id : null;
+
+          // ETA only computable when we have a real start time + duration (activities only)
+          const eta = activeActivity && (activeActivity as any).startedAt
+              ? new Date(new Date((activeActivity as any).startedAt).getTime() + (activeActivity.durationHours || 2) * 3600000)
+              : null;
+
+          return {
+              tech, liveStatus, clientName, refLabel, eta,
+              onClick: activeActivity ? () => handleItemClick('activity', activeActivity.id) : activeTicket ? () => handleItemClick('ticket', activeTicket.id) : undefined
+          };
+      });
+  }, [operationsStaff, activities, tickets, customers, sites]);
 
   const getSystemStatus = () => {
       if (metrics.alertsCount > 3) return { 
@@ -367,102 +432,124 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
   return (
     <div className="flex flex-col h-full bg-slate-100 overflow-hidden font-sans text-slate-900">
         
-        {/* TOP: KPI & Controls — HIDDEN in TV mode */}
+        {/* TOP: Mission Control Summary — HIDDEN in TV mode (TV cycles a dedicated Dashboard panel already) */}
         {!tvMode && (
         <div className="flex-none bg-white z-30 shadow-sm">
-            {/* KPI Row */}
-            <div className="p-4 pb-2 grid grid-cols-6 gap-4 border-b border-slate-200">
-                {/* KPI Cards */}
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
+
+            {/* Mission Control Header */}
+            <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-[#FFCC00] shrink-0" />
+                <h2 className="font-bold text-slate-900 text-[15px] tracking-tight">Mission Control</h2>
+                <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold ${statusConfig.bgColor} ${statusConfig.borderColor} ${statusConfig.textColor}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dotColor} animate-pulse`} />{statusConfig.label}
+                </span>
+              </div>
+              <div className="text-[11px] font-mono font-semibold text-slate-400 tabular-nums">
+                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · Live
+              </div>
+            </div>
+
+            {/* Live KPI Bar */}
+            <div className="px-4 pb-3 grid grid-cols-7 gap-3">
+                <div className="p-2.5 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Jobs</span>
-                        <ActivityIcon size={14} className="text-blue-500"/>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Activities Today</span>
+                        <Calendar size={13} className="text-slate-400"/>
                     </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.activeJobs}</span>
-                        <span className="text-[10px] font-bold text-emerald-600 mb-0.5">↑</span>
+                    <span className="text-xl font-bold text-slate-800 leading-none mt-1 tabular-nums">{metrics.plannedToday}</span>
+                </div>
+                <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/40 shadow-sm flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                        <span className="text-[9px] font-bold text-blue-600 uppercase tracking-wider">In Progress</span>
+                        <ActivityIcon size={13} className="text-blue-500"/>
                     </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100,(metrics.activeJobs/(metrics.plannedToday||1))*100)}%` }}></div>
+                    <span className="text-xl font-bold text-blue-700 leading-none mt-1 tabular-nums">{metrics.inProgressCount}</span>
+                </div>
+                <div className={`p-2.5 rounded-xl border shadow-sm flex flex-col justify-between ${metrics.carryForwardCount > 0 ? 'border-orange-200 bg-orange-50/40' : 'border-slate-200 bg-white'}`}>
+                    <div className="flex justify-between items-start">
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${metrics.carryForwardCount > 0 ? 'text-orange-600' : 'text-slate-400'}`}>Carry Forward</span>
+                        <History size={13} className={metrics.carryForwardCount > 0 ? 'text-orange-500' : 'text-slate-300'}/>
+                    </div>
+                    <span className={`text-xl font-bold leading-none mt-1 tabular-nums ${metrics.carryForwardCount > 0 ? 'text-orange-700' : 'text-slate-800'}`}>{metrics.carryForwardCount}</span>
+                </div>
+                <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 shadow-sm flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                        <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">Completed Today</span>
+                        <CheckCircle2 size={13} className="text-emerald-500"/>
+                    </div>
+                    <span className="text-xl font-bold text-emerald-700 leading-none mt-1 tabular-nums">{metrics.completedToday}</span>
+                </div>
+                <div className="p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/40 shadow-sm flex flex-col justify-between">
+                    <div className="flex justify-between items-start">
+                        <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider">Active Engineers</span>
+                        <Truck size={13} className="text-indigo-500"/>
+                    </div>
+                    <div className="flex items-end gap-1 mt-1">
+                      <span className="text-xl font-bold text-indigo-700 leading-none tabular-nums">{metrics.crewsOnSite}</span>
+                      <span className="text-[10px] font-medium text-indigo-400 mb-0.5">/ {operationsStaff.length}</span>
                     </div>
                 </div>
-                {/* ... KPI Cards ... */}
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
+                <div className="p-2.5 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
                     <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Teams On-Site</span>
-                        <Truck size={14} className="text-indigo-500"/>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Open Tickets</span>
+                        <TicketIcon size={13} className="text-slate-400"/>
                     </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.crewsOnSite}</span>
-                        <span className="text-[10px] font-medium text-slate-400 mb-0.5">/ {operationsStaff.length}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-indigo-500" style={{ width: `${(metrics.crewsOnSite/operationsStaff.length)*100}%` }}></div>
-                    </div>
+                    <span className="text-xl font-bold text-slate-800 leading-none mt-1 tabular-nums">{metrics.openTickets}</span>
                 </div>
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
+                <div className={`p-2.5 rounded-xl border shadow-sm flex flex-col justify-between ${metrics.urgentTickets > 0 ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-white'}`}>
                     <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Planned Today</span>
-                        <Calendar size={14} className="text-slate-400"/>
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${metrics.urgentTickets > 0 ? 'text-red-600' : 'text-slate-400'}`}>Urgent Tickets</span>
+                        <ShieldAlert size={13} className={metrics.urgentTickets > 0 ? 'text-red-600 animate-pulse' : 'text-slate-300'}/>
                     </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.plannedToday}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-slate-400" style={{ width: `${Math.min(100,(metrics.completedToday/(metrics.plannedToday||1))*100)}%` }}></div>
-                    </div>
-                </div>
-                <div className={`p-3 rounded-lg border shadow-sm flex flex-col justify-between ${metrics.alertsCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
-                    <div className="flex justify-between items-start">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${metrics.alertsCount > 0 ? 'text-red-600' : 'text-slate-400'}`}>Alerts</span>
-                        <ShieldAlert size={14} className={metrics.alertsCount > 0 ? 'text-red-600 animate-pulse' : 'text-slate-300'}/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className={`text-2xl font-bold leading-none ${metrics.alertsCount > 0 ? 'text-red-700' : 'text-slate-800'}`}>{metrics.alertsCount}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className={`h-full ${metrics.alertsCount > 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: metrics.alertsCount > 0 ? '100%' : '0%' }}></div>
-                    </div>
-                </div>
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Utilization</span>
-                        <Zap size={14} className={metrics.utilization > 80 ? 'text-amber-500' : 'text-slate-300'}/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.utilization}%</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className={`h-full ${metrics.utilization > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${metrics.utilization}%` }}></div>
-                    </div>
-                </div>
-                <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col justify-between">
-                    <div className="flex justify-between items-start">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Completed</span>
-                        <CheckCircle2 size={14} className="text-emerald-500"/>
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                        <span className="text-2xl font-bold text-slate-800 leading-none">{metrics.completedToday}</span>
-                    </div>
-                    <div className="h-1 w-full bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100,(metrics.completedToday/(metrics.plannedToday||1))*100)}%` }}></div>
-                    </div>
+                    <span className={`text-xl font-bold leading-none mt-1 tabular-nums ${metrics.urgentTickets > 0 ? 'text-red-700' : 'text-slate-800'}`}>{metrics.urgentTickets}</span>
                 </div>
             </div>
 
-            {/* Toolbar & Status Pill */}
-            <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between gap-4">
-                
-                {/* Status Pill */}
-                <div className={`flex items-center gap-3 px-4 py-1.5 rounded-full border ${statusConfig.bgColor} ${statusConfig.borderColor} transition-colors`}>
-                    <div className={`w-2 h-2 rounded-full ${statusConfig.dotColor} animate-pulse`} />
-                    <span className={`text-xs font-bold ${statusConfig.textColor}`}>{statusConfig.label}</span>
-                    <span className={`text-[10px] ${statusConfig.textColor} opacity-60 border-l border-current pl-3 ml-1`}>
-                        Last updated {currentTime.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                    </span>
-                </div>
+            {/* Critical Alerts strip — horizontal scroll, only renders genuine issues */}
+            {criticalAlerts.length > 0 && (
+              <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1"><ShieldAlert size={11}/> Critical Alerts</span>
+                {criticalAlerts.slice(0, 25).map(a => (
+                  <button key={a.id} type="button" onClick={a.onClick}
+                    className={`shrink-0 flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-lg border text-[10px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${
+                      a.tone === 'red' ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                    }`}>
+                    {a.icon}<span className="font-bold">{a.label}</span><span className="opacity-70 font-medium">{a.sub}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-                {/* Zoom Controls */}
+            {/* Engineers Live Status strip — horizontal scroll of compact cards */}
+            <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1"><Users size={11}/> Engineers</span>
+              {engineerLiveStatus.map(({ tech, liveStatus, clientName, refLabel, eta, onClick }) => {
+                const statusStyle = liveStatus === 'Working' ? 'bg-blue-500' : liveStatus === 'Travelling' ? 'bg-cyan-500' : liveStatus === 'Busy' ? 'bg-amber-500' : 'bg-emerald-500';
+                return (
+                  <button key={tech.id} type="button" onClick={onClick} disabled={!onClick}
+                    className={`shrink-0 flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${onClick ? 'cursor-pointer' : 'cursor-default'}`}>
+                    <div className="relative shrink-0">
+                      <img src={tech.avatar} className="w-7 h-7 rounded-full bg-slate-200 object-cover" alt="" />
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${statusStyle}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-slate-800 truncate max-w-[110px]">{tech.name}</span>
+                        <span className={`text-[8px] font-bold uppercase px-1 py-0.5 rounded ${liveStatus === 'Working' ? 'bg-blue-100 text-blue-700' : liveStatus === 'Travelling' ? 'bg-cyan-100 text-cyan-700' : liveStatus === 'Busy' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{liveStatus}</span>
+                      </div>
+                      <div className="text-[9px] text-slate-400 truncate max-w-[150px]">
+                        {clientName ? <>{refLabel} · {clientName}{eta ? ` · ETA ${eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</> : 'No active job'}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Zoom Controls */}
+            <div className="bg-white border-t border-slate-100 px-4 py-2 flex items-center justify-between gap-4">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operational Timeline</span>
                 <div className="flex items-center gap-2">
                     <button onClick={() => setZoomLevel(prev => Math.max(60, prev - 20))} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded border border-transparent hover:border-slate-200 transition-colors"><ZoomOut size={16}/></button>
                     <span className="text-[10px] font-mono text-slate-400 min-w-[60px] text-center font-medium">{zoomLevel} px/hr</span>
