@@ -1940,6 +1940,19 @@ useEffect(() => {
                         technicians={technicians}
                         slaAlerts={slaAlerts}
                         customers={customers}
+                        salesAppointmentRequests={salesAppointmentRequests}
+                        currentUser={currentUser}
+                        onNavigate={(type, id) => {
+                            if (type === 'ticket') {
+                                setTicketFilter({ ticketId: id });
+                                setActiveView('tickets');
+                            } else if (type === 'activity') {
+                                setTargetActivityId(id);
+                                setActiveView('planning');
+                            } else if (type === 'view') {
+                                setActiveView(id);
+                            }
+                        }}
                     />
                 )}
                 {activeView === 'users' && (
