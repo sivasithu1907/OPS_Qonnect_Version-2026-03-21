@@ -1339,11 +1339,11 @@ useEffect(() => {
             />
         )}
 
-        {/* Sidebar — solid dark anchor (no glass/blur here by design); Qonnect
+        {/* Sidebar — warm off-white anchor (no glass/blur here by design); Qonnect
             yellow reserved strictly for the active-item accent. */}
         <aside
             aria-label="Main navigation"
-            className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#15171A] border-r border-white/10 text-white z-50 transition-transform duration-200 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}
+            className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#F3F1ED] border-r border-black/[0.08] text-slate-900 z-50 transition-transform duration-200 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}
         >
             
             {/* Sidebar Header — clicking the logo navigates to Master Dashboard.
@@ -1352,7 +1352,7 @@ useEffect(() => {
             <button
                 type="button"
                 onClick={() => { setActiveView('master_dashboard'); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center border-b border-white/10 transition-all duration-200 text-left ${FOCUS_RING} ${sidebarCollapsed ? 'justify-center py-4' : 'px-5 py-4 gap-3'}`}
+                className={`w-full flex items-center border-b border-black/[0.08] transition-all duration-200 text-left ${FOCUS_RING} ${sidebarCollapsed ? 'justify-center py-4' : 'px-5 py-4 gap-3'}`}
                 title="Go to Master Dashboard"
             >
             <div className="shrink-0 transition-all duration-300 flex items-center justify-center">
@@ -1360,8 +1360,8 @@ useEffect(() => {
             </div>
             
             <div className={`flex flex-col justify-center overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`}>
-                <h1 className="text-[17px] font-semibold text-white leading-tight tracking-tight whitespace-nowrap">{APP_NAME}</h1>
-                <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest whitespace-nowrap mt-0.5">
+                <h1 className="text-[17px] font-semibold text-slate-900 leading-tight tracking-tight whitespace-nowrap">{APP_NAME}</h1>
+                <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest whitespace-nowrap mt-0.5">
                 Field Operations Platform
                 </div>
             </div>
@@ -1381,14 +1381,14 @@ useEffect(() => {
                             sections to make room for future modules. */}
                         {!sidebarCollapsed && (
                             <h3 className="px-4 mb-1.5 first:mt-1 mt-5">
-                                <span className="text-[11px] font-medium text-slate-400 uppercase tracking-[0.08em]">
+                                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-[0.08em]">
                                     {cat}
                                 </span>
                             </h3>
                         )}
                         
                         {/* Collapsed Divider */}
-                        {sidebarCollapsed && <div className="border-b border-white/10 mb-3 mx-4 mt-3" />}
+                        {sidebarCollapsed && <div className="border-b border-black/[0.08] mb-3 mx-4 mt-3" />}
 
                         <div className="space-y-1.5">
                             {items.map(item => {
@@ -1409,15 +1409,15 @@ useEffect(() => {
                                         }}
                                         className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm transition-all duration-200 rounded-[10px] border-l-[3px] ${FOCUS_RING} ${
                                             isActive 
-                                            ? 'border-[#FFCC00] bg-[#FFCC00]/[0.12] text-white font-semibold' 
-                                            : 'border-transparent font-medium text-white/80 hover:bg-white/5 hover:text-white'
+                                            ? 'border-[#FFCC00] bg-[#FFCC00]/[0.16] text-slate-900 font-semibold' 
+                                            : 'border-transparent font-medium text-slate-700 hover:bg-black/[0.04] hover:text-slate-900'
                                         }`}
                                     >
                                         <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center w-full' : 'w-full'}`}>
                                             <span className={`shrink-0 flex items-center justify-center transition-colors rounded-md ${
                                                 isActive
-                                                    ? 'text-[#FFCC00] bg-[#FFCC00]/10 p-1.5 -m-1.5'
-                                                    : 'text-slate-400 group-hover:text-slate-200'
+                                                    ? 'text-slate-900 bg-[#FFCC00]/25 p-1.5 -m-1.5'
+                                                    : 'text-slate-500 group-hover:text-slate-700'
                                             }`}>
                                                 {item.icon}
                                             </span>
@@ -1431,7 +1431,7 @@ useEffect(() => {
                                                     {activeUserNotifications.length}
                                                 </span>
                                             ) : (
-                                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#15171A]" />
+                                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#F3F1ED]" />
                                             )
                                         )}
 
