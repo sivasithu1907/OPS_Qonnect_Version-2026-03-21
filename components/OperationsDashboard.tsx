@@ -513,26 +513,6 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                 </div>
             </div>
 
-            {/* Critical Alerts strip — horizontal scroll, only renders genuine issues */}
-            {criticalAlerts.length > 0 && (
-              <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1"><ShieldAlert size={11}/> Critical Alerts</span>
-                {criticalAlerts.slice(0, 25).map(a => (
-                  <button key={a.id} type="button" onClick={a.onClick}
-                    className={`shrink-0 flex items-center gap-2 pl-2.5 pr-3 py-2 rounded-lg border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${
-                      a.tone === 'red' ? 'bg-red-50 border-red-200 hover:bg-red-100' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-                    }`}>
-                    <span className={a.tone === 'red' ? 'text-red-500 shrink-0' : 'text-amber-500 shrink-0'}>{a.icon}</span>
-                    <span className={`text-[10px] font-bold uppercase tracking-wide shrink-0 ${a.tone === 'red' ? 'text-red-700' : 'text-amber-700'}`}>{a.label}</span>
-                    <span className={`w-px h-3 shrink-0 ${a.tone === 'red' ? 'bg-red-200' : 'bg-amber-200'}`} />
-                    <span className={`text-[10px] font-mono font-semibold shrink-0 ${a.tone === 'red' ? 'text-red-600' : 'text-amber-600'}`}>{a.ref}</span>
-                    <span className={`w-px h-3 shrink-0 ${a.tone === 'red' ? 'bg-red-200' : 'bg-amber-200'}`} />
-                    <span className={`text-[10px] font-medium truncate max-w-[130px] ${a.tone === 'red' ? 'text-red-800' : 'text-amber-800'}`}>{a.client}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
             {/* Engineers Live Status strip — horizontal scroll of compact cards */}
             <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1"><Users size={11}/> Engineers</span>
