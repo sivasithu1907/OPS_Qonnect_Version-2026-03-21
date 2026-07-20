@@ -333,6 +333,19 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       };
   }, [baseTickets, searchTerm, priorityFilter, statusFilter, assigneeFilter, technicians]);
 
+  // Header operational summary — always reflects ALL tickets, not whatever
+  // the list is currently filtered to, so it stays a stable "state of the
+  // world" reading. Overdue uses the same >72h threshold as the Stalled
+  // aging pill above (and the same one used on the Service Dashboard).
+  const headerSummary = useMemo(() => {
+    const now = Date.now();
+    const open = tickets.filter(t => t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
+    const overdue = open.filter(t => (now - new Date(t.createdAt).getTime()) / 36e5 > 72);
+    const assigned = open.filter(t => !!t.assignedTechId);
+    const unassigned = open.filter(t => !t.assignedTechId);
+    return { openCount: open.length, overdueCount: overdue.length, assignedCount: assigned.length, unassignedCount: unassigned.length };
+  }, [tickets]);
+
   const handleClearLocalFilters = () => {
       setSearchTerm('');
       setAgingFilter(null);
@@ -399,6 +412,30 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     }
   };
   const getFormValue = (field: keyof NonNullable<typeof editForm>) => editForm ? editForm[field] : '';
+
+  // Shared status badge — same colour mapping already used for tickets
+  // throughout this file, now centralised and paired with an icon so status
+  // is never conveyed by colour alone.
+  const STATUS_META: Record<string, { icon: React.ReactNode; badge: string }> = {
+    NEW:           { icon: <AlertCircle size={11} />,  badge: 'bg-slate-100 text-slate-600' },
+    OPEN:          { icon: <Clock size={11} />,        badge: 'bg-blue-100 text-blue-700' },
+    ASSIGNED:      { icon: <UserCheck size={11} />,    badge: 'bg-purple-100 text-purple-700' },
+    IN_PROGRESS:   { icon: <RefreshCw size={11} />,     badge: 'bg-amber-100 text-amber-700' },
+    ON_MY_WAY:     { icon: <MapPin size={11} />,        badge: 'bg-cyan-100 text-cyan-700' },
+    ARRIVED:       { icon: <MapPin size={11} />,        badge: 'bg-indigo-100 text-indigo-700' },
+    CARRY_FORWARD: { icon: <History size={11} />,       badge: 'bg-orange-100 text-orange-700' },
+    RESOLVED:      { icon: <CheckCircle2 size={11} />,  badge: 'bg-emerald-100 text-emerald-700' },
+    CANCELLED:     { icon: <X size={11} />,             badge: 'bg-red-100 text-red-600' },
+  };
+  const StatusBadge: React.FC<{ status: string; className?: string }> = ({ status, className = '' }) => {
+    const meta = STATUS_META[status] || { icon: <Clock size={11} />, badge: 'bg-slate-100 text-slate-600' };
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap ${meta.badge} ${className}`}>
+        {meta.icon}{status.replace(/_/g, ' ')}
+      </span>
+    );
+  };
+
   
   const updateField = (field: keyof NonNullable<typeof editForm>, value: any) => {
       if (!selectedTicket) return;
@@ -759,30 +796,59 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   return (
     <div className="flex flex-col h-[calc(100vh-4.5rem)] overflow-hidden bg-slate-50">
 
-      {/* ── Full-width top bar ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 shrink-0">
-        {/* Title + view toggle */}
-        <div className="flex items-center gap-3 shrink-0">
-          <h2 className="font-bold text-slate-900 text-base">
-            {activeFilter ? 'Filtered' : viewMode === 'active' ? 'Active Tickets' : 'History'}
-          </h2>
-          <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{filteredTickets.length}</span>
+      {/* ── Header: title + operational summary ── */}
+      <div className="bg-white border-b border-slate-200 px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="font-bold text-slate-900 text-xl">
+              {activeFilter ? 'Filtered Tickets' : viewMode === 'active' ? 'Active Tickets' : 'History'}
+            </h2>
+            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">{filteredTickets.length}</span>
+          </div>
           {!activeFilter && (
-            <div className="flex bg-slate-100 p-0.5 rounded-lg">
-              <button onClick={() => setViewMode('active')} className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${viewMode==='active' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}>Active</button>
-              <button onClick={() => setViewMode('history')} className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all flex items-center gap-1 ${viewMode==='history' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'}`}><History size={11}/>History</button>
-            </div>
+            <button type="button" onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl hover:bg-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-offset-1">
+              <Plus size={16}/> New Ticket
+            </button>
           )}
         </div>
 
+        {/* Operational Summary — reflects ALL tickets, independent of the list's local filters */}
+        {!activeFilter && (
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
+              <Clock size={12} className="text-blue-500" /> {headerSummary.openCount} Open
+            </span>
+            <span className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border ${headerSummary.overdueCount > 0 ? 'text-red-700 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
+              <AlertTriangle size={12} className={headerSummary.overdueCount > 0 ? 'text-red-600' : 'text-slate-400'} /> {headerSummary.overdueCount} Overdue
+            </span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
+              <UserCheck size={12} className="text-purple-500" /> {headerSummary.assignedCount} Assigned
+            </span>
+            <span className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 border ${headerSummary.unassignedCount > 0 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
+              <AlertCircle size={12} className={headerSummary.unassignedCount > 0 ? 'text-amber-600' : 'text-slate-400'} /> {headerSummary.unassignedCount} Unassigned
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Filters row ── */}
+      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-3 flex-wrap shrink-0">
+        {!activeFilter && (
+          <div className="flex bg-slate-100 p-0.5 rounded-xl shrink-0">
+            <button type="button" onClick={() => setViewMode('active')} className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode==='active' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}>Active</button>
+            <button type="button" onClick={() => setViewMode('history')} className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${viewMode==='history' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500'}`}><History size={11}/>History</button>
+          </div>
+        )}
+
         {/* Search */}
         {!activeFilter && (
-          <div className="relative flex-1 max-w-sm">
-            <SearchIcon size={14} className="absolute left-3 top-2.5 text-slate-400" />
+          <div className="relative flex-1 max-w-sm min-w-[180px]">
+            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" placeholder="Search tickets, client, phone..."
               value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-8 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 bg-white" />
-            {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-2 top-2 text-slate-400"><X size={13}/></button>}
+              className="w-full pl-8 pr-8 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 bg-white" />
+            {searchTerm && <button type="button" onClick={() => setSearchTerm('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X size={13}/></button>}
           </div>
         )}
 
@@ -790,8 +856,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
         {!activeFilter && (
           <div className="flex gap-1.5 shrink-0">
             {(['Fresh','Warning','Stalled'] as const).map(type => (
-              <button key={type} onClick={() => setAgingFilter(agingFilter===type ? null : type)}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+              <button key={type} type="button" onClick={() => setAgingFilter(agingFilter===type ? null : type)}
+                aria-pressed={agingFilter === type}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${
                   agingFilter===type
                     ? type==='Fresh' ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
                     : type==='Warning' ? 'bg-amber-100 text-amber-700 border-amber-300'
@@ -806,7 +873,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
         {/* Dropdowns */}
         {!activeFilter && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
             {[
               { val: priorityFilter, set: setPriorityFilter, opts: Object.values(Priority), label: 'Priority' },
               { val: statusFilter,   set: setStatusFilter,   opts: [TicketStatus.NEW,TicketStatus.OPEN,TicketStatus.ASSIGNED,TicketStatus.IN_PROGRESS,TicketStatus.CARRY_FORWARD,TicketStatus.RESOLVED,TicketStatus.CANCELLED], label: 'Status' },
@@ -814,39 +881,31 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
             ].map((f,i) => (
               <div key={i} className="relative">
                 <select value={f.val} onChange={e => f.set(e.target.value as any)}
-                  className="appearance-none bg-white border border-slate-200 rounded-lg py-1.5 pl-2 pr-6 text-[11px] font-medium text-slate-600 focus:outline-none focus:border-slate-400 cursor-pointer">
+                  className="appearance-none bg-white border border-slate-200 rounded-xl py-1.5 pl-2 pr-6 text-[11px] font-medium text-slate-600 focus:outline-none focus:border-slate-400 cursor-pointer">
                   <option value="ALL">All {f.label}s</option>
                   {f.opts.map((o:any) => <option key={f.valKey?o[f.valKey]:o} value={f.valKey?o[f.valKey]:o}>{toTitleCase(f.nameKey?o[f.nameKey]:String(o))}</option>)}
                 </select>
                 <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
             ))}
-            {hasActiveLocalFilters && <button onClick={handleClearLocalFilters} className="text-[10px] text-red-500 font-bold px-2 py-1.5 bg-red-50 rounded-lg border border-red-100 hover:bg-red-100">✕ Clear</button>}
+            {hasActiveLocalFilters && <button type="button" onClick={handleClearLocalFilters} className="text-[10px] text-red-500 font-bold px-2 py-1.5 bg-red-50 rounded-xl border border-red-100 hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]">✕ Clear</button>}
           </div>
         )}
 
-        {/* Spacer + New button */}
-        <div className="ml-auto flex items-center gap-2">
-          {activeFilter && (
-            <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
-              <Filter size={12}/> {activeFilter.description || 'Filtered'}
-              <button onClick={onClearFilter}><X size={12}/></button>
-            </div>
-          )}
-          {!activeFilter && (
-            <button onClick={() => setIsCreateModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors">
-              <Plus size={14}/> New Ticket
-            </button>
-          )}
-        </div>
+        {/* Active-filter banner */}
+        {activeFilter && (
+          <div className="ml-auto flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100">
+            <Filter size={12}/> {activeFilter.description || 'Filtered'}
+            <button type="button" onClick={onClearFilter} aria-label="Clear filter" className="focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] rounded"><X size={12}/></button>
+          </div>
+        )}
       </div>
 
       {/* ── Body: list + detail ── */}
       <div className="flex flex-1 overflow-hidden">
 
       {/* Left List */}
-      <div className="w-[360px] shrink-0 border-r border-slate-200 flex flex-col bg-white">
+      <div className={`${selectedTicketId ? 'hidden' : 'flex w-full'} lg:flex lg:w-[360px] lg:shrink-0 border-r border-slate-200 flex-col bg-white`}>
         <div className="overflow-y-auto flex-1">
              
 
@@ -854,7 +913,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               <div className="flex flex-col items-center justify-center h-48 text-slate-400">
                   <Filter size={32} className="mb-2 opacity-50"/>
                   <p className="text-sm">No tickets found</p>
-                  {hasActiveLocalFilters && <button onClick={handleClearLocalFilters} className="mt-2 text-xs text-blue-500 hover:underline">Clear Filters</button>}
+                  {hasActiveLocalFilters && <button type="button" onClick={handleClearLocalFilters} className="mt-2 text-xs text-blue-500 hover:underline">Clear Filters</button>}
               </div>
           ) : (
             <div>
@@ -868,28 +927,46 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 {group.tickets.map(ticket => {
                 const health = getTicketHealth(ticket);
                 const healthColor = getHealthColor(health);
+                const engineer = technicians.find(t => t.id === ticket.assignedTechId);
+                const siteLabel = ticket.houseNumber && !ticket.houseNumber.startsWith('http')
+                    ? ticket.houseNumber
+                    : (ticket.locationUrl || ticket.houseNumber?.startsWith('http')) ? 'Map linked' : null;
+                const ageMs = Date.now() - new Date(ticket.createdAt).getTime();
+                const ageHours = Math.floor(ageMs / 3600000);
+                const ageLabel = ageHours < 1 ? '<1h' : ageHours < 24 ? `${ageHours}h` : `${Math.floor(ageHours / 24)}d`;
                 return (
-                    <div key={ticket.id} onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }} className={`p-3.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${
+                    <button
+                        type="button"
+                        key={ticket.id}
+                        onClick={() => { setSelectedTicketId(ticket.id); onOpenTicket?.(ticket); }}
+                        aria-current={selectedTicketId === ticket.id ? 'true' : undefined}
+                        className={`w-full text-left p-3.5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] focus-visible:ring-inset ${
                         selectedTicketId === ticket.id ? 'bg-blue-50/50 border-l-4 border-l-blue-500' :
                         ticket.priority === 'URGENT' ? 'border-l-4 border-l-red-500 bg-red-50/20' :
                         ticket.priority === 'HIGH' ? 'border-l-4 border-l-orange-400 bg-orange-50/10' :
                         ''}`}>
-                        <div className="flex justify-between items-start mb-1">
-                            <span className="font-medium text-slate-900">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                                              ticket.status === 'NEW'           ? 'bg-slate-100 text-slate-600' :
-                                              ticket.status === 'OPEN'          ? 'bg-blue-100 text-blue-700' :
-                                              ticket.status === 'ASSIGNED'      ? 'bg-purple-100 text-purple-700' :
-                                              ticket.status === 'IN_PROGRESS'   ? 'bg-amber-100 text-amber-700' :
-                                              ticket.status === 'ON_MY_WAY'     ? 'bg-cyan-100 text-cyan-700' :
-                                              ticket.status === 'ARRIVED'       ? 'bg-indigo-100 text-indigo-700' :
-                                              ticket.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                                              ticket.status === 'RESOLVED'      ? 'bg-emerald-100 text-emerald-700' :
-                                              ticket.status === 'CANCELLED'     ? 'bg-red-100 text-red-600' :
-                                              'bg-slate-100 text-slate-600'
-                                            }`}>{ticket.status.replace(/_/g, ' ')}</span>
+                        <div className="flex justify-between items-start gap-2 mb-1.5">
+                            <span className="font-semibold text-slate-900 truncate">{customers?.find(c => c.id === ticket.customerId)?.name || ticket.customerName}</span>
+                            <StatusBadge status={ticket.status} className="shrink-0" />
                         </div>
-                        <div className="text-sm text-slate-500 mb-2 truncate"><span className="text-xs text-slate-400 font-medium">{ticket.id}</span> • {(safeString(ticket.type) || '—')} • {ticket.category} • {safeString(ticket.phoneNumber)}</div>
+                        <div className="text-xs text-slate-500 mb-2.5 truncate">
+                            <span className="text-slate-400 font-mono font-medium">{ticket.id}</span> · {(safeString(ticket.type) || '—')} · {ticket.category}
+                        </div>
+
+                        {/* Engineer + Site — previously missing from the card entirely */}
+                        <div className="flex items-center gap-3 mb-2 text-xs text-slate-600">
+                            <span className="flex items-center gap-1 min-w-0">
+                                <User size={11} className={engineer ? 'text-slate-400' : 'text-amber-500'} />
+                                <span className={`truncate ${engineer ? '' : 'text-amber-600 font-medium'}`}>{engineer?.name || 'Unassigned'}</span>
+                            </span>
+                            {siteLabel && (
+                                <span className="flex items-center gap-1 min-w-0 text-slate-400">
+                                    <MapPin size={11} className="shrink-0" />
+                                    <span className="truncate">{siteLabel}</span>
+                                </span>
+                            )}
+                        </div>
+
                         <div className="flex justify-between items-center text-xs">
                             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600"><span className={`w-1.5 h-1.5 rounded-full ${getPriorityDot(ticket.priority)}`}/>{toTitleCase(ticket.priority)}</span>
                             <div className="flex items-center gap-2">
@@ -906,10 +983,12 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                 {health && (
                                     <div className={`w-2.5 h-2.5 rounded-full ${healthColor} shadow-sm border border-white`} title={`${health?.toUpperCase()} Status`} />
                                 )}
-                                <span className="text-slate-400">{new Date(ticket.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span className="text-slate-400" title="Age since created">{ageLabel} old</span>
+                                <span className="text-slate-300">·</span>
+                                <span className="text-slate-400" title="Last updated">{new Date(ticket.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                             </div>
                         </div>
-                    </div>
+                    </button>
                 );
             })}
               </div>
@@ -923,32 +1002,22 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       {selectedTicket && editForm ? (
         <div className="flex-1 flex flex-col bg-white">
           {/* ── Unified Detail Header ── */}
-          <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between bg-white shrink-0">
+          <div className="px-6 py-5 border-b border-slate-200 flex items-start justify-between bg-white shrink-0">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-[10px] font-mono text-slate-400">{selectedTicket.id}</span>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                  selectedTicket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-700' :
-                  selectedTicket.status === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
-                  selectedTicket.status === 'ON_MY_WAY' ? 'bg-cyan-100 text-cyan-700' :
-                  selectedTicket.status === 'ARRIVED' ? 'bg-indigo-100 text-indigo-700' :
-                  selectedTicket.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                  selectedTicket.status === 'CANCELLED' ? 'bg-red-100 text-red-600' :
-                  selectedTicket.status === 'ASSIGNED' ? 'bg-purple-100 text-purple-700' :
-                  selectedTicket.status === 'NEW' ? 'bg-slate-100 text-slate-600' :
-                  'bg-blue-100 text-blue-700'
-                }`}>{selectedTicket.status.replace(/_/g,' ')}</span>
+                <StatusBadge status={selectedTicket.status} />
                 {(() => { const h = getTicketHealth(selectedTicket); const hc = getHealthColor(h); return h ? <span className={`w-2 h-2 rounded-full ${hc}`} title={h}/> : null; })()}
               </div>
-              <h3 className="font-bold text-lg text-slate-900 truncate">{editForm.customerName}</h3>
-              <p className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(editForm.phoneNumber)} · {editForm.category}</p>
+              <h3 className="font-bold text-xl text-slate-900 truncate">{editForm.customerName}</h3>
+              <p className="text-xs text-slate-500 mt-1">{formatPhoneDisplay(editForm.phoneNumber)} · {editForm.category}</p>
             </div>
             <div className="flex items-center gap-2 ml-4 shrink-0">
-              <button onClick={() => setPanelMode(panelMode==='edit'?'view':'edit')}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg border transition-all ${panelMode==='edit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+              <button type="button" onClick={() => setPanelMode(panelMode==='edit'?'view':'edit')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00] ${panelMode==='edit' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
                 <Edit size={12}/> {panelMode==='edit' ? 'Editing' : 'Edit'}
               </button>
-              <button onClick={() => setSelectedTicketId(null)} className="p-2 hover:bg-slate-100 rounded-lg"><X size={15} className="text-slate-400"/></button>
+              <button type="button" onClick={() => setSelectedTicketId(null)} aria-label="Close ticket detail" className="p-2 hover:bg-slate-100 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCC00]"><X size={15} className="text-slate-400"/></button>
             </div>
           </div>
 
@@ -1057,9 +1126,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                               <div className={`rounded-xl p-3 border ${cardBg}`}>
                                 <div className="flex justify-between items-center mb-1.5"><span className={`font-bold text-xs ${hdrColor}`}>Visit {i + 1} — {fD(v.date)}</span><span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${badgeStyle}`}>{(v.status || '').replace(/_/g, ' ')}</span></div>
                                 <div className="text-[10px] text-slate-500">{fT(v.startedAt)} → {v.completedAt ? fT(v.completedAt) : 'ongoing'}{dur !== null ? ` (${dur >= 60 ? Math.floor(dur/60)+'h '+dur%60+'m' : dur+'m'})` : ''}</div>
-                                {v.remarks && <div className="bg-white/60 rounded-lg p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
-                                {v.completionNote && <div className="bg-emerald-50/50 rounded-lg p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
-                                {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-lg p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
+                                {v.remarks && <div className="bg-white/60 rounded-xl p-2 mt-2 border border-white/80"><div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Remark</div><p className="text-[11px] text-slate-700 whitespace-pre-wrap">{v.remarks}</p></div>}
+                                {v.completionNote && <div className="bg-emerald-50/50 rounded-xl p-2 mt-1.5 border border-emerald-100"><div className="text-[8px] font-bold text-emerald-600 uppercase mb-0.5">Completion</div><p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{v.completionNote}</p></div>}
+                                {v.carryForwardReason && isCF && <div className="bg-orange-50/50 rounded-xl p-2 mt-1.5 border border-orange-200"><div className="text-[8px] font-bold text-orange-600 uppercase mb-0.5">CF reason</div><p className="text-[11px] text-orange-800 whitespace-pre-wrap">{v.carryForwardReason}</p></div>}
                               </div>
                             </div>
                           );
@@ -1067,7 +1136,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                       </div>
                     </div>
                   )}
-                  {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-lg border cursor-pointer hover:shadow-md" onClick={() => { const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';ov.onclick=()=>ov.remove();const im=document.createElement('img');im.src=p.url||p;im.style.cssText='max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';ov.appendChild(im);document.body.appendChild(ov); }} />)}</div></div>}
+                  {photos.length > 0 && <div><div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({photos.length})</div><div className="grid grid-cols-4 gap-2">{photos.map((p: any, i: number) => <img key={i} src={p.url || p} alt="" className="w-full h-20 object-cover rounded-xl border cursor-pointer hover:shadow-md" onClick={() => { const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer';ov.onclick=()=>ov.remove();const im=document.createElement('img');im.src=p.url||p;im.style.cssText='max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px';ov.appendChild(im);document.body.appendChild(ov); }} />)}</div></div>}
                   {selectedTicket.odooLink && <div className="flex items-center gap-2 text-xs text-slate-500 p-3 bg-slate-50 rounded-xl border border-slate-100"><ExternalLink size={10} /><span className="text-slate-400">Odoo</span><a href={selectedTicket.odooLink} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline truncate font-medium">{selectedTicket.odooLink}</a></div>}
                   </div>{/* end left col */}
 
@@ -1077,14 +1146,14 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Priority</label>
-                      <select value={editForm?.priority || ''} onChange={e => updateField('priority', e.target.value)} className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
+                      <select value={editForm?.priority || ''} onChange={e => updateField('priority', e.target.value)} className="w-full border border-slate-200 rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
                         {Object.values(Priority).map(p => <option key={p} value={p}>{toTitleCase(p)}</option>)}
                       </select>
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Assign Engineer</label>
-                      <select value={editForm?.assignedTechId || ''} onChange={e => updateField('assignedTechId', e.target.value)} className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
+                      <select value={editForm?.assignedTechId || ''} onChange={e => updateField('assignedTechId', e.target.value)} className="w-full border border-slate-200 rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
                         <option value="">— Unassigned —</option>
                         <optgroup label="Team Leads">{teamLeads.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
                         <optgroup label="Field Engineers">{fieldEngineers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
@@ -1096,19 +1165,19 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                       <input type="datetime-local"
                         value={toLocalDatetimeInput(editForm?.appointmentTime || '')}
                         onChange={e => updateField('appointmentTime', fromLocalDatetimeInput(e.target.value))}
-                        className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                        className="w-full border border-slate-200 rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Type</label>
-                      <select value={editForm?.type || ''} onChange={e => updateField('type', e.target.value)} className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
+                      <select value={editForm?.type || ''} onChange={e => updateField('type', e.target.value)} className="w-full border border-slate-200 rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400">
                         {Object.values(TicketType).map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Category</label>
-                      <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[40px]">
+                      <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-xl bg-white min-h-[40px]">
                         {TICKET_CATEGORIES.map(cat => {
                           const cats = ((editForm?.category || '')).split(', ').filter(Boolean);
                           const sel = cats.includes(cat);
@@ -1116,7 +1185,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             const curr = ((editForm?.category||'')).split(', ').filter(Boolean);
                             const next = sel ? curr.filter(x => x!==cat) : [...curr, cat];
                             updateField('category', next.join(', ')||'Other');
-                          }} className={`text-[10px] px-2 py-1 rounded-lg border transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{cat}</button>;
+                          }} className={`text-[10px] px-2 py-1 rounded-xl border transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{cat}</button>;
                         })}
                       </div>
                     </div>
@@ -1124,24 +1193,24 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">House / Building No.</label>
                       <input type="text" value={editForm?.houseNumber || ''} onChange={e => updateField('houseNumber', e.target.value)}
-                        placeholder="Villa 10" className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                        placeholder="Villa 10" className="w-full border border-slate-200 rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Location URL</label>
                       <input type="text" value={editForm?.locationUrl || ''} onChange={e => updateField('locationUrl', e.target.value)}
-                        placeholder="https://maps.google..." className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                        placeholder="https://maps.google..." className="w-full border border-slate-200 rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Odoo Link</label>
                       <input type="text" value={editForm?.odooLink || ''} onChange={e => updateField('odooLink', e.target.value)}
-                        placeholder="https://odoo..." className="w-full border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
+                        placeholder="https://odoo..." className="w-full border border-slate-200 rounded-xl py-2 px-3 text-sm bg-white focus:outline-none focus:border-slate-400" />
                     </div>
 
                     {hasUnsavedChanges() && (
-                      <button onClick={() => { handleSaveChanges(); }}
-                        className="w-full py-2.5 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 text-sm flex items-center justify-center gap-2">
+                      <button type="button" onClick={() => { handleSaveChanges(); }}
+                        className="w-full py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 text-sm flex items-center justify-center gap-2">
                         <Save size={14}/> Save Changes
                       </button>
                     )}
@@ -1162,7 +1231,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 </h3>
 
                 {linkedCustomer ? (
-                    <div className="flex justify-between items-start p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
+                    <div className="flex justify-between items-start p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                         <div>
                             <div className="font-bold text-slate-900 text-sm">{linkedCustomer.name}</div>
                             <div className="text-xs text-emerald-700 font-mono mt-1">{formatPhoneDisplay(linkedCustomer.phone)}</div>
@@ -1181,7 +1250,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between p-3 bg-slate-100 border border-slate-200 rounded-lg">
+                        <div className="flex items-center justify-between p-3 bg-slate-100 border border-slate-200 rounded-xl">
                             <div>
                                 <div className="text-[10px] font-bold text-slate-500 uppercase">Detected Contact</div>
                                 <div className="font-mono text-sm font-bold text-slate-700">{formatPhoneDisplay(editForm?.phoneNumber || '') || "No Phone"}</div>
@@ -1190,7 +1259,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         </div>
 
                         {potentialMatch && (
-                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center animate-in fade-in">
+                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex justify-between items-center animate-in fade-in">
                                 <div>
                                     <div className="text-[10px] text-blue-600 font-bold mb-1 flex items-center gap-1"><Sparkles size={10}/> Suggestion</div>
                                     <div className="text-sm font-bold text-slate-800">{potentialMatch.name}</div>
@@ -1202,7 +1271,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                         if (editForm && !editForm.houseNumber && potentialMatch.buildingNumber) updateField('houseNumber', potentialMatch.buildingNumber);
                                         if (editForm && !editForm.locationUrl && potentialMatch.address) updateField('locationUrl', potentialMatch.address);
                                     }}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors shadow-sm"
                                 >
                                     Link
                                 </button>
@@ -1211,14 +1280,14 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
                         {clientLinkMode === 'view' && (
                             <div className="flex gap-2">
-                                <button onClick={() => setClientLinkMode('search')} className="flex-1 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Link Existing</button>
-                                <button onClick={() => setClientLinkMode('create')} className="flex-1 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors">Create New</button>
+                                <button type="button" onClick={() => setClientLinkMode('search')} className="flex-1 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">Link Existing</button>
+                                <button type="button" onClick={() => setClientLinkMode('create')} className="flex-1 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors">Create New</button>
                             </div>
                         )}
 
                         {clientLinkMode === 'search' && (
                             <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                <div className="bg-slate-50 p-2 rounded-xl border border-slate-200">
                                     <CustomerSelector 
                                         customers={customers}
                                         onSelect={(c) => {
@@ -1231,15 +1300,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                         onCreateNew={() => {}}
                                     />
                                 </div>
-                                <button onClick={() => setClientLinkMode('view')} className="text-xs text-slate-500 hover:text-slate-800 w-full text-center hover:underline">Cancel Search</button>
+                                <button type="button" onClick={() => setClientLinkMode('view')} className="text-xs text-slate-500 hover:text-slate-800 w-full text-center hover:underline">Cancel Search</button>
                             </div>
                         )}
 
                         {clientLinkMode === 'create' && (
-                            <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-lg animate-in fade-in zoom-in-95 duration-200">
+                            <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-xl animate-in fade-in zoom-in-95 duration-200">
                                 <div className="flex items-center justify-between">
                                     <h4 className="text-xs font-bold text-slate-800">New Client Profile</h4>
-                                    <button onClick={() => setClientLinkMode('view')}><X size={14} className="text-slate-400 hover:text-slate-600"/></button>
+                                    <button type="button" onClick={() => setClientLinkMode('view')}><X size={14} className="text-slate-400 hover:text-slate-600"/></button>
                                 </div>
                                 <input 
                                     value={newClientName}
@@ -1250,7 +1319,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                 <div className="text-xs text-slate-500">Phone: {formatPhoneDisplay(editForm?.phoneNumber || '')}</div>
                                 <button 
                                     onClick={handleInlineCreateClient}
-                                    className="w-full bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-emerald-700"
+                                    className="w-full bg-emerald-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-700"
                                 >
                                     Create & Link
                                 </button>
@@ -1273,7 +1342,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 )}
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
-                  <span className={`block w-full px-3 py-2 rounded-lg text-sm font-bold text-center border ${
+                  <span className={`block w-full px-3 py-2 rounded-xl text-sm font-bold text-center border ${
                     selectedTicket?.status === TicketStatus.NEW           ? 'bg-slate-100 text-slate-700 border-slate-300' :
                     selectedTicket?.status === TicketStatus.OPEN          ? 'bg-blue-50 text-blue-700 border-blue-200' :
                     selectedTicket?.status === TicketStatus.ASSIGNED      ? 'bg-purple-50 text-purple-700 border-purple-200' :
@@ -1311,7 +1380,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Type</label><select value={getFormValue('type') as TicketType} onChange={(e) => updateField('type', e.target.value)} className={INPUT_STYLES}>{Object.values(TicketType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                 <div><label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Category</label>
-                  <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[36px]">
+                  <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-xl bg-white min-h-[36px]">
                     {TICKET_CATEGORIES.map(c => {
                       const cats = ((getFormValue('category') as string) || '').split(', ').filter(Boolean);
                       const sel = cats.includes(c);
@@ -1319,7 +1388,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         const curr = ((getFormValue('category') as string) || '').split(', ').filter(Boolean);
                         const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                         updateField('category', next.join(', ') || 'Other');
-                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
+                      }} className={`text-[11px] px-2.5 py-1.5 rounded-xl border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                     })}
                   </div>
                 </div>
@@ -1376,7 +1445,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               <select
                 value={editForm?.assignedTechId || ''}
                 onChange={e => { updateField('assignedTechId', e.target.value); }}
-                className="appearance-none text-xs font-bold pl-3 pr-7 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer">
+                className="appearance-none text-xs font-bold pl-3 pr-7 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:border-slate-400 cursor-pointer">
                 <option value="">Unassigned</option>
                 {teamLeads.map(t => <option key={t.id} value={t.id}>TL: {t.name}</option>)}
                 {fieldEngineers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -1384,35 +1453,35 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
               <UserCheck size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
             {/* AI Analyse */}
-            <button onClick={handleAIAnalysis} disabled={isAnalyzing}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-50">
+            <button type="button" onClick={handleAIAnalysis} disabled={isAnalyzing}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-purple-600 bg-purple-50 border border-purple-200 rounded-xl hover:bg-purple-100 transition-colors disabled:opacity-50">
               <Sparkles size={12}/> {isAnalyzing ? 'Analysing...' : 'AI Analyse'}
             </button>
             {/* Save — only when editing and has changes */}
             {panelMode === 'edit' && hasUnsavedChanges() && (
-              <button onClick={() => { handleSaveChanges(); setPanelMode('view'); }}
+              <button type="button" onClick={() => { handleSaveChanges(); setPanelMode('view'); }}
                 disabled={!isDetailValid()}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:bg-slate-300 transition-colors">
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:bg-slate-300 transition-colors">
                 <Save size={12}/> Save Changes
               </button>
             )}
             {/* Cancel ticket */}
             {selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED && (
-              <button onClick={() => setShowCancelConfirm(true)}
-                className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors">
+              <button type="button" onClick={() => setShowCancelConfirm(true)}
+                className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 transition-colors">
                 <X size={12}/> Cancel Ticket
               </button>
             )}
             {/* Admin override */}
-            <button onClick={() => { setShowAdminOverride(true); setOverrideStatus(selectedTicket?.status||''); setOverrideStartedAt(''); setOverrideCompletedAt(''); setOverrideNote(''); }}
-              className={`${selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED ? '' : 'ml-auto'} flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors`}>
+            <button type="button" onClick={() => { setShowAdminOverride(true); setOverrideStatus(selectedTicket?.status||''); setOverrideStartedAt(''); setOverrideCompletedAt(''); setOverrideNote(''); }}
+              className={`${selectedTicket.status !== TicketStatus.RESOLVED && selectedTicket.status !== TicketStatus.CANCELLED ? '' : 'ml-auto'} flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 transition-colors`}>
               Override
             </button>
           </div>
 
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400">
+        <div className="hidden lg:flex flex-1 items-center justify-center bg-slate-50 text-slate-400">
           <div className="text-center">
             <MoreHorizontal size={48} className="mx-auto mb-2 opacity-50" />
             <p>Select a ticket to view details</p>
@@ -1427,7 +1496,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                   <h3 className="font-bold text-lg text-slate-900">Create New Ticket</h3>
-                  <button onClick={() => setIsCreateModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+                  <button type="button" onClick={() => setIsCreateModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
              </div>
              
              <form onSubmit={handleCreateSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -1435,7 +1504,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                  {/* Auto-filled Date */}
                  <div className="space-y-1">
                      <label className="text-xs font-semibold text-slate-500 uppercase">Created Date</label>
-                     <div className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 text-slate-600 text-sm font-medium">
+                     <div className="w-full bg-slate-100 border border-slate-200 rounded-xl p-2 text-slate-600 text-sm font-medium">
                          {createForm.createdDateDisplay}
                      </div>
                  </div>
@@ -1515,7 +1584,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-xs font-semibold text-slate-500 uppercase">Category <span className="text-red-500">*</span></label>
-                        <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg bg-white min-h-[36px]">
+                        <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-xl bg-white min-h-[36px]">
                           {TICKET_CATEGORIES.map(c => {
                             const cats = (createForm.category || '').split(', ').filter(Boolean);
                             const sel = cats.includes(c);
@@ -1523,7 +1592,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                               const curr = (createForm.category || '').split(', ').filter(Boolean);
                               const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                               setCreateForm({...createForm, category: next.join(', ')});
-                            }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
+                            }} className={`text-[11px] px-2.5 py-1.5 rounded-xl border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                           })}
                         </div>
                     </div>
@@ -1544,7 +1613,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 </div>
 
                 {/* Location Details */}
-                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <h4 className="text-xs font-bold text-slate-700 uppercase mb-3">Location Details</h4>
                     <div className="grid grid-cols-1 gap-3">
                         <div className="space-y-1">
@@ -1629,11 +1698,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                  </div>
 
                  <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
-                      <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+                      <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
                       <button 
                         type="submit" 
                         disabled={isCreateFormValid ? !isCreateFormValid() : true}
-                        className={`px-6 py-2 text-white font-medium rounded-lg shadow-lg transition-all ${isCreateFormValid && isCreateFormValid() ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20' : 'bg-slate-300 cursor-not-allowed'}`}
+                        className={`px-6 py-2 text-white font-medium rounded-xl shadow-lg transition-all ${isCreateFormValid && isCreateFormValid() ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20' : 'bg-slate-300 cursor-not-allowed'}`}
                       >
                           {isNewClientMode ? 'Create Client & Ticket' : 'Create Ticket'}
                       </button>
@@ -1658,7 +1727,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         <select
                             value={overrideStatus}
                             onChange={e => setOverrideStatus(e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                            className="w-full border border-slate-300 rounded-xl p-2.5 text-sm"
                         >
                             {[TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.ASSIGNED,
                               TicketStatus.IN_PROGRESS, TicketStatus.CARRY_FORWARD,
@@ -1675,7 +1744,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             type="datetime-local"
                             value={overrideStartedAt}
                             onChange={e => setOverrideStartedAt(e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                            className="w-full border border-slate-300 rounded-xl p-2.5 text-sm"
                         />
                     </div>
                     <div>
@@ -1686,7 +1755,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             type="datetime-local"
                             value={overrideCompletedAt}
                             onChange={e => setOverrideCompletedAt(e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
+                            className="w-full border border-slate-300 rounded-xl p-2.5 text-sm"
                         />
                     </div>
                     <div>
@@ -1696,17 +1765,17 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             onChange={e => setOverrideNote(e.target.value)}
                             rows={2}
                             placeholder="Reason for override..."
-                            className="w-full border border-slate-300 rounded-lg p-2.5 text-sm resize-none"
+                            className="w-full border border-slate-300 rounded-xl p-2.5 text-sm resize-none"
                         />
                     </div>
                 </div>
                 <div className="p-4 border-t border-slate-200 flex gap-3">
-                    <button onClick={() => setShowAdminOverride(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">
+                    <button type="button" onClick={() => setShowAdminOverride(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl hover:bg-slate-50">
                         Cancel
                     </button>
                     <button
                         onClick={handleApplyOverride}
-                        className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700"
+                        className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700"
                     >
                         Apply Override
                     </button>
@@ -1727,7 +1796,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <p className="text-sm text-slate-700">This will mark the ticket as <span className="font-bold text-red-600">Cancelled</span>. This action cannot be undone.</p>
                 </div>
                 <div className="p-4 border-t border-slate-200 flex gap-3">
-                    <button onClick={() => setShowCancelConfirm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-lg hover:bg-slate-50">
+                    <button type="button" onClick={() => setShowCancelConfirm(false)} className="flex-1 py-2.5 text-slate-500 font-bold rounded-xl hover:bg-slate-50">
                         Keep Ticket
                     </button>
                     <button
@@ -1735,7 +1804,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             onUpdateTicket({ ...selectedTicket, status: TicketStatus.CANCELLED, updatedAt: new Date().toISOString() });
                             setShowCancelConfirm(false);
                         }}
-                        className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700"
+                        className="flex-1 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700"
                     >
                         Cancel Ticket
                     </button>
