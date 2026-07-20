@@ -110,17 +110,19 @@ export const NAVIGATION_ITEMS = [
     category: 'Data'
   },
 
-  // ── 📈 Analytics — detailed reporting/analytics views, separate from the
-  // executive Overview now that Master Dashboard covers the top-line
-  // operational summary. Same page, same route, same roles — only where it
-  // sits in the nav has changed. ──
-  { 
-    id: 'dashboard', 
-    label: 'Service Dashboard', 
-    icon: <LayoutDashboard size={20} />, 
-    roles: [Role.ADMIN, Role.VIEWER],
-    category: 'Analytics'
-  },
+  // ── 📈 Service Dashboard — TEMPORARILY HIDDEN from the sidebar per request
+  // while the Master Dashboard finalizes as the executive view. The route
+  // ('dashboard' in App.tsx), its component, permissions, and all business
+  // logic are completely untouched — this entry is commented out of the nav
+  // array only. Uncomment to restore it (as-is, or once its future as a
+  // dedicated Analytics page is decided).
+  // {
+  //   id: 'dashboard',
+  //   label: 'Service Dashboard',
+  //   icon: <LayoutDashboard size={20} />,
+  //   roles: [Role.ADMIN, Role.VIEWER],
+  //   category: 'Analytics'
+  // },
 
   // ── 👨‍💼 Administration — internal admin modules ──
   { 
