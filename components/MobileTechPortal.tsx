@@ -23,6 +23,33 @@ interface MobileTechPortalProps {
   onUpdateTicket?: (ticket: Ticket) => void; 
 }
 
+// Status is never colour-only — every activity badge pairs an icon with the
+// text, mirroring the same convention used for ticket badges in MyJobTaskView.
+const getActivityStatusMeta = (status: string, delayed = false): { icon: React.ReactNode; classes: string; label: string } => {
+  if (delayed) return { icon: <AlertTriangle size={11} />, classes: 'bg-red-100 text-red-700', label: 'DELAYED' };
+  switch (status) {
+    case 'ON_MY_WAY':      return { icon: <Car size={11} />, classes: 'bg-cyan-100 text-cyan-700', label: status.replace(/_/g,' ') };
+    case 'ARRIVED':         return { icon: <Home size={11} />, classes: 'bg-indigo-100 text-indigo-700', label: status.replace(/_/g,' ') };
+    case 'IN_PROGRESS':     return { icon: <Play size={11} className="fill-current" />, classes: 'bg-amber-100 text-amber-700', label: status.replace(/_/g,' ') };
+    case 'DONE':             return { icon: <CheckCircle2 size={11} />, classes: 'bg-emerald-100 text-emerald-700', label: status.replace(/_/g,' ') };
+    case 'CARRY_FORWARD':   return { icon: <RotateCcw size={11} />, classes: 'bg-orange-100 text-orange-700', label: status.replace(/_/g,' ') };
+    case 'CANCELLED':       return { icon: <XCircle size={11} />, classes: 'bg-slate-200 text-slate-500', label: status.replace(/_/g,' ') };
+    default:                return { icon: <Clock size={11} />, classes: 'bg-purple-100 text-purple-700', label: status.replace(/_/g,' ') }; // PLANNED
+  }
+};
+
+const PriorityDot: React.FC<{ priority: string }> = ({ priority }) => {
+  const color = priority === 'URGENT' ? 'bg-red-500' : priority === 'HIGH' ? 'bg-orange-400' : priority === 'MEDIUM' ? 'bg-amber-400' : 'bg-slate-300';
+  return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />;
+};
+
+// Shared eyebrow header for grouped sections in the Job Details workspace.
+const SectionLabel: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({ icon, children }) => (
+  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+    <span className="text-slate-400">{icon}</span>{children}
+  </div>
+);
+
 const MobileTechPortal: React.FC<MobileTechPortalProps> = ({ 
     tickets, 
     activities = [], 
@@ -607,12 +634,12 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
       }
 
       const delayed = item.delayed;
-      const isStarted = job.status === 'IN_PROGRESS';
       const actCust = customers?.find((cu: any) => cu.id === job.customerId);
       const actSteps5 = ['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','DONE'];
       const actRawIdx = actSteps5.indexOf(job.status);
       const actStepIdx = actRawIdx === -1 ? 0 : actRawIdx;
       const actProgress = job.status === 'DONE' ? 100 : Math.max(5, ((actStepIdx + 1) / actSteps5.length) * 100);
+      const cardStatusMeta = getActivityStatusMeta(job.status, delayed);
 
       return (
           <div 
@@ -630,16 +657,10 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                       <div>
                           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{job.reference || job.id}</div>
                           <h3 className="text-base font-bold text-slate-900">{actCust?.name || job.type}</h3>
-                          {actCust && <div className="text-xs text-slate-500 mt-0.5">{job.type}{job.serviceCategory ? ` · ${job.serviceCategory}` : ''}</div>}
+                          {actCust && <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5"><PriorityDot priority={job.priority}/>{job.type}{job.serviceCategory ? ` · ${job.serviceCategory}` : ''}</div>}
                       </div>
-                      <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
-                          delayed ? 'bg-red-100 text-red-700' :
-                          isStarted ? 'bg-amber-100 text-amber-700' :
-                          job.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
-                          job.status === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                          'bg-purple-100 text-purple-700'
-                      }`}>
-                          {delayed ? 'DELAYED' : job.status.replace(/_/g,' ')}
+                      <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${cardStatusMeta.classes}`}>
+                          {cardStatusMeta.icon}{cardStatusMeta.label}
                       </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
@@ -752,7 +773,16 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                         <div className="flex-1 overflow-y-auto">
                             {/* Ticket detail */}
                             {activeJob && activeJobItem?.type !== 'activity' && (
-                                <MyJobTaskView ticket={activeJob as any} onUpdateStatus={handleStatusUpdate} isDetailView={true} />
+                                <MyJobTaskView
+                                    ticket={activeJob as any}
+                                    onUpdateStatus={handleStatusUpdate}
+                                    isDetailView={true}
+                                    photos={loadedPhotos[(activeJob as any).id] || []}
+                                    isLoadingPhotos={loadingPhotosForId === (activeJob as any).id}
+                                    maxPhotos={MAX_PHOTOS}
+                                    onAddPhoto={() => handlePhotoClick((activeJob as any).id, 'ticket')}
+                                    onViewPhoto={showPhotoLightbox}
+                                />
                             )}
                             {/* Activity detail — reuse existing rich view */}
                             {activeJob && activeJobItem?.type === 'activity' && (() => {
@@ -768,6 +798,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 ];
                                 const actStep = actSteps.findIndex(s => s.key === actStatus) === -1 ? 0 : actSteps.findIndex(s => s.key === actStatus);
                                 const actProgressVal = actStatus === 'DONE' ? 100 : Math.max(5, ((actStep + 1) / actSteps.length) * 100);
+                                const actStatusMeta = getActivityStatusMeta(actStatus);
                                 return (
                                 <div className="flex flex-col h-full overflow-y-auto bg-slate-50">
                                     <div className="h-1 bg-slate-200 shrink-0"><div className="h-1 bg-emerald-500 transition-all duration-500" style={{ width: `${actProgressVal}%` }}/></div>
@@ -776,33 +807,61 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             <div>
                                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{act.reference || act.id}</div>
                                                 <h2 className="text-xl font-bold text-slate-900">{actCustomer?.name || act.type}</h2>
-                                                {actCustomer && <div className="text-sm text-slate-500 mt-0.5">{act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}</div>}
+                                                <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                                    <PriorityDot priority={act.priority}/>
+                                                    {act.type}{act.serviceCategory ? ` · ${act.serviceCategory}` : ''}
+                                                </div>
                                             </div>
-                                            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${
-                                                (actStatus as any) === 'ON_MY_WAY' ? 'bg-cyan-100 text-cyan-700' :
-                                                (actStatus as any) === 'ARRIVED' ? 'bg-indigo-100 text-indigo-700' :
-                                                actStatus === 'IN_PROGRESS' ? 'bg-amber-100 text-amber-700' :
-                                                actStatus === 'DONE' ? 'bg-emerald-100 text-emerald-700' :
-                                                actStatus === 'CARRY_FORWARD' ? 'bg-orange-100 text-orange-700' :
-                                                'bg-purple-100 text-purple-700'
-                                            }`}>{actStatus.replace(/_/g,' ')}</span>
+                                            <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${actStatusMeta.classes}`}>
+                                                {actStatusMeta.icon}{actStatusMeta.label}
+                                            </span>
                                         </div>
-                                        {actCustomer?.phone && (
-                                            <a href={`tel:${actCustomer.phone}`} className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
-                                                <Phone size={14}/> Call Customer — {actCustomer.phone}
-                                            </a>
+
+                                        {/* Client Information */}
+                                        <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                            <SectionLabel icon={<Phone size={11}/>}>Client Information</SectionLabel>
+                                            <div className="text-sm font-bold text-slate-800">{actCustomer?.name || 'Unknown Client'}</div>
+                                            {actCustomer?.phone ? (
+                                                <a href={`tel:${actCustomer.phone}`} className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
+                                                    <Phone size={14}/> Call Customer — {actCustomer.phone}
+                                                </a>
+                                            ) : (
+                                                <div className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs">
+                                                    <Phone size={14}/> No phone number on file
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Site Information */}
+                                        {(act.houseNumber || act.locationUrl) && (
+                                            <div className="bg-white rounded-xl p-4 border border-slate-100">
+                                                <SectionLabel icon={<MapPin size={11}/>}>Site Information</SectionLabel>
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-sm font-semibold text-slate-700 truncate">{act.houseNumber || 'Location pinned'}</span>
+                                                    {act.locationUrl && (
+                                                        <a href={act.locationUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                                                            className="shrink-0 flex items-center gap-1 text-[10px] text-blue-600 font-bold px-2.5 py-1.5 bg-blue-50 rounded-lg">
+                                                            <Navigation size={11}/> Navigate
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
                                         )}
+
+                                        {/* Issue Summary */}
                                         {act.description && (
                                             <div className="bg-white rounded-xl p-4 border border-slate-100">
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Scope of Work</div>
+                                                <SectionLabel icon={<AlertTriangle size={11}/>}>Issue Summary</SectionLabel>
                                                 <p className="text-sm text-slate-700 leading-relaxed">{act.description}</p>
                                             </div>
                                         )}
+
+                                        {/* Activity Details */}
                                         <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
+                                            <SectionLabel icon={<Clock size={11}/>}>Activity Details</SectionLabel>
                                             {act.serviceCategory && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Category</span><span className="font-semibold text-slate-700">{act.serviceCategory}</span></div>}
                                             <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Priority</span><span className={`font-bold ${act.priority === 'URGENT' ? 'text-red-600' : act.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{act.priority}</span></div>
                                             {act.plannedDate && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Planned</span><span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString()} {new Date(act.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
-                                            {(act.houseNumber || act.locationUrl) && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Location</span><span className="font-semibold text-slate-700 text-right max-w-[55%] truncate">{act.houseNumber || act.locationUrl}</span></div>}
                                         </div>
                                         {/* Step progress */}
                                         {actStatus !== 'DONE' && actStatus !== 'CARRY_FORWARD' && (
@@ -831,7 +890,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             if (!hasPhotoFlag && realPhotos.length === 0) return null;
                                             return (
                                                 <div className="bg-white rounded-xl p-4 border border-slate-100">
-                                                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Photos ({realPhotos.length || '...'}/{MAX_PHOTOS})</div>
+                                                    <SectionLabel icon={<Camera size={11}/>}>Photos ({realPhotos.length || '...'}/{MAX_PHOTOS})</SectionLabel>
                                                     {isLoadingThisJob && realPhotos.length === 0 ? (
                                                         <div className="text-xs text-slate-400 py-4 text-center">Loading photos…</div>
                                                     ) : (
@@ -1060,9 +1119,10 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                     <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{scheduleJobs.length}</span>
                                                 </div>
                                                 {scheduleJobs.length === 0 ? (
-                                                    <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                                                        <CheckCircle2 size={40} className="mb-2 text-slate-300"/>
-                                                        <p className="font-medium text-sm">{isPastDate ? 'No jobs on this date' : showingInProgress ? 'All jobs are in progress' : 'No jobs scheduled'}</p>
+                                                    <div className="flex flex-col items-center justify-center py-14 text-slate-400">
+                                                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3"><CheckCircle2 size={24} className="text-emerald-400"/></div>
+                                                        <p className="font-bold text-sm text-slate-500">{isPastDate ? 'No jobs on this date' : showingInProgress ? 'All jobs are in progress' : 'No jobs scheduled'}</p>
+                                                        {!isPastDate && !showingInProgress && <p className="text-xs text-slate-400 mt-1">Nothing to work on right now — enjoy the break</p>}
                                                     </div>
                                                 ) : scheduleJobs.map(item => renderJobCard(item))}
                                             </>
@@ -1077,9 +1137,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             <div className="px-4 pb-4 space-y-3">
                                 {upcomingJobs.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                                        <CalendarDays size={40} className="mb-3 text-slate-300" />
-                                        <p className="text-sm font-medium">No upcoming jobs</p>
-                                        <p className="text-xs mt-1">Nothing planned for the next 14 days</p>
+                                        <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-3"><CalendarDays size={24} className="text-blue-400" /></div>
+                                        <p className="text-sm font-bold text-slate-500">No upcoming jobs</p>
+                                        <p className="text-xs mt-1 text-slate-400">Nothing planned for the next 14 days</p>
                                     </div>
                                 ) : (
                                     upcomingJobs.map((job, idx) => {
@@ -1129,8 +1189,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 </div>
                                 {carryForwardJobs.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                                        <RotateCcw size={48} className="mb-3 text-slate-300"/>
-                                        <p className="font-medium">No carry forward jobs</p>
+                                        <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mb-3"><RotateCcw size={28} className="text-orange-300"/></div>
+                                        <p className="font-bold text-slate-500">No carry forward jobs</p>
                                         <p className="text-xs text-slate-400 mt-1">All caught up!</p>
                                     </div>
                                 ) : carryForwardJobs.map(item => renderJobCard(item, true))}
@@ -1146,8 +1206,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 </div>
                                 {completedJobs.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                                        <History size={48} className="mb-3 text-slate-300"/>
-                                        <p className="font-medium">No completed jobs yet</p>
+                                        <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3"><History size={28} className="text-emerald-300"/></div>
+                                        <p className="font-bold text-slate-500">No completed jobs yet</p>
+                                        <p className="text-xs text-slate-400 mt-1">Finished jobs will show up here</p>
                                     </div>
                                 ) : Object.entries(historyGrouped).map(([dateLabel, items]) => (
                                     <div key={dateLabel} className="mb-3">
@@ -1163,6 +1224,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             const label = isAct ? (job.type || 'Activity') : (job.customerName || job.id);
                                             const sub = isAct ? (job.serviceCategory || '') : (job.category || '');
                                             const dt = new Date(item.sortDate);
+                                            const isDone = job.status === 'RESOLVED' || job.status === 'DONE';
                                             return (
                                                 <div key={job.id} onClick={() => setHistoryDetailJob({ ...job, kind: item.kind })}
                                                     className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-2 cursor-pointer active:scale-[0.99] transition-transform">
@@ -1171,12 +1233,13 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                             <div className="text-[10px] font-bold text-slate-400">{job.reference || job.id}</div>
                                                             <div className="font-bold text-slate-800 text-sm">{label}</div>
                                                         </div>
-                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${job.status === 'RESOLVED' || job.status === 'DONE' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                                        <span className={`inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                                                            {isDone ? <CheckCircle2 size={10}/> : <XCircle size={10}/>}
                                                             {(job.status || '').replace(/_/g,' ')}
                                                         </span>
                                                     </div>
                                                     {sub && <div className="text-xs text-slate-500">{sub}</div>}
-                                                    <div className="text-[10px] text-slate-400 mt-1">{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                                                    <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><Clock size={9}/>{dt.toLocaleDateString()} {dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
                                                 </div>
                                             );
                                         })}
