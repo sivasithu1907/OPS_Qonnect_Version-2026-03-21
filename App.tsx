@@ -1352,7 +1352,7 @@ useEffect(() => {
             <button
                 type="button"
                 onClick={() => { setActiveView('master_dashboard'); setIsMobileMenuOpen(false); }}
-                className={`w-full flex items-center border-b border-black/[0.08] transition-all duration-200 text-left ${FOCUS_RING} ${sidebarCollapsed ? 'justify-center py-4' : 'px-5 py-4 gap-3'}`}
+                className={`w-full flex items-center border-b border-black/[0.08] shadow-[0_1px_0_rgba(0,0,0,0.02)] transition-all duration-200 text-left ${FOCUS_RING} ${sidebarCollapsed ? 'justify-center py-4' : 'px-5 py-4 gap-3'}`}
                 title="Go to Master Dashboard"
             >
             <div className="shrink-0 transition-all duration-300 flex items-center justify-center">
@@ -1367,30 +1367,30 @@ useEffect(() => {
             </div>
             </button>
             
-            <nav className="flex-1 px-3 py-4 space-y-3 overflow-y-auto overflow-x-hidden custom-scrollbar">
-            {categoryOrder.map(cat => {
+            <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+            {categoryOrder.map((cat, catIdx) => {
                 const items = groupedNavItems[cat];
                 if (!items || items.length === 0) return null;
 
                 return (
-                    <div key={cat}>
+                    <div key={cat} className={catIdx > 0 && !sidebarCollapsed ? 'pt-4 mt-4 border-t border-black/[0.055]' : ''}>
                         {/* Section Header — small, quiet uppercase label. Each
                             section (including single-item ones like Sales/Data)
                             keeps its heading so the grouping itself communicates
                             structure — Sales and Data are deliberately their own
                             sections to make room for future modules. */}
                         {!sidebarCollapsed && (
-                            <h3 className="px-4 mb-1.5 first:mt-1 mt-5">
-                                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-[0.08em]">
+                            <h3 className="px-3 mb-2">
+                                <span className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-[0.11em]">
                                     {cat}
                                 </span>
                             </h3>
                         )}
                         
                         {/* Collapsed Divider */}
-                        {sidebarCollapsed && <div className="border-b border-black/[0.08] mb-3 mx-4 mt-3" />}
+                        {sidebarCollapsed && catIdx > 0 && <div className="border-t border-black/[0.08] mb-3 mx-4 pt-3" />}
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-0.5">
                             {items.map(item => {
                                 const isActive = activeView === item.id;
                                 return (
@@ -1407,21 +1407,27 @@ useEffect(() => {
                                             if (item.id !== 'lead_portal') setFocusedTicketId(null);
                                             if (item.id !== 'planning') setTargetActivityId(null);
                                         }}
-                                        className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'} py-2.5 text-sm transition-all duration-200 rounded-xl border-l-[3px] ${FOCUS_RING} ${
+                                        className={`group relative w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between pl-3.5 pr-2.5'} py-2.5 text-sm rounded-lg transition-all duration-150 ease-out ${FOCUS_RING} ${
                                             isActive 
-                                            ? 'border-[#FFCC00] bg-[#FFCC00]/[0.16] text-slate-900 font-semibold' 
-                                            : 'border-transparent font-medium text-slate-700 hover:bg-black/[0.04] hover:text-slate-900'
+                                            ? 'bg-white text-slate-900 font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.06),0_0_0_1px_rgba(0,0,0,0.04)]' 
+                                            : 'font-medium text-slate-600 hover:bg-black/[0.035] hover:text-slate-900'
                                         }`}
                                     >
-                                        <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center w-full' : 'w-full'}`}>
-                                            <span className={`shrink-0 flex items-center justify-center transition-colors ${
+                                        {/* Thin accent indicator — a short floating bar rather than a
+                                            full-height border, so the active state reads as a subtle
+                                            highlight instead of a heavy rule. */}
+                                        {isActive && (
+                                            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full bg-[#FFCC00]" />
+                                        )}
+                                        <div className={`flex items-center gap-2.5 ${sidebarCollapsed ? 'justify-center w-full' : 'w-full'}`}>
+                                            <span className={`shrink-0 flex items-center justify-center transition-colors duration-150 ${
                                                 isActive
-                                                    ? 'text-slate-900 bg-[#FFCC00]/25 p-1.5 -m-1.5 rounded-xl'
-                                                    : 'text-slate-500 group-hover:text-slate-700'
+                                                    ? 'text-[#B8860B]'
+                                                    : 'text-slate-400 group-hover:text-slate-600'
                                             }`}>
                                                 {item.icon}
                                             </span>
-                                            {!sidebarCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
+                                            {!sidebarCollapsed && <span className="whitespace-nowrap tracking-[-0.01em]">{item.label}</span>}
                                         </div>
                                         
                                         {/* Notification Badge */}
@@ -1574,19 +1580,19 @@ useEffect(() => {
                 <div className="flex items-center gap-4">
                      {/* Search Bar (Global) */}
                      <div className="relative hidden lg:block z-50">
-                         <div className="flex items-center bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 focus-within:ring-2 focus-within:ring-slate-200 transition-all">
-                             <Search size={16} className="text-slate-400" />
+                         <div className={`flex items-center bg-slate-50 pl-3 pr-2.5 py-2 rounded-xl border transition-all duration-200 ${isGlobalSearchFocused ? 'border-slate-300 bg-white shadow-[0_0_0_3px_rgba(0,0,0,0.04)]' : 'border-slate-100 hover:border-slate-200'}`}>
+                             <Search size={15} className={`shrink-0 transition-colors ${isGlobalSearchFocused ? 'text-slate-500' : 'text-slate-400'}`} />
                              <input 
                                 type="text" 
-                                placeholder="Global Search..." 
+                                placeholder="Search tickets, clients, jobs…" 
                                 value={globalSearchQuery}
                                 onChange={(e) => setGlobalSearchQuery(e.target.value)}
                                 onFocus={() => setIsGlobalSearchFocused(true)}
                                 onBlur={() => setTimeout(() => setIsGlobalSearchFocused(false), 200)}
-                                className="bg-transparent border-none outline-none text-sm ml-2 w-64 text-slate-700 placeholder:text-slate-400" 
+                                className={`bg-transparent border-none outline-none text-sm ml-2 text-slate-700 placeholder:text-slate-400 transition-all duration-200 ${isGlobalSearchFocused ? 'w-72' : 'w-56'}`} 
                              />
                              {globalSearchQuery && (
-                                 <button type="button" onClick={() => setGlobalSearchQuery('')} aria-label="Clear search" className={`ml-2 text-slate-400 hover:text-slate-600 rounded ${FOCUS_RING}`}><X size={14}/></button>
+                                 <button type="button" onClick={() => setGlobalSearchQuery('')} aria-label="Clear search" className={`ml-2 shrink-0 text-slate-400 hover:text-slate-600 rounded ${FOCUS_RING}`}><X size={14}/></button>
                              )}
                          </div>
 
