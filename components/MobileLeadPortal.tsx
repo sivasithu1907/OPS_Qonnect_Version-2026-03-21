@@ -1751,67 +1751,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           </div>
                       </div>
 
-                      {/* Engineers Overview */}
-                      <div>
-                          <div className="flex items-center justify-between mb-2 px-1">
-                              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Engineers Overview</h3>
-                              <button onClick={() => setActiveTab('team')} className="text-[10px] font-bold text-amber-600">See All</button>
-                          </div>
-                          {engineersOverview.length === 0 ? (
-                              <div className="flex flex-col items-center justify-center py-8 text-slate-400 bg-white rounded-xl border border-slate-200">
-                                  <Users size={22} className="text-slate-300 mb-1.5" />
-                                  <p className="text-xs font-bold text-slate-500">No engineers on the team yet</p>
-                              </div>
-                          ) : (
-                              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-                                  {engineersOverview.map(({ tech, pendingCount: tPending, progressCount: tProgress, activeCount: tActive }) => {
-                                      const isAvailable = tech.status === 'AVAILABLE' && tProgress === 0;
-                                      return (
-                                          <button key={tech.id} onClick={() => setViewTech(tech)}
-                                              className="shrink-0 w-[132px] bg-white rounded-xl border border-slate-200 shadow-sm p-3 text-left active:scale-[0.97] transition-transform">
-                                              <div className="flex items-center gap-2 mb-2">
-                                                  <div className="relative shrink-0">
-                                                      <img src={tech.avatar} className="w-8 h-8 rounded-full bg-slate-200 object-cover" alt="" />
-                                                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${isAvailable ? 'bg-emerald-500' : tProgress > 0 ? 'bg-amber-500' : 'bg-slate-400'}`} />
-                                                  </div>
-                                                  <div className="min-w-0">
-                                                      <div className="text-xs font-bold text-slate-800 truncate">{tech.name}</div>
-                                                      <div className={`text-[9px] font-bold uppercase ${isAvailable ? 'text-emerald-600' : tProgress > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{isAvailable ? 'Available' : tProgress > 0 ? 'Working' : 'Idle'}</div>
-                                                  </div>
-                                              </div>
-                                              <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase">
-                                                  <span>{tActive} job{tActive !== 1 ? 's' : ''} today</span>
-                                                  {tPending > 0 && <span className="text-blue-500">{tPending} pending</span>}
-                                              </div>
-                                          </button>
-                                      );
-                                  })}
-                              </div>
-                          )}
-                      </div>
-
-                      {/* Activities Requiring Action */}
-                      {actionRequiredItems.length > 0 && (
-                          <div>
-                              <div className="flex items-center gap-1.5 mb-2 px-1">
-                                  <AlertTriangle size={12} className="text-red-500" />
-                                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Activities Requiring Action</h3>
-                                  <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">{actionRequiredItems.length}</span>
-                              </div>
-                              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-                                  {actionRequiredItems.slice(0, 20).map(item => (
-                                      <button key={item.id} onClick={item.onClick}
-                                          className={`shrink-0 flex items-center gap-2 pl-2.5 pr-3 py-2 rounded-lg border transition-colors active:scale-[0.97] ${item.tone === 'red' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-                                          <span className={item.tone === 'red' ? 'text-red-500 shrink-0' : 'text-amber-500 shrink-0'}>{item.icon}</span>
-                                          <span className={`text-[10px] font-bold uppercase tracking-wide shrink-0 ${item.tone === 'red' ? 'text-red-700' : 'text-amber-700'}`}>{item.label}</span>
-                                          <span className={`w-px h-3 shrink-0 ${item.tone === 'red' ? 'bg-red-200' : 'bg-amber-200'}`} />
-                                          <span className={`text-[10px] font-medium truncate max-w-[110px] ${item.tone === 'red' ? 'text-red-800' : 'text-amber-800'}`}>{item.client}</span>
-                                      </button>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
-
                       {/* Search Bar */}
                       <div className="flex gap-2">
                           <div className="relative flex-1">
