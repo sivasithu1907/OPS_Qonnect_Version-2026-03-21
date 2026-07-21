@@ -1723,6 +1723,34 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           </div>
                       </div>
 
+                      {/* Pending Sales Appointment Requests — an operational alert, not
+                          a menu item. Sales creates these; until a Team Lead schedules
+                          or links them to an activity, they're unfulfilled revenue sitting
+                          idle. High visibility when pending, and collapses to nothing
+                          (not even a quiet "0 pending" line) when there's nothing to act on. */}
+                      {pendingSARCount > 0 && (
+                          <button
+                              onClick={() => setMobileModule('sales_requests')}
+                              className="w-full flex items-center gap-3 p-4 bg-amber-50 border border-amber-300 rounded-2xl shadow-sm active:scale-[0.99] transition-transform text-left"
+                          >
+                              <div className="relative shrink-0 w-11 h-11 rounded-xl bg-white border border-amber-200 flex items-center justify-center">
+                                  <ClipboardList size={22} className="text-amber-600" />
+                                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full px-1 border-2 border-amber-50">
+                                      {pendingSARCount}
+                                  </span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-bold text-amber-900">
+                                      {pendingSARCount} Sales Appointment Request{pendingSARCount !== 1 ? 's' : ''} Pending
+                                  </div>
+                                  <div className="text-xs text-amber-700 mt-0.5">Awaiting scheduling — needs an engineer assigned</div>
+                              </div>
+                              <span className="shrink-0 flex items-center gap-1 text-xs font-bold text-amber-800 bg-white border border-amber-200 rounded-lg px-3 py-1.5">
+                                  View <ChevronRight size={13} />
+                              </span>
+                          </button>
+                      )}
+
                       {/* Search Bar */}
                       <div className="flex gap-2">
                           <div className="relative flex-1">
@@ -1819,15 +1847,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               )}
                               <button
                                 onClick={() => setMobileModule('sales_requests')}
-                                className="relative flex flex-col items-center gap-1.5 p-3 bg-amber-50 rounded-xl border border-amber-200 shadow-sm active:scale-95 transition-transform"
+                                className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform"
                               >
-                                <ClipboardList size={20} className="text-amber-500" />
-                                <span className="text-[9px] font-bold text-amber-700 uppercase leading-tight text-center">Sales Req.</span>
-                                {pendingSARCount > 0 && (
-                                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full px-1 border-2 border-white">
-                                    {pendingSARCount}
-                                  </span>
-                                )}
+                                <ClipboardList size={20} className="text-amber-400" />
+                                <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Sales Req.</span>
                               </button>
                               <button onClick={() => { setMobileModule('clients'); }} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
                                   <Contact size={20} className="text-purple-400" />
