@@ -19,7 +19,7 @@ import {
   ClipboardList, RefreshCw, Filter, Building, ExternalLink,
   CalendarCheck, Users, ArrowRight, Inbox, Trash2,
   LayoutList, LayoutGrid, ChevronLeft, ChevronRight as ChevronRightIcon,
-  KeyRound, EyeOff, Eye as EyeIcon
+  KeyRound, EyeOff, Eye as EyeIcon, Zap
 } from 'lucide-react';
 import { Role, SalesAppointmentRequest, SalesRequestStatus, Technician } from '../types';
 import { INPUT_STYLES, SEARCH_INPUT_STYLES, SALES_ACTIVITY_TYPES, SERVICE_CATEGORIES } from '../constants';
@@ -66,11 +66,20 @@ const EMPTY_FORM = {
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
+const STATUS_ICON: Record<SalesRequestStatus, React.ReactNode> = {
+  PENDING_SCHEDULING: <Clock size={11} />,
+  SCHEDULED:          <CalendarCheck size={11} />,
+  IN_PROGRESS:        <RefreshCw size={11} />,
+  COMPLETED:          <CheckCircle2 size={11} />,
+  LINKED:             <ArrowRight size={11} />,
+  CANCELLED:          <X size={11} />,
+};
+
 const StatusBadge = ({ status }: { status: SalesRequestStatus }) => {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING_SCHEDULING;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${cfg.color} ${cfg.bg}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${cfg.color} ${cfg.bg}`}>
+      {STATUS_ICON[status] ?? STATUS_ICON.PENDING_SCHEDULING}
       {cfg.label}
     </span>
   );
@@ -277,6 +286,21 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     () => requests.filter(r => r.status === SalesRequestStatus.PENDING_SCHEDULING).length,
     [requests]
   );
+
+  // Today's SAR Summary — counts per status, scoped the same way the list
+  // below is (respects the Sales My/All toggle), using only the status
+  // values that already exist on SalesAppointmentRequest. No new metrics.
+  const summaryScope = useMemo(
+    () => (isSales && myOnly ? requests.filter(r => r.createdBy === myId) : requests),
+    [requests, isSales, myOnly, myId]
+  );
+  const summaryCounts = useMemo(() => {
+    const counts: Record<SalesRequestStatus, number> = {
+      PENDING_SCHEDULING: 0, SCHEDULED: 0, IN_PROGRESS: 0, COMPLETED: 0, LINKED: 0, CANCELLED: 0,
+    };
+    summaryScope.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+    return counts;
+  }, [summaryScope]);
 
   // ── Form helpers ───────────────────────────────────────────────────────────
   const openCreate = () => {
@@ -570,6 +594,29 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
         </div>
       </div>
 
+      {/* ── Today's SAR Summary ── */}
+      <div className="px-6 py-4 bg-white border-b border-slate-100 overflow-x-auto no-scrollbar">
+        <div className="flex gap-2 min-w-max">
+          {(Object.keys(STATUS_CONFIG) as SalesRequestStatus[]).map(s => {
+            const cfg = STATUS_CONFIG[s];
+            const isActive = statusFilter === s;
+            return (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(isActive ? 'ALL' : s)}
+                className={`flex items-center gap-2.5 pl-2.5 pr-3.5 py-2 rounded-xl border transition-all ${isActive ? `${cfg.bg} border-current ${cfg.color} shadow-sm` : 'bg-white border-slate-200 hover:border-slate-300'}`}
+              >
+                <span className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 ${cfg.bg} ${cfg.color}`}>{STATUS_ICON[s]}</span>
+                <div className="text-left leading-tight">
+                  <div className={`text-sm font-bold tabular-nums ${isActive ? cfg.color : 'text-slate-900'}`}>{summaryCounts[s]}</div>
+                  <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap">{cfg.label}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ── My / All toggle (Sales only) ── */}
       {isSales && (
         <div className="px-6 pt-3 pb-0 bg-white flex gap-2 border-b-0">
@@ -664,7 +711,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           />
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
-            <Inbox size={48} strokeWidth={1.2} />
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center"><Inbox size={28} strokeWidth={1.4} className="text-slate-300" /></div>
             <div className="text-center">
               <p className="font-semibold text-slate-600">No requests found</p>
               <p className="text-sm mt-1">
@@ -1255,6 +1302,12 @@ const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, canDelete, isSc
                 </span>
               )}
             </div>
+            {r.linkedActivityId && (
+              <div className="flex items-center gap-1.5 mt-2 text-xs">
+                <ArrowRight size={11} className="text-purple-500 shrink-0" />
+                <span className="text-purple-700 font-semibold">Linked to {r.linkedActivityId}</span>
+              </div>
+            )}
             {r.serviceCategory && (
               <div className="flex flex-wrap gap-1 mt-2">
                 {r.serviceCategory.split(', ').filter(Boolean).map(c => (
@@ -1801,6 +1854,66 @@ const MATCH_STATUS_LABEL: Record<string, string> = {
   IN_PROGRESS: 'In Progress', DONE: 'Completed', COMPLETED: 'Completed',
 };
 
+// Shared eyebrow header for grouped sections in the detail drawer.
+const SectionLabel = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => (
+  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 mt-4 first:mt-0">
+    <span className="text-slate-400">{icon}</span>{children}
+  </div>
+);
+
+// Request lifecycle — built only from fields that actually exist on
+// SalesAppointmentRequest. "Created" always happened; the branch taken next
+// is either "Scheduled" (new activity) or "Linked" (existing activity), never
+// both; "In Progress" / "Completed" reuse the same status enum values that
+// already flow back from the linked ticket/activity. There's no dedicated
+// timestamp for those last two transitions, so updatedAt is used as the
+// best available approximation — it's never presented as more precise than
+// that.
+const RequestTimeline: React.FC<{ request: SalesAppointmentRequest }> = ({ request: r }) => {
+  if (r.status === SalesRequestStatus.CANCELLED) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <span className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center shrink-0"><CheckCircle2 size={12} className="text-slate-500" /></span>
+        Created {new Date(r.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+        <span className="text-slate-300">→</span>
+        <span className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center shrink-0"><X size={12} className="text-slate-500" /></span>
+        Cancelled {r.updatedAt && `${new Date(r.updatedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`}
+      </div>
+    );
+  }
+
+  const isLinkedPath = r.status === SalesRequestStatus.LINKED || !!r.linkedActivityId;
+  const reachedStage2 = r.status !== SalesRequestStatus.PENDING_SCHEDULING;
+  const reachedInProgress = r.status === SalesRequestStatus.IN_PROGRESS || r.status === SalesRequestStatus.COMPLETED;
+  const reachedCompleted = r.status === SalesRequestStatus.COMPLETED;
+
+  const steps = [
+    { key: 'created', label: 'Created', done: true, date: r.createdAt },
+    { key: 'stage2', label: isLinkedPath ? 'Linked to Activity' : 'Scheduled', done: reachedStage2, date: r.linkedAt || r.scheduledDate || (reachedStage2 ? r.updatedAt : undefined) },
+    { key: 'progress', label: 'In Progress', done: reachedInProgress, date: reachedInProgress ? r.updatedAt : undefined },
+    { key: 'completed', label: 'Completed', done: reachedCompleted, date: reachedCompleted ? r.updatedAt : undefined },
+  ];
+
+  return (
+    <div className="flex items-start justify-between">
+      {steps.map((step, i) => (
+        <React.Fragment key={step.key}>
+          <div className="flex flex-col items-center text-center w-16">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
+              step.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-200 text-slate-300'
+            }`}>
+              {step.done ? <CheckCircle2 size={14} /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+            </div>
+            <span className={`text-[9px] font-bold mt-1 leading-tight ${step.done ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
+            {step.date && <span className="text-[8px] text-slate-400 mt-0.5">{new Date(step.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>}
+          </div>
+          {i < steps.length - 1 && <div className={`flex-1 h-0.5 mt-3.5 ${steps[i + 1].done ? 'bg-emerald-500' : 'bg-slate-200'}`} />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
 const DetailDrawer: React.FC<DetailDrawerProps> = ({
   request: r, technicians, canEdit, canDelete, isScheduler, isSales, onClose, onEdit, onSchedule, onDelete,
   matchingActivities, loadingMatches, linkTargetActivityId, onSelectLinkTarget,
@@ -1844,28 +1957,53 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
         </div>
 
         <div className="px-6 py-5">
+          {/* Timeline — the request lifecycle at a glance */}
+          <SectionLabel icon={<RefreshCw size={11} />}>Timeline</SectionLabel>
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 mb-1">
+            <RequestTimeline request={r} />
+          </div>
+
+          <SectionLabel icon={<ClipboardList size={11} />}>Request Details</SectionLabel>
           <div className="space-y-0">
             {row('Activity Type', r.activityType)}
             {row('Service Category', r.serviceCategory)}
+            {row('Remarks', r.remarks)}
+          </div>
+
+          <SectionLabel icon={<UserIcon size={11} />}>Client Information</SectionLabel>
+          <div className="space-y-0">
             {row('Contact Number', r.contactNumber)}
             {row('House / Building', r.houseNumber)}
-            {row('Odoo CRM Link', r.odooReference, r.odooReference)}
             {row('Location URL', r.locationUrl, r.locationUrl)}
+          </div>
+
+          <SectionLabel icon={<Tag size={11} />}>Sales Information</SectionLabel>
+          <div className="space-y-0">
             {row('Sales Lead', r.salesLeadName)}
-            {row('Remarks', r.remarks)}
-            {row('Scheduled Date', r.scheduledDate ? new Date(r.scheduledDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : null)}
-            {row('Start Time', r.scheduledStartTime)}
-            {row('End Time', r.scheduledEndTime)}
-            {row('Assigned Engineer', engineer?.name)}
+            {row('Odoo CRM Link', r.odooReference, r.odooReference)}
             {row('Created', new Date(r.createdAt).toLocaleString('en-GB'))}
             {r.updatedAt !== r.createdAt && row('Updated', new Date(r.updatedAt).toLocaleString('en-GB'))}
           </div>
+
+          {(r.scheduledDate || engineer) && (
+            <>
+              <SectionLabel icon={<Calendar size={11} />}>Schedule Information</SectionLabel>
+              <div className="space-y-0">
+                {row('Scheduled Date', r.scheduledDate ? new Date(r.scheduledDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : null)}
+                {row('Start Time', r.scheduledStartTime)}
+                {row('End Time', r.scheduledEndTime)}
+                {row('Assigned Engineer', engineer?.name)}
+              </div>
+            </>
+          )}
 
           {/* Linked-to-existing-activity status — distinct from a request
               that got its OWN new activity via Schedule. A linked request
               never has its own activity; it's purely a reference to
               someone else's job, with a mandatory note explaining why. */}
           {isLinked && r.linkedActivityId && (
+            <>
+              <SectionLabel icon={<ArrowRight size={11} />}>Linked Activity</SectionLabel>
             <div className="mt-4 px-4 py-3 rounded-xl text-sm bg-purple-50 border border-purple-200 text-purple-800 space-y-1.5">
               <div className="flex items-center gap-2 font-semibold">
                 <ArrowRight size={14} />
@@ -1884,12 +2022,15 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
                 </button>
               )}
             </div>
+            </>
           )}
 
           {/* A request that got its own brand-new activity via Schedule
               (the normal, non-linked path) — unchanged from before. */}
           {!isLinked && r.linkedActivityId && (
-            <div className={`mt-4 px-4 py-3 rounded-xl text-sm flex items-center gap-2 border ${
+            <>
+              <SectionLabel icon={<ArrowRight size={11} />}>Linked Activity</SectionLabel>
+            <div className={`mt-1 px-4 py-3 rounded-xl text-sm flex items-center gap-2 border ${
                 r.status === 'COMPLETED'   ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
                 r.status === 'IN_PROGRESS' ? 'bg-amber-50 border-amber-200 text-amber-700' :
                 'bg-blue-50 border-blue-200 text-blue-700'
@@ -1904,6 +2045,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
                 {r.status === 'SCHEDULED'   && <span className="ml-1">— Scheduled &amp; Planned</span>}
               </span>
             </div>
+            </>
           )}
 
           {/* Matching activities — the actual decision point. Team Lead /
@@ -1987,7 +2129,9 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-slate-100">
+          <div className="pt-4 border-t border-slate-100 mt-4">
+            <SectionLabel icon={<Zap size={11} />}>Quick Actions</SectionLabel>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
             {canEdit && (
               <button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
                 <Edit2 size={13} /> Edit
@@ -2008,6 +2152,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
                 <Edit2 size={13} /> Reschedule
               </button>
             )}
+            </div>
           </div>
         </div>
       </div>
