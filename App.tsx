@@ -1343,7 +1343,7 @@ useEffect(() => {
             yellow reserved strictly for the active-item accent. */}
         <aside
             aria-label="Main navigation"
-            className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#F3F1ED] border-r border-black/[0.08] text-slate-900 z-50 transition-transform duration-200 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}
+            className={`fixed inset-y-0 left-0 md:relative flex flex-col bg-[#F4F5F7] border-r border-black/[0.08] text-slate-900 z-50 transition-transform duration-200 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:w-[80px] w-[80px]' : 'md:w-[260px] w-[260px]'} ${currentUser.role === Role.SALES ? 'hidden' : ''}`}
         >
             
             {/* Sidebar Header — clicking the logo navigates to Master Dashboard.
@@ -1437,7 +1437,7 @@ useEffect(() => {
                                                     {activeUserNotifications.length}
                                                 </span>
                                             ) : (
-                                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#F3F1ED]" />
+                                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-[#F4F5F7]" />
                                             )
                                         )}
 
