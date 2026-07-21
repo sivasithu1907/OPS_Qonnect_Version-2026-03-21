@@ -1834,7 +1834,20 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Quick Actions</h3>
                           <div className="grid grid-cols-4 gap-2">
                               {onAddActivity && (
-                                  <button onClick={() => setActiveTab('planner')} className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform">
+                                  <button
+                                    onClick={() => {
+                                      // Reset to a clean blank form — same reset used when the
+                                      // modal's own Cancel/Close button is pressed — so a stale
+                                      // customer/service-category selection from a previous
+                                      // session never leaks into a fresh "quick create".
+                                      setActCustSearch('');
+                                      setActSelectedCustomer(null);
+                                      setActServiceCats([]);
+                                      setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' });
+                                      setShowCreateActivity(true);
+                                    }}
+                                    className="flex flex-col items-center gap-1.5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-transform"
+                                  >
                                       <ActivityIcon size={20} className="text-indigo-400" />
                                       <span className="text-[9px] font-bold text-slate-500 uppercase leading-tight text-center">Activity</span>
                                   </button>
