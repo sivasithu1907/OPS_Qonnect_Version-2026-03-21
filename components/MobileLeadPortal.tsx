@@ -790,6 +790,27 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       }
   };
 
+  // Status is never colour-only — every badge across the Lead Portal pairs
+  // an icon with the coloured pill and the text label.
+  const getStatusIcon = (s: string): React.ReactNode => {
+      switch (s) {
+          case TicketStatus.NEW:
+          case TicketStatus.OPEN:
+          case TicketStatus.ASSIGNED:
+          case 'PLANNED':          return <Clock size={10} />;
+          case 'ON_MY_WAY':        return <Navigation size={10} />;
+          case 'ARRIVED':          return <Home size={10} />;
+          case TicketStatus.IN_PROGRESS:
+          case 'IN_PROGRESS':      return <Play size={10} className="fill-current" />;
+          case TicketStatus.CARRY_FORWARD: return <RotateCcw size={10} />;
+          case TicketStatus.RESOLVED:
+          case 'DONE':              return <CheckCircle2 size={10} />;
+          case TicketStatus.CANCELLED:
+          case 'CANCELLED':         return <XCircle size={10} />;
+          default:                  return <Clock size={10} />;
+      }
+  };
+
   const getTechJobs = (techId: string) => {
       const techTickets = tickets.filter(t => t.assignedTechId === techId && t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
       const techActivities = activities.filter(a => a.leadTechId === techId && a.status !== 'DONE' && a.status !== 'CANCELLED');
@@ -813,6 +834,50 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       };
   };
 
+  // Engineers Overview — same team scope TeamView already uses (active,
+  // Team Lead / Field Engineer, not on leave), reusing the existing
+  // getTechJobs() counts rather than recomputing workload from scratch.
+  const engineersOverview = useMemo(() => {
+      return technicians
+          .filter(t => t.isActive !== false && [Role.TEAM_LEAD, Role.FIELD_ENGINEER].includes(t.systemRole) && t.status !== 'LEAVE')
+          .map(tech => ({ tech, ...getTechJobs(tech.id) }));
+  }, [technicians, tickets, activities]);
+
+  // Activities Requiring Action — genuine issues only, derived from the same
+  // unifiedFeed already powering the list below. No new business rules:
+  // "overdue" reuses isStalled() for tickets and the plannedDate-passed
+  // check for activities; "waiting assignment" and "carry forward" just
+  // read existing status/assignment fields.
+  const actionRequiredItems = useMemo(() => {
+      const now = Date.now();
+      type ActionItem = { id: string; icon: React.ReactNode; label: string; ref: string; client: string; tone: 'red' | 'amber'; onClick: () => void };
+      const out: ActionItem[] = [];
+      unifiedFeed.forEach(item => {
+          if (doneStatuses.includes(item.status)) return;
+          if (item.kind === 'ticket') {
+              const t = item.data;
+              if (isStalled(t)) out.push({ id: `ov-${t.id}`, icon: <AlertTriangle size={11} />, label: 'Overdue', ref: t.id, client: t.customerName, tone: 'red', onClick: () => handleTicketCardTap(t) });
+              if (!t.assignedTechId) out.push({ id: `wa-${t.id}`, icon: <UserPlus size={11} />, label: 'Waiting Assignment', ref: t.id, client: t.customerName, tone: 'amber', onClick: () => handleTicketCardTap(t) });
+              if (t.status === TicketStatus.CARRY_FORWARD) out.push({ id: `cf-${t.id}`, icon: <RotateCcw size={11} />, label: 'Carry Forward', ref: t.id, client: t.customerName, tone: 'amber', onClick: () => handleTicketCardTap(t) });
+              if (t.priority === Priority.URGENT) out.push({ id: `ur-${t.id}`, icon: <Zap size={11} />, label: 'Urgent', ref: t.id, client: t.customerName, tone: 'red', onClick: () => handleTicketCardTap(t) });
+          } else {
+              const a = item.data as any;
+              const client = (customers || []).find((c: any) => c.id === a.customerId)?.name || a.customerName || a.reference || a.id;
+              const plannedMs = new Date(a.plannedDate).getTime();
+              const isOverdue = plannedMs < now && !inProgressStatuses.includes(a.status) && a.status !== 'CARRY_FORWARD';
+              if (isOverdue) out.push({ id: `ova-${a.id}`, icon: <AlertTriangle size={11} />, label: 'Overdue', ref: a.reference || a.id, client, tone: 'red', onClick: () => handleActivityCardTap(a) });
+              if (!a.leadTechId && !a.primaryEngineerId) out.push({ id: `waa-${a.id}`, icon: <UserPlus size={11} />, label: 'Waiting Assignment', ref: a.reference || a.id, client, tone: 'amber', onClick: () => handleActivityCardTap(a) });
+              if (a.status === 'CARRY_FORWARD') out.push({ id: `cfa-${a.id}`, icon: <RotateCcw size={11} />, label: 'Carry Forward', ref: a.reference || a.id, client, tone: 'amber', onClick: () => handleActivityCardTap(a) });
+              if (a.priority === 'URGENT') out.push({ id: `ura-${a.id}`, icon: <Zap size={11} />, label: 'Urgent', ref: a.reference || a.id, client, tone: 'red', onClick: () => handleActivityCardTap(a) });
+          }
+      });
+      return out;
+  }, [unifiedFeed, customers]);
+
+  // Recent Team Activity — most recent updates across the whole feed,
+  // independent of the homeFilter toggle further down.
+  const recentTeamActivity = useMemo(() => unifiedFeed.slice(0, 8), [unifiedFeed]);
+
   // --- Sub-Components ---
 
   const TicketCard: React.FC<{ ticket: Ticket }> = ({ ticket }) => {
@@ -834,8 +899,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               
               <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(ticket.status)}`}>
-                          {ticket.status.replace('_', ' ')}
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${getStatusColor(ticket.status)}`}>
+                          {getStatusIcon(ticket.status)}{ticket.status.replace('_', ' ')}
                       </span>
                       <span className="text-xs font-mono text-slate-500">#{ticket.id}</span>
                   </div>
@@ -887,8 +952,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           >
               <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>
-                          {actStatus.replace(/_/g, ' ')}
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${statusColor}`}>
+                          {getStatusIcon(actStatus)}{actStatus.replace(/_/g, ' ')}
                       </span>
                       <span className="text-xs font-mono text-slate-500">#{act.reference || act.id}</span>
                       <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">ACTIVITY</span>
@@ -955,8 +1020,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               {isChargeable && <span className="ml-2 text-amber-600 font-bold text-[10px]">QAR 199</span>}
                           </div>
                       </div>
-                      <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${statusColor}`}>
-                          {ticket.status.replace(/_/g,' ')}
+                      <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${statusColor}`}>
+                          {getStatusIcon(ticket.status)}{ticket.status.replace(/_/g,' ')}
                       </span>
                   </div>
                   {/* Location */}
@@ -1663,24 +1728,166 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
           <div className="h-full overflow-y-auto custom-scrollbar pb-24">
               {activeTab === 'home' && (
                   <div className="p-4 space-y-5">
-                      {/* Dashboard Status Cards */}
-                      <div className="grid grid-cols-4 gap-2">
-                          <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'progress' ? 'bg-amber-50 border-amber-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-xl font-bold text-amber-600">{inProgressCount}</div>
-                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">In Progress</div>
-                          </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'carry' ? 'bg-orange-50 border-orange-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-xl font-bold text-orange-600">{carryForwardCount}</div>
-                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">Carry Fwd</div>
-                          </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'pending' ? 'bg-blue-50 border-blue-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-xl font-bold text-blue-600">{pendingCount}</div>
-                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">Pending</div>
-                          </button>
-                          <button onClick={() => setHomeFilter(homeFilter === 'all_history' ? 'all' : 'all_history')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'all_history' ? 'bg-slate-100 border-slate-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
-                              <div className="text-xl font-bold text-slate-700">{totalJobsCount}</div>
-                              <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">All Jobs</div>
-                          </button>
+                      {/* Today's Team Summary */}
+                      <div>
+                          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Today's Team Summary</h3>
+                          <div className="grid grid-cols-4 gap-2">
+                              <button onClick={() => setHomeFilter(homeFilter === 'progress' ? 'all' : 'progress')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'progress' ? 'bg-amber-50 border-amber-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                  <div className="text-xl font-bold text-amber-600">{inProgressCount}</div>
+                                  <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">In Progress</div>
+                              </button>
+                              <button onClick={() => setHomeFilter(homeFilter === 'carry' ? 'all' : 'carry')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'carry' ? 'bg-orange-50 border-orange-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                  <div className="text-xl font-bold text-orange-600">{carryForwardCount}</div>
+                                  <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">Carry Fwd</div>
+                              </button>
+                              <button onClick={() => setHomeFilter(homeFilter === 'pending' ? 'all' : 'pending')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'pending' ? 'bg-blue-50 border-blue-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                  <div className="text-xl font-bold text-blue-600">{pendingCount}</div>
+                                  <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">Pending</div>
+                              </button>
+                              <button onClick={() => setHomeFilter(homeFilter === 'all_history' ? 'all' : 'all_history')} className={`p-3 rounded-xl border transition-all active:scale-[0.97] flex flex-col items-center ${homeFilter === 'all_history' ? 'bg-slate-100 border-slate-400 shadow-md' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                  <div className="text-xl font-bold text-slate-700">{totalJobsCount}</div>
+                                  <div className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 leading-tight text-center">All Jobs</div>
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* Engineers Overview */}
+                      <div>
+                          <div className="flex items-center justify-between mb-2 px-1">
+                              <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Engineers Overview</h3>
+                              <button onClick={() => setActiveTab('team')} className="text-[10px] font-bold text-amber-600">See All</button>
+                          </div>
+                          {engineersOverview.length === 0 ? (
+                              <div className="flex flex-col items-center justify-center py-8 text-slate-400 bg-white rounded-xl border border-slate-200">
+                                  <Users size={22} className="text-slate-300 mb-1.5" />
+                                  <p className="text-xs font-bold text-slate-500">No engineers on the team yet</p>
+                              </div>
+                          ) : (
+                              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+                                  {engineersOverview.map(({ tech, pendingCount: tPending, progressCount: tProgress, activeCount: tActive }) => {
+                                      const isAvailable = tech.status === 'AVAILABLE' && tProgress === 0;
+                                      return (
+                                          <button key={tech.id} onClick={() => setViewTech(tech)}
+                                              className="shrink-0 w-[132px] bg-white rounded-xl border border-slate-200 shadow-sm p-3 text-left active:scale-[0.97] transition-transform">
+                                              <div className="flex items-center gap-2 mb-2">
+                                                  <div className="relative shrink-0">
+                                                      <img src={tech.avatar} className="w-8 h-8 rounded-full bg-slate-200 object-cover" alt="" />
+                                                      <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${isAvailable ? 'bg-emerald-500' : tProgress > 0 ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                                                  </div>
+                                                  <div className="min-w-0">
+                                                      <div className="text-xs font-bold text-slate-800 truncate">{tech.name}</div>
+                                                      <div className={`text-[9px] font-bold uppercase ${isAvailable ? 'text-emerald-600' : tProgress > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{isAvailable ? 'Available' : tProgress > 0 ? 'Working' : 'Idle'}</div>
+                                                  </div>
+                                              </div>
+                                              <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase">
+                                                  <span>{tActive} job{tActive !== 1 ? 's' : ''} today</span>
+                                                  {tPending > 0 && <span className="text-blue-500">{tPending} pending</span>}
+                                              </div>
+                                          </button>
+                                      );
+                                  })}
+                              </div>
+                          )}
+                      </div>
+
+                      {/* Activities Requiring Action */}
+                      {actionRequiredItems.length > 0 && (
+                          <div>
+                              <div className="flex items-center gap-1.5 mb-2 px-1">
+                                  <AlertTriangle size={12} className="text-red-500" />
+                                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Activities Requiring Action</h3>
+                                  <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">{actionRequiredItems.length}</span>
+                              </div>
+                              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+                                  {actionRequiredItems.slice(0, 20).map(item => (
+                                      <button key={item.id} onClick={item.onClick}
+                                          className={`shrink-0 flex items-center gap-2 pl-2.5 pr-3 py-2 rounded-lg border transition-colors active:scale-[0.97] ${item.tone === 'red' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                                          <span className={item.tone === 'red' ? 'text-red-500 shrink-0' : 'text-amber-500 shrink-0'}>{item.icon}</span>
+                                          <span className={`text-[10px] font-bold uppercase tracking-wide shrink-0 ${item.tone === 'red' ? 'text-red-700' : 'text-amber-700'}`}>{item.label}</span>
+                                          <span className={`w-px h-3 shrink-0 ${item.tone === 'red' ? 'bg-red-200' : 'bg-amber-200'}`} />
+                                          <span className={`text-[10px] font-medium truncate max-w-[110px] ${item.tone === 'red' ? 'text-red-800' : 'text-amber-800'}`}>{item.client}</span>
+                                      </button>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
+                      {/* Search Bar */}
+                      <div className="flex gap-2">
+                          <div className="relative flex-1">
+                              <Search size={16} className="absolute left-3 top-3 text-slate-500"/>
+                              <input 
+                                  value={searchTerm}
+                                  onChange={(e) => setSearchTerm(e.target.value)}
+                                  placeholder="Search by name, phone, or job ID..."
+                                  className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-colors shadow-sm"
+                              />
+                          </div>
+                      </div>
+
+                      {/* Today's Assignments — Date Grouped (Tickets + Activities) */}
+                      <div>
+                          <div className="flex items-center justify-between mb-3 px-1">
+                              <h3 className="text-xs font-bold text-slate-500 uppercase">
+                                  {homeFilter === 'all' ? "Today's Assignments" : homeFilter === 'progress' ? 'In Progress' : homeFilter === 'carry' ? 'Carry Forwards' : homeFilter === 'pending' ? 'Pending' : homeFilter === 'all_history' ? 'All Jobs' : "Today's Assignments"}
+                              </h3>
+                              <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] font-bold">{homeFilteredFeed.length}</span>
+                          </div>
+                          {homeFilteredFeed.length === 0 && (
+                              <div className="flex flex-col items-center justify-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">
+                                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center mb-2"><ListTodo size={22} className="text-emerald-400" /></div>
+                                  <p className="text-sm font-bold text-slate-500">No jobs waiting</p>
+                                  <p className="text-xs text-slate-400 mt-0.5">Nothing pending for the team right now</p>
+                              </div>
+                          )}
+                          {Object.entries(groupedFeed).map(([dateLabel, itemsInGroup]) => (
+                              <div key={dateLabel} className="mb-4">
+                                  <div className="flex items-center gap-2 mb-2 px-1">
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">{dateLabel}</span>
+                                      <span className="text-[10px] text-slate-300 font-bold">{itemsInGroup.length}</span>
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                  </div>
+                                  {itemsInGroup.map(item => 
+                                      item.kind === 'ticket' 
+                                          ? <TicketCard key={`t-${item.data.id}`} ticket={item.data as Ticket} />
+                                          : <ActivityFeedCard key={`a-${item.data.id}`} activity={item.data as Activity} />
+                                  )}
+                              </div>
+                          ))}
+                      </div>
+
+                      {/* Recent Team Activity */}
+                      <div>
+                          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Recent Team Activity</h3>
+                          {recentTeamActivity.length === 0 ? (
+                              <div className="flex flex-col items-center justify-center py-8 text-slate-400 bg-white rounded-xl border border-slate-200">
+                                  <History size={20} className="text-slate-300 mb-1.5" />
+                                  <p className="text-xs font-bold text-slate-500">Nothing pending</p>
+                              </div>
+                          ) : (
+                              <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+                                  {recentTeamActivity.map((item, i) => {
+                                      const isTicket = item.kind === 'ticket';
+                                      const d: any = item.data;
+                                      const client = isTicket ? d.customerName : ((customers || []).find((c: any) => c.id === d.customerId)?.name || d.customerName || d.reference || d.id);
+                                      const ref = isTicket ? d.id : (d.reference || d.id);
+                                      const dt = new Date(item.sortDate);
+                                      return (
+                                          <button key={`${item.kind}-${d.id}-${i}`} onClick={() => isTicket ? handleTicketCardTap(d) : handleActivityCardTap(d)}
+                                              className="w-full text-left p-3 flex items-center gap-2.5 active:bg-slate-50 transition-colors">
+                                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded tabular-nums shrink-0">{dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                              <span className="min-w-0 flex-1">
+                                                  <span className="block text-xs font-bold text-slate-800 truncate">{ref} · {client}</span>
+                                              </span>
+                                              <span className={`shrink-0 inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap ${getStatusColor(item.status)}`}>
+                                                  {getStatusIcon(item.status)}{item.status.replace(/_/g, ' ')}
+                                              </span>
+                                          </button>
+                                      );
+                                  })}
+                              </div>
+                          )}
                       </div>
 
                       {/* Quick Actions */}
@@ -1716,50 +1923,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   <span className="text-[9px] font-bold text-slate-500 uppercase">Clients</span>
                               </button>
                           </div>
-                      </div>
-
-                      {/* Search Bar */}
-                      <div className="flex gap-2">
-                          <div className="relative flex-1">
-                              <Search size={16} className="absolute left-3 top-3 text-slate-500"/>
-                              <input 
-                                  value={searchTerm}
-                                  onChange={(e) => setSearchTerm(e.target.value)}
-                                  placeholder="Search by name, phone, or job ID..."
-                                  className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30 transition-colors shadow-sm"
-                              />
-                          </div>
-                      </div>
-
-                      {/* Live Feed — Date Grouped (Tickets + Activities) */}
-                      <div>
-                          <div className="flex items-center justify-between mb-3 px-1">
-                              <h3 className="text-xs font-bold text-slate-500 uppercase">
-                                  {homeFilter === 'all' ? 'Live Feed' : homeFilter === 'progress' ? 'In Progress' : homeFilter === 'carry' ? 'Carry Forwards' : homeFilter === 'pending' ? 'Pending' : homeFilter === 'all_history' ? 'All Jobs' : 'Live Feed'}
-                              </h3>
-                              <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] font-bold">{homeFilteredFeed.length}</span>
-                          </div>
-                          {homeFilteredFeed.length === 0 && (
-                              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                                  <ListTodo size={40} className="text-slate-300 mb-2" />
-                                  <p className="text-sm">No jobs found</p>
-                              </div>
-                          )}
-                          {Object.entries(groupedFeed).map(([dateLabel, itemsInGroup]) => (
-                              <div key={dateLabel} className="mb-4">
-                                  <div className="flex items-center gap-2 mb-2 px-1">
-                                      <div className="h-px flex-1 bg-slate-200" />
-                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0">{dateLabel}</span>
-                                      <span className="text-[10px] text-slate-300 font-bold">{itemsInGroup.length}</span>
-                                      <div className="h-px flex-1 bg-slate-200" />
-                                  </div>
-                                  {itemsInGroup.map(item => 
-                                      item.kind === 'ticket' 
-                                          ? <TicketCard key={`t-${item.data.id}`} ticket={item.data as Ticket} />
-                                          : <ActivityFeedCard key={`a-${item.data.id}`} activity={item.data as Activity} />
-                                  )}
-                              </div>
-                          ))}
                       </div>
                   </div>
               )}
