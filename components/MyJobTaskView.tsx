@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Ticket, TicketStatus, TicketType } from '../types';
 import { Phone, MapPin, ShieldCheck, CheckCircle2, Clock, X, Navigation, Play, Car, Home, Camera, RotateCcw, AlertTriangle } from 'lucide-react';
+import { getStatusMeta } from './shared/StatusBadge';
 
 interface MyJobTaskViewProps {
   ticket: Ticket;
@@ -26,20 +27,8 @@ const SectionLabel: React.FC<{ icon: React.ReactNode; children: React.ReactNode 
   </div>
 );
 
-// Status is never colour-only — every badge pairs an icon with the text.
-const getStatusMeta = (status: string): { icon: React.ReactNode; classes: string } => {
-  switch (status) {
-    case TicketStatus.ASSIGNED:
-    case 'NEW':
-    case TicketStatus.OPEN:      return { icon: <Clock size={11} />, classes: 'bg-purple-100 text-purple-700' };
-    case TicketStatus.ON_MY_WAY: return { icon: <Car size={11} />, classes: 'bg-cyan-100 text-cyan-700' };
-    case TicketStatus.ARRIVED:   return { icon: <Home size={11} />, classes: 'bg-indigo-100 text-indigo-700' };
-    case TicketStatus.IN_PROGRESS: return { icon: <Play size={11} className="fill-current" />, classes: 'bg-amber-100 text-amber-700' };
-    case TicketStatus.RESOLVED:  return { icon: <CheckCircle2 size={11} />, classes: 'bg-emerald-100 text-emerald-700' };
-    case TicketStatus.CANCELLED: return { icon: <X size={11} />, classes: 'bg-slate-200 text-slate-500' };
-    default:                     return { icon: <RotateCcw size={11} />, classes: 'bg-orange-100 text-orange-700' }; // CARRY_FORWARD and any other
-  }
-};
+// Status is never colour-only — every badge pairs an icon with the text
+// (see components/shared/StatusBadge.tsx for the canonical mapping).
 
 const PriorityDot: React.FC<{ priority: string }> = ({ priority }) => {
   const color = priority === 'URGENT' ? 'bg-red-500' : priority === 'HIGH' ? 'bg-orange-400' : priority === 'MEDIUM' ? 'bg-amber-400' : 'bg-slate-300';
@@ -140,7 +129,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
                   {isChargeable && <span className="ml-1 text-amber-600 font-bold text-[10px]">QAR 199</span>}
                 </div>
               </div>
-              <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${statusMeta.classes}`}>
+              <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${statusMeta.badge}`}>
                 {statusMeta.icon}{ticket.status.replace(/_/g,' ')}
               </span>
             </div>
@@ -274,7 +263,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
                 {isChargeable && <span className="ml-1 text-amber-600 font-bold text-[10px]">QAR 199</span>}
               </div>
             </div>
-            <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${statusMeta.classes}`}>
+            <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${statusMeta.badge}`}>
               {statusMeta.icon}{ticket.status.replace(/_/g,' ')}
             </span>
           </div>
