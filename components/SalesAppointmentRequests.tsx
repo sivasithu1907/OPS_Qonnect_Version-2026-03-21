@@ -106,6 +106,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   const [salesRepFilter, setSalesRepFilter] = useState<string>('ALL');
   // View toggle + calendar month
   const [view, setView]               = useState<'list' | 'calendar'>('list');
+  // Status filter — now a dropdown instead of a wrapping row of chips.
+  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   // Sales: "my requests" tab vs "all requests" tab
   const [myOnly, setMyOnly]           = useState<boolean>(true);
   // Calendar day popup — managed inside CalendarView component
@@ -182,6 +184,17 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   }, []);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  // Close the status filter dropdown on outside click
+  useEffect(() => {
+    if (!isStatusMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-status-filter-panel]')) setIsStatusMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isStatusMenuOpen]);
 
   // ── Customer search by phone number (debounced) ───────────────────────────
   useEffect(() => {
@@ -663,25 +676,52 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
               ))}
             </select>
           )}
-          <div className="flex gap-2 flex-wrap">
-            {(['ALL', ...Object.values(SalesRequestStatus)] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s as any)}
-                className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors whitespace-nowrap ${
-                  statusFilter === s
-                    ? 'bg-slate-800 text-white border-slate-800'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                }`}
+          <div className="relative shrink-0" data-status-filter-panel>
+            <button
+              type="button"
+              onClick={() => setIsStatusMenuOpen(prev => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={isStatusMenuOpen}
+              className={`flex items-center gap-2 pl-3 pr-2.5 py-2 rounded-xl text-xs font-semibold border transition-colors whitespace-nowrap ${
+                statusFilter !== 'ALL'
+                  ? `${STATUS_CONFIG[statusFilter as SalesRequestStatus].bg} ${STATUS_CONFIG[statusFilter as SalesRequestStatus].color}`
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <Filter size={13} className="shrink-0" />
+              {statusFilter === 'ALL' ? 'All Statuses' : STATUS_CONFIG[statusFilter as SalesRequestStatus]?.label}
+              {statusFilter === SalesRequestStatus.PENDING_SCHEDULING && pendingCount > 0 && (
+                <span className="bg-amber-400 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{pendingCount}</span>
+              )}
+              <ChevronDown size={13} className={`text-slate-400 transition-transform shrink-0 ${isStatusMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isStatusMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 sm:left-0 top-11 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-30 overflow-hidden py-1 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
               >
-                {s === 'ALL' ? 'All' : STATUS_CONFIG[s as SalesRequestStatus]?.label ?? s}
-                {s === SalesRequestStatus.PENDING_SCHEDULING && pendingCount > 0 && (
-                  <span className="ml-1.5 bg-amber-400 text-slate-900 rounded-full px-1.5 py-0.5 text-[10px]">
-                    {pendingCount}
-                  </span>
-                )}
-              </button>
-            ))}
+                {(['ALL', ...Object.values(SalesRequestStatus)] as const).map(s => {
+                  const isActive = statusFilter === s;
+                  const count = s === 'ALL' ? summaryScope.length : summaryCounts[s as SalesRequestStatus];
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setStatusFilter(s as any); setIsStatusMenuOpen(false); }}
+                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left transition-colors ${isActive ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50'}`}
+                    >
+                      <span className={s === 'ALL' ? 'text-slate-400' : STATUS_CONFIG[s as SalesRequestStatus].color}>
+                        {s === 'ALL' ? <Filter size={13} /> : STATUS_ICON[s as SalesRequestStatus]}
+                      </span>
+                      <span className="flex-1 truncate">{s === 'ALL' ? 'All Statuses' : STATUS_CONFIG[s as SalesRequestStatus]?.label}</span>
+                      <span className="text-[11px] font-bold text-slate-400 tabular-nums">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
