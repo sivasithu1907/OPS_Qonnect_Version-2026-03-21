@@ -8,6 +8,7 @@ import CustomerSelector from './CustomerSelector';
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
 import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2, Eye, Edit, Phone as PhoneIcon, RotateCcw, Briefcase, ExternalLink } from 'lucide-react';
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
+import { StatusBadge } from './shared/StatusBadge';
 
 // Converts a UTC ISO string → datetime-local input value in LOCAL timezone
 const toLocalDatetimeInput = (isoString: string): string => {
@@ -413,28 +414,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   };
   const getFormValue = (field: keyof NonNullable<typeof editForm>) => editForm ? editForm[field] : '';
 
-  // Shared status badge — same colour mapping already used for tickets
-  // throughout this file, now centralised and paired with an icon so status
-  // is never conveyed by colour alone.
-  const STATUS_META: Record<string, { icon: React.ReactNode; badge: string }> = {
-    NEW:           { icon: <AlertCircle size={11} />,  badge: 'bg-slate-100 text-slate-600' },
-    OPEN:          { icon: <Clock size={11} />,        badge: 'bg-blue-100 text-blue-700' },
-    ASSIGNED:      { icon: <UserCheck size={11} />,    badge: 'bg-purple-100 text-purple-700' },
-    IN_PROGRESS:   { icon: <RefreshCw size={11} />,     badge: 'bg-amber-100 text-amber-700' },
-    ON_MY_WAY:     { icon: <MapPin size={11} />,        badge: 'bg-cyan-100 text-cyan-700' },
-    ARRIVED:       { icon: <MapPin size={11} />,        badge: 'bg-indigo-100 text-indigo-700' },
-    CARRY_FORWARD: { icon: <History size={11} />,       badge: 'bg-orange-100 text-orange-700' },
-    RESOLVED:      { icon: <CheckCircle2 size={11} />,  badge: 'bg-emerald-100 text-emerald-700' },
-    CANCELLED:     { icon: <X size={11} />,             badge: 'bg-red-100 text-red-600' },
-  };
-  const StatusBadge: React.FC<{ status: string; className?: string }> = ({ status, className = '' }) => {
-    const meta = STATUS_META[status] || { icon: <Clock size={11} />, badge: 'bg-slate-100 text-slate-600' };
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap ${meta.badge} ${className}`}>
-        {meta.icon}{status.replace(/_/g, ' ')}
-      </span>
-    );
-  };
+  // Status badge — now imported from the shared components/shared/StatusBadge.tsx
+  // (previously a locally-defined STATUS_META + component, now the single
+  // source of truth shared with Ticket detail, Tech Portal, Lead Portal, and SAR)
 
   // Shared section label — gives every grouping in the ticket workspace
   // (Client, Site, Issue, Timeline, Attachments...) the same eyebrow style,
