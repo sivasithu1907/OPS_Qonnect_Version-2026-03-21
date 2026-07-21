@@ -8,9 +8,45 @@ interface MyJobTaskViewProps {
   onSelect?: (ticket: Ticket) => void;
   /** When true renders the full-screen detail layout. When false (default) renders the compact list card. */
   isDetailView?: boolean;
+  // Photo capability — wired from MobileTechPortal's existing photo
+  // infrastructure (fetchRealPhotos/handlePhotoClick/loadedPhotos). Optional
+  // so the compact list-card usage (which doesn't need it) stays unaffected.
+  photos?: any[];
+  isLoadingPhotos?: boolean;
+  maxPhotos?: number;
+  onAddPhoto?: () => void;
+  onViewPhoto?: (src: string) => void;
 }
 
-export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateStatus, onSelect, isDetailView = false }) => {
+// Shared eyebrow header for grouped sections in the detail workspace —
+// Client Info / Site Info / Issue Summary / Job Details / Photos / Notes.
+const SectionLabel: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({ icon, children }) => (
+  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+    <span className="text-slate-400">{icon}</span>{children}
+  </div>
+);
+
+// Status is never colour-only — every badge pairs an icon with the text.
+const getStatusMeta = (status: string): { icon: React.ReactNode; classes: string } => {
+  switch (status) {
+    case TicketStatus.ASSIGNED:
+    case 'NEW':
+    case TicketStatus.OPEN:      return { icon: <Clock size={11} />, classes: 'bg-purple-100 text-purple-700' };
+    case TicketStatus.ON_MY_WAY: return { icon: <Car size={11} />, classes: 'bg-cyan-100 text-cyan-700' };
+    case TicketStatus.ARRIVED:   return { icon: <Home size={11} />, classes: 'bg-indigo-100 text-indigo-700' };
+    case TicketStatus.IN_PROGRESS: return { icon: <Play size={11} className="fill-current" />, classes: 'bg-amber-100 text-amber-700' };
+    case TicketStatus.RESOLVED:  return { icon: <CheckCircle2 size={11} />, classes: 'bg-emerald-100 text-emerald-700' };
+    case TicketStatus.CANCELLED: return { icon: <X size={11} />, classes: 'bg-slate-200 text-slate-500' };
+    default:                     return { icon: <RotateCcw size={11} />, classes: 'bg-orange-100 text-orange-700' }; // CARRY_FORWARD and any other
+  }
+};
+
+const PriorityDot: React.FC<{ priority: string }> = ({ priority }) => {
+  const color = priority === 'URGENT' ? 'bg-red-500' : priority === 'HIGH' ? 'bg-orange-400' : priority === 'MEDIUM' ? 'bg-amber-400' : 'bg-slate-300';
+  return <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />;
+};
+
+export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateStatus, onSelect, isDetailView = false, photos, isLoadingPhotos, maxPhotos, onAddPhoto, onViewPhoto }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [remark, setRemark] = useState('');
 
@@ -76,6 +112,8 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
     ticket.status === TicketStatus.RESOLVED    ? 'bg-emerald-100 text-emerald-700' :
     'bg-slate-100 text-slate-600';
 
+  const statusMeta = getStatusMeta(ticket.status);
+
   // ── COMPACT LIST CARD (used in job list) — matches activity card style exactly ──
   if (!isDetailView) {
     return (
@@ -95,14 +133,15 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{ticket.id}</div>
                 <h3 className="text-lg font-bold text-slate-900">{ticket.customerName}</h3>
-                <div className="text-sm text-slate-500 mt-0.5">
+                <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <PriorityDot priority={ticket.priority} />
                   {ticket.category}
-                  {isWarranty   && <span className="ml-2 text-emerald-600 font-bold text-[10px]">✓ Warranty</span>}
-                  {isChargeable && <span className="ml-2 text-amber-600 font-bold text-[10px]">QAR 199</span>}
+                  {isWarranty   && <span className="ml-1 text-emerald-600 font-bold text-[10px]">✓ Warranty</span>}
+                  {isChargeable && <span className="ml-1 text-amber-600 font-bold text-[10px]">QAR 199</span>}
                 </div>
               </div>
-              <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${statusColor}`}>
-                {ticket.status.replace(/_/g,' ')}
+              <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${statusMeta.classes}`}>
+                {statusMeta.icon}{ticket.status.replace(/_/g,' ')}
               </span>
             </div>
 
@@ -228,29 +267,54 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
             <div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{ticket.id}</div>
               <h2 className="text-xl font-bold text-slate-900">{ticket.customerName}</h2>
-              <div className="text-sm text-slate-500 mt-0.5">
+              <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                <PriorityDot priority={ticket.priority} />
                 {ticket.category}
-                {isWarranty   && <span className="ml-2 text-emerald-600 font-bold text-[10px]">✓ Warranty</span>}
-                {isChargeable && <span className="ml-2 text-amber-600 font-bold text-[10px]">QAR 199</span>}
+                {isWarranty   && <span className="ml-1 text-emerald-600 font-bold text-[10px]">✓ Warranty</span>}
+                {isChargeable && <span className="ml-1 text-amber-600 font-bold text-[10px]">QAR 199</span>}
               </div>
             </div>
-            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold ${statusColor}`}>
-              {ticket.status.replace(/_/g,' ')}
+            <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full font-bold whitespace-nowrap ${statusMeta.classes}`}>
+              {statusMeta.icon}{ticket.status.replace(/_/g,' ')}
             </span>
           </div>
 
-          {/* Call */}
-          {ticket.phoneNumber && (
-            <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
-              className="flex items-center justify-center gap-2 w-full py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
-              <Phone size={14}/> Call Customer — {ticket.phoneNumber}
-            </a>
+          {/* Client Information */}
+          <div className="bg-white rounded-xl p-4 border border-slate-100">
+            <SectionLabel icon={<Phone size={11}/>}>Client Information</SectionLabel>
+            <div className="text-sm font-bold text-slate-800">{ticket.customerName}</div>
+            {ticket.phoneNumber ? (
+              <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
+                className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
+                <Phone size={14}/> Call Customer — {ticket.phoneNumber}
+              </a>
+            ) : (
+              <div className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs">
+                <Phone size={14}/> No phone number on file
+              </div>
+            )}
+          </div>
+
+          {/* Site Information */}
+          {(ticket.houseNumber || ticket.locationUrl) && (
+            <div className="bg-white rounded-xl p-4 border border-slate-100">
+              <SectionLabel icon={<MapPin size={11}/>}>Site Information</SectionLabel>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-700 truncate">{ticket.houseNumber || 'Location pinned'}</span>
+                {ticket.locationUrl && (
+                  <a href={ticket.locationUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                    className="shrink-0 flex items-center gap-1 text-[10px] text-blue-600 font-bold px-2.5 py-1.5 bg-blue-50 rounded-lg">
+                    <Navigation size={11}/> Navigate
+                  </a>
+                )}
+              </div>
+            </div>
           )}
 
-          {/* Issue */}
+          {/* Issue Summary */}
           {issueText && (
             <div className="bg-white rounded-xl p-4 border border-slate-100">
-              <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Issue / Scope of Work</div>
+              <SectionLabel icon={<AlertTriangle size={11}/>}>Issue Summary</SectionLabel>
               <p className="text-sm text-slate-700 leading-relaxed">{issueText}</p>
             </div>
           )}
@@ -288,8 +352,9 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
             </div>
           )}
 
-          {/* Details grid */}
+          {/* Activity Details */}
           <div className="bg-white rounded-xl p-4 border border-slate-100 space-y-3">
+            <SectionLabel icon={<Clock size={11}/>}>Job Details</SectionLabel>
             <div className="flex justify-between text-sm">
               <span className="text-slate-400 font-medium">Category</span>
               <span className="font-semibold text-slate-700">{ticket.category}</span>
@@ -305,12 +370,6 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
                   {new Date(ticket.appointmentTime).toLocaleDateString('en-GB',{timeZone:'Asia/Qatar',day:'2-digit',month:'short',year:'numeric'})}
                   {' '}{new Date(ticket.appointmentTime).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}
                 </span>
-              </div>
-            )}
-            {(ticket.houseNumber||ticket.locationUrl) && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400 font-medium">Location</span>
-                <span className="font-semibold text-slate-700 text-right max-w-[55%] truncate">{ticket.houseNumber||ticket.locationUrl}</span>
               </div>
             )}
           </div>
@@ -334,28 +393,39 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
             </div>
           )}
 
-          {/* Navigate + Photos */}
-          <div className="grid grid-cols-2 gap-3">
-            {ticket.locationUrl ? (
-              <a href={ticket.locationUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
-                className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:scale-95 transition-transform">
-                <Navigation size={22} className="mb-1 text-blue-500"/>
-                <span className="text-xs font-semibold">Navigate</span>
-              </a>
-            ) : (
-              <div className="flex flex-col items-center justify-center p-3 bg-slate-50 rounded-xl text-slate-400">
-                <Navigation size={22} className="mb-1"/>
-                <span className="text-xs font-semibold">Navigate</span>
-              </div>
-            )}
-            <div className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl text-slate-600">
-              <Camera size={22} className="mb-1"/>
-              <span className="text-xs font-semibold">Photos</span>
+          {/* Photos — real upload/review, wired to the same photo capability the Activity workspace already uses */}
+          <div className="bg-white rounded-xl p-4 border border-slate-100">
+            <div className="flex items-center justify-between mb-2">
+              <SectionLabel icon={<Camera size={11}/>}>Photos {maxPhotos ? `(${(photos || []).length}/${maxPhotos})` : ''}</SectionLabel>
             </div>
+            {isLoadingPhotos && (photos || []).length === 0 ? (
+              <div className="text-xs text-slate-400 py-4 text-center">Loading photos…</div>
+            ) : (photos || []).length > 0 ? (
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                {(photos || []).map((p: any, i: number) => (
+                  <img key={i} src={p.url || p} alt="" className="w-full aspect-square object-cover rounded-lg border border-slate-200 cursor-pointer"
+                    onClick={() => onViewPhoto?.(p.url || p)} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 mb-3">No photos added yet.</p>
+            )}
+            {onAddPhoto && (
+              <button onClick={(e) => { e.stopPropagation(); onAddPhoto(); }}
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl font-bold text-xs active:bg-slate-100 transition-colors">
+                <Camera size={14}/> Add Photo
+              </button>
+            )}
           </div>
 
-          {/* Action */}
-          <div className="pb-6">
+          {/* Actions */}
+          <div className="pb-6 space-y-3">
+            {ticket.locationUrl && (
+              <a href={ticket.locationUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                className="flex items-center justify-center gap-2 w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-[0.98] transition-transform">
+                <Navigation size={16} className="text-blue-500"/> Open Map
+              </a>
+            )}
             {actionConfig && !isCompleted && (
               <button onClick={handleAction}
                 className={`w-full py-4 rounded-2xl font-bold shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 ${actionConfig.color}`}>
