@@ -1459,26 +1459,78 @@ useEffect(() => {
             <header className="h-16 border-b border-slate-100 bg-white flex items-center justify-between px-4 shrink-0 z-40 relative">
                 <div className="flex items-center gap-3">
                     {currentUser.role === Role.SALES ? (
-                        /* SALES: avatar + name + designation + online status — always visible */
-                        <div className="flex items-center gap-3">
-                            {/* Avatar with green online dot */}
-                            <div className="relative shrink-0">
-                                {currentUser.avatar ? (
-                                    <img src={currentUser.avatar} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shadow-sm" />
-                                ) : (
-                                    <div className="w-10 h-10 rounded-full bg-amber-100 ring-2 ring-amber-400 flex items-center justify-center font-bold text-amber-700 text-sm">
-                                        {currentUser.name.charAt(0)}
+                        /* SALES: avatar + name + designation + online status — now doubles as
+                           the account menu trigger (Change Password / Sign Out), so we don't
+                           show a second, redundant avatar in the right-side icon cluster. */
+                        <div className="relative" data-profile-panel>
+                            <button
+                                type="button"
+                                onClick={() => setIsProfileOpen(prev => !prev)}
+                                className={`flex items-center gap-3 p-1 pr-2 rounded-lg hover:bg-slate-100 transition-colors ${FOCUS_RING}`}
+                                aria-haspopup="menu"
+                                aria-expanded={isProfileOpen}
+                                aria-label={`Account menu for ${currentUser.name}`}
+                            >
+                                {/* Avatar with green online dot */}
+                                <div className="relative shrink-0">
+                                    {currentUser.avatar ? (
+                                        <img src={currentUser.avatar} alt={currentUser.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-amber-400 shadow-sm" />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-full bg-amber-100 ring-2 ring-amber-400 flex items-center justify-center font-bold text-amber-700 text-sm">
+                                            {currentUser.name.charAt(0)}
+                                        </div>
+                                    )}
+                                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+                                </div>
+                                {/* Name + designation — always shown */}
+                                <div className="text-left">
+                                    <p className="text-sm font-bold text-slate-900 leading-none">{currentUser.name}</p>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">
+                                        {(currentUser as any).jobRole || 'Sales Representative'}
+                                    </p>
+                                </div>
+                                <ChevronDown size={14} aria-hidden="true" className={`text-slate-400 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {isProfileOpen && (
+                                <div
+                                    role="menu"
+                                    aria-label="Account menu"
+                                    className="absolute left-0 top-14 w-64 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+                                >
+                                    <div className="px-4 py-3 border-b border-slate-100">
+                                        <div className="text-sm font-bold text-slate-900 truncate">{currentUser.name}</div>
+                                        {currentUser.email && (
+                                            <div className="text-xs text-slate-500 truncate mt-0.5">{currentUser.email}</div>
+                                        )}
+                                        <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+                                            {currentUser.role}
+                                        </span>
                                     </div>
-                                )}
-                                <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-                            </div>
-                            {/* Name + designation — always shown */}
-                            <div>
-                                <p className="text-sm font-bold text-slate-900 leading-none">{currentUser.name}</p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">
-                                    {(currentUser as any).jobRole || 'Sales Representative'}
-                                </p>
-                            </div>
+                                    <div className="py-1">
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => { setIsProfileOpen(false); setShowSalesPwModal(true); }}
+                                            className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors ${FOCUS_RING}`}
+                                        >
+                                            <KeyRound size={16} className="text-slate-400" aria-hidden="true" />
+                                            Change Password
+                                        </button>
+                                    </div>
+                                    <div className="border-t border-slate-100 py-1">
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => { setIsProfileOpen(false); handleLogout(); }}
+                                            className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors ${FOCUS_RING}`}
+                                        >
+                                            <LogOut size={16} aria-hidden="true" />
+                                            Sign Out
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <>
@@ -1616,18 +1668,6 @@ useEffect(() => {
                              <RefreshCw size={18} />
                          </button>
                      )}
-                     {currentUser.role === Role.SALES && (
-                         <button
-                             type="button"
-                             onClick={() => setShowSalesPwModal(true)}
-                             className={`p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors ${FOCUS_RING}`}
-                             title="Change Password"
-                             aria-label="Change password"
-                         >
-                             <KeyRound size={18} />
-                         </button>
-                     )}
-
 
                      {/* Notification Bell — single bell, SLA as inner tab */}
                      <div className="relative" data-notif-panel>
@@ -1745,6 +1785,8 @@ useEffect(() => {
                          )}
                      </div>
 
+                     {currentUser.role !== Role.SALES && (
+                     <>
                      {/* Divider */}
                      <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
 
@@ -1814,6 +1856,8 @@ useEffect(() => {
                             </div>
                         )}
                      </div>
+                     </>
+                     )}
                 </div>
             </header>
 
