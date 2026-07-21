@@ -7,6 +7,7 @@ import { ChevronLeft, Search, X, XCircle, CalendarDays, ChevronRight, MapPin, Na
 import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 import CompletionFeedbackModal from './CompletionFeedbackModal';
+import { getStatusMeta } from './shared/StatusBadge';
 
 interface MobileTechPortalProps {
   tickets: Ticket[];
@@ -25,17 +26,13 @@ interface MobileTechPortalProps {
 
 // Status is never colour-only — every activity badge pairs an icon with the
 // text, mirroring the same convention used for ticket badges in MyJobTaskView.
+// Colours/icons now come from the single shared table
+// (components/shared/StatusBadge.tsx); this wrapper only adds the
+// TechPortal-specific "delayed" override.
 const getActivityStatusMeta = (status: string, delayed = false): { icon: React.ReactNode; classes: string; label: string } => {
   if (delayed) return { icon: <AlertTriangle size={11} />, classes: 'bg-red-100 text-red-700', label: 'DELAYED' };
-  switch (status) {
-    case 'ON_MY_WAY':      return { icon: <Car size={11} />, classes: 'bg-cyan-100 text-cyan-700', label: status.replace(/_/g,' ') };
-    case 'ARRIVED':         return { icon: <Home size={11} />, classes: 'bg-indigo-100 text-indigo-700', label: status.replace(/_/g,' ') };
-    case 'IN_PROGRESS':     return { icon: <Play size={11} className="fill-current" />, classes: 'bg-amber-100 text-amber-700', label: status.replace(/_/g,' ') };
-    case 'DONE':             return { icon: <CheckCircle2 size={11} />, classes: 'bg-emerald-100 text-emerald-700', label: status.replace(/_/g,' ') };
-    case 'CARRY_FORWARD':   return { icon: <RotateCcw size={11} />, classes: 'bg-orange-100 text-orange-700', label: status.replace(/_/g,' ') };
-    case 'CANCELLED':       return { icon: <XCircle size={11} />, classes: 'bg-slate-200 text-slate-500', label: status.replace(/_/g,' ') };
-    default:                return { icon: <Clock size={11} />, classes: 'bg-purple-100 text-purple-700', label: status.replace(/_/g,' ') }; // PLANNED
-  }
+  const meta = getStatusMeta(status);
+  return { icon: meta.icon, classes: meta.badge, label: meta.label ?? status.replace(/_/g, ' ') };
 };
 
 const PriorityDot: React.FC<{ priority: string }> = ({ priority }) => {
