@@ -1794,41 +1794,6 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           </button>
                       )}
 
-                      {/* Recent Team Activity — kept near the top since this is meant
-                          to be a quick glance, not something worth scrolling past the
-                          entire Assignments list to find. */}
-                      <div>
-                          <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Recent Team Activity</h3>
-                          {recentTeamActivity.length === 0 ? (
-                              <div className="flex flex-col items-center justify-center py-8 text-slate-400 bg-white rounded-xl border border-slate-200">
-                                  <History size={20} className="text-slate-300 mb-1.5" />
-                                  <p className="text-xs font-bold text-slate-500">Nothing pending</p>
-                              </div>
-                          ) : (
-                              <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
-                                  {recentTeamActivity.map((item, i) => {
-                                      const isTicket = item.kind === 'ticket';
-                                      const d: any = item.data;
-                                      const client = isTicket ? d.customerName : ((customers || []).find((c: any) => c.id === d.customerId)?.name || d.customerName || d.reference || d.id);
-                                      const ref = isTicket ? d.id : (d.reference || d.id);
-                                      const dt = new Date(item.sortDate);
-                                      return (
-                                          <button key={`${item.kind}-${d.id}-${i}`} onClick={() => isTicket ? handleTicketCardTap(d) : handleActivityCardTap(d)}
-                                              className="w-full text-left p-3 flex items-center gap-2.5 active:bg-slate-50 transition-colors">
-                                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded tabular-nums shrink-0">{dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                              <span className="min-w-0 flex-1">
-                                                  <span className="block text-xs font-bold text-slate-800 truncate">{ref} · {client}</span>
-                                              </span>
-                                              <span className={`shrink-0 inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-bold whitespace-nowrap ${getStatusColor(item.status)}`}>
-                                                  {getStatusIcon(item.status)}{item.status.replace(/_/g, ' ')}
-                                              </span>
-                                          </button>
-                                      );
-                                  })}
-                              </div>
-                          )}
-                      </div>
-
                       {/* Search Bar */}
                       <div className="flex gap-2">
                           <div className="relative flex-1">
