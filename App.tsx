@@ -36,9 +36,23 @@ const SalesAppointmentRequests = lazy(() => import('./components/SalesAppointmen
 // Loading fallback component
 const LoadingFallback = () => (
     <div className="flex items-center justify-center h-full py-20">
-        <div className="text-center">
-            <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm text-slate-500">Loading...</p>
+        <div className="flex flex-col items-center gap-4">
+            {/* Brand mark with a gentle breathing pulse, rather than a generic
+                spinner — this fires on every single page transition in the
+                app (every module is lazy-loaded), so it's the single most
+                frequently-seen loading state in the whole product. */}
+            <div className="relative flex items-center justify-center w-14 h-14">
+                <span className="absolute inset-0 rounded-2xl bg-[#FFCC00]/20 motion-safe:animate-ping" style={{ animationDuration: '1.6s' }} />
+                <div className="relative w-11 h-11 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center">
+                    <QonnectLogo size={22} />
+                </div>
+            </div>
+            {/* Skeleton hint — suggests content structure is forming rather
+                than a bare "please wait" message */}
+            <div className="flex flex-col items-center gap-1.5">
+                <div className="h-2 w-28 rounded-full bg-slate-200 motion-safe:animate-pulse" />
+                <div className="h-2 w-20 rounded-full bg-slate-100 motion-safe:animate-pulse" style={{ animationDelay: '0.15s' }} />
+            </div>
         </div>
     </div>
 );
