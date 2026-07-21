@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
+import { getStatusMeta } from './shared/StatusBadge';
 import { 
   ChevronLeft, Phone, MapPin, Search, Plus, RotateCcw, Navigation, 
   LogOut, Bell, ListTodo, Calendar, BarChart3, Users,
@@ -773,43 +774,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       setShowActivityReschedule(true);
   };
 
-  const getStatusColor = (s: string) => {
-      switch(s) {
-          case TicketStatus.NEW: return 'bg-emerald-500 text-white';
-          case TicketStatus.OPEN: return 'bg-blue-500 text-white';
-          case TicketStatus.ASSIGNED: return 'bg-purple-500 text-white';
-          case TicketStatus.IN_PROGRESS: 
-          case 'IN_PROGRESS': return 'bg-amber-500 text-white animate-pulse';
-          case TicketStatus.CARRY_FORWARD: return 'bg-orange-500 text-white';
-          case TicketStatus.RESOLVED: 
-          case 'DONE': return 'bg-slate-500 text-white';
-          case TicketStatus.CANCELLED: 
-          case 'CANCELLED': return 'bg-red-500 text-white';
-          case 'PLANNED': return 'bg-blue-400 text-white';
-          default: return 'bg-slate-400 text-white';
-      }
-  };
-
-  // Status is never colour-only — every badge across the Lead Portal pairs
-  // an icon with the coloured pill and the text label.
-  const getStatusIcon = (s: string): React.ReactNode => {
-      switch (s) {
-          case TicketStatus.NEW:
-          case TicketStatus.OPEN:
-          case TicketStatus.ASSIGNED:
-          case 'PLANNED':          return <Clock size={10} />;
-          case 'ON_MY_WAY':        return <Navigation size={10} />;
-          case 'ARRIVED':          return <Home size={10} />;
-          case TicketStatus.IN_PROGRESS:
-          case 'IN_PROGRESS':      return <Play size={10} className="fill-current" />;
-          case TicketStatus.CARRY_FORWARD: return <RotateCcw size={10} />;
-          case TicketStatus.RESOLVED:
-          case 'DONE':              return <CheckCircle2 size={10} />;
-          case TicketStatus.CANCELLED:
-          case 'CANCELLED':         return <XCircle size={10} />;
-          default:                  return <Clock size={10} />;
-      }
-  };
+  // getStatusColor / getStatusIcon — kept as thin wrappers so the 11 existing
+  // call sites across this file don't need to change, but the actual
+  // colour/icon mapping now comes from the single shared table
+  // (components/shared/StatusBadge.tsx) instead of a hand-maintained
+  // duplicate that had drifted from the rest of the app (solid-fill pills
+  // instead of the soft-tint style used everywhere else).
+  const getStatusColor = (s: string) => getStatusMeta(s).badge;
+  const getStatusIcon = (s: string): React.ReactNode => getStatusMeta(s).icon;
 
   const getTechJobs = (techId: string) => {
       const techTickets = tickets.filter(t => t.assignedTechId === techId && t.status !== TicketStatus.RESOLVED && t.status !== TicketStatus.CANCELLED);
