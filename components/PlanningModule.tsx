@@ -10,6 +10,7 @@ import {
 import CustomerSelector from './CustomerSelector';
 import { getActivityStatusLabel } from '../constants';
 import { EmptyKanbanColumn } from './shared/EmptyState';
+import { ContextualActions, callAction, whatsappAction, navigateAction, odooAction } from './shared/ContextualActions';
 interface PlanningModuleProps {
   activities: Activity[];
   teams: Team[]; 
@@ -423,7 +424,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
           </button>
         ))}
       </div>
-      <div className="overflow-x-auto flex-1 overflow-y-auto">
+      <div className="overflow-x-auto flex-1 overflow-y-auto qn-table">
       <table className="w-full text-sm text-left table-fixed">
         <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-[11px] tracking-wide border-b border-slate-200 sticky top-0 z-10">
           <tr>
@@ -1499,6 +1500,17 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                   {va.houseNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">House / Villa</span><span className="text-slate-700">{va.houseNumber}</span></div>}
                   {customer?.buildingNumber && <div className="flex justify-between text-sm"><span className="text-slate-400">Building</span><span className="text-slate-700">{customer.buildingNumber}</span></div>}
                   {va.locationUrl && <div className="flex justify-between text-sm"><span className="text-slate-400">Map</span><a href={va.locationUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-xs truncate max-w-[60%]">Open Map</a></div>}
+                  {/* Quick contact actions (Sprint 2.3) */}
+                  <div className="pt-3 border-t border-slate-100 mt-1">
+                    <ContextualActions
+                      actions={[
+                        callAction(vaCustomerPhone),
+                        whatsappAction(vaCustomerPhone),
+                        navigateAction(va.locationUrl),
+                        odooAction(va.odooLink),
+                      ]}
+                    />
+                  </div>
                 </div>
                 {/* Timing */}
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2">
