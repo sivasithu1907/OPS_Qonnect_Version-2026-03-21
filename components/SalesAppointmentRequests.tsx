@@ -26,6 +26,7 @@ import { INPUT_STYLES, SEARCH_INPUT_STYLES, SALES_ACTIVITY_TYPES, SERVICE_CATEGO
 import api from '../services/api';
 import { SarListSkeleton } from './shared/Skeletons';
 import { EmptySAR } from './shared/EmptyState';
+import { ContextualActions, callAction, whatsappAction, navigateAction, odooAction } from './shared/ContextualActions';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CurrentUser {
@@ -2013,6 +2014,17 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
             {row('Contact Number', r.contactNumber)}
             {row('House / Building', r.houseNumber)}
             {row('Location URL', r.locationUrl, r.locationUrl)}
+          </div>
+          {/* Quick contact actions (Sprint 2.3) */}
+          <div className="mt-3 mb-1">
+            <ContextualActions
+              actions={[
+                callAction(r.contactNumber),
+                whatsappAction(r.contactNumber),
+                navigateAction(r.locationUrl),
+                odooAction(r.odooReference),
+              ]}
+            />
           </div>
 
           <SectionLabel icon={<Tag size={11} />}>Sales Information</SectionLabel>
