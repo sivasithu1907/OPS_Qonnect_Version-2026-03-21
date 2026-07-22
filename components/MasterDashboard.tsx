@@ -830,7 +830,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           </div>
         </div>
 
-        <table className="w-full text-sm text-left table-fixed">
+        <div className="overflow-x-auto qn-table"><table className="w-full text-sm text-left table-fixed">
           <thead className="bg-white text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 w-[5%]">Type</th>
@@ -868,7 +868,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       </div>
 
       {/* Preview Popup */}
