@@ -29,6 +29,11 @@ const fromLocalDatetimeInput = (localStr: string): string => {
 interface TicketManagementProps {
   tickets: Ticket[];
   technicians: Technician[];
+  // Command Palette quick action (Sprint 2.1): when true, open the EXISTING
+  // create-ticket modal on arrival, then signal back so the parent clears
+  // the one-shot flag. Purely additive — no new form or workflow.
+  autoOpenCreate?: boolean;
+  onAutoOpenHandled?: () => void;
   // Pass full customer list and creation handler
   customers?: Customer[]; 
   activities?: any[]; // For looking up linked activity data (appointment, assignment)
@@ -91,7 +96,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     activeFilter,
     onClearFilter,
     currentUser,
-    onDeleteTicket
+    onDeleteTicket,
+    autoOpenCreate = false,
+    onAutoOpenHandled
 }) => {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -102,6 +109,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
+
+  // Command Palette quick action — opens the same create modal the
+  // "New Ticket" button opens, then clears the one-shot request.
+  useEffect(() => {
+      if (autoOpenCreate) {
+          setIsCreateModalOpen(true);
+          onAutoOpenHandled?.();
+      }
+  }, [autoOpenCreate, onAutoOpenHandled]);
 
   // Reset viewMode to 'active' when external filter is cleared
   useEffect(() => {
