@@ -24,7 +24,8 @@ import {
 import { Role, SalesAppointmentRequest, SalesRequestStatus, Technician } from '../types';
 import { INPUT_STYLES, SEARCH_INPUT_STYLES, SALES_ACTIVITY_TYPES, SERVICE_CATEGORIES } from '../constants';
 import api from '../services/api';
-
+import { SarListSkeleton } from './shared/Skeletons';
+import { EmptySAR } from './shared/EmptyState';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CurrentUser {
@@ -714,7 +715,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
             {isStatusMenuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 sm:left-0 top-11 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-30 overflow-hidden py-1 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+                className="absolute right-0 sm:left-0 top-11 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-30 overflow-hidden py-1 qn-dropdown"
               >
                 {(['ALL', ...Object.values(SalesRequestStatus)] as const).map(s => {
                   const isActive = statusFilter === s;
@@ -744,10 +745,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       {/* ── Main Content ── */}
       <div className="px-6 py-6">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-400">
-            <Loader2 size={32} className="animate-spin" />
-            <span className="text-sm">Loading requests…</span>
-          </div>
+          <SarListSkeleton />
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <AlertCircle size={28} className="text-red-400" />
@@ -765,27 +763,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
             onSelectRequest={r => setDetailItem(r)}
           />
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center"><Inbox size={28} strokeWidth={1.4} className="text-slate-300" /></div>
-            <div className="text-center">
-              <p className="font-semibold text-slate-600">No requests found</p>
-              <p className="text-sm mt-1">
-                {searchQ || statusFilter !== 'ALL'
-                  ? 'Try adjusting your filters'
-                  : isSales
-                  ? 'Click "New Request" to create your first appointment request'
-                  : 'No sales appointment requests yet'}
-              </p>
-            </div>
-            {isSales && (
-              <button
-                onClick={openCreate}
-                className="flex items-center gap-2 px-4 py-2 bg-[#FFCC00] text-slate-900 rounded-xl font-semibold text-sm"
-              >
-                <Plus size={15} /> New Request
-              </button>
-            )}
-          </div>
+          <EmptySAR
+            filtered={!!(searchQ || statusFilter !== 'ALL')}
+            isSales={isSales}
+            onCreateSAR={(isSales || isScheduler) ? openCreate : undefined}
+            onClearFilters={(searchQ || statusFilter !== 'ALL') ? () => { setSearchQ(''); setStatusFilter('ALL'); } : undefined}
+          />
         ) : (
           <DateGroupedList
             requests={filtered}
