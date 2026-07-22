@@ -23,6 +23,11 @@ interface CustomerRecordsProps {
   isMobile?: boolean;
   onCreateTicket?: (data: any) => void;
   onCreateActivity?: (data: any) => void;
+  // Command Palette quick action (Sprint 2.1): when true, open the EXISTING
+  // "Add Client" modal on arrival, then signal back so the parent clears the
+  // one-shot flag. Purely additive — no new form or workflow.
+  autoOpenCreate?: boolean;
+  onAutoOpenHandled?: () => void;
 }
 
 const CustomerRecords: React.FC<CustomerRecordsProps> = ({ 
@@ -37,7 +42,9 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
     readOnly = false,
     isMobile = false,
     onCreateTicket,
-    onCreateActivity
+    onCreateActivity,
+    autoOpenCreate = false,
+    onAutoOpenHandled
 }) => {
   const showPhotoLightbox = (src: string) => {
     const overlay = document.createElement('div');
@@ -130,6 +137,15 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       setAvatarPreview(null);
       setFormError(null);
   };
+
+  // Command Palette quick action — opens the same "Add Client" modal the
+  // header button opens, then clears the one-shot request.
+  useEffect(() => {
+      if (autoOpenCreate && !readOnly) {
+          openModal('add');
+      }
+      if (autoOpenCreate) onAutoOpenHandled?.();
+  }, [autoOpenCreate]);
 
   const handleDelete = (id: string, e?: React.MouseEvent) => {
       if (readOnly) return;
