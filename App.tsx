@@ -1,11 +1,16 @@
-import React, { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import toast, { Toaster } from './components/Toast';
 import { generateActivityId } from './utils/idUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
 import {
-  Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2, KeyRound, EyeOff, Eye as EyeIcon, RefreshCw
+  Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2, KeyRound, EyeOff, Eye as EyeIcon, RefreshCw, Command as CommandIcon
 } from 'lucide-react';
+// Command Palette (Sprint 2.1) — registry + recent-pages hook are tiny and
+// load eagerly; the palette UI itself is lazy-loaded below and only mounts
+// while open, so it adds nothing to initial page rendering.
+import { getCommandsForRole, IS_APPLE_PLATFORM, type CommandItem, type QuickActionId } from './components/commandRegistry';
+import { useRecentPages } from './hooks/useRecentPages';
 
 // Login + ErrorBoundary load eagerly (needed immediately)
 import Login from './components/Login';
@@ -32,6 +37,7 @@ const TVDisplayMode = lazy(() => import('./components/TVDisplayMode'));
 const CompletedJobSummary = lazy(() => import('./components/CompletedJobSummary'));
 const MasterDashboard = lazy(() => import('./components/MasterDashboard'));
 const SalesAppointmentRequests = lazy(() => import('./components/SalesAppointmentRequests'));
+const CommandPalette = lazy(() => import('./components/CommandPalette'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -152,6 +158,16 @@ function App() {
   // TV Display Mode — detected from URL hash
   const [isTVMode, setIsTVMode] = useState(() => window.location.hash === '#tv');
 
+  // ── Command Palette (Sprint 2.1) ────────────────────────────────────────
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  // Element focused before the palette opened — restored after close.
+  const paletteReturnFocusRef = useRef<HTMLElement | null>(null);
+  // One-shot signal telling a target module to open its EXISTING create
+  // modal after a palette quick action navigates to it. The module clears it
+  // as soon as it has opened the form. (Create Activity doesn't need this —
+  // it reuses the pre-existing `prefillActivity` → open-modal flow.)
+  const [pendingQuickCreate, setPendingQuickCreate] = useState<'ticket' | 'client' | 'user' | 'sar' | null>(null);
+
   // Completed Job Summary — unified popup for completed tickets/activities
   const [showChatBot, setShowChatBot] = useState(false);
   const [completedSummary, setCompletedSummary] = useState<{ type: 'ticket' | 'activity', item: any } | null>(null);
@@ -254,6 +270,95 @@ function App() {
           setActiveView('team');
       }
   };
+
+  // ── Command Palette wiring ──────────────────────────────────────────────
+  // The palette only exists inside the desktop shell — never in the
+  // fullscreen mobile portals (Lead/Tech) or TV mode, which return before
+  // the shell renders.
+  const isDesktopShellActive =
+    !!currentUser && !isTVMode && activeView !== 'lead_portal' && activeView !== 'tech_portal';
+
+  // Role-filtered commands, derived from the same NAVIGATION_ITEMS config the
+  // sidebar uses — no second permission system.
+  const paletteCommands = useMemo<CommandItem[]>(
+    () => (currentUser ? getCommandsForRole(currentUser.role) : []),
+    [currentUser]
+  );
+
+  // Recently visited pages (view ids only) — recorded while the shell is
+  // active; display-time lookup against paletteCommands re-applies the
+  // current role's permissions automatically.
+  const recentViews = useRecentPages(activeView, isDesktopShellActive);
+
+  const openCommandPalette = useCallback(() => {
+    paletteReturnFocusRef.current = (document.activeElement as HTMLElement | null) ?? null;
+    setIsPaletteOpen(true);
+  }, []);
+
+  const closeCommandPalette = useCallback(() => {
+    setIsPaletteOpen(false);
+    // Restore focus to wherever the user was before opening — skipped
+    // silently if that element has since unmounted (e.g. after navigating).
+    const el = paletteReturnFocusRef.current;
+    paletteReturnFocusRef.current = null;
+    if (el && typeof el.focus === 'function' && document.contains(el)) {
+      requestAnimationFrame(() => el.focus());
+    }
+  }, []);
+
+  // Global Ctrl+K / ⌘K — active only while the desktop shell is on screen.
+  // Ignored while typing in inputs/textareas/selects/contentEditable unless
+  // the palette is already open (then it toggles closed). preventDefault
+  // stops the browser's own Ctrl+K behaviour (address-bar search).
+  useEffect(() => {
+    if (!isDesktopShellActive) {
+      if (isPaletteOpen) setIsPaletteOpen(false);
+      return;
+    }
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== 'k' && e.key !== 'K')) return;
+      if (!isPaletteOpen) {
+        const t = e.target as HTMLElement | null;
+        const isTyping = !!t && (
+          t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable
+        );
+        if (isTyping) return;
+      }
+      e.preventDefault();
+      if (isPaletteOpen) closeCommandPalette(); else openCommandPalette();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isDesktopShellActive, isPaletteOpen, openCommandPalette, closeCommandPalette]);
+
+  // Executes a palette result. Navigation mirrors the sidebar's exact
+  // side-effects; quick actions additionally hand off to the target module's
+  // EXISTING creation flow (never a duplicated form).
+  const handlePaletteSelect = useCallback((cmd: CommandItem) => {
+    closeCommandPalette();
+    setActiveView(cmd.targetView);
+    setIsMobileMenuOpen(false);
+    if (cmd.targetView !== 'tickets') setTicketFilter(null);
+    if (cmd.targetView !== 'lead_portal') setFocusedTicketId(null);
+    if (cmd.targetView !== 'planning') setTargetActivityId(null);
+
+    if (cmd.kind === 'action' && cmd.action) {
+      const action: QuickActionId = cmd.action;
+      if (action === 'create_activity') {
+        // Reuses the same prefill flow CustomerRecords already uses to open
+        // the planner's create modal (empty prefill = clean create form).
+        setPrefillActivity({});
+      } else if (action === 'create_ticket') {
+        setPendingQuickCreate('ticket');
+      } else if (action === 'create_client') {
+        setPendingQuickCreate('client');
+      } else if (action === 'add_user') {
+        setPendingQuickCreate('user');
+      } else if (action === 'create_sar') {
+        setPendingQuickCreate('sar');
+      }
+    }
+  }, [closeCommandPalette]);
 
   // Toggle Handler
   const toggleSidebar = () => {
@@ -1592,6 +1697,26 @@ useEffect(() => {
                 </div>
 
                 <div className="flex items-center gap-4">
+                     {/* Command Palette trigger (Sprint 2.1) — compact pill on
+                         md+ with the shortcut hint; icon-only below md so
+                         tablet/mobile users can still open the palette without
+                         cluttering the header. */}
+                     <button
+                        type="button"
+                        onClick={openCommandPalette}
+                        aria-haspopup="dialog"
+                        aria-expanded={isPaletteOpen}
+                        aria-label={`Open command palette (${IS_APPLE_PLATFORM ? 'Command' : 'Ctrl'}+K)`}
+                        title={`Search or jump to… (${IS_APPLE_PLATFORM ? '⌘' : 'Ctrl'}+K)`}
+                        className={`group flex items-center gap-2 p-2 md:pl-3 md:pr-2 md:py-2 rounded-xl border border-slate-100 bg-slate-50 hover:border-slate-200 hover:bg-white transition-all duration-200 ${FOCUS_RING}`}
+                     >
+                        <CommandIcon size={15} className="shrink-0 text-slate-400 group-hover:text-slate-500 transition-colors" aria-hidden="true" />
+                        <span className="hidden md:block text-[13px] font-medium text-slate-400 group-hover:text-slate-600 transition-colors">Jump to…</span>
+                        <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded-md border border-slate-200 bg-white text-[10px] font-semibold text-slate-500 leading-none" aria-hidden="true">
+                            {IS_APPLE_PLATFORM ? '⌘' : 'Ctrl'} K
+                        </kbd>
+                     </button>
+
                      {/* Search Bar (Global) */}
                      <div className="relative hidden lg:block z-50">
                          <div className={`flex items-center bg-slate-50 pl-3 pr-2.5 py-2 rounded-xl border transition-all duration-200 ${isGlobalSearchFocused ? 'border-slate-300 bg-white shadow-[0_0_0_3px_rgba(0,0,0,0.04)]' : 'border-slate-100 hover:border-slate-200'}`}>
@@ -1926,6 +2051,8 @@ useEffect(() => {
                         onCreateTicket={handleCreateTicket}
                         activeFilter={ticketFilter}
                         onClearFilter={() => setTicketFilter(null)}
+                        autoOpenCreate={pendingQuickCreate === 'ticket'}
+                        onAutoOpenHandled={() => setPendingQuickCreate(null)}
                     />
                 )}
                 {activeView === 'operations' && (
@@ -1995,6 +2122,8 @@ useEffect(() => {
                         });
                         setActiveView('planning');
                     }}
+                        autoOpenCreate={pendingQuickCreate === 'client'}
+                        onAutoOpenHandled={() => setPendingQuickCreate(null)}
                     />
                 )}
                 {activeView === 'master_dashboard' && (
@@ -2027,6 +2156,8 @@ useEffect(() => {
                         onDeleteUser={handleDeleteUser}
                         onChangePassword={handleChangePassword}
                         onJobsReassigned={() => { loadTickets(); loadActivities(); }}
+                        autoOpenCreate={pendingQuickCreate === 'user'}
+                        onAutoOpenHandled={() => setPendingQuickCreate(null)}
                     />
                 )}
                 {activeView === 'team' && (
@@ -2067,6 +2198,8 @@ useEffect(() => {
                             // the SAR's status and linkedActivityId.
                             loadSalesAppointmentRequests();
                         }}
+                        autoOpenCreate={pendingQuickCreate === 'sar'}
+                        onAutoOpenHandled={() => setPendingQuickCreate(null)}
                     />
                 )}
 
@@ -2125,6 +2258,21 @@ useEffect(() => {
           </Suspense>
 
         </main>
+
+        {/* ── Command Palette (Sprint 2.1) — lazy-loaded, mounted only while
+             open. Recent list excludes the page the user is already on, and
+             resolves ids against role-filtered commands so revoked pages
+             never appear. ── */}
+        {isPaletteOpen && (
+          <Suspense fallback={null}>
+            <CommandPalette
+              onClose={closeCommandPalette}
+              commands={paletteCommands}
+              recentViews={recentViews.filter(v => v !== activeView)}
+              onSelect={handlePaletteSelect}
+            />
+          </Suspense>
+        )}
 
         {/* ── Change Password Modal — originally SALES-only (key icon in header),
              now also reachable from the shared Account menu's "Change Password"
