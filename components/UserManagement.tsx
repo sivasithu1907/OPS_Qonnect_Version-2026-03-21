@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { EmptyTeam } from './shared/EmptyState';
 import { Technician, Role, Team } from '../types';
 import { 
   Plus, Search, Edit, Trash2, Shield, Briefcase, 
