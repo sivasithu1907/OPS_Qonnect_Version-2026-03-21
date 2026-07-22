@@ -9,7 +9,7 @@ import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phon
 import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2, Eye, Edit, Phone as PhoneIcon, RotateCcw, Briefcase, ExternalLink } from 'lucide-react';
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
 import { StatusBadge } from './shared/StatusBadge';
-
+import { EmptyTickets } from './shared/EmptyState';
 // Converts a UTC ISO string → datetime-local input value in LOCAL timezone
 const toLocalDatetimeInput = (isoString: string): string => {
   if (!isoString) return '';
@@ -930,11 +930,10 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
              
 
           {filteredTickets.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-                  <Filter size={32} className="mb-2 opacity-50"/>
-                  <p className="text-sm">No tickets found</p>
-                  {hasActiveLocalFilters && <button type="button" onClick={handleClearLocalFilters} className="mt-2 text-xs text-blue-500 hover:underline">Clear Filters</button>}
-              </div>
+              <EmptyTickets
+                filtered={hasActiveLocalFilters}
+                onClearFilters={hasActiveLocalFilters ? handleClearLocalFilters : undefined}
+              />
           ) : (
             <div>
             {groupedTickets.map(group => (
@@ -1549,7 +1548,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
       {/* New Ticket Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm qn-modal-backdrop">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                   <h3 className="font-bold text-lg text-slate-900">Create New Ticket</h3>
