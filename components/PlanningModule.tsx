@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import CustomerSelector from './CustomerSelector';
 import { getActivityStatusLabel } from '../constants';
-
+import { EmptyKanbanColumn } from './shared/EmptyState';
 interface PlanningModuleProps {
   activities: Activity[];
   teams: Team[]; 
@@ -562,7 +562,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
               
               <div className="p-3 flex-1 overflow-y-auto space-y-2.5 custom-scrollbar">
                 {colActs.length === 0 ? (
-                    <div className="text-center py-8 text-xs text-slate-400">No activities</div>
+                    <EmptyKanbanColumn label={meta.label} />
                 ) : (
                     colActs.map(act => <ActivityCard key={act.id} act={act} />)
                 )}
@@ -1004,7 +1004,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm qn-modal-backdrop">
             <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-2xl max-h-[90vh] rounded-2xl'} overflow-hidden flex flex-col`}>
                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                   <h3 className="font-bold text-lg text-slate-900">
