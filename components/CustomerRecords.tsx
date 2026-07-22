@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { EmptyClients } from './shared/EmptyState';
 import { Customer, Activity, Technician, Site, Ticket, SalesAppointmentRequest } from '../types';
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
 import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight, ClipboardList } from 'lucide-react';
@@ -569,7 +570,7 @@ onSaveCustomer(data as Customer);
 
         {/* Add/Edit Modal */}
         {(modalType === 'add' || modalType === 'edit') && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm qn-modal-backdrop">
                  <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-lg'} overflow-hidden flex flex-col`}>
                     <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
                          <h3 className="font-bold text-lg text-slate-900">
@@ -710,7 +711,7 @@ onSaveCustomer(data as Customer);
 
         {/* View Details & History Modal */}
         {modalType === 'view' && activeItem && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm qn-modal-backdrop">
                 <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-4xl max-h-[85vh]'} overflow-hidden relative flex flex-col md:flex-row`}>
                     <button onClick={closeModal} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10"><X size={20}/></button>
                     
