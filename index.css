@@ -191,3 +191,32 @@
     transform: none;
   }
 }
+
+/* ── animate-in / fade-in / zoom-in utilities (Sprint 2.2 fix) ─────────────
+   These were previously written expecting tailwindcss-animate but that plugin
+   is not available inside Docker. Defined here as plain CSS so they work in
+   every environment without any extra npm package. */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-in {
+    animation-fill-mode: both;
+  }
+  .fade-in {
+    animation-name: qp-fade;
+    animation-duration: var(--tw-animation-duration, 150ms);
+    animation-timing-function: ease-out;
+  }
+  .zoom-in-95 {
+    animation-name: zoom-in-95;
+    animation-duration: var(--tw-animation-duration, 150ms);
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .duration-150 { --tw-animation-duration: 150ms; }
+  .duration-200 { --tw-animation-duration: 200ms; }
+  .duration-300 { --tw-animation-duration: 300ms; }
+  .duration-500 { --tw-animation-duration: 500ms; }
+
+  @keyframes zoom-in-95 {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+}
