@@ -215,7 +215,7 @@ const AuditLog: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto qn-table">
         {error && (
           <div className="m-6 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>
         )}
