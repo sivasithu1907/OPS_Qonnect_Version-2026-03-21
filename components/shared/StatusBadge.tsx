@@ -76,7 +76,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label, classNa
   const meta = getStatusMeta(status);
   const text = label ?? meta.label ?? status.replace(/_/g, ' ');
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap ${meta.badge} ${className}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap transition-all duration-100 qn-status-badge ${meta.badge} ${className}`}>
       {meta.icon}{text}
     </span>
   );
