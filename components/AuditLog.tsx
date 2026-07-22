@@ -6,6 +6,8 @@ import {
   User, FileText, Ticket as TicketIcon, Activity as ActivityIcon,
   Contact, Users, LogIn, LogOut, KeyRound, X, ArrowRightLeft, Star
 } from 'lucide-react';
+import { AuditLogSkeleton } from './shared/Skeletons';
+import { EmptyAuditLog } from './shared/EmptyState';
 
 interface AuditLogEntry {
   id: number;
@@ -262,9 +264,7 @@ const AuditLog: React.FC = () => {
 
               {!loading && logs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-16 text-center text-slate-400">
-                    No activity found for the current filters.
-                  </td>
+                  <td colSpan={5}><EmptyAuditLog /></td>
                 </tr>
               )}
             </tbody>
@@ -272,9 +272,7 @@ const AuditLog: React.FC = () => {
         )}
 
         {loading && (
-          <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
-            <RefreshCw size={16} className="animate-spin" /> Loading audit log…
-          </div>
+          <div className="p-4"><AuditLogSkeleton /></div>
         )}
       </div>
 
