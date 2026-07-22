@@ -5723,6 +5723,238 @@ const shutdown = async () => {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Sprint 3.1A — Global Operational Record Search
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/search/records?q=<query>
+//
+// Searches across Clients, Activities, Active Tickets, and Sales Appointment
+// Requests. Returns lightweight result summaries only — no photos, no full
+// message history, no audit logs.
+//
+// Security:
+//  - Requires the same `authenticate` middleware as every other endpoint.
+//  - VIEWER role can search (read-only is fine for search).
+//  - SALES role sees only their own SARs (mirrors the existing SAR GET logic).
+//  - FIELD_ENGINEER role sees only assigned tickets and their own activities.
+//  - ADMIN / TEAM_LEAD / VIEWER see all records (matches existing list endpoints).
+//  - All queries use parameterised $1 placeholders — no string interpolation.
+//  - Results are capped per category (5 max) to prevent information overload.
+//
+// Ranking: exact-ID > phone match > odoo-ref prefix > name prefix > partial.
+// Applied in SQL via CASE scores; PostgreSQL returns sorted rows, frontend just
+// takes them in order.
+// ═══════════════════════════════════════════════════════════════════════════════
+app.get('/api/search/records', authenticate, async (req, res) => {
+    try {
+        const q = (req.query.q || '').toString().trim();
+        if (q.length < 2) {
+            return res.json({ clients: [], activities: [], tickets: [], sars: [] });
+        }
+
+        const role   = req.user.role;
+        const userId = req.user.id;
+
+        // Parameterised patterns (used in every query below)
+        const exact   = q;
+        const prefix  = q + '%';
+        const partial = '%' + q + '%';
+
+        // ── CLIENTS ──────────────────────────────────────────────────────────
+        // All roles that can reach this endpoint can see customers
+        // (FIELD_ENGINEER sees customers via /api/mobile/tech already).
+        const clientQ = await pool.query(
+            `SELECT id, name, phone, email, address AS location_url, building_number, notes
+             FROM customers
+             WHERE name ILIKE $2
+                OR phone ILIKE $2
+                OR email ILIKE $2
+                OR building_number ILIKE $2
+                OR REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') LIKE REGEXP_REPLACE($3, '[^0-9+]', '', 'g')
+             ORDER BY
+               CASE
+                 WHEN LOWER(name) = LOWER($1)         THEN 1
+                 WHEN LOWER(phone) = LOWER($1)        THEN 2
+                 WHEN name ILIKE $3                   THEN 3
+                 WHEN phone ILIKE $3                  THEN 4
+                 ELSE 5
+               END
+             LIMIT 5`,
+            [exact, partial, prefix]
+        );
+
+        // ── ACTIVITIES ───────────────────────────────────────────────────────
+        // FE: only activities they are involved in (matches mobile/tech endpoint).
+        // All others: unrestricted (matches /api/activities).
+        const activityWhere = (role === 'FIELD_ENGINEER')
+            ? `(lead_tech_id = $4 OR details->>'primaryEngineerId' = $4 OR details->'supportingEngineerIds' ? $4) AND`
+            : '';
+        const actParams = (role === 'FIELD_ENGINEER')
+            ? [exact, partial, prefix, userId]
+            : [exact, partial, prefix];
+
+        const actQ = await pool.query(
+            `SELECT id, reference, type, status, customer_name, planned_date,
+                    details->>'serviceCategory' AS service_category,
+                    details->>'odooLink' AS odoo_link,
+                    lead_tech_id
+             FROM activities
+             WHERE ${activityWhere}
+               type != 'WHATSAPP_SUPPORT'
+               AND (
+                 id ILIKE $2
+                 OR reference ILIKE $2
+                 OR customer_name ILIKE $2
+                 OR description ILIKE $2
+                 OR details->>'houseNumber' ILIKE $2
+                 OR details->>'odooLink' ILIKE $2
+                 OR details->>'serviceCategory' ILIKE $2
+               )
+             ORDER BY
+               CASE
+                 WHEN LOWER(id) = LOWER($1)              THEN 1
+                 WHEN LOWER(reference) = LOWER($1)       THEN 2
+                 WHEN details->>'odooLink' ILIKE $3       THEN 3
+                 WHEN customer_name ILIKE $3              THEN 4
+                 ELSE 5
+               END,
+               updated_at DESC
+             LIMIT 5`,
+            actParams
+        );
+
+        // ── ACTIVE TICKETS ───────────────────────────────────────────────────
+        // FE: only tickets assigned to them (matches mobile/tech endpoint).
+        // Excludes RESOLVED and CANCELLED to match "Active Tickets" semantics.
+        // SALES role: cannot access tickets (no ticket-related view in their role).
+        // VIEWER / ADMIN / TEAM_LEAD: see all active tickets.
+        let tickets = [];
+        if (role !== 'SALES') {
+            const ticketWhere = (role === 'FIELD_ENGINEER')
+                ? `assigned_tech_id = $4 AND`
+                : '';
+            const ticketStatusFilter = (role === 'FIELD_ENGINEER')
+                ? ''
+                : `status NOT IN ('RESOLVED','CANCELLED') AND`;
+            const ticketParams = (role === 'FIELD_ENGINEER')
+                ? [exact, partial, prefix, userId]
+                : [exact, partial, prefix];
+
+            const ticketQ = await pool.query(
+                `SELECT id, customer_name, phone_number, category, status, assigned_tech_id, odoo_link
+                 FROM tickets
+                 WHERE ${ticketWhere} ${ticketStatusFilter}
+                 (
+                   id ILIKE $2
+                   OR customer_name ILIKE $2
+                   OR phone_number ILIKE $2
+                   OR notes ILIKE $2
+                   OR carry_forward_note ILIKE $2
+                   OR odoo_link ILIKE $2
+                   OR REGEXP_REPLACE(phone_number, '[^0-9+]', '', 'g') LIKE REGEXP_REPLACE($3, '[^0-9+]', '', 'g')
+                 )
+                 ORDER BY
+                   CASE
+                     WHEN LOWER(id) = LOWER($1)                THEN 1
+                     WHEN LOWER(phone_number) = LOWER($1)      THEN 2
+                     WHEN odoo_link ILIKE $3                   THEN 3
+                     WHEN customer_name ILIKE $3               THEN 4
+                     ELSE 5
+                   END,
+                   updated_at DESC
+                 LIMIT 5`,
+                ticketParams
+            );
+            tickets = ticketQ.rows.map(r => ({
+                id:           r.id,
+                customerName: r.customer_name,
+                phoneNumber:  r.phone_number || '',
+                category:     r.category || '',
+                status:       r.status,
+                odooLink:     r.odoo_link || '',
+            }));
+        }
+
+        // ── SALES APPOINTMENT REQUESTS ────────────────────────────────────────
+        // SALES: only their own requests (mirrors existing SAR GET scoping).
+        // FE: cannot see SARs.
+        // ADMIN / TEAM_LEAD / VIEWER: all SARs.
+        let sars = [];
+        if (role !== 'FIELD_ENGINEER') {
+            const sarWhere = (role === 'SALES')
+                ? `created_by = $4 AND`
+                : '';
+            const sarParams = (role === 'SALES')
+                ? [exact, partial, prefix, userId]
+                : [exact, partial, prefix];
+
+            const sarQ = await pool.query(
+                `SELECT id, customer_name, contact_number, activity_type,
+                        service_category, status, odoo_reference, sales_lead_name
+                 FROM sales_appointment_requests
+                 WHERE ${sarWhere}
+                 (
+                   id ILIKE $2
+                   OR customer_name ILIKE $2
+                   OR contact_number ILIKE $2
+                   OR odoo_reference ILIKE $2
+                   OR service_category ILIKE $2
+                   OR sales_lead_name ILIKE $2
+                   OR REGEXP_REPLACE(contact_number, '[^0-9+]', '', 'g') LIKE REGEXP_REPLACE($3, '[^0-9+]', '', 'g')
+                 )
+                 ORDER BY
+                   CASE
+                     WHEN LOWER(id) = LOWER($1)                    THEN 1
+                     WHEN LOWER(contact_number) = LOWER($1)        THEN 2
+                     WHEN LOWER(odoo_reference) = LOWER($1)        THEN 3
+                     WHEN customer_name ILIKE $3                   THEN 4
+                     ELSE 5
+                   END,
+                   created_at DESC
+                 LIMIT 5`,
+                sarParams
+            );
+            sars = sarQ.rows.map(r => ({
+                id:             r.id,
+                customerName:   r.customer_name,
+                contactNumber:  r.contact_number || '',
+                activityType:   r.activity_type || '',
+                serviceCategory: r.service_category || '',
+                status:         r.status,
+                odooReference:  r.odoo_reference || '',
+                salesLeadName:  r.sales_lead_name || '',
+            }));
+        }
+
+        res.json({
+            clients: clientQ.rows.map(r => ({
+                id:             r.id,
+                name:           r.name,
+                phone:          r.phone || '',
+                email:          r.email || '',
+                buildingNumber: r.building_number || '',
+                locationUrl:    r.location_url || '',
+            })),
+            activities: actQ.rows.map(r => ({
+                id:              r.id,
+                reference:       r.reference || r.id,
+                type:            r.type || '',
+                status:          r.status,
+                customerName:    r.customer_name || '',
+                plannedDate:     r.planned_date || null,
+                serviceCategory: r.service_category || '',
+                odooLink:        r.odoo_link || '',
+            })),
+            tickets,
+            sars,
+        });
+    } catch (e) {
+        console.error('Record search error:', e.message);
+        res.status(500).json({ error: 'Search temporarily unavailable' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`✅ Backend server running on http://localhost:${PORT}`);
   });
