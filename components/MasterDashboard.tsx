@@ -7,6 +7,8 @@ import {
   Plus, Ticket as TicketIcon, ClipboardList, Calendar as CalendarIcon,
   RefreshCw, ArrowRight, Wrench, TrendingUp, Users, Contact, UserX
 } from 'lucide-react';
+import { MasterDashboardSkeleton } from './shared/Skeletons';
+import { EmptyJobsTable } from './shared/EmptyState';
 
 interface MasterDashboardProps {
   tickets: Ticket[];
@@ -845,14 +847,9 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {allJobs.length === 0 && (tickets.length === 0 && activities.length === 0) ? (
-              <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-                  <span>Loading data...</span>
-                </div>
-              </td></tr>
+              <tr><td colSpan={10}><MasterDashboardSkeleton /></td></tr>
             ) : allJobs.length === 0 ? (
-              <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">No jobs match current filters</td></tr>
+              <tr><td colSpan={10}><EmptyJobsTable filtered={true} /></td></tr>
             ) : allJobs.map(job => {
               const photos = (job.raw as any).photos || [];
               return (
