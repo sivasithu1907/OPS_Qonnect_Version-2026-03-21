@@ -58,3 +58,136 @@
   from { opacity: 0; transform: translateY(6px) scale(0.985); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Sprint 2.2 — Enterprise Motion System, Skeletons & Premium Empty States
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Page-level transitions ──────────────────────────────────────────── */
+/* Applied to the main content wrapper when the active view changes.
+   Respects prefers-reduced-motion: inside the guard so the class is a
+   no-op for users who have disabled animations. */
+@media (prefers-reduced-motion: no-preference) {
+  .qn-page-enter {
+    animation: page-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+/* ── 2. Card hover elevation ────────────────────────────────────────────── */
+/* Opt-in class.  Apply .qn-card to any white-card container.
+   Uses CSS transform (no layout change) for GPU-composited lift. */
+.qn-card {
+  transition: box-shadow 180ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              transform   180ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.qn-card:hover {
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.10),
+              0 1px 4px  -1px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qn-card:hover { transform: none; }
+}
+
+/* ── 3. Button press feedback ───────────────────────────────────────────── */
+/* Replaces the ad-hoc active:scale-[0.98] / active:scale-95 scattered
+   across the codebase with one consistent token. */
+.qn-btn-press {
+  transition: transform 100ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              background-color 100ms ease,
+              box-shadow 100ms ease;
+}
+.qn-btn-press:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qn-btn-press:active { transform: none; }
+}
+
+/* ── 4. Modal / dialog panel entrance ──────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .qn-modal-panel {
+    animation: qp-pop 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .qn-modal-backdrop {
+    animation: qp-fade 140ms ease-out both;
+  }
+}
+
+/* ── 5. Dropdown / menu entrance ────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .qn-dropdown {
+    animation: item-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+/* ── 6. Skeleton loader ─────────────────────────────────────────────────── */
+/* The shimmer moves right-to-left across a subtle gradient, matching the
+   Qonnect light theme. No colour-only indication — structural shape
+   communicates what is loading. */
+.qn-skeleton {
+  background: linear-gradient(
+    90deg,
+    #f1f5f9 25%,
+    #e8edf4 50%,
+    #f1f5f9 75%
+  );
+  background-size: 200% 100%;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .qn-skeleton {
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+/* Block variant — used for taller skeleton sections */
+.qn-skeleton-block {
+  border-radius: 10px;
+}
+
+/* ── 7. Status badge transition ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .qn-status-badge {
+    animation: badge-pop 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+/* ── 8. Table row hover ─────────────────────────────────────────────────── */
+.qn-table-row {
+  transition: background-color 100ms ease;
+}
+
+/* ── 9. Sidebar width transition (already on aside, this strengthens it) ── */
+/* The sidebar already uses transition-transform; we add width so the
+   content area doesn't snap. */
+.qn-sidebar-width {
+  transition: width 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* ── 10. List item stagger helper ───────────────────────────────────────── */
+/* nth-child delay so list items animate in sequence, not all at once. */
+@media (prefers-reduced-motion: no-preference) {
+  .qn-stagger > *:nth-child(1)  { animation-delay:  0ms; }
+  .qn-stagger > *:nth-child(2)  { animation-delay: 30ms; }
+  .qn-stagger > *:nth-child(3)  { animation-delay: 55ms; }
+  .qn-stagger > *:nth-child(4)  { animation-delay: 75ms; }
+  .qn-stagger > *:nth-child(5)  { animation-delay: 92ms; }
+  .qn-stagger > *:nth-child(n+6){ animation-delay:105ms; }
+}
+
+/* ── 11. Reduced-motion global override ─────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  /* Disable ALL decorative animations globally; keep functional
+     transitions (e.g. focus rings, colour changes) intact. */
+  .qn-page-enter,
+  .qn-modal-panel,
+  .qn-modal-backdrop,
+  .qn-dropdown,
+  .qn-skeleton,
+  .qn-status-badge {
+    animation: none !important;
+  }
+  .qn-card:hover {
+    transform: none;
+  }
+}
