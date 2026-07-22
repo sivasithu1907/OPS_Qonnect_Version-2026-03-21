@@ -135,6 +135,11 @@ interface UserManagementProps {
   // tickets/activities — the jobs moved are otherwise stale in any data
   // the parent is already holding.
   onJobsReassigned?: () => void;
+  // Command Palette quick action (Sprint 2.1): when true, open the EXISTING
+  // "Add User" modal on arrival, then signal back so the parent clears the
+  // one-shot flag. Purely additive — no new form or workflow.
+  autoOpenCreate?: boolean;
+  onAutoOpenHandled?: () => void;
 }
 
 const UserManagement: React.FC<UserManagementProps> = ({ 
@@ -142,7 +147,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
     onSaveUser,
     onDeleteUser,
     onChangePassword,
-    onJobsReassigned
+    onJobsReassigned,
+    autoOpenCreate = false,
+    onAutoOpenHandled
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Technician | null>(null);
@@ -185,6 +192,15 @@ const UserManagement: React.FC<UserManagementProps> = ({
     setModalOpen(true);
     setShowPassword(false);
   };
+
+  // Command Palette quick action — opens the same "Add User" modal the
+  // header button opens, then clears the one-shot request.
+  useEffect(() => {
+    if (autoOpenCreate) {
+        handleAddNew();
+        onAutoOpenHandled?.();
+    }
+  }, [autoOpenCreate]);
 
   const generatePassword = () => {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
