@@ -1,9 +1,11 @@
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   Activity, Server, ArrowDownLeft, ArrowUpRight, 
   Wifi, AlertCircle, RefreshCw, Pause, Play, Trash2,
   Terminal, ShieldCheck, Zap, Database, CheckCircle2
 } from 'lucide-react';
+import { EmptyMessages } from './shared/EmptyState';
 
 interface LogEntry {
   id: string;
@@ -476,7 +478,7 @@ const WhatsAppMonitor: React.FC = () => {
                                 {!selectedThread ? (
                                     <div className="h-full flex items-center justify-center text-slate-500 text-sm">Select a conversation.</div>
                                 ) : selectedMessages.length === 0 ? (
-                                    <div className="h-full flex items-center justify-center text-slate-500 text-sm">No messages yet.</div>
+                                    <div className="h-full flex items-center justify-center"><EmptyMessages /></div>
                                 ) : (
                                     <div className="space-y-3">
                                         {selectedMessages.map((m) => {
