@@ -10,6 +10,7 @@ import {
 // load eagerly; the palette UI itself is lazy-loaded below and only mounts
 // while open, so it adds nothing to initial page rendering.
 import { getCommandsForRole, IS_APPLE_PLATFORM, type CommandItem, type QuickActionId } from './components/commandRegistry';
+import type { RecordItem } from './components/CommandPalette';
 import { useRecentPages } from './hooks/useRecentPages';
 
 // Login + ErrorBoundary load eagerly (needed immediately)
@@ -357,6 +358,45 @@ function App() {
       } else if (action === 'create_sar') {
         setPendingQuickCreate('sar');
       }
+    }
+  }, [closeCommandPalette]);
+
+  // Sprint 3.1A — record result navigation.
+  // Opens the correct existing page/detail view for the selected record,
+  // reusing the same setActiveView + filter pattern the rest of the app uses.
+  const handleRecordSelect = useCallback((item: RecordItem) => {
+    closeCommandPalette();
+    setIsMobileMenuOpen(false);
+
+    switch (item.recordType) {
+      case 'client':
+        // Navigate to Clients page. The CustomerRecords component will show
+        // the full list; a future sprint could deep-link to a specific record.
+        setActiveView('customers');
+        setTicketFilter(null);
+        setTargetActivityId(null);
+        break;
+      case 'activity':
+        // Navigate to Activity Planner and open this activity's detail modal,
+        // reusing the existing initialActivityId flow.
+        setTargetActivityId(item.recordId);
+        setActiveView('planning');
+        setTicketFilter(null);
+        break;
+      case 'ticket':
+        // Navigate to Active Tickets and filter to this ticket,
+        // reusing the existing ticketFilter flow.
+        setTicketFilter({ ticketId: item.recordId });
+        setActiveView('tickets');
+        setTargetActivityId(null);
+        break;
+      case 'sar':
+        // Navigate to Sales Appointment Requests.
+        // The module manages its own detail drawer; no global filter needed.
+        setActiveView('sales_requests');
+        setTicketFilter(null);
+        setTargetActivityId(null);
+        break;
     }
   }, [closeCommandPalette]);
 
@@ -2270,6 +2310,7 @@ useEffect(() => {
               commands={paletteCommands}
               recentViews={recentViews.filter(v => v !== activeView)}
               onSelect={handlePaletteSelect}
+              onSelectRecord={handleRecordSelect}
             />
           </Suspense>
         )}
