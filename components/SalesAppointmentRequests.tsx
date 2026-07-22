@@ -40,6 +40,11 @@ interface Props {
   technicians: Technician[];
   activities?: any[]; // For resource occupancy calendar
   onActivityCreated?: () => void;
+  // Command Palette quick action (Sprint 2.1): when true, open the EXISTING
+  // "New Request" form on arrival, then signal back so the parent clears the
+  // one-shot flag. Purely additive — no new form or workflow.
+  autoOpenCreate?: boolean;
+  onAutoOpenHandled?: () => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -90,7 +95,7 @@ const FieldError = ({ msg }: { msg?: string }) =>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, activities = [], onActivityCreated }) => {
+const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, activities = [], onActivityCreated, autoOpenCreate = false, onAutoOpenHandled }) => {
   const isSales     = currentUser.role === Role.SALES;
   const isScheduler = currentUser.role === Role.ADMIN || currentUser.role === Role.TEAM_LEAD;
   const myId        = currentUser.techId || currentUser.id;
@@ -325,6 +330,16 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     setSelectedCustomerId(undefined);
     setShowForm(true);
   };
+
+  // Command Palette quick action — opens the same "New Request" form the
+  // header button opens (same isSales/isScheduler rule), then clears the
+  // one-shot request.
+  useEffect(() => {
+    if (autoOpenCreate) {
+      if (isSales || isScheduler) openCreate();
+      onAutoOpenHandled?.();
+    }
+  }, [autoOpenCreate]);
 
   const openEdit = (r: SalesAppointmentRequest) => {
     setEditingId(r.id);
