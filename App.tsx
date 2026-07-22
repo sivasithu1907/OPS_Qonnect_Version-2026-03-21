@@ -1621,7 +1621,7 @@ useEffect(() => {
                                 <div
                                     role="menu"
                                     aria-label="Account menu"
-                                    className="absolute left-0 top-14 w-64 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+                                    className="absolute left-0 top-14 w-64 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden qn-dropdown"
                                 >
                                     <div className="px-4 py-3 border-b border-slate-100">
                                         <div className="text-sm font-bold text-slate-900 truncate">{currentUser.name}</div>
@@ -1833,7 +1833,7 @@ useEffect(() => {
                          </button>
 
                          {isNotifOpen && (
-                             <div role="menu" className="absolute right-0 top-10 w-80 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150">
+                             <div role="menu" className="absolute right-0 top-10 w-80 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden qn-dropdown">
                                  {/* Tab header */}
                                  <div className="px-3 py-2.5 border-b border-slate-100 flex items-center justify-between">
                                      <div className="flex gap-1">
@@ -1963,7 +1963,7 @@ useEffect(() => {
                             <div
                                 role="menu"
                                 aria-label="Account menu"
-                                className="absolute right-0 top-11 w-64 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+                                className="absolute right-0 top-11 w-64 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-[95] overflow-hidden qn-dropdown"
                             >
                                 <div className="px-4 py-3 border-b border-slate-100">
                                     <div className="text-sm font-bold text-slate-900 truncate">{currentUser.name}</div>
@@ -2007,7 +2007,7 @@ useEffect(() => {
             </header>
 
             {/* View Container */}
-            <div className="flex-1 overflow-auto bg-slate-50 relative">
+            <div key={activeView} className="flex-1 overflow-auto bg-slate-50 relative qn-page-enter">
               <ErrorBoundary name='MainContent'>
               <Suspense fallback={<LoadingFallback />}>
                 {/* ── SALES route guard: redirect to allowed view ── */}
