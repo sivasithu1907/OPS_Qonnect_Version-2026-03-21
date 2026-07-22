@@ -21,7 +21,8 @@ import toast from './Toast';
 import api from '../services/api';
 import { Plus, RefreshCw, Calendar, AlertCircle } from 'lucide-react';
 import { Customer } from '../types';
-
+import { AmcSkeleton } from './shared/Skeletons';
+import { EmptyAMC } from './shared/EmptyState';
 interface AMCContractsProps {
   customers: Customer[];
 }
@@ -199,13 +200,9 @@ const AMCContracts: React.FC<AMCContractsProps> = ({ customers }) => {
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-slate-400">Loading contracts…</div>
+          <div className="p-4"><AmcSkeleton /></div>
         ) : schedules.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
-            <Calendar size={40} className="mx-auto mb-3 opacity-40" />
-            <p className="font-medium">No AMC contracts yet</p>
-            <p className="text-xs mt-1">Set up a contract to auto-create visits ahead of each due date</p>
-          </div>
+          <EmptyAMC />
         ) : (
           <div>
             {section('Overdue — needs attention', overdue, 'text-red-500')}
