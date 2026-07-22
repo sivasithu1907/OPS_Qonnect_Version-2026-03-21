@@ -15,7 +15,8 @@ import {
 import api from '../services/api';
 import toast from './Toast';
 import { ServiceFeedback as ServiceFeedbackType } from '../types';
-
+import { FeedbackSkeleton } from './shared/Skeletons';
+import { EmptyFeedback } from './shared/EmptyState';
 const RESOLUTION_LABEL: Record<string, string> = {
   COMPLETED: 'Completed',
   PARTIALLY_COMPLETED: 'Partially Completed',
@@ -366,14 +367,9 @@ const ServiceFeedbackPage: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto p-6" onClick={() => setShowDateMenu(false)}>
         {loading ? (
-          <div className="flex items-center justify-center gap-2 text-slate-400 py-16">
-            <Loader2 size={16} className="animate-spin" /> Loading feedback…
-          </div>
+          <div className="max-w-4xl"><FeedbackSkeleton /></div>
         ) : sorted.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
-            <Star size={40} className="mx-auto mb-3 opacity-40" />
-            <p className="font-medium">{followUpOnly ? 'No follow-ups pending' : 'No feedback in this range'}</p>
-          </div>
+          <EmptyFeedback followUpOnly={followUpOnly} />
         ) : viewMode === 'sort' ? (
           <div className="space-y-3 max-w-4xl">
             {sorted.map(renderCard)}
