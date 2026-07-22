@@ -10,6 +10,7 @@ import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, F
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
 import { StatusBadge } from './shared/StatusBadge';
 import { EmptyTickets } from './shared/EmptyState';
+import { ContextualActions, callAction, whatsappAction, navigateAction, odooAction } from './shared/ContextualActions';
 // Converts a UTC ISO string → datetime-local input value in LOCAL timezone
 const toLocalDatetimeInput = (isoString: string): string => {
   if (!isoString) return '';
@@ -1122,6 +1123,16 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <SectionLabel icon={<User size={11}/>}>Client Information</SectionLabel>
                     <div className="text-sm font-bold text-slate-800">{cust?.name || editForm.customerName}</div>
                     {editForm.phoneNumber && <div className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(editForm.phoneNumber)}</div>}
+                    {/* ── Quick contact actions (Sprint 2.3) ── */}
+                    <div className="mt-3">
+                      <ContextualActions
+                        actions={[
+                          callAction(editForm.phoneNumber),
+                          whatsappAction(editForm.phoneNumber),
+                          navigateAction(selectedTicket.locationUrl || cust?.address),
+                        ]}
+                      />
+                    </div>
                   </div>
 
                   {/* ── Site Information ── */}
