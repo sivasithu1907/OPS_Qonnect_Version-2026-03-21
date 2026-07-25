@@ -938,9 +938,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 </div>
                                 );
                             })()}
-                        </div>
+                        </div>{/* end flex-1 overflow-y-auto */}
 
-                        {/* ── STICKY CTA BAR — primary action always thumb-reachable ── */}
+                        {/* ── STICKY CTA BAR — outside the scroll container so it doesn't scroll away ── */}
                         {activeJob && activeJobItem?.type === 'activity' && (() => {
                             const act = activeJob as Activity;
                             const actStatus = act.status;
@@ -986,7 +986,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                             }
 
                             return (
-                                <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 pt-3 pb-5 shrink-0 z-10">
+                                <div className="bg-white border-t border-slate-200 px-4 pt-3 pb-5 shrink-0">
                                     <div className="flex gap-2 items-center">
                                         {primaryBtn}
                                         {/* Secondary overflow menu — carry forward / cancel */}
@@ -1014,7 +1014,6 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 </div>
                             );
                         })()}
-                        </div>
                     </div>
                 )}
 
