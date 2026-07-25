@@ -117,8 +117,8 @@ function ToastCard({ item, onRemove }: { item: ToastItem; onRemove: (id: string)
         ${cfg.border}
         transition-all duration-300
         ${visible
-          ? 'opacity-100 translate-x-0'
-          : 'opacity-0 translate-x-6'
+          ? 'opacity-100 translate-x-0 translate-y-0'
+          : 'opacity-0 translate-y-4 sm:translate-y-0 sm:translate-x-6'
         }
       `}
       style={{ fontFamily: 'inherit', fontSize: '13px' }}
@@ -183,16 +183,30 @@ export function Toaster() {
   if (toasts.length === 0) return null;
 
   return createPortal(
-    <div
-      className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none"
-      aria-label="Notifications"
-    >
-      {toasts.map(t => (
-        <div key={t.id} className="pointer-events-auto">
-          <ToastCard item={t} onRemove={remove} />
-        </div>
-      ))}
-    </div>,
+    <>
+      {/* Desktop: top-right stack */}
+      <div
+        className="hidden sm:flex fixed top-4 right-4 z-[9999] flex-col gap-2 pointer-events-none"
+        aria-label="Notifications"
+      >
+        {toasts.map(t => (
+          <div key={t.id} className="pointer-events-auto">
+            <ToastCard item={t} onRemove={remove} />
+          </div>
+        ))}
+      </div>
+      {/* Mobile: bottom-center stack — sits in thumb zone above nav */}
+      <div
+        className="flex sm:hidden fixed bottom-20 left-4 right-4 z-[9999] flex-col-reverse gap-2 pointer-events-none items-center"
+        aria-label="Notifications"
+      >
+        {toasts.map(t => (
+          <div key={t.id} className="pointer-events-auto w-full max-w-sm">
+            <ToastCard item={t} onRemove={remove} />
+          </div>
+        ))}
+      </div>
+    </>,
     document.body
   );
 }
