@@ -355,3 +355,96 @@ export const AmcSkeleton: React.FC = () => (
     ))}
   </div>
 );
+
+/* ── Mobile Job Detail view ─────────────────────────────────────────────── */
+export const JobDetailSkeleton: React.FC = () => (
+  <div className="flex flex-col gap-4 p-5 bg-slate-50 h-full" aria-hidden="true">
+    {/* Status badge + title */}
+    <div className="flex justify-between items-start">
+      <div className="flex flex-col gap-2 flex-1">
+        <Bone className="h-2.5 w-24 rounded-full" />
+        <Bone className="h-6 w-48 rounded-xl" />
+        <Bone className="h-2.5 w-36 rounded-full" />
+      </div>
+      <Bone className="h-7 w-20 rounded-full shrink-0" />
+    </div>
+    {/* 1-click comms bar */}
+    <div className="grid grid-cols-3 gap-2">
+      {[0,1,2].map(i => (
+        <Bone key={i} className="h-14 rounded-xl" />
+      ))}
+    </div>
+    {/* Info card */}
+    <div className="bg-white rounded-xl border border-slate-100 p-4 flex flex-col gap-3">
+      <Bone className="h-3 w-20 rounded-full" />
+      <Bone className="h-4 w-40 rounded-full" />
+      <Bone className="h-10 w-full rounded-xl" />
+    </div>
+    {/* Progress steps */}
+    <div className="bg-white rounded-xl border border-slate-100 p-4">
+      <div className="flex items-center justify-between">
+        {[0,1,2,3].map(i => (
+          <React.Fragment key={i}>
+            <div className="flex flex-col items-center gap-1">
+              <Bone className="h-7 w-7 rounded-full" />
+              <Bone className="h-2 w-10 rounded-full" />
+            </div>
+            {i < 3 && <Bone className="flex-1 h-0.5 mx-2 mb-3 rounded-full" />}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+    {/* Description */}
+    <div className="bg-white rounded-xl border border-slate-100 p-4 flex flex-col gap-2">
+      <Bone className="h-2.5 w-28 rounded-full" />
+      <Bone className="h-3 w-full rounded-full" />
+      <Bone className="h-3 w-4/5 rounded-full" />
+    </div>
+    {/* Sticky CTA placeholder */}
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 pt-3 pb-5">
+      <Bone className="h-14 w-full rounded-2xl" />
+    </div>
+  </div>
+);
+
+/* ── Customer Timeline skeleton ─────────────────────────────────────────── */
+export const CustomerTimelineSkeleton: React.FC<{ count?: number }> = ({ count = 4 }) => (
+  <div className="space-y-4" aria-hidden="true">
+    {/* Year group header */}
+    <div className="flex items-center gap-3">
+      <Bone className="h-3 w-10 rounded-full" />
+      <Bone className="flex-1 h-px rounded-full" />
+    </div>
+    <div className="relative border-l-2 border-slate-100 ml-3 space-y-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="relative pl-8">
+          {/* Dot */}
+          <Bone className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full" />
+          <div className="rounded-xl border border-slate-100 overflow-hidden">
+            {/* Accent bar */}
+            <Bone className="h-1 w-full rounded-none" />
+            <div className="p-3 flex flex-col gap-2.5">
+              <div className="flex justify-between items-start">
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <div className="flex gap-1.5">
+                    <Bone className="h-4 w-16 rounded-md" />
+                    <Bone className="h-4 w-24 rounded-md" />
+                  </div>
+                  <Bone className="h-4 w-36 rounded-full" />
+                  <Bone className="h-2.5 w-24 rounded-full" />
+                </div>
+                <Bone className="h-6 w-20 rounded-lg shrink-0" />
+              </div>
+              <Bone className="h-3 w-full rounded-full" />
+              <Bone className="h-3 w-3/4 rounded-full" />
+              <div className="flex gap-4">
+                <Bone className="h-2.5 w-20 rounded-full" />
+                <Bone className="h-2.5 w-16 rounded-full" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
