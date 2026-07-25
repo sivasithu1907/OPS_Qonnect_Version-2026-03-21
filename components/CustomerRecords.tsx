@@ -5,6 +5,7 @@ import { Customer, Activity, Technician, Site, Ticket, SalesAppointmentRequest }
 import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
 import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight, ClipboardList } from 'lucide-react';
 import { ContextualActions, whatsappAction, createTicketAction, createActivityAction } from './shared/ContextualActions';
+import { CustomerTimelineSkeleton } from './shared/Skeletons';
 
 interface CustomerRecordsProps {
   customers: Customer[];
@@ -861,141 +862,202 @@ onSaveCustomer(data as Customer);
                         })()}
                         
                         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                            {activeTimeline.length === 0 ? (
+                            {activeTimeline.length === 0 && !activeItem ? (
+                                /* Skeleton while customer record is being resolved */
+                                <CustomerTimelineSkeleton count={3} />
+                            ) : activeTimeline.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2 opacity-60">
                                     <Calendar size={48} />
                                     <p>No service history found for this customer.</p>
                                 </div>
-                            ) : (
-                                <div className="relative border-l-2 border-slate-100 ml-3 space-y-6 py-2">
-                                    {activeTimeline.map((item, index) => {
-                                        const isTicket = item.kind === 'ticket';
-                                        const isSar = item.kind === 'sar';
-                                        const statusColor = 
-                                            item.status === 'DONE' || item.status === 'RESOLVED' || item.status === 'COMPLETED' ? 'bg-emerald-500' :
-                                            item.status === 'IN_PROGRESS' ? 'bg-blue-500' :
-                                            item.status === 'CARRY_FORWARD' ? 'bg-amber-500' :
-                                            item.status === 'CANCELLED' ? 'bg-slate-300' :
-                                            item.status === 'ON_MY_WAY' || item.status === 'ARRIVED' ? 'bg-cyan-500' :
-                                            item.status === 'SCHEDULED' ? 'bg-indigo-500' :
-                                            item.status === 'PENDING_SCHEDULING' ? 'bg-amber-400' :
-                                            'bg-amber-400';
-                                        const statusBadge =
-                                            item.status === 'DONE' || item.status === 'RESOLVED' || item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                                            item.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                                            item.status === 'CARRY_FORWARD' ? 'bg-amber-100 text-amber-700' :
-                                            item.status === 'CANCELLED' ? 'bg-slate-100 text-slate-500' :
-                                            item.status === 'ON_MY_WAY' || item.status === 'ARRIVED' ? 'bg-cyan-100 text-cyan-700' :
-                                            item.status === 'SCHEDULED' ? 'bg-indigo-100 text-indigo-700' :
-                                            item.status === 'PENDING_SCHEDULING' ? 'bg-amber-100 text-amber-700' :
-                                            'bg-amber-100 text-amber-700';
-                                        
-                                        return (
-                                            <div key={`${item.kind}-${item.id}-${index}`} className="relative pl-8">
-                                                {/* Timeline Dot */}
-                                                <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 border-white shadow-sm ${statusColor}`}>
-                                                    {isTicket && <TicketIcon size={8} className="text-white absolute top-0.5 left-0.5" />}
-                                                    {isSar && <ClipboardList size={8} className="text-white absolute top-0.5 left-0.5" />}
-                                                </div>
-                                                
-                                                <div className={`rounded-lg p-4 border hover:shadow-md transition-shadow cursor-pointer ${
-                                                    isTicket ? 'bg-purple-50/30 border-purple-100' : isSar ? 'bg-amber-50/30 border-amber-100' : 'bg-slate-50 border-slate-100'
-                                                }`} onClick={() => setHistoryPreview(item)}>
-                                                    {/* Header Row */}
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 mb-0.5">
-                                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isTicket ? 'bg-purple-100 text-purple-600' : isSar ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-600'}`}>
-                                                                    {isTicket ? 'TICKET' : isSar ? 'SALES REQUEST' : 'ACTIVITY'}
-                                                                </span>
-                                                                <span className="text-[10px] font-mono text-slate-400">{item.ref}</span>
-                                                            </div>
-                                                            <div className="font-bold text-slate-800 text-sm">{item.title}</div>
-                                                            {item.serviceCategory && <div className="text-[10px] text-indigo-600">{item.serviceCategory}</div>}
-                                                            <div className="text-xs text-slate-500 font-mono mt-0.5">{item.dateLabel} at {item.date.toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}</div>
-                                                            {isSar && item.linkedActivityId && (
-                                                                <div className="text-[10px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
-                                                                    <ArrowRight size={10} /> Scheduled as {item.linkedActivityId}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
-                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusBadge}`}>
-                                                                {item.status.replace(/_/g, ' ')}
-                                                            </span>
-                                                            {!isSar && (
-                                                                <span className={`text-[9px] font-bold ${
-                                                                    item.priority === 'URGENT' ? 'text-red-600' : item.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'
-                                                                }`}>{item.priority}</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    {/* Description */}
-                                                    <p className="text-xs text-slate-600 mb-2 line-clamp-2">{item.description}</p>
-                                                    
-                                                    {/* Meta Row */}
-                                                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mb-2">
-                                                        {item.techName && (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <div className="w-4 h-4 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-[8px] font-bold">E</div>
-                                                                <span className="truncate">{item.techName}</span>
-                                                            </div>
-                                                        )}
-                                                        {item.location && (
-                                                            <div className="flex items-center gap-1">
-                                                                <MapPin size={10} className="text-slate-400"/>
-                                                                <span className="truncate">{item.location}</span>
-                                                            </div>
-                                                        )}
-                                                        {item.startedAt && item.completedAt && (
-                                                            <div className="flex items-center gap-1">
-                                                                <Clock size={10} className="text-slate-400"/>
-                                                                <span>{Math.round((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)}m actual</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
+                            ) : (() => {
+                                // Group timeline items by year for cleaner scannability
+                                const grouped: { year: string; items: typeof activeTimeline }[] = [];
+                                activeTimeline.forEach(item => {
+                                    const yr = item.date.getFullYear().toString();
+                                    const last = grouped[grouped.length - 1];
+                                    if (last && last.year === yr) last.items.push(item);
+                                    else grouped.push({ year: yr, items: [item] });
+                                });
 
-                                                    {/* Notes Section — Remarks, Completion, Carry Forward */}
-                                                    {(item.remarks || item.completionNote || item.carryForwardNote || item.cancellationReason) && (
-                                                        <div className="space-y-1.5 mt-2 pt-2 border-t border-slate-100">
-                                                            {item.remarks && (
-                                                                <div className="flex items-start gap-1.5">
-                                                                    <MessageSquare size={10} className="text-slate-400 mt-0.5 shrink-0"/>
-                                                                    <p className="text-[11px] text-slate-600 whitespace-pre-wrap">{item.remarks}</p>
+                                const statusMeta = (status: string) => {
+                                    switch (status) {
+                                        case 'DONE': case 'RESOLVED': case 'COMPLETED':
+                                            return { dot: 'bg-emerald-500', pill: 'bg-emerald-100 text-emerald-700 border border-emerald-200', icon: '✓' };
+                                        case 'IN_PROGRESS':
+                                            return { dot: 'bg-blue-500 animate-pulse', pill: 'bg-blue-100 text-blue-700 border border-blue-200', icon: '▶' };
+                                        case 'CARRY_FORWARD':
+                                            return { dot: 'bg-amber-500', pill: 'bg-amber-100 text-amber-700 border border-amber-200', icon: '↻' };
+                                        case 'CANCELLED':
+                                            return { dot: 'bg-slate-300', pill: 'bg-slate-100 text-slate-500 border border-slate-200', icon: '✕' };
+                                        case 'ON_MY_WAY': case 'ARRIVED':
+                                            return { dot: 'bg-cyan-500', pill: 'bg-cyan-100 text-cyan-700 border border-cyan-200', icon: '→' };
+                                        case 'SCHEDULED':
+                                            return { dot: 'bg-indigo-500', pill: 'bg-indigo-100 text-indigo-700 border border-indigo-200', icon: '📅' };
+                                        default:
+                                            return { dot: 'bg-amber-400', pill: 'bg-amber-100 text-amber-700 border border-amber-200', icon: '○' };
+                                    }
+                                };
+
+                                return (
+                                    <div className="space-y-6">
+                                        {grouped.map(group => (
+                                            <div key={group.year}>
+                                                {/* Year divider */}
+                                                <div className="flex items-center gap-3 mb-4 sticky top-0 bg-white/95 backdrop-blur-sm py-1 z-10">
+                                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{group.year}</span>
+                                                    <div className="flex-1 h-px bg-slate-100" />
+                                                    <span className="text-[10px] font-bold text-slate-300">{group.items.length}</span>
+                                                </div>
+                                                <div className="relative border-l-2 border-slate-100 ml-3 space-y-4">
+                                                    {group.items.map((item, index) => {
+                                                        const isTicket = item.kind === 'ticket';
+                                                        const isSar = item.kind === 'sar';
+                                                        const sm = statusMeta(item.status);
+                                                        const isDone = ['DONE','RESOLVED','COMPLETED'].includes(item.status);
+                                                        const isCancelled = item.status === 'CANCELLED';
+
+                                                        return (
+                                                            <div key={`${item.kind}-${item.id}-${index}`} className="relative pl-8">
+                                                                {/* Timeline dot with kind icon */}
+                                                                <div className={`absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm flex items-center justify-center ${sm.dot}`}>
+                                                                    {isTicket && <TicketIcon size={7} className="text-white" />}
+                                                                    {isSar && <ClipboardList size={7} className="text-white" />}
                                                                 </div>
-                                                            )}
-                                                            {item.completionNote && (
-                                                                <div className="bg-emerald-50 rounded p-2 border border-emerald-100">
-                                                                    <div className="text-[9px] font-bold text-emerald-500 uppercase mb-0.5">Completion Summary</div>
-                                                                    <p className="text-[11px] text-emerald-800 whitespace-pre-wrap">{item.completionNote}</p>
-                                                                </div>
-                                                            )}
-                                                            {item.carryForwardNote && (
-                                                                <div className="bg-amber-50 rounded p-2 border border-amber-100">
-                                                                    <div className="text-[9px] font-bold text-amber-600 uppercase mb-0.5 flex items-center gap-1"><RotateCcw size={8}/> Carry Forward</div>
-                                                                    <p className="text-[11px] text-amber-800 whitespace-pre-wrap">{item.carryForwardNote}</p>
-                                                                    {item.nextPlannedAt && (
-                                                                        <div className="text-[10px] text-amber-600 mt-1 font-medium">
-                                                                            Next: {new Date(item.nextPlannedAt).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short'})} at {new Date(item.nextPlannedAt).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+
+                                                                <div
+                                                                    className={`rounded-xl border transition-all cursor-pointer group ${
+                                                                        isDone ? 'bg-white border-slate-100 hover:border-emerald-200 hover:shadow-sm' :
+                                                                        isCancelled ? 'bg-slate-50 border-slate-100 opacity-60 hover:opacity-80' :
+                                                                        isTicket ? 'bg-purple-50/40 border-purple-100 hover:border-purple-300 hover:shadow-sm' :
+                                                                        isSar ? 'bg-amber-50/40 border-amber-100 hover:border-amber-300 hover:shadow-sm' :
+                                                                        'bg-blue-50/30 border-blue-100 hover:border-blue-300 hover:shadow-sm'
+                                                                    }`}
+                                                                    onClick={() => setHistoryPreview(item)}
+                                                                >
+                                                                    {/* Coloured top accent bar */}
+                                                                    <div className={`h-1 rounded-t-xl ${
+                                                                        isDone ? 'bg-emerald-400' :
+                                                                        isCancelled ? 'bg-slate-200' :
+                                                                        isTicket ? 'bg-purple-400' :
+                                                                        isSar ? 'bg-amber-400' :
+                                                                        'bg-blue-400'
+                                                                    }`} />
+
+                                                                    <div className="p-3">
+                                                                        {/* Header row */}
+                                                                        <div className="flex justify-between items-start gap-2 mb-2">
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                                                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                                                                                        isTicket ? 'bg-purple-100 text-purple-600' :
+                                                                                        isSar ? 'bg-amber-100 text-amber-700' :
+                                                                                        'bg-blue-100 text-blue-600'
+                                                                                    }`}>
+                                                                                        {isTicket ? 'TICKET' : isSar ? 'SALES' : 'ACTIVITY'}
+                                                                                    </span>
+                                                                                    <span className="text-[10px] font-mono text-slate-400">{item.ref}</span>
+                                                                                    {item.serviceCategory && (
+                                                                                        <span className="text-[9px] font-medium text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100">
+                                                                                            {item.serviceCategory}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <div className="font-bold text-slate-800 text-sm leading-tight">{item.title}</div>
+                                                                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                                                                    {item.dateLabel} · {item.date.toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}
+                                                                                </div>
+                                                                            </div>
+                                                                            {/* Status pill */}
+                                                                            <span className={`shrink-0 text-[9px] font-bold px-2 py-1 rounded-lg uppercase leading-none ${sm.pill}`}>
+                                                                                {item.status.replace(/_/g, ' ')}
+                                                                            </span>
                                                                         </div>
-                                                                    )}
+
+                                                                        {/* Description */}
+                                                                        {item.description && (
+                                                                            <p className="text-xs text-slate-600 mb-2 line-clamp-2 leading-relaxed">{item.description}</p>
+                                                                        )}
+
+                                                                        {/* Meta row: engineer + location + duration */}
+                                                                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                                                                            {item.techName && (
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <div className="w-3.5 h-3.5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[7px] font-bold">E</div>
+                                                                                    <span>{item.techName}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {item.location && (
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <MapPin size={9} className="text-slate-400 shrink-0"/>
+                                                                                    <span className="truncate max-w-[120px]">{item.location}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {item.startedAt && item.completedAt && (
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <Clock size={9} className="text-slate-400"/>
+                                                                                    <span>{Math.round((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)}m</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {isSar && item.linkedActivityId && (
+                                                                                <div className="flex items-center gap-1 text-emerald-600 font-medium">
+                                                                                    <ArrowRight size={9}/> {item.linkedActivityId}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Inline note pills — compact, expandable via click */}
+                                                                        {(item.completionNote || item.carryForwardNote || item.cancellationReason || item.remarks) && (
+                                                                            <div className="mt-2 pt-2 border-t border-slate-100 space-y-1.5">
+                                                                                {item.completionNote && (
+                                                                                    <div className="flex items-start gap-1.5 bg-emerald-50 rounded-lg p-2 border border-emerald-100">
+                                                                                        <span className="text-[8px] font-black text-emerald-500 uppercase mt-px shrink-0">Done</span>
+                                                                                        <p className="text-[11px] text-emerald-800 leading-snug line-clamp-2">{item.completionNote}</p>
+                                                                                    </div>
+                                                                                )}
+                                                                                {item.carryForwardNote && (
+                                                                                    <div className="flex items-start gap-1.5 bg-amber-50 rounded-lg p-2 border border-amber-100">
+                                                                                        <RotateCcw size={9} className="text-amber-500 mt-px shrink-0"/>
+                                                                                        <div>
+                                                                                            <p className="text-[11px] text-amber-800 leading-snug line-clamp-2">{item.carryForwardNote}</p>
+                                                                                            {item.nextPlannedAt && (
+                                                                                                <p className="text-[10px] text-amber-600 font-medium mt-0.5">
+                                                                                                    Next: {new Date(item.nextPlannedAt).toLocaleDateString('en-GB',{timeZone:'Asia/Qatar',day:'2-digit',month:'short'})}
+                                                                                                </p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+                                                                                {item.cancellationReason && (
+                                                                                    <div className="flex items-start gap-1.5 bg-red-50 rounded-lg p-2 border border-red-100">
+                                                                                        <span className="text-[8px] font-black text-red-500 uppercase mt-px shrink-0">Cancelled</span>
+                                                                                        <p className="text-[11px] text-red-700 leading-snug line-clamp-2">{item.cancellationReason}</p>
+                                                                                    </div>
+                                                                                )}
+                                                                                {item.remarks && !item.completionNote && (
+                                                                                    <div className="flex items-start gap-1.5">
+                                                                                        <MessageSquare size={9} className="text-slate-400 mt-px shrink-0"/>
+                                                                                        <p className="text-[11px] text-slate-600 line-clamp-2">{item.remarks}</p>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* "See full detail" prompt — only visible on hover */}
+                                                                        <div className="mt-2 text-[9px] font-bold text-slate-300 group-hover:text-slate-400 transition-colors text-right">
+                                                                            tap to expand ›
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                            )}
-                                                            {item.cancellationReason && (
-                                                                <div className="bg-red-50 rounded p-2 border border-red-100">
-                                                                    <div className="text-[9px] font-bold text-red-500 uppercase mb-0.5">Cancelled</div>
-                                                                    <p className="text-[11px] text-red-700 whitespace-pre-wrap">{item.cancellationReason}</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 </div>
