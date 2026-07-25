@@ -8,6 +8,7 @@ import { INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 import CompletionFeedbackModal from './CompletionFeedbackModal';
 import { getStatusMeta } from './shared/StatusBadge';
+import { JobDetailSkeleton } from './shared/Skeletons';
 
 interface MobileTechPortalProps {
   tickets: Ticket[];
@@ -761,13 +762,15 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                 
                 {/* === JOB DETAIL VIEW (overrides everything when a job is tapped) === */}
                 {selectedJobId && !completionStep && (
-                    <div className="h-full flex flex-col">
+                    <div className="h-full flex flex-col relative">
                         {/* Detail header with back button */}
                         <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 shrink-0 shadow-sm">
                             <button onClick={handleBack} className="p-1"><ChevronLeft size={24} className="text-slate-600"/></button>
                             <h2 className="font-bold text-slate-900">Job Details</h2>
                         </div>
                         <div className="flex-1 overflow-y-auto">
+                            {/* Show skeleton while job data resolves (e.g. photo fetch in flight) */}
+                            {!activeJob && <JobDetailSkeleton />}
                             {/* Ticket detail */}
                             {activeJob && activeJobItem?.type !== 'activity' && (
                                 <MyJobTaskView
@@ -898,64 +901,119 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                                 </div>
                                             );
                                         })()}
-                                        {/* Action buttons */}
-                                        {actStatus !== 'DONE' && actStatus !== 'CANCELLED' && (
-                                            <div className="space-y-2 pt-2">
-                                                {actStatus === 'PLANNED' || actStatus === 'CARRY_FORWARD' ? (
-                                                    <button onClick={handleActivityOnMyWay} className="w-full py-3.5 rounded-xl bg-cyan-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
-                                                        <Navigation size={16}/> On My Way
-                                                    </button>
-                                                ) : (actStatus as any) === 'ON_MY_WAY' ? (
-                                                    <button onClick={handleActivityArrived} className="w-full py-3.5 rounded-xl bg-indigo-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
-                                                        <MapPin size={16}/> I've Arrived
-                                                    </button>
-                                                ) : (actStatus as any) === 'ARRIVED' ? (
-                                                    <button onClick={handleActivityStartWork} className="w-full py-3.5 rounded-xl bg-amber-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
-                                                        <Play size={16}/> Start Work
-                                                    </button>
-                                                ) : actStatus === 'IN_PROGRESS' ? (
-                                                    <>
-                                                        <button onClick={() => handlePhotoClick(act.id, 'activity')} className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-sm flex items-center justify-center gap-2 border border-slate-200 active:bg-slate-200">
-                                                            <Camera size={14}/> Add Photo ({(loadedPhotos[act.id] || []).length}/{MAX_PHOTOS})
-                                                        </button>
-                                                        <button onClick={() => setCompletionStep(true)} className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-bold shadow-lg active:scale-[0.98] flex items-center justify-center gap-2">
-                                                            <CheckCircle2 size={16}/> Complete Job
-                                                        </button>
-                                                        {/* Client cancelled on-site */}
-                                                        <button onClick={() => {
-                                                            setCancelTargetAct(act);
-                                                            setCancelReason('client_cancelled_onsite');
-                                                            setCancelledBy('CLIENT');
-                                                            setCancelNote('');
-                                                            setShowCancelModal(true);
-                                                        }} className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 font-bold text-sm active:bg-red-100 flex items-center justify-center gap-2">
-                                                            <XCircle size={14}/> Client Cancelled On-Site
-                                                        </button>
-                                                    </>
-                                                ) : null}
-                                                {/* Cancel button for ON_MY_WAY */}
-                                                {(actStatus as any) === 'ON_MY_WAY' && (
-                                                    <button onClick={() => {
-                                                        setCancelTargetAct(act);
-                                                        setCancelReason('client_cancelled_enroute');
-                                                        setCancelledBy('CLIENT');
-                                                        setCancelNote('');
-                                                        setShowCancelModal(true);
-                                                    }} className="w-full py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 font-bold text-sm active:bg-red-100 flex items-center justify-center gap-2">
-                                                        <XCircle size={14}/> Client Cancelled
-                                                    </button>
-                                                )}
-                                                {['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','CARRY_FORWARD'].includes(actStatus) && (
-                                                    <button onClick={handleCarryForwardClick} className="w-full py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 font-bold text-sm active:bg-orange-100 flex items-center justify-center gap-2">
-                                                        <RotateCcw size={14}/> Carry Forward
-                                                    </button>
+                                        {/* 1-click comms strip — always visible when customer has phone */}
+                                        {actCustomer?.phone && (
+                                            <div className="grid grid-cols-3 gap-2 pt-1">
+                                                <a href={`tel:${actCustomer.phone}`}
+                                                    className="flex flex-col items-center justify-center gap-1 py-3 bg-emerald-50 border border-emerald-200 rounded-xl active:bg-emerald-100 transition-colors"
+                                                    onClick={e => e.stopPropagation()}>
+                                                    <Phone size={16} className="text-emerald-600"/>
+                                                    <span className="text-[10px] font-bold text-emerald-700">Call</span>
+                                                </a>
+                                                <a href={`https://wa.me/${actCustomer.phone.replace(/\D/g,'')}`}
+                                                    target="_blank" rel="noopener noreferrer"
+                                                    className="flex flex-col items-center justify-center gap-1 py-3 bg-teal-50 border border-teal-200 rounded-xl active:bg-teal-100 transition-colors"
+                                                    onClick={e => e.stopPropagation()}>
+                                                    <Smartphone size={16} className="text-teal-600"/>
+                                                    <span className="text-[10px] font-bold text-teal-700">WhatsApp</span>
+                                                </a>
+                                                {act.locationUrl ? (
+                                                    <a href={act.locationUrl} target="_blank" rel="noopener noreferrer"
+                                                        className="flex flex-col items-center justify-center gap-1 py-3 bg-blue-50 border border-blue-200 rounded-xl active:bg-blue-100 transition-colors"
+                                                        onClick={e => e.stopPropagation()}>
+                                                        <Navigation size={16} className="text-blue-600"/>
+                                                        <span className="text-[10px] font-bold text-blue-700">Navigate</span>
+                                                    </a>
+                                                ) : (
+                                                    <div className="flex flex-col items-center justify-center gap-1 py-3 bg-slate-50 border border-slate-200 rounded-xl opacity-40">
+                                                        <Navigation size={16} className="text-slate-400"/>
+                                                        <span className="text-[10px] font-bold text-slate-400">Navigate</span>
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
+                                        {/* Spacer so content isn't hidden behind sticky CTA bar */}
+                                        {actStatus !== 'DONE' && actStatus !== 'CANCELLED' && <div className="h-24"/>}
                                     </div>
                                 </div>
                                 );
                             })()}
+                        </div>
+
+                        {/* ── STICKY CTA BAR — primary action always thumb-reachable ── */}
+                        {activeJob && activeJobItem?.type === 'activity' && (() => {
+                            const act = activeJob as Activity;
+                            const actStatus = act.status;
+                            if (actStatus === 'DONE' || actStatus === 'CANCELLED') return null;
+
+                            // Determine the single primary action for this status
+                            let primaryBtn: React.ReactNode = null;
+                            if (actStatus === 'PLANNED' || actStatus === 'CARRY_FORWARD') {
+                                primaryBtn = (
+                                    <button onClick={handleActivityOnMyWay}
+                                        className="flex-1 py-4 rounded-2xl bg-cyan-600 text-white font-bold text-base shadow-lg active:scale-[0.97] flex items-center justify-center gap-2 transition-transform">
+                                        <Navigation size={18}/> On My Way
+                                    </button>
+                                );
+                            } else if ((actStatus as any) === 'ON_MY_WAY') {
+                                primaryBtn = (
+                                    <button onClick={handleActivityArrived}
+                                        className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-bold text-base shadow-lg active:scale-[0.97] flex items-center justify-center gap-2 transition-transform">
+                                        <MapPin size={18}/> I've Arrived
+                                    </button>
+                                );
+                            } else if ((actStatus as any) === 'ARRIVED') {
+                                primaryBtn = (
+                                    <button onClick={handleActivityStartWork}
+                                        className="flex-1 py-4 rounded-2xl bg-amber-500 text-white font-bold text-base shadow-lg active:scale-[0.97] flex items-center justify-center gap-2 transition-transform">
+                                        <Play size={18}/> Start Work
+                                    </button>
+                                );
+                            } else if (actStatus === 'IN_PROGRESS') {
+                                primaryBtn = (
+                                    <>
+                                        <button onClick={() => handlePhotoClick(act.id, 'activity')}
+                                            className="w-12 h-14 rounded-2xl bg-slate-100 border border-slate-200 text-slate-600 flex flex-col items-center justify-center gap-0.5 active:bg-slate-200 shrink-0 transition-colors">
+                                            <Camera size={16}/>
+                                            <span className="text-[8px] font-bold">{(loadedPhotos[act.id] || []).length}/{MAX_PHOTOS}</span>
+                                        </button>
+                                        <button onClick={() => setCompletionStep(true)}
+                                            className="flex-1 py-4 rounded-2xl bg-emerald-600 text-white font-bold text-base shadow-lg active:scale-[0.97] flex items-center justify-center gap-2 transition-transform">
+                                            <CheckCircle2 size={18}/> Complete Job
+                                        </button>
+                                    </>
+                                );
+                            }
+
+                            return (
+                                <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-4 pt-3 pb-5 shrink-0 z-10">
+                                    <div className="flex gap-2 items-center">
+                                        {primaryBtn}
+                                        {/* Secondary overflow menu — carry forward / cancel */}
+                                        {['PLANNED','ON_MY_WAY','ARRIVED','IN_PROGRESS','CARRY_FORWARD'].includes(actStatus) && (
+                                            <button onClick={handleCarryForwardClick}
+                                                className="w-12 h-14 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex flex-col items-center justify-center gap-0.5 active:bg-orange-100 shrink-0 transition-colors">
+                                                <RotateCcw size={15}/>
+                                                <span className="text-[8px] font-bold text-orange-600">CF</span>
+                                            </button>
+                                        )}
+                                        {['ON_MY_WAY','IN_PROGRESS'].includes(actStatus) && (
+                                            <button onClick={() => {
+                                                setCancelTargetAct(act);
+                                                setCancelReason(actStatus === 'ON_MY_WAY' ? 'client_cancelled_enroute' : 'client_cancelled_onsite');
+                                                setCancelledBy('CLIENT');
+                                                setCancelNote('');
+                                                setShowCancelModal(true);
+                                            }}
+                                                className="w-12 h-14 rounded-2xl bg-red-50 border border-red-200 text-red-500 flex flex-col items-center justify-center gap-0.5 active:bg-red-100 shrink-0 transition-colors">
+                                                <XCircle size={15}/>
+                                                <span className="text-[8px] font-bold text-red-500">Cancel</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         </div>
                     </div>
                 )}
