@@ -26,6 +26,42 @@ interface OperationsDashboardProps {
 // Define a union type for the selected item in the drawer
 type DrawerItem = { type: 'ticket', data: Ticket } | { type: 'activity', data: Activity };
 
+// ── UX Helpers ────────────────────────────────────────────────────────────────
+
+/** Returns Tailwind classes for a compact priority badge */
+const getPriorityBadge = (priority: string | undefined): { pill: string; dot: string; label: string } => {
+    switch ((priority || '').toUpperCase()) {
+        case 'URGENT': return { pill: 'bg-red-100 text-red-700 border border-red-300 ring-1 ring-red-400', dot: 'bg-red-500', label: 'URGENT' };
+        case 'HIGH':   return { pill: 'bg-orange-100 text-orange-700 border border-orange-300',             dot: 'bg-orange-500', label: 'HIGH' };
+        case 'MEDIUM': return { pill: 'bg-amber-100 text-amber-700 border border-amber-200',               dot: 'bg-amber-400', label: 'MED' };
+        default:       return { pill: 'bg-slate-100 text-slate-500 border border-slate-200',               dot: 'bg-slate-300', label: 'LOW' };
+    }
+};
+
+/** Returns solid-color timeline bar classes per status — higher contrast than the pale tints */
+const getTimelineBarClasses = (status: string, isTicket: boolean, escalationLevel: number, isPlanned: boolean): string => {
+    if (isPlanned) return 'bg-slate-100 border border-dashed border-slate-300 text-slate-400 opacity-60';
+    if (escalationLevel > 0) return 'bg-red-500 border border-red-600 text-white shadow-md';
+    if (isTicket) {
+        switch (status) {
+            case 'RESOLVED':    return 'bg-emerald-100 border border-emerald-300 text-emerald-800 opacity-75';
+            case 'IN_PROGRESS': return 'bg-amber-400 border border-amber-500 text-white shadow-sm';
+            case 'ON_MY_WAY':   return 'bg-cyan-500 border border-cyan-600 text-white shadow-sm';
+            case 'ARRIVED':     return 'bg-indigo-500 border border-indigo-600 text-white shadow-sm';
+            case 'ASSIGNED':    return 'bg-violet-100 border border-violet-300 text-violet-900';
+            default:            return 'bg-slate-200 border border-slate-300 text-slate-600';
+        }
+    }
+    switch (status) {
+        case 'DONE':          return 'bg-emerald-100 border border-emerald-300 text-emerald-800 opacity-75';
+        case 'CARRY_FORWARD': return 'bg-orange-200 border border-orange-400 text-orange-900';
+        case 'IN_PROGRESS':   return 'bg-blue-500 border border-blue-600 text-white shadow-sm';
+        case 'ON_MY_WAY':     return 'bg-cyan-500 border border-cyan-600 text-white shadow-sm';
+        case 'ARRIVED':       return 'bg-indigo-500 border border-indigo-600 text-white shadow-sm';
+        default:              return 'bg-slate-100 border border-slate-200 text-slate-700';
+    }
+};
+
 const OperationsDashboard: React.FC<OperationsDashboardProps> = ({ 
     teams, 
     sites, 
@@ -1025,37 +1061,32 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         const isTicket = item.type === 'ticket';
                                         const isPlanned = item.isPlanned;
                                         
+                                        const barClasses = getTimelineBarClasses(item.status, isTicket, item.escalationLevel, isPlanned);
+                                        const priMeta = getPriorityBadge(item.priority);
+                                        const isActive = ['IN_PROGRESS','ON_MY_WAY','ARRIVED'].includes(item.status);
                                         return (
                                             <div 
                                                 key={item.id}
-                                                className={`absolute top-3 bottom-3 rounded border shadow-sm p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-md hover:ring-2 ring-opacity-50 transition-all z-20 overflow-hidden ${
-                                                    isTicket && item.status === 'RESOLVED'    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
-                                                    isTicket && item.status === 'IN_PROGRESS'  ? 'bg-amber-50 border-amber-300 text-amber-900 ring-amber-400' :
-                                                    isTicket && item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-300 text-cyan-900 ring-cyan-400' :
-                                                    isTicket && item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-300 text-indigo-900 ring-indigo-400' :
-                                                    isTicket && item.status === 'ASSIGNED'    ? 'bg-purple-50 border-purple-200 text-purple-900 ring-purple-400' :
-                                                    isTicket                                  ? 'bg-slate-50 border-slate-200 text-slate-600' :
-                                                    item.status === 'DONE'        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
-                                                    item.status === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-300 text-orange-800 opacity-90' :
-                                                    item.status === 'IN_PROGRESS' ? 'bg-blue-50 border-blue-200 text-blue-900 ring-blue-400' :
-                                                    item.status === 'ON_MY_WAY'   ? 'bg-cyan-50 border-cyan-200 text-cyan-800 ring-cyan-400' :
-                                                    item.status === 'ARRIVED'     ? 'bg-indigo-50 border-indigo-200 text-indigo-800 ring-indigo-400' :
-                                                    item.escalationLevel > 0      ? 'bg-red-50 border-red-200 text-red-900 ring-red-400' :
-                                                    isPlanned                     ? 'bg-slate-50 border-dashed border-slate-300 text-slate-400 opacity-60' :
-                                                    'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                                                }`}
+                                                className={`absolute top-3 bottom-3 rounded border p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-lg hover:brightness-95 transition-all z-20 overflow-hidden ${barClasses}`}
                                                 style={style}
                                                 onClick={() => handleItemClick(isTicket ? 'ticket' : 'activity', item.id)}
                                                 title={`${item.description} - ${new Date(item.plannedDate).toLocaleTimeString()}`}
                                             >
+                                                {/* Top row: ref + priority dot + support count */}
                                                 <div className="flex items-center gap-1 font-bold text-[11px] leading-snug truncate">
                                                     {isTicket && <TicketIcon size={11} />}
-                                                    {item.reference}
+                                                    {/* Priority dot — visible at any bar width */}
+                                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priMeta.dot}`} title={priMeta.label} />
+                                                    <span className="truncate">{item.reference}</span>
                                                     {item.supportCount > 0 && (
-                                                        <span className="ml-auto text-[9px] font-bold bg-blue-100 text-blue-600 px-1 rounded shrink-0">+{item.supportCount}</span>
+                                                        <span className="ml-auto text-[9px] font-bold bg-white/30 px-1 rounded shrink-0">+{item.supportCount}</span>
                                                     )}
                                                     {isPlanned && (
-                                                        <span className="ml-auto text-[9px] font-medium text-slate-400 italic shrink-0">planned</span>
+                                                        <span className="ml-auto text-[9px] font-medium italic shrink-0 opacity-60">planned</span>
+                                                    )}
+                                                    {/* Urgent pill — only render when bar is wide enough to show text */}
+                                                    {item.priority === 'URGENT' && !isPlanned && (
+                                                        <span className="ml-auto shrink-0 text-[8px] font-black px-1 py-0.5 rounded bg-red-600 text-white leading-none">!</span>
                                                     )}
                                                 </div>
                                                 {item.clientLine && (
@@ -1064,9 +1095,10 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                 <div className="text-[10px] truncate opacity-80 leading-snug mt-0.5">
                                                     {item.description}
                                                 </div>
-                                                {(item.status === 'IN_PROGRESS' || item.status === 'ON_MY_WAY' || item.status === 'ARRIVED') && !isPlanned && (
-                                                    <div className="mt-1 h-0.5 w-full bg-blue-200 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-blue-500 animate-pulse w-2/3"></div>
+                                                {/* Active pulse bar — white on coloured backgrounds, coloured on white */}
+                                                {isActive && !isPlanned && (
+                                                    <div className="mt-1 h-0.5 w-full bg-white/30 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-white/80 animate-pulse w-2/3 rounded-full" />
                                                     </div>
                                                 )}
                                             </div>
@@ -1311,7 +1343,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                  )}
                                  <div className="flex justify-between text-xs">
                                      <span className="text-slate-400">Priority</span>
-                                     <span className={`font-bold ${(selectedItem.data as Activity).priority === 'URGENT' ? 'text-red-600' : (selectedItem.data as Activity).priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>
+                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getPriorityBadge((selectedItem.data as Activity).priority).pill}`}>
                                          {(selectedItem.data as Activity).priority}
                                      </span>
                                  </div>
@@ -1344,7 +1376,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                  </div>
                                  <div className="flex justify-between text-xs">
                                      <span className="text-slate-400">Priority</span>
-                                     <span className={`font-bold ${(selectedItem.data as Ticket).priority === 'URGENT' ? 'text-red-600' : (selectedItem.data as Ticket).priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>
+                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getPriorityBadge((selectedItem.data as Ticket).priority).pill}`}>
                                          {(selectedItem.data as Ticket).priority}
                                      </span>
                                  </div>
