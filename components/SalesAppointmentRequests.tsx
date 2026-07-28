@@ -669,10 +669,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       )}
 
       {/* ── Filters / Search ── */}
-      <div className="px-6 py-4 bg-white border-b border-slate-100">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <div className="px-6 py-3 bg-white border-b border-slate-100">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+
+          {/* Search — left-anchored, capped so filters always have dedicated space */}
+          <div className="relative sm:flex-1 sm:max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               value={searchQ}
               onChange={e => setSearchQ(e.target.value)}
@@ -680,22 +682,25 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
               className={SEARCH_INPUT_STYLES}
             />
           </div>
-          {/* Sales rep filter — Admin/Team Lead only. Sales already only
-              ever sees their own requests via the My/All tabs above, so a
-              "filter by rep" control would be redundant for them. */}
-          {isScheduler && salesRepOptions.length > 0 && (
-            <select
-              value={salesRepFilter}
-              onChange={e => setSalesRepFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition-colors"
-            >
-              <option value="ALL">All Sales Reps</option>
-              {salesRepOptions.map(rep => (
-                <option key={rep.id} value={rep.id}>{rep.name}</option>
-              ))}
-            </select>
-          )}
-          <div className="relative shrink-0" data-status-filter-panel>
+
+          {/* Filter group — right-anchored, consistent 16px gap between controls */}
+          <div className="flex items-center gap-4 sm:ml-auto">
+            {/* Sales rep filter — Admin/Team Lead only. Sales already only
+                ever sees their own requests via the My/All tabs above, so a
+                "filter by rep" control would be redundant for them. */}
+            {isScheduler && salesRepOptions.length > 0 && (
+              <select
+                value={salesRepFilter}
+                onChange={e => setSalesRepFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition-colors"
+              >
+                <option value="ALL">All Sales Reps</option>
+                {salesRepOptions.map(rep => (
+                  <option key={rep.id} value={rep.id}>{rep.name}</option>
+                ))}
+              </select>
+            )}
+            <div className="relative shrink-0" data-status-filter-panel>
             <button
               type="button"
               onClick={() => setIsStatusMenuOpen(prev => !prev)}
@@ -741,9 +746,10 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
                 })}
               </div>
             )}
-          </div>
-        </div>
-      </div>
+          </div>{/* end status filter panel */}
+          </div>{/* end filter group */}
+        </div>{/* end toolbar flex row */}
+      </div>{/* end toolbar container */}
 
       {/* ── Main Content ── */}
       <div className="px-6 py-6">
