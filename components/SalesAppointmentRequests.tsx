@@ -391,7 +391,9 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     if (phoneDigits.length < 8)          errs.contactNumber = 'Enter a valid phone number (min 8 digits)';
     if (!formData.locationUrl.trim())    errs.locationUrl   = 'Location URL is required';
     if (!formData.houseNumber.trim())    errs.houseNumber   = 'House/Building number is required';
-    if (!formData.odooReference.trim())  errs.odooReference = 'Odoo Reference is required';
+    const isTroubleshooting = formData.activityType === 'Troubleshooting';
+    if (!isTroubleshooting && !formData.odooReference.trim())
+                                         errs.odooReference = 'Odoo Reference is required';
     if (!formData.activityType)          errs.activityType  = 'Activity type is required';
     if (formData.serviceCategory.length === 0) errs.serviceCategory = 'Select at least one service category';
     setFormErrors(errs);
@@ -799,7 +801,23 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           onCustSearchChange={v => { setCustSearch(v); }}
           onSelectCustomer={selectCustomer}
           onToggleServiceCat={toggleServiceCat}
-          onFieldChange={(field, value) => setFormData(p => ({ ...p, [field]: value }))}
+          onFieldChange={(field, value) => {
+            setFormData(p => ({ ...p, [field]: value }));
+            // When activity type changes, dynamically update CRM link validation error
+            if (field === 'activityType') {
+              setFormErrors(prev => {
+                if (value === 'Troubleshooting') {
+                  // Troubleshooting: CRM link is optional — clear any existing error immediately
+                  const { odooReference: _dropped, ...rest } = prev;
+                  return rest;
+                } else if (!formData.odooReference.trim()) {
+                  // Switching back to a mandatory type with an empty field — restore the error
+                  return { ...prev, odooReference: 'Odoo Reference is required' };
+                }
+                return prev;
+              });
+            }
+          }}
           onClose={() => setShowForm(false)}
           onSubmit={handleSubmit}
           salesLeadName={currentUser.name}
@@ -1609,7 +1627,8 @@ const FormModal: React.FC<FormModalProps> = ({
         {/* Odoo CRM Link */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Odoo CRM Link <span className="text-red-500">*</span>
+            Odoo CRM Link{formData.activityType !== 'Troubleshooting' && <span className="text-red-500"> *</span>}
+            {formData.activityType === 'Troubleshooting' && <span className="text-slate-400 font-normal text-xs ml-1">(optional)</span>}
           </label>
           <input
             value={formData.odooReference}
