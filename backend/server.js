@@ -4357,7 +4357,8 @@ app.post('/api/sales-appointment-requests', authenticate, writeRateLimit, async 
         if (!contactNumber?.trim())  missing.push('contactNumber');
         if (!locationUrl?.trim())    missing.push('locationUrl');
         if (!houseNumber?.trim())    missing.push('houseNumber');
-        if (!odooReference?.trim())  missing.push('odooReference');
+        if (!odooReference?.trim() && activityType?.trim() !== 'Troubleshooting')
+            missing.push('odooReference');
         if (!activityType?.trim())   missing.push('activityType');
         if (!serviceCategory?.trim()) missing.push('serviceCategory');
         if (missing.length) return res.status(400).json({ error: 'Missing required fields', fields: missing });
@@ -4436,7 +4437,7 @@ app.post('/api/sales-appointment-requests', authenticate, writeRateLimit, async 
              RETURNING *`,
             [
                 newId, resolvedCustomerId, customerName.trim(), contactNumber.trim(),
-                locationUrl.trim(), houseNumber.trim(), odooReference.trim(),
+                locationUrl.trim(), houseNumber.trim(), (odooReference?.trim() || ''),
                 activityType.trim(), serviceCategory.trim(), salesLeadUserId,
                 salesLeadName, remarks?.trim() || null, status, userId
             ]
