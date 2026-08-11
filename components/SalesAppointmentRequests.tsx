@@ -1741,137 +1741,187 @@ interface ScheduleModalProps {
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
   request: r, schedForm, schedErrors, scheduling, fieldEngineers, technicalAssociates,
   onFieldChange, onToggleAssistant, onClose, onSubmit
-}) => (
-  <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+}) => {
+  // Lock body scroll while modal is open; restore on unmount.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return (
+    /*
+     * Backdrop — full-screen, tapping it closes the modal.
+     * On mobile: align to bottom (bottom-sheet style).
+     * On sm+ screens: centre like a traditional modal.
+     */
     <div
-      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg"
-      onClick={e => e.stopPropagation()}
+      className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center sm:p-4"
+      onClick={onClose}
     >
-      <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
-            <CalendarCheck size={18} className="text-blue-600" />
+      {/*
+       * Modal shell — flex-col so header / body / footer stack correctly.
+       *
+       * Height constraints (mobile-first):
+       *   - max-h uses 100dvh (dynamic viewport; accounts for Safari toolbar).
+       *   - Falls back to 100vh for browsers that don't support dvh.
+       *   - On mobile: no top rounding, no horizontal padding (fills width).
+       *   - On sm+: centred card with max-w-lg and full rounding.
+       *
+       * We do NOT put overflow on the shell; only the body section scrolls.
+       */}
+      <div
+        className="
+          bg-white flex flex-col w-full
+          rounded-t-2xl sm:rounded-2xl
+          shadow-2xl
+          sm:max-w-lg
+          max-h-[100dvh] sm:max-h-[90dvh]
+          [max-height:100vh] sm:[max-height:90vh]
+        "
+        style={{ maxHeight: 'min(100dvh, 100vh)' }}
+        onClick={e => e.stopPropagation()}
+      >
+
+        {/* ── Sticky header (shrink-0 so it never collapses) ── */}
+        <div className="shrink-0 flex items-center justify-between px-6 py-5 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
+              <CalendarCheck size={18} className="text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Schedule Appointment</h2>
+              <p className="text-xs text-slate-500 mt-0.5">{r.customerName} — {r.activityType}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Schedule Appointment</h2>
-            <p className="text-xs text-slate-500 mt-0.5">{r.customerName} — {r.activityType}</p>
-          </div>
-        </div>
-        <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
-          <X size={18} />
-        </button>
-      </div>
-
-      <div className="px-6 py-5 space-y-4">
-
-        {schedErrors._global && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-            {schedErrors._global}
-          </div>
-        )}
-
-        {/* Request summary */}
-        <div className="bg-slate-50 rounded-xl p-4 text-sm space-y-1">
-          <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Client</span><span className="font-semibold text-slate-800">{r.customerName}</span></div>
-          <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Phone</span><span className="text-slate-700">{r.contactNumber}</span></div>
-          <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Type</span><span className="text-slate-700">{r.activityType}</span></div>
-          <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Service</span><span className="text-slate-700">{r.serviceCategory}</span></div>
-          {r.remarks && <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Remarks</span><span className="text-slate-600 italic">{r.remarks}</span></div>}
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Date */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Appointment Date <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="date"
-            value={schedForm.scheduledDate}
-            onChange={e => onFieldChange('scheduledDate', e.target.value)}
-            className={`${INPUT_STYLES} ${schedErrors.scheduledDate ? 'border-red-400' : ''}`}
-          />
-          <FieldError msg={schedErrors.scheduledDate} />
-        </div>
+        {/*
+         * ── Scrollable body (flex-1 min-h-0 so it shrinks inside the flex
+         *    column and the footer is never pushed off-screen) ──
+         */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4">
 
-        {/* Start Time only */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Start Time <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="time"
-            value={schedForm.scheduledStartTime}
-            onChange={e => onFieldChange('scheduledStartTime', e.target.value)}
-            className={`${INPUT_STYLES} ${schedErrors.scheduledStartTime ? 'border-red-400' : ''}`}
-          />
-          <FieldError msg={schedErrors.scheduledStartTime} />
-        </div>
-
-        {/* Assign Field Engineer */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Assign Field Engineer <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={schedForm.assignedFieldEngineerId}
-            onChange={e => onFieldChange('assignedFieldEngineerId', e.target.value)}
-            className={`${INPUT_STYLES} ${schedErrors.assignedFieldEngineerId ? 'border-red-400' : ''}`}
-          >
-            <option value="">— Select engineer —</option>
-            {fieldEngineers.map(t => (
-              <option key={t.id} value={t.id}>{t.name}{t.level ? ` — ${t.level.replace(/_/g,' ')}` : ''}</option>
-            ))}
-          </select>
-          <FieldError msg={schedErrors.assignedFieldEngineerId} />
-        </div>
-
-        {/* Technical Associates (optional multi-select) */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Technical Associates
-            <span className="ml-1.5 text-xs font-normal text-slate-400">(optional)</span>
-          </label>
-          {technicalAssociates.length === 0 ? (
-            <p className="text-xs text-slate-400 py-2">No technical associates available</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {technicalAssociates.map(t => {
-                const selected = schedForm.assistantTechIds.includes(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => onToggleAssistant(t.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                      selected
-                        ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'
-                    }`}
-                  >
-                    <Users size={11} />
-                    {t.name}
-                    {selected && <CheckCircle2 size={11} />}
-                  </button>
-                );
-              })}
+          {schedErrors._global && (
+            <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              {schedErrors._global}
             </div>
           )}
-        </div>
 
-        {/* Duration */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Duration (hours)</label>
-          <input
-            type="number"
-            min={0.5}
-            step={0.5}
-            value={schedForm.durationHours}
-            onChange={e => onFieldChange('durationHours', e.target.value)}
-            className={INPUT_STYLES}
-          />
-        </div>
+          {/* Request summary */}
+          <div className="bg-slate-50 rounded-xl p-4 text-sm space-y-1">
+            <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Client</span><span className="font-semibold text-slate-800">{r.customerName}</span></div>
+            <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Phone</span><span className="text-slate-700">{r.contactNumber}</span></div>
+            <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Type</span><span className="text-slate-700">{r.activityType}</span></div>
+            <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Service</span><span className="text-slate-700">{r.serviceCategory}</span></div>
+            {r.remarks && <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Remarks</span><span className="text-slate-600 italic">{r.remarks}</span></div>}
+          </div>
 
-        <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+          {/* Date */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Appointment Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={schedForm.scheduledDate}
+              onChange={e => onFieldChange('scheduledDate', e.target.value)}
+              className={`${INPUT_STYLES} ${schedErrors.scheduledDate ? 'border-red-400' : ''}`}
+            />
+            <FieldError msg={schedErrors.scheduledDate} />
+          </div>
+
+          {/* Start Time */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Start Time <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="time"
+              value={schedForm.scheduledStartTime}
+              onChange={e => onFieldChange('scheduledStartTime', e.target.value)}
+              className={`${INPUT_STYLES} ${schedErrors.scheduledStartTime ? 'border-red-400' : ''}`}
+            />
+            <FieldError msg={schedErrors.scheduledStartTime} />
+          </div>
+
+          {/* Assign Field Engineer */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Assign Field Engineer <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={schedForm.assignedFieldEngineerId}
+              onChange={e => onFieldChange('assignedFieldEngineerId', e.target.value)}
+              className={`${INPUT_STYLES} ${schedErrors.assignedFieldEngineerId ? 'border-red-400' : ''}`}
+            >
+              <option value="">— Select engineer —</option>
+              {fieldEngineers.map(t => (
+                <option key={t.id} value={t.id}>{t.name}{t.level ? ` — ${t.level.replace(/_/g,' ')}` : ''}</option>
+              ))}
+            </select>
+            <FieldError msg={schedErrors.assignedFieldEngineerId} />
+          </div>
+
+          {/* Technical Associates (optional multi-select) */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Technical Associates
+              <span className="ml-1.5 text-xs font-normal text-slate-400">(optional)</span>
+            </label>
+            {technicalAssociates.length === 0 ? (
+              <p className="text-xs text-slate-400 py-2">No technical associates available</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {technicalAssociates.map(t => {
+                  const selected = schedForm.assistantTechIds.includes(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => onToggleAssistant(t.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                        selected
+                          ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'
+                      }`}
+                    >
+                      <Users size={11} />
+                      {t.name}
+                      {selected && <CheckCircle2 size={11} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Duration */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Duration (hours)</label>
+            <input
+              type="number"
+              min={0.5}
+              step={0.5}
+              value={schedForm.durationHours}
+              onChange={e => onFieldChange('durationHours', e.target.value)}
+              className={INPUT_STYLES}
+            />
+          </div>
+
+        </div>{/* end scrollable body */}
+
+        {/*
+         * ── Sticky footer — shrink-0 keeps it always visible at the bottom.
+         *    padding-bottom uses safe-area-inset-bottom for iPhone notch/home-bar.
+         */}
+        <div
+          className="shrink-0 flex items-center justify-end gap-3 px-6 pt-4 pb-4 border-t border-slate-100 bg-white rounded-b-2xl"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
           <button onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
             Cancel
           </button>
@@ -1884,10 +1934,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             Confirm Schedule
           </button>
         </div>
+
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ─── Detail Drawer ────────────────────────────────────────────────────────────
 
