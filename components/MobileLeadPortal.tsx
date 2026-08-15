@@ -217,10 +217,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Notifications / Activity Log
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Create Activity customer search
-  const [actCustSearch, setActCustSearch] = useState('');
+  // Create Activity — phone-first customer search
+  const [actPhoneSearch, setActPhoneSearch] = useState('');
+  const [actCustSearch, setActCustSearch] = useState(''); // kept for other references
   const [actSelectedCustomer, setActSelectedCustomer] = useState<Customer | null>(null);
+  const [actNewCustName, setActNewCustName] = useState('');
+  const [actCustError, setActCustError] = useState('');
+  const [actCreatingCust, setActCreatingCust] = useState(false);
   const [actServiceCats, setActServiceCats] = useState<string[]>([]);
+
+  /** Strip all non-digit chars for phone comparison */
+  const normalizePhone = (p: string) => p.replace(/\D/g, '');
 
   // Create Activity (quick) — all form state fully initialized for clean resets
   const [showCreateActivity, setShowCreateActivity] = useState(false);
@@ -4148,39 +4155,73 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                       <h3 className="font-bold text-lg text-slate-900">Plan New Activity</h3>
-                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }}><X size={20} className="text-slate-400" /></button>
+                      <button onClick={() => { setShowCreateActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }}><X size={20} className="text-slate-400" /></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                      {/* Customer — search by name or phone */}
+                      {/* Customer — phone-first search */}
                       <div>
                           <label className="text-xs font-semibold text-slate-500 uppercase">Customer <span className="text-red-500">*</span></label>
+
                           {actSelectedCustomer ? (
+                              /* ── Selected customer card ── */
                               <div className="mt-1 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
                                   <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                                   <div className="flex-1 min-w-0">
                                       <p className="text-sm font-bold text-emerald-800 truncate">{actSelectedCustomer.name}</p>
                                       <p className="text-[10px] text-emerald-600">{actSelectedCustomer.phone}</p>
                                   </div>
-                                  <button onClick={() => { setActSelectedCustomer(null); setActCustSearch(''); }} className="text-xs text-slate-400 hover:text-slate-600">Change</button>
+                                  <button
+                                      onClick={() => {
+                                          setActSelectedCustomer(null);
+                                          setActPhoneSearch('');
+                                          setActNewCustName('');
+                                          setActCustError('');
+                                      }}
+                                      className="text-xs text-slate-400 hover:text-slate-600"
+                                  >Change</button>
                               </div>
                           ) : (
                               <>
-                                  <div className="relative mt-1">
-                                      <Search size={14} className="absolute left-3 top-3 text-slate-400" />
-                                      <input value={actCustSearch} onChange={e => setActCustSearch(e.target.value)}
-                                          placeholder="Search by name or phone..."
-                                          className="w-full border border-slate-300 rounded-lg pl-9 pr-3 p-2.5 text-sm" />
+                                  {/* ── Step 1: Phone Number input ── */}
+                                  <div className="mt-1">
+                                      <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number *</label>
+                                      <input
+                                          value={actPhoneSearch}
+                                          onChange={e => {
+                                              const val = e.target.value;
+                                              setActPhoneSearch(val);
+                                              setActNewCustName('');
+                                              setActCustError('');
+                                              // Auto-select on exact normalized match
+                                              const normVal = normalizePhone(val);
+                                              if (normVal.length >= 4) {
+                                                  const exactMatch = (customers || []).find(
+                                                      c => c.phone && normalizePhone(c.phone) === normVal
+                                                  );
+                                                  if (exactMatch) setActSelectedCustomer(exactMatch);
+                                              }
+                                          }}
+                                          placeholder="Enter phone number to search..."
+                                          className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1"
+                                      />
                                   </div>
-                                  {actCustSearch.length >= 2 && (() => {
-                                      const q = actCustSearch.toLowerCase();
-                                      const matches = (customers || []).filter(c => 
-                                          c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(actCustSearch))
+
+                                  {/* ── Partial-match suggestions (while typing, no exact match yet) ── */}
+                                  {actPhoneSearch.length >= 3 && (() => {
+                                      const normVal = normalizePhone(actPhoneSearch);
+                                      const exact = (customers || []).find(c => c.phone && normalizePhone(c.phone) === normVal);
+                                      if (exact) return null; // will be shown as selected card on next render
+                                      const partials = (customers || []).filter(
+                                          c => c.phone && normalizePhone(c.phone).includes(normVal) && normVal.length > 0
                                       );
-                                      return matches.length > 0 ? (
+                                      return partials.length > 0 ? (
                                           <div className="mt-1 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
-                                              {matches.slice(0, 5).map(c => (
-                                                  <button key={c.id} onClick={() => { setActSelectedCustomer(c); setActCustSearch(c.name); }}
-                                                      className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
+                                              {partials.slice(0, 5).map(c => (
+                                                  <button
+                                                      key={c.id}
+                                                      onClick={() => { setActSelectedCustomer(c); setActPhoneSearch(c.phone || actPhoneSearch); setActNewCustName(''); setActCustError(''); }}
+                                                      className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0"
+                                                  >
                                                       <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
                                                       <div className="min-w-0">
                                                           <div className="text-sm font-medium text-slate-800 truncate">{c.name}</div>
@@ -4189,26 +4230,73 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                   </button>
                                               ))}
                                           </div>
-                                      ) : (
-                                          <div className="mt-1 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                                              <p className="text-xs text-amber-700 font-medium">No customer found</p>
-                                              <button onClick={() => {
-                                                  const newCust: Customer = {
-                                                      id: `c${Date.now()}`, name: actCustSearch.trim(),
-                                                      phone: actCustSearch.replace(/\D/g, '').length >= 4 ? actCustSearch.trim() : '',
-                                                      address: '', email: '',
-                                                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(actCustSearch.trim())}&background=random`
-                                                  };
-                                                  if (onAddCustomer) {
-                                                      Promise.resolve(onAddCustomer(newCust)).then(created => {
-                                                          setActSelectedCustomer(created || newCust);
-                                                          setActCustSearch((created || newCust).name);
-                                                      });
-                                                  } else {
-                                                      setActSelectedCustomer(newCust);
-                                                  }
-                                              }} className="mt-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors flex items-center gap-1">
-                                                  <UserPlus size={12} /> Create "{actCustSearch.trim()}"
+                                      ) : null;
+                                  })()}
+
+                                  {/* ── No match found: show name field + Create Customer button ── */}
+                                  {actPhoneSearch.length >= 4 && (() => {
+                                      const normVal = normalizePhone(actPhoneSearch);
+                                      const hasAnyMatch = (customers || []).some(c => c.phone && normalizePhone(c.phone).includes(normVal));
+                                      if (hasAnyMatch) return null;
+                                      return (
+                                          <div className="mt-2 space-y-2">
+                                              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                                                  <p className="text-xs text-amber-700 font-medium">No customer found with this number.</p>
+                                              </div>
+                                              <div>
+                                                  <label className="text-[10px] font-bold text-slate-500 uppercase">Customer Name *</label>
+                                                  <input
+                                                      value={actNewCustName}
+                                                      onChange={e => { setActNewCustName(e.target.value); setActCustError(''); }}
+                                                      placeholder="e.g. Ahmed Al Thani"
+                                                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1"
+                                                  />
+                                              </div>
+                                              {actCustError && (
+                                                  <p className="text-xs text-red-600 font-medium">{actCustError}</p>
+                                              )}
+                                              <button
+                                                  disabled={actCreatingCust}
+                                                  onClick={async () => {
+                                                      const trimmedName = actNewCustName.trim();
+                                                      const trimmedPhone = actPhoneSearch.trim();
+                                                      // Validate name not empty
+                                                      if (!trimmedName) {
+                                                          setActCustError('Customer name is required.');
+                                                          return;
+                                                      }
+                                                      // Validate name is not purely numeric
+                                                      if (/^\d+$/.test(trimmedName.replace(/[\s\-\+\(\)]/g, ''))) {
+                                                          setActCustError('Customer name cannot be a phone number or numeric value.');
+                                                          return;
+                                                      }
+                                                      if (!onAddCustomer) {
+                                                          setActCustError('Customer creation is not available.');
+                                                          return;
+                                                      }
+                                                      setActCreatingCust(true);
+                                                      setActCustError('');
+                                                      try {
+                                                          const newCust: Customer = {
+                                                              id: `c${Date.now()}`,
+                                                              name: trimmedName,
+                                                              phone: trimmedPhone,
+                                                              address: '', email: '',
+                                                              avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(trimmedName)}&background=random`
+                                                          };
+                                                          const created = await Promise.resolve(onAddCustomer(newCust));
+                                                          if (!created) throw new Error('No customer returned from server.');
+                                                          setActSelectedCustomer(created);
+                                                      } catch {
+                                                          setActCustError('Customer creation failed. Please try again.');
+                                                      } finally {
+                                                          setActCreatingCust(false);
+                                                      }
+                                                  }}
+                                                  className="w-full py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                                              >
+                                                  <UserPlus size={14} />
+                                                  {actCreatingCust ? 'Creating…' : 'Create Customer'}
                                               </button>
                                           </div>
                                       );
@@ -4296,9 +4384,13 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
                   </div>
                   <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
-                      <button onClick={() => { setShowCreateActivity(false); setActCustSearch(''); setActSelectedCustomer(null); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                      <button onClick={() => { setShowCreateActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
                       <button onClick={() => {
-                          if (!actSelectedCustomer) { toast.error('Please select a customer'); return; }
+                          if (!actSelectedCustomer) { toast.error('Please select or create a customer first'); return; }
+                          // Guard: reject temporary IDs produced before the phone-first fix (safety net)
+                          if (!actSelectedCustomer.id || actSelectedCustomer.id.startsWith('c') && /^\d+$/.test(actSelectedCustomer.id.slice(1)) && actSelectedCustomer.name === actSelectedCustomer.phone) {
+                              toast.error('Invalid customer selection. Please search again.'); return;
+                          }
                           if (!createActivityForm.type) { toast.error('Please select an activity type'); return; }
                           if (actServiceCats.length === 0) { toast.error('Please select at least one service category'); return; }
                           if (!createActivityForm.plannedDate) { toast.error('Please set a planned date'); return; }
@@ -4317,8 +4409,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               leadTechId: (createActivityForm as any).assignedEngineerId || currentUserId,
                           });
                           setShowCreateActivity(false);
+                          setActPhoneSearch('');
                           setActCustSearch('');
                           setActSelectedCustomer(null);
+                          setActNewCustName('');
+                          setActCustError('');
                           setActServiceCats([]);
                           setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' });
                       }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Plan Activity</button>
