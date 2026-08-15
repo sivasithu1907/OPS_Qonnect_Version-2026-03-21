@@ -565,17 +565,17 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 w-full max-w-full overflow-x-hidden">
 
       {/* ── Page Header ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-5">
+      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-5">
         {/* Row 1: Icon + Title + Subtitle */}
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
             <ClipboardList size={20} className="text-amber-600" />
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">Sales Appointment Requests</h1>
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold text-slate-900 leading-tight truncate">Sales Appointment Requests</h1>
             <p className="text-xs text-slate-500 mt-0.5">
               {isSales ? 'Create and track your appointment requests' : 'Manage and schedule incoming sales requests'}
             </p>
@@ -583,8 +583,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
         </div>
 
         {/* Row 2: [≡⊞] [↺] [pending]   [+ New Request] */}
-        <div className="flex items-center justify-between gap-2 mt-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between flex-wrap gap-2 mt-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
               <button
                 onClick={() => setView('list')}
@@ -627,8 +627,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       </div>
 
       {/* ── Today's SAR Summary ── */}
-      <div className="px-6 py-4 bg-white border-b border-slate-100 overflow-x-auto no-scrollbar">
-        <div className="flex gap-2 min-w-max">
+      <div className="px-4 sm:px-6 py-3 bg-white border-b border-slate-100">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
           {(Object.keys(STATUS_CONFIG) as SalesRequestStatus[]).map(s => {
             const cfg = STATUS_CONFIG[s];
             const isActive = statusFilter === s;
@@ -636,12 +636,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
               <button
                 key={s}
                 onClick={() => setStatusFilter(isActive ? 'ALL' : s)}
-                className={`flex items-center gap-2.5 pl-2.5 pr-3.5 py-2 rounded-xl border transition-all ${isActive ? `${cfg.bg} border-current ${cfg.color} shadow-sm` : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                className={`flex items-center gap-2 pl-2 pr-2 py-2 rounded-xl border transition-all min-w-0 ${isActive ? `${cfg.bg} border-current ${cfg.color} shadow-sm` : 'bg-white border-slate-200 hover:border-slate-300'}`}
               >
-                <span className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 ${cfg.bg} ${cfg.color}`}>{STATUS_ICON[s]}</span>
-                <div className="text-left leading-tight">
+                <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${cfg.bg} ${cfg.color}`}>{STATUS_ICON[s]}</span>
+                <div className="text-left leading-tight min-w-0">
                   <div className={`text-sm font-bold tabular-nums ${isActive ? cfg.color : 'text-slate-900'}`}>{summaryCounts[s]}</div>
-                  <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide whitespace-nowrap">{cfg.label}</div>
+                  <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide truncate">{cfg.label}</div>
                 </div>
               </button>
             );
@@ -651,7 +651,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
 
       {/* ── My / All toggle (Sales only) ── */}
       {isSales && (
-        <div className="px-6 pt-3 pb-0 bg-white flex gap-2 border-b-0">
+        <div className="px-4 sm:px-6 pt-3 pb-0 bg-white flex gap-2 border-b-0">
           <button
             onClick={() => setMyOnly(true)}
             className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${myOnly ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
@@ -669,11 +669,11 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       )}
 
       {/* ── Filters / Search ── */}
-      <div className="px-6 py-3 bg-white border-b border-slate-100">
+      <div className="px-4 sm:px-6 py-3 bg-white border-b border-slate-100">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
 
           {/* Search — left-anchored, capped so filters always have dedicated space */}
-          <div className="relative sm:flex-1 sm:max-w-md">
+          <div className="relative flex-1 min-w-0 sm:max-w-md">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               value={searchQ}
@@ -683,8 +683,8 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
             />
           </div>
 
-          {/* Filter group — right-anchored, consistent 16px gap between controls */}
-          <div className="flex items-center gap-4 sm:ml-auto">
+          {/* Filter group — right-anchored, wraps on narrow screens */}
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap sm:ml-auto">
             {/* Sales rep filter — Admin/Team Lead only. Sales already only
                 ever sees their own requests via the My/All tabs above, so a
                 "filter by rep" control would be redundant for them. */}
@@ -692,7 +692,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
               <select
                 value={salesRepFilter}
                 onChange={e => setSalesRepFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition-colors"
+                className="max-w-[140px] sm:max-w-none px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition-colors truncate"
               >
                 <option value="ALL">All Sales Reps</option>
                 {salesRepOptions.map(rep => (
@@ -752,7 +752,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       </div>{/* end toolbar container */}
 
       {/* ── Main Content ── */}
-      <div className="px-6 py-6">
+      <div className="px-4 sm:px-6 py-6">
         {loading ? (
           <SarListSkeleton />
         ) : error ? (
@@ -1359,7 +1359,7 @@ const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, canDelete, isSc
                   taller than its siblings just because of this one field.
                   The full value is still shown in the detail view. */}
               {r.odooReference && (
-                <span className="flex items-center gap-1 min-w-0 max-w-[180px] sm:max-w-none" title={r.odooReference}>
+                <span className="flex items-center gap-1 min-w-0 max-w-[150px] sm:max-w-xs" title={r.odooReference}>
                   <FileText size={12} className="shrink-0" />
                   <span className="truncate">{r.odooReference}</span>
                 </span>
@@ -1405,7 +1405,7 @@ const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, canDelete, isSc
         </div>
 
         {/* Actions row */}
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100" onClick={e => e.stopPropagation()}>
           <button onClick={onView} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
             <Eye size={12} /> View
           </button>
@@ -1470,12 +1470,12 @@ const FormModal: React.FC<FormModalProps> = ({
       onClick={e => e.stopPropagation()}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 sticky top-0 bg-white z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-5 border-b border-slate-200 sticky top-0 bg-white z-10 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
             <ClipboardList size={18} className="text-amber-600" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
             {editing ? 'Edit Appointment Request' : 'New Appointment Request'}
           </h2>
         </div>
@@ -1484,7 +1484,7 @@ const FormModal: React.FC<FormModalProps> = ({
         </button>
       </div>
 
-      <div className="px-6 py-5 space-y-5">
+      <div className="px-4 sm:px-6 py-5 space-y-5">
 
         {/* Global error */}
         {formErrors._global && (
@@ -2010,10 +2010,10 @@ const RequestTimeline: React.FC<{ request: SalesAppointmentRequest }> = ({ reque
   ];
 
   return (
-    <div className="flex items-start justify-between">
+    <div className="flex items-start justify-between min-w-0 overflow-hidden">
       {steps.map((step, i) => (
         <React.Fragment key={step.key}>
-          <div className="flex flex-col items-center text-center w-16">
+          <div className="flex flex-col items-center text-center w-14 shrink-0">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
               step.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-200 text-slate-300'
             }`}>
@@ -2042,12 +2042,14 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
   const row = (label: string, value?: string | null, href?: string) => {
     if (!value) return null;
     return (
-      <div className="flex gap-3 py-2 border-b border-slate-100 last:border-0">
-        <span className="text-sm text-slate-500 w-36 shrink-0">{label}</span>
-        {href
-          ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline flex items-center gap-1 break-all">{value} <ExternalLink size={10} /></a>
-          : <span className="text-sm font-medium text-slate-800 break-words">{value}</span>
-        }
+      <div className="flex gap-2 py-2 border-b border-slate-100 last:border-0 min-w-0">
+        <span className="text-sm text-slate-500 w-28 sm:w-36 shrink-0">{label}</span>
+        <div className="min-w-0 flex-1">
+          {href
+            ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline flex items-center gap-1 break-all min-w-0">{value} <ExternalLink size={10} className="shrink-0" /></a>
+            : <span className="text-sm font-medium text-slate-800 break-words min-w-0 block">{value}</span>
+          }
+        </div>
       </div>
     );
   };
@@ -2055,23 +2057,23 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div
-        className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-white w-full max-w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto min-w-0"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 sticky top-0 bg-white">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-5 border-b border-slate-200 sticky top-0 bg-white min-w-0">
+          <div className="min-w-0 flex-1 mr-2">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <StatusBadge status={r.status} />
-              <span className="text-xs font-mono text-slate-400">{r.id}</span>
+              <span className="text-xs font-mono text-slate-400 truncate">{r.id}</span>
             </div>
-            <h2 className="text-base font-bold text-slate-900">{r.customerName}</h2>
+            <h2 className="text-base font-bold text-slate-900 truncate">{r.customerName}</h2>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="px-6 py-5">
+        <div className="px-4 sm:px-6 py-5 min-w-0">
           {/* Timeline — the request lifecycle at a glance */}
           <SectionLabel icon={<RefreshCw size={11} />}>Timeline</SectionLabel>
           <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 mb-1">
