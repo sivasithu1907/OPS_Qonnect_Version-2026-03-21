@@ -55,6 +55,7 @@ const STATUS_CONFIG: Record<SalesRequestStatus, { label: string; color: string; 
   PENDING_SCHEDULING: { label: 'Pending Scheduling', color: 'text-amber-700',  bg: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-400'  },
   SCHEDULED:          { label: 'Scheduled',          color: 'text-blue-700',   bg: 'bg-blue-50   border-blue-200',   dot: 'bg-blue-500'   },
   IN_PROGRESS:        { label: 'In Progress',         color: 'text-amber-700',  bg: 'bg-amber-50  border-amber-200',  dot: 'bg-amber-500'  },
+  CARRY_FORWARD:      { label: 'Carry Forward',       color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200', dot: 'bg-orange-500' },
   COMPLETED:          { label: 'Completed',           color: 'text-emerald-700',bg: 'bg-emerald-50 border-emerald-200',dot: 'bg-emerald-500'},
   LINKED:             { label: 'Linked',               color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200', dot: 'bg-purple-500' },
   CANCELLED:          { label: 'Cancelled',           color: 'text-slate-500',  bg: 'bg-slate-50  border-slate-200',  dot: 'bg-slate-400'  },
@@ -77,6 +78,7 @@ const STATUS_ICON: Record<SalesRequestStatus, React.ReactNode> = {
   PENDING_SCHEDULING: <Clock size={11} />,
   SCHEDULED:          <CalendarCheck size={11} />,
   IN_PROGRESS:        <RefreshCw size={11} />,
+  CARRY_FORWARD:      <RefreshCw size={11} />,
   COMPLETED:          <CheckCircle2 size={11} />,
   LINKED:             <ArrowRight size={11} />,
   CANCELLED:          <X size={11} />,
@@ -191,6 +193,32 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   }, []);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  // ── Live refresh: poll every 25 s + re-fetch when the window regains focus ─
+  // Keeps the SAR list current when activity status changes happen through
+  // other portals (Lead Portal, Tech Portal, Admin). Polling interval is
+  // moderate enough to avoid hammering the server; focus refresh means a
+  // user switching back from another tab sees fresh data immediately.
+  useEffect(() => {
+    const interval = setInterval(() => { fetchRequests(); }, 25_000);
+    const onFocus = () => { fetchRequests(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [fetchRequests]);
+
+  // ── Keep the open detail drawer in sync with the latest fetched data ───────
+  // After every refresh, if a drawer is open re-point it at the updated record
+  // so the user doesn't see a stale status inside the drawer.
+  useEffect(() => {
+    if (!detailItem) return;
+    const updated = requests.find(r => r.id === detailItem.id);
+    if (updated && updated.updatedAt !== detailItem.updatedAt) {
+      setDetailItem(updated);
+    }
+  }, [requests]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close the status filter dropdown on outside click
   useEffect(() => {
@@ -316,7 +344,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   );
   const summaryCounts = useMemo(() => {
     const counts: Record<SalesRequestStatus, number> = {
-      PENDING_SCHEDULING: 0, SCHEDULED: 0, IN_PROGRESS: 0, COMPLETED: 0, LINKED: 0, CANCELLED: 0,
+      PENDING_SCHEDULING: 0, SCHEDULED: 0, IN_PROGRESS: 0, CARRY_FORWARD: 0, COMPLETED: 0, LINKED: 0, CANCELLED: 0,
     };
     summaryScope.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
     return counts;
@@ -1999,15 +2027,28 @@ const RequestTimeline: React.FC<{ request: SalesAppointmentRequest }> = ({ reque
 
   const isLinkedPath = r.status === SalesRequestStatus.LINKED || !!r.linkedActivityId;
   const reachedStage2 = r.status !== SalesRequestStatus.PENDING_SCHEDULING;
-  const reachedInProgress = r.status === SalesRequestStatus.IN_PROGRESS || r.status === SalesRequestStatus.COMPLETED;
+  const isCarryForward = r.status === SalesRequestStatus.CARRY_FORWARD;
+  const reachedInProgress = r.status === SalesRequestStatus.IN_PROGRESS || r.status === SalesRequestStatus.CARRY_FORWARD || r.status === SalesRequestStatus.COMPLETED;
   const reachedCompleted = r.status === SalesRequestStatus.COMPLETED;
 
-  const steps = [
-    { key: 'created', label: 'Created', done: true, date: r.createdAt },
-    { key: 'stage2', label: isLinkedPath ? 'Linked to Activity' : 'Scheduled', done: reachedStage2, date: r.linkedAt || r.scheduledDate || (reachedStage2 ? r.updatedAt : undefined) },
-    { key: 'progress', label: 'In Progress', done: reachedInProgress, date: reachedInProgress ? r.updatedAt : undefined },
-    { key: 'completed', label: 'Completed', done: reachedCompleted, date: reachedCompleted ? r.updatedAt : undefined },
-  ];
+  // If the SAR is (or has been) in CARRY_FORWARD, include that as an explicit
+  // step so the timeline accurately reflects the lifecycle. For all other paths
+  // the timeline shows the standard 4-step Created → Scheduled → In Progress →
+  // Completed flow.
+  const steps = isCarryForward
+    ? [
+        { key: 'created',   label: 'Created',      done: true,              date: r.createdAt },
+        { key: 'stage2',    label: isLinkedPath ? 'Linked' : 'Scheduled', done: true,  date: r.linkedAt || r.scheduledDate || r.updatedAt },
+        { key: 'progress',  label: 'In Progress',  done: true,              date: undefined },
+        { key: 'cf',        label: 'Carry Forward',done: true,              date: r.updatedAt, active: true },
+        { key: 'completed', label: 'Completed',    done: false,             date: undefined },
+      ]
+    : [
+        { key: 'created',   label: 'Created',                                        done: true,             date: r.createdAt },
+        { key: 'stage2',    label: isLinkedPath ? 'Linked to Activity' : 'Scheduled',done: reachedStage2,    date: r.linkedAt || r.scheduledDate || (reachedStage2 ? r.updatedAt : undefined) },
+        { key: 'progress',  label: 'In Progress',                                    done: reachedInProgress,date: reachedInProgress ? r.updatedAt : undefined },
+        { key: 'completed', label: 'Completed',                                      done: reachedCompleted, date: reachedCompleted ? r.updatedAt : undefined },
+      ];
 
   return (
     <div className="flex items-start justify-between min-w-0 overflow-hidden">
@@ -2015,14 +2056,16 @@ const RequestTimeline: React.FC<{ request: SalesAppointmentRequest }> = ({ reque
         <React.Fragment key={step.key}>
           <div className="flex flex-col items-center text-center w-14 shrink-0">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
-              step.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-200 text-slate-300'
+              (step as any).active ? 'bg-orange-500 border-orange-500 text-white' :
+              step.done          ? 'bg-emerald-500 border-emerald-500 text-white' :
+                                   'bg-white border-slate-200 text-slate-300'
             }`}>
-              {step.done ? <CheckCircle2 size={14} /> : <span className="text-[10px] font-bold">{i + 1}</span>}
+              {(step as any).active ? <RefreshCw size={12} /> : step.done ? <CheckCircle2 size={14} /> : <span className="text-[10px] font-bold">{i + 1}</span>}
             </div>
-            <span className={`text-[9px] font-bold mt-1 leading-tight ${step.done ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
+            <span className={`text-[9px] font-bold mt-1 leading-tight ${(step as any).active ? 'text-orange-600' : step.done ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
             {step.date && <span className="text-[8px] text-slate-400 mt-0.5">{new Date(step.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>}
           </div>
-          {i < steps.length - 1 && <div className={`flex-1 h-0.5 mt-3.5 ${steps[i + 1].done ? 'bg-emerald-500' : 'bg-slate-200'}`} />}
+          {i < steps.length - 1 && <div className={`flex-1 h-0.5 mt-3.5 ${(steps[i + 1] as any).active ? 'bg-orange-400' : steps[i + 1].done ? 'bg-emerald-500' : 'bg-slate-200'}`} />}
         </React.Fragment>
       ))}
     </div>
@@ -2159,18 +2202,21 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
             <>
               <SectionLabel icon={<ArrowRight size={11} />}>Linked Activity</SectionLabel>
             <div className={`mt-1 px-4 py-3 rounded-xl text-sm flex items-center gap-2 border ${
-                r.status === 'COMPLETED'   ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                r.status === 'IN_PROGRESS' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                r.status === 'COMPLETED'     ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                r.status === 'IN_PROGRESS'   ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                r.status === 'CARRY_FORWARD' ? 'bg-orange-50 border-orange-200 text-orange-700' :
                 'bg-blue-50 border-blue-200 text-blue-700'
             }`}>
-              {r.status === 'COMPLETED'   ? <CheckCircle2 size={14} /> :
-               r.status === 'IN_PROGRESS' ? <span className="text-base">🔄</span> :
+              {r.status === 'COMPLETED'     ? <CheckCircle2 size={14} /> :
+               r.status === 'IN_PROGRESS'   ? <span className="text-base">🔄</span> :
+               r.status === 'CARRY_FORWARD' ? <RefreshCw size={14} /> :
                <span className="text-base">📅</span>}
               <span>
                 Activity <span className="font-mono font-semibold">{r.linkedActivityId}</span>
-                {r.status === 'IN_PROGRESS' && <span className="ml-1 font-semibold">— Work In Progress</span>}
-                {r.status === 'COMPLETED'   && <span className="ml-1 font-semibold">— Completed</span>}
-                {r.status === 'SCHEDULED'   && <span className="ml-1">— Scheduled &amp; Planned</span>}
+                {r.status === 'IN_PROGRESS'   && <span className="ml-1 font-semibold">— Work In Progress</span>}
+                {r.status === 'COMPLETED'     && <span className="ml-1 font-semibold">— Completed</span>}
+                {r.status === 'SCHEDULED'     && <span className="ml-1">— Scheduled &amp; Planned</span>}
+                {r.status === 'CARRY_FORWARD' && <span className="ml-1 font-semibold">— Carry Forward</span>}
               </span>
             </div>
             </>
