@@ -272,6 +272,10 @@ export enum SalesRequestStatus {
   PENDING_SCHEDULING = 'PENDING_SCHEDULING',
   SCHEDULED = 'SCHEDULED',
   IN_PROGRESS = 'IN_PROGRESS',
+  // Intermediate status — the field team could not complete the visit;
+  // the activity has been carried forward to a new date. The SAR remains
+  // open and will advance to COMPLETED once the rescheduled visit is DONE.
+  CARRY_FORWARD = 'CARRY_FORWARD',
   // Renamed from DONE to COMPLETED — the backend has always written
   // 'COMPLETED' to the database when a linked job finishes (see the SAR
   // Sync logic in server.js), but this enum said 'DONE', so the status
