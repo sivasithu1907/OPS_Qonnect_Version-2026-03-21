@@ -3723,6 +3723,10 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                 entityLabel: mergedDetails.customerName || req.params.id,
                 details: { from: prevStatus, to: 'CARRY_FORWARD', carryForwardNote: visitRecord.carryForwardReason || undefined, nextPlannedAt: mergedDetails.nextPlannedAt || undefined },
             });
+            // ── Sync the linked SAR to CARRY_FORWARD before returning ──
+            // The early return previously bypassed the SAR sync below, leaving
+            // SARs stuck at IN_PROGRESS while their activity showed CARRY_FORWARD.
+            await syncSarWithActivity(req.params.id, 'CARRY_FORWARD', null, 'manual_carry_forward');
             return res.json({ok: true, visitRecorded: true});
         }
 
@@ -3831,27 +3835,10 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                   ),
         });
 
-        // ── SAR Sync: if this activity was created from a Sales Appointment Request,
-        // keep the SAR status in sync with activity progress ──────────────────────
-        const salesRequestId = mergedDetails.salesRequestId || details.salesRequestId;
-        if (salesRequestId) {
-            let sarStatus = null;
-            if (status === 'IN_PROGRESS' || status === 'ON_MY_WAY' || status === 'ARRIVED') {
-                sarStatus = 'IN_PROGRESS';
-            } else if (status === 'DONE') {
-                sarStatus = 'COMPLETED';
-            } else if (status === 'CANCELLED') {
-                sarStatus = 'CANCELLED';
-            } else if (status === 'PLANNED' || status === 'CARRY_FORWARD') {
-                sarStatus = 'SCHEDULED'; // back to scheduled if rescheduled
-            }
-            if (sarStatus) {
-                await pool.query(
-                    `UPDATE sales_appointment_requests SET status = $1, updated_at = NOW() WHERE id = $2`,
-                    [sarStatus, salesRequestId]
-                ).catch(e => console.error('SAR sync failed (non-critical):', e.message));
-            }
-        }
+        // ── SAR Sync: keep the linked SAR's status in sync with this activity ──
+        // Uses linked_activity_id as the primary join key (robust to missing
+        // details.salesRequestId on older records). LINKED SARs are excluded.
+        await syncSarWithActivity(req.params.id, status, null, 'activity_update');
 
         res.json({ok: true});
     } catch(e) { console.error(e); res.status(500).json({error: "Failed to update activity"}); }
@@ -5676,28 +5663,193 @@ app.use((err, req, res, next) => {
 });
 
 // --- AUTO CARRY-FORWARD CRON (runs at 10 PM Qatar / 7 PM UTC daily) ---
-const runAutoCarryForward = async () => {
+// ═══════════════════════════════════════════════════════════════════════════════
+// SAR ↔ Activity status synchronisation helper
+// ═══════════════════════════════════════════════════════════════════════════════
+// Maps an activity status to its corresponding SAR status according to the
+// agreed workflow:
+//
+//   Activity                          → SAR
+//   PLANNED | ASSIGNED                → SCHEDULED
+//   ON_MY_WAY | ARRIVED | IN_PROGRESS → IN_PROGRESS
+//   CARRY_FORWARD                     → CARRY_FORWARD
+//   DONE                              → COMPLETED
+//   CANCELLED                         → CANCELLED
+//
+// The function looks up the SAR primarily via linked_activity_id so that it
+// works even when the activity's details.salesRequestId is missing or stale
+// (e.g. older records, manually linked activities).
+//
+// SARs whose current status is 'LINKED' are intentionally excluded — they
+// represent a different relationship (a SAR pointing at a *pre-existing*
+// activity) and must not have their top-level LINKED status overwritten.
+//
+// @param {string} activityId — the activity whose status just changed
+// @param {string} newActivityStatus — the status the activity just moved to
+// @param {object|null} client — optional pg client for transaction support
+//                               (if null, uses the module-level pool)
+// @param {string} callerLabel — for audit/log context (e.g. 'manual_cf', 'auto_cf')
+// @returns {Promise<{updated: boolean, sarId: string|null}>}
+// ═══════════════════════════════════════════════════════════════════════════════
+const ACTIVITY_TO_SAR_STATUS = {
+    PLANNED:      'SCHEDULED',
+    ASSIGNED:     'SCHEDULED',
+    ON_MY_WAY:    'IN_PROGRESS',
+    ARRIVED:      'IN_PROGRESS',
+    IN_PROGRESS:  'IN_PROGRESS',
+    CARRY_FORWARD:'CARRY_FORWARD',
+    DONE:         'COMPLETED',
+    CANCELLED:    'CANCELLED',
+};
+
+const syncSarWithActivity = async (activityId, newActivityStatus, client = null, callerLabel = 'sync') => {
+    const targetSarStatus = ACTIVITY_TO_SAR_STATUS[newActivityStatus];
+    if (!targetSarStatus) return { updated: false, sarId: null }; // unknown status — nothing to do
+
+    const db = client || pool;
+
+    // Find the SAR linked to this activity (excluding intentionally LINKED SARs)
+    const sarRes = await db.query(
+        `SELECT id, status FROM sales_appointment_requests
+         WHERE linked_activity_id = $1
+           AND status <> 'LINKED'
+         LIMIT 1`,
+        [activityId]
+    );
+    if (!sarRes.rows.length) return { updated: false, sarId: null };
+
+    const sar = sarRes.rows[0];
+    if (sar.status === targetSarStatus) return { updated: false, sarId: sar.id }; // already correct
+
+    await db.query(
+        `UPDATE sales_appointment_requests
+            SET status = $1, updated_at = NOW()
+          WHERE id = $2`,
+        [targetSarStatus, sar.id]
+    );
+
+    console.log(JSON.stringify({
+        level: 'INFO',
+        type: 'sar_sync',
+        caller: callerLabel,
+        activityId,
+        activityStatus: newActivityStatus,
+        sarId: sar.id,
+        sarPrevStatus: sar.status,
+        sarNewStatus: targetSarStatus,
+        timestamp: new Date().toISOString(),
+    }));
+
+    return { updated: true, sarId: sar.id };
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Startup reconciliation — repair SARs whose status diverged from their linked
+// activity (e.g. after a bug that caused early returns to skip SAR sync).
+// Safe to run on every server start: it only touches rows that are genuinely
+// mismatched and excludes LINKED SARs and SARs without a valid linked activity.
+// ═══════════════════════════════════════════════════════════════════════════════
+const reconcileSarStatuses = async () => {
     try {
         const result = await pool.query(`
-            UPDATE activities 
-            SET status = 'CARRY_FORWARD',
-                carry_forward_note = COALESCE(NULLIF(carry_forward_note,''), '') || 
-                    E'[Auto] Not completed by end of day — reschedule required',
-                next_planned_at = NULL,
-                completed_at = NOW(),
-                updated_at = NOW()
-            WHERE status IN ('PLANNED', 'IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED', 'ASSIGNED')
-            AND planned_date::date < (NOW() AT TIME ZONE 'Asia/Qatar')::date
-            RETURNING reference, lead_tech_id
+            WITH mapping(activity_status, sar_status) AS (
+                VALUES
+                    ('PLANNED',       'SCHEDULED'),
+                    ('ASSIGNED',      'SCHEDULED'),
+                    ('ON_MY_WAY',     'IN_PROGRESS'),
+                    ('ARRIVED',       'IN_PROGRESS'),
+                    ('IN_PROGRESS',   'IN_PROGRESS'),
+                    ('CARRY_FORWARD', 'CARRY_FORWARD'),
+                    ('DONE',          'COMPLETED'),
+                    ('CANCELLED',     'CANCELLED')
+            ),
+            mismatched AS (
+                SELECT sar.id   AS sar_id,
+                       sar.status AS current_sar_status,
+                       m.sar_status AS correct_sar_status
+                FROM sales_appointment_requests sar
+                JOIN activities a ON a.id = sar.linked_activity_id
+                JOIN mapping m    ON m.activity_status = a.status
+                WHERE sar.status <> 'LINKED'
+                  AND sar.status <> m.sar_status
+            )
+            UPDATE sales_appointment_requests s
+               SET status     = m.correct_sar_status,
+                   updated_at = NOW()
+              FROM mismatched m
+             WHERE s.id = m.sar_id
+            RETURNING s.id, m.current_sar_status, m.correct_sar_status
         `);
         if (result.rows.length > 0) {
             console.log(JSON.stringify({
                 level: 'WARN',
+                type: 'sar_reconcile',
+                message: 'Startup reconciliation corrected mismatched SAR statuses',
+                count: result.rows.length,
+                corrections: result.rows.map(r => ({
+                    sarId: r.id,
+                    from: r.current_sar_status,
+                    to: r.correct_sar_status,
+                })),
+                timestamp: new Date().toISOString(),
+            }));
+        } else {
+            console.log(JSON.stringify({ level: 'INFO', type: 'sar_reconcile', message: 'No SAR status mismatches found on startup', timestamp: new Date().toISOString() }));
+        }
+    } catch (e) {
+        console.error('SAR reconciliation error:', e.message);
+    }
+};
+
+const runAutoCarryForward = async () => {
+    try {
+        // Step 1: collect the IDs of activities that need carry-forwarding
+        const candidates = await pool.query(`
+            SELECT id, reference, lead_tech_id
+            FROM activities
+            WHERE status IN ('PLANNED', 'IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED', 'ASSIGNED')
+              AND planned_date::date < (NOW() AT TIME ZONE 'Asia/Qatar')::date
+        `);
+        if (!candidates.rows.length) return;
+
+        // Step 2: process each activity in its own transaction so the activity
+        // update and SAR sync always succeed or fail together.
+        let cfCount = 0;
+        const cfActivities = [];
+        for (const row of candidates.rows) {
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                await client.query(`
+                    UPDATE activities
+                       SET status             = 'CARRY_FORWARD',
+                           carry_forward_note = COALESCE(NULLIF(carry_forward_note,''), '') ||
+                               E'[Auto] Not completed by end of day — reschedule required',
+                           next_planned_at    = NULL,
+                           completed_at       = NOW(),
+                           updated_at         = NOW()
+                     WHERE id = $1
+                `, [row.id]);
+                await syncSarWithActivity(row.id, 'CARRY_FORWARD', client, 'auto_carry_forward');
+                await client.query('COMMIT');
+                cfCount++;
+                cfActivities.push({ id: row.id, reference: row.reference, leadTechId: row.lead_tech_id });
+            } catch (err) {
+                await client.query('ROLLBACK');
+                console.error(`Auto carry-forward failed for activity ${row.id}:`, err.message);
+            } finally {
+                client.release();
+            }
+        }
+
+        if (cfCount > 0) {
+            console.log(JSON.stringify({
+                level: 'WARN',
                 type: 'auto_carry_forward',
                 message: 'Activities auto carry-forwarded (not completed by EOD)',
-                count: result.rows.length,
-                activities: result.rows.map(r => r.reference),
-                assignedTo: result.rows.map(r => r.lead_tech_id).filter(Boolean),
+                count: cfCount,
+                activities: cfActivities.map(r => r.reference),
+                assignedTo: cfActivities.map(r => r.leadTechId).filter(Boolean),
                 timestamp: new Date().toISOString()
             }));
         }
@@ -5958,5 +6110,8 @@ app.get('/api/search/records', authenticate, async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`✅ Backend server running on http://localhost:${PORT}`);
+    // Run SAR status reconciliation after DB is ready — repairs any SARs whose
+    // status diverged from their linked activity due to the pre-fix early-return bug.
+    reconcileSarStatuses();
   });
 });
