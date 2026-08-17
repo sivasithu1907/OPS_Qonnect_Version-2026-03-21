@@ -17,6 +17,7 @@ const SalesAppointmentRequests = lazy(() => import('./SalesAppointmentRequests')
 const CompletionFeedbackModal = lazy(() => import('./CompletionFeedbackModal'));
 import { INPUT_STYLES, SEARCH_INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
+import { normalizePhone, validatePhone, formatPhoneDisplay } from '../utils/phoneUtils';
 
 // --- Props ---
 interface MobileLeadPortalProps {
@@ -226,12 +227,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   const [actCreatingCust, setActCreatingCust] = useState(false);
   const [actServiceCats, setActServiceCats] = useState<string[]>([]);
 
-  /** Strip all non-digit chars for phone comparison */
-  const normalizePhone = (p: string) => p.replace(/\D/g, '');
+  // normalizePhone / validatePhone / formatPhoneDisplay imported from utils/phoneUtils
 
   // Create Activity (quick) — all form state fully initialized for clean resets
   const [showCreateActivity, setShowCreateActivity] = useState(false);
   const [isPlanningActivity, setIsPlanningActivity] = useState(false);
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false);
   const EMPTY_CREATE_FORM = {
       type: '', serviceCategory: '', customerId: '', description: '',
       plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '', assignedEngineerId: ''
@@ -4152,7 +4153,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
       {/* --- Create Activity Modal (matches PlanningModule exactly) --- */}
       {showCreateActivity && onAddActivity && (
-          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowCreateActivity(false)}>
+          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => { setShowCreateActivity(false); setIsPlanningActivity(false); }}>
               <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                       <h3 className="font-bold text-lg text-slate-900">Plan New Activity</h3>
@@ -4260,17 +4261,23 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                   disabled={actCreatingCust}
                                                   onClick={async () => {
                                                       const trimmedName = actNewCustName.trim();
-                                                      const trimmedPhone = actPhoneSearch.trim();
-                                                      // Validate name not empty
+                                                      const rawPhone = actPhoneSearch.trim();
+                                                      // Validate name
                                                       if (!trimmedName) {
                                                           setActCustError('Customer name is required.');
                                                           return;
                                                       }
-                                                      // Validate name is not purely numeric
                                                       if (/^\d+$/.test(trimmedName.replace(/[\s\-\+\(\)]/g, ''))) {
                                                           setActCustError('Customer name cannot be a phone number or numeric value.');
                                                           return;
                                                       }
+                                                      // Validate and normalize phone via shared Qatar utility
+                                                      const phoneResult = validatePhone(rawPhone);
+                                                      if (!phoneResult.isValid) {
+                                                          setActCustError(phoneResult.error || 'Invalid phone number.');
+                                                          return;
+                                                      }
+                                                      const canonicalPhone = phoneResult.formatted!;
                                                       if (!onAddCustomer) {
                                                           setActCustError('Customer creation is not available.');
                                                           return;
@@ -4281,15 +4288,15 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                           const newCust: Customer = {
                                                               id: `c${Date.now()}`,
                                                               name: trimmedName,
-                                                              phone: trimmedPhone,
+                                                              phone: canonicalPhone,
                                                               address: '', email: '',
                                                               avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(trimmedName)}&background=random`
                                                           };
                                                           const created = await Promise.resolve(onAddCustomer(newCust));
                                                           if (!created) throw new Error('No customer returned from server.');
                                                           setActSelectedCustomer(created);
-                                                      } catch {
-                                                          setActCustError('Customer creation failed. Please try again.');
+                                                      } catch (err: any) {
+                                                          setActCustError(err?.message || 'Customer creation failed. Please try again.');
                                                       } finally {
                                                           setActCreatingCust(false);
                                                       }
@@ -4334,7 +4341,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   return (
                                       <button key={cat} type="button" onClick={() => setActServiceCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
                                           className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}>
-                                          {sel && <span className="mr-0.5">\u2713 </span>}{cat}
+                                          {sel && <span className="mr-0.5">{'✓'} </span>}{cat}
                                       </button>
                                   );
                               })}
@@ -4385,58 +4392,65 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
                   </div>
                   <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
-                      <button onClick={() => { setShowCreateActivity(false); setIsPlanningActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ ...EMPTY_CREATE_FORM }); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                      <button
+                          disabled={isPlanningActivity}
+                          onClick={() => {
+                              setIsPlanningActivity(false);
+                              setShowCreateActivity(false);
+                              setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null);
+                              setActNewCustName(''); setActCustError(''); setActServiceCats([]);
+                              setCreateActivityForm({ ...EMPTY_CREATE_FORM });
+                          }}
+                          className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl disabled:opacity-40"
+                      >Cancel</button>
                       <button
                           disabled={isPlanningActivity}
                           onClick={async () => {
-                          if (isPlanningActivity) return;
-                          if (!actSelectedCustomer) { toast.error('Please select or create a customer first'); return; }
-                          // Guard: reject temp IDs from pre-fix flow (phone stored as name)
-                          if (!actSelectedCustomer.id || (actSelectedCustomer.id.startsWith('c') && /^\d+$/.test(actSelectedCustomer.id.slice(1)) && actSelectedCustomer.name === actSelectedCustomer.phone)) {
-                              toast.error('Invalid customer selection. Please search again.'); return;
-                          }
-                          if (!createActivityForm.type) { toast.error('Please select an activity type'); return; }
-                          if (actServiceCats.length === 0) { toast.error('Please select at least one service category'); return; }
-                          if (!createActivityForm.plannedDate) { toast.error('Please set a planned date'); return; }
-                          const plannedDt = new Date(createActivityForm.plannedDate);
-                          if (isNaN(plannedDt.getTime())) { toast.error('Invalid planned date — please re-select'); return; }
-                          setIsPlanningActivity(true);
-                          try {
-                              const result = await Promise.resolve(onAddActivity({
-                                  type: createActivityForm.type,
-                                  serviceCategory: actServiceCats.join(', '),
-                                  customerId: actSelectedCustomer.id,
-                                  description: createActivityForm.description || undefined,
-                                  plannedDate: plannedDt.toISOString(),
-                                  priority: createActivityForm.priority,
-                                  status: 'PLANNED',
-                                  locationUrl: createActivityForm.locationUrl || undefined,
-                                  houseNumber: createActivityForm.houseNumber || undefined,
-                                  leadTechId: (createActivityForm as any).assignedEngineerId || currentUserId,
-                              }));
-                              // result may be undefined if caller returns void (backwards-compat)
-                              if (result && !result.success) {
-                                  toast.error(result.error || 'Failed to create activity. Please retry.');
-                                  return; // keep modal open
+                              if (isPlanningActivity) return;
+                              // Validation
+                              if (!actSelectedCustomer) { toast.error('Please select or create a customer first'); return; }
+                              // Guard: reject temp IDs (phone stored as name — pre-fix safety net)
+                              if (!actSelectedCustomer.id || (actSelectedCustomer.id.startsWith('c') && /^\d+$/.test(actSelectedCustomer.id.slice(1)) && actSelectedCustomer.name === actSelectedCustomer.phone)) {
+                                  toast.error('Invalid customer — please search again.'); return;
                               }
-                              // Success — close and reset
-                              toast.success('Activity planned successfully');
-                              setShowCreateActivity(false);
-                              setActPhoneSearch('');
-                              setActCustSearch('');
-                              setActSelectedCustomer(null);
-                              setActNewCustName('');
-                              setActCustError('');
-                              setActServiceCats([]);
-                              setCreateActivityForm({ ...EMPTY_CREATE_FORM });
-                          } catch (err: any) {
-                              toast.error(err?.message || 'Unexpected error — please retry.');
-                          } finally {
-                              setIsPlanningActivity(false);
-                          }
-                      }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
-                          {isPlanningActivity ? 'Planning…' : 'Plan Activity'}
-                      </button>
+                              if (!createActivityForm.type) { toast.error('Please select an activity type'); return; }
+                              if (actServiceCats.length === 0) { toast.error('Please select at least one service category'); return; }
+                              if (!createActivityForm.plannedDate) { toast.error('Please set a planned date'); return; }
+                              const plannedDt = new Date(createActivityForm.plannedDate);
+                              if (isNaN(plannedDt.getTime())) { toast.error('Invalid planned date — please re-select'); return; }
+                              setIsPlanningActivity(true);
+                              try {
+                                  const result = await Promise.resolve(onAddActivity!({
+                                      type: createActivityForm.type,
+                                      serviceCategory: actServiceCats.join(', '),
+                                      customerId: actSelectedCustomer.id,
+                                      description: createActivityForm.description || undefined,
+                                      plannedDate: plannedDt.toISOString(),
+                                      priority: createActivityForm.priority,
+                                      status: 'PLANNED',
+                                      locationUrl: createActivityForm.locationUrl || undefined,
+                                      houseNumber: createActivityForm.houseNumber || undefined,
+                                      leadTechId: (createActivityForm as any).assignedEngineerId || currentUserId,
+                                  }));
+                                  // result is undefined when caller returns void (PlanningModule compat)
+                                  if (result && !result.success) {
+                                      toast.error(result.error || 'Failed to create activity. Please retry.');
+                                      return; // keep modal open
+                                  }
+                                  // Success — close and reset
+                                  toast.success('Activity planned successfully');
+                                  setShowCreateActivity(false);
+                                  setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null);
+                                  setActNewCustName(''); setActCustError(''); setActServiceCats([]);
+                                  setCreateActivityForm({ ...EMPTY_CREATE_FORM });
+                              } catch (err: any) {
+                                  toast.error(err?.message || 'Unexpected error — please retry.');
+                              } finally {
+                                  setIsPlanningActivity(false);
+                              }
+                          }}
+                          className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >{isPlanningActivity ? 'Planning…' : 'Plan Activity'}</button>
                   </div>
               </div>
           </div>
@@ -4462,9 +4476,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             setTicketPhoneSearch(val);
                             setTicketSelectedCustomer(null);
                             setCreateTicketForm(p => ({...p, phone: val, customerName: ''}));
-                            // Auto-search
+                            // Auto-search with normalized comparison (handles +974, 00974, 8-digit local)
                             if (val.length >= 4) {
-                                const found = (customers || []).find(c => c.phone && c.phone.includes(val));
+                                const normVal = normalizePhone(val);
+                                const found = (customers || []).find(c => c.phone && normalizePhone(c.phone) === normVal);
                                 if (found) {
                                     setTicketSelectedCustomer(found);
                                     setCreateTicketForm(p => ({...p, customerName: found.name, phone: found.phone || val}));
@@ -4477,7 +4492,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 </div>
                 {/* Search results */}
                 {ticketPhoneSearch.length >= 3 && !ticketSelectedCustomer && (() => {
-                    const matches = (customers || []).filter(c => c.phone && c.phone.includes(ticketPhoneSearch));
+                    const normSearch = normalizePhone(ticketPhoneSearch);
+                    const matches = (customers || []).filter(c => c.phone && normalizePhone(c.phone).includes(normSearch));
                     return matches.length > 0 ? (
                         <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
                             {matches.slice(0, 5).map(c => (
@@ -4531,7 +4547,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         const curr = (createTicketForm.category || '').split(', ').filter(Boolean);
                         const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                         setCreateTicketForm(p => ({...p, category: next.join(', ')}));
-                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
+                      }} className={`text-[11px] px-2.5 py-1.5 rounded-lg border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500'}`}>{sel ? '✓ ' : ''}{c}</button>;
                     })}
                   </div>
                 </div>
@@ -4578,41 +4594,67 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               </div>
             </div>
             <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
-              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
-              <button onClick={async () => {
-                const phone = ticketSelectedCustomer?.phone || createTicketForm.phone.trim();
-                const name = ticketSelectedCustomer?.name || createTicketForm.customerName.trim();
-                if (!name || !phone || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
-                  toast.error('Please fill all required fields');
-                  return;
-                }
-                let custId = ticketSelectedCustomer?.id;
-                let custName = name;
-                // If no existing customer matched, create new
-                if (!ticketSelectedCustomer) {
-                    const newCust: Customer = {
-                        id: `c${Date.now()}`, name: name,
-                        phone: phone, address: createTicketForm.houseNumber, email: '',
-                        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
-                    };
-                    const created = onAddCustomer ? await onAddCustomer(newCust) : null;
-                    custId = created?.id || newCust.id;
-                    custName = created?.name || newCust.name;
-                }
-
-                onCreateTicket({
-                  customerId: custId, customerName: custName,
-                  phoneNumber: phone,
-                  category: createTicketForm.category, type: createTicketForm.type,
-                  priority: createTicketForm.priority,
-                  initialMessage: createTicketForm.description.trim(),
-                  locationUrl: createTicketForm.locationUrl, houseNumber: createTicketForm.houseNumber
-                });
-                setShowCreateTicket(false);
-                setTicketPhoneSearch('');
-                setTicketSelectedCustomer(null);
-                setCreateTicketForm({ customerName: '', phone: '', category: '', type: '', priority: 'MEDIUM', description: '', locationUrl: '', houseNumber: '' });
-              }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Create Ticket</button>
+              <button
+                disabled={isCreatingTicket}
+                onClick={() => { setShowCreateTicket(false); setIsCreatingTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}
+                className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl disabled:opacity-40"
+              >Cancel</button>
+              <button
+                disabled={isCreatingTicket}
+                onClick={async () => {
+                  if (isCreatingTicket) return;
+                  const rawPhone = ticketSelectedCustomer?.phone || createTicketForm.phone.trim();
+                  const name = ticketSelectedCustomer?.name || createTicketForm.customerName.trim();
+                  if (!name || !rawPhone || !createTicketForm.category || !createTicketForm.type || !createTicketForm.description.trim()) {
+                    toast.error('Please fill all required fields');
+                    return;
+                  }
+                  // Normalize & validate phone
+                  const phoneResult: { isValid: boolean; formatted?: string; error?: string } = ticketSelectedCustomer ? { isValid: true, formatted: rawPhone } : validatePhone(rawPhone);
+                  if (!phoneResult.isValid) {
+                    toast.error(phoneResult.error || 'Invalid phone number.');
+                    return;
+                  }
+                  const canonicalPhone = phoneResult.formatted!;
+                  setIsCreatingTicket(true);
+                  try {
+                    let custId = ticketSelectedCustomer?.id;
+                    let custName = name;
+                    // If no existing customer matched, create new with canonical phone
+                    if (!ticketSelectedCustomer) {
+                        const newCust: Customer = {
+                            id: `c${Date.now()}`, name,
+                            phone: canonicalPhone, address: createTicketForm.houseNumber, email: '',
+                            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+                        };
+                        const created = onAddCustomer ? await onAddCustomer(newCust) : null;
+                        if (!created) {
+                            toast.error('Customer creation failed — please try again.');
+                            return;
+                        }
+                        custId = created.id;
+                        custName = created.name;
+                    }
+                    onCreateTicket!({
+                      customerId: custId, customerName: custName,
+                      phoneNumber: canonicalPhone,
+                      category: createTicketForm.category, type: createTicketForm.type,
+                      priority: createTicketForm.priority,
+                      initialMessage: createTicketForm.description.trim(),
+                      locationUrl: createTicketForm.locationUrl, houseNumber: createTicketForm.houseNumber
+                    });
+                    setShowCreateTicket(false);
+                    setTicketPhoneSearch('');
+                    setTicketSelectedCustomer(null);
+                    setCreateTicketForm({ customerName: '', phone: '', category: '', type: '', priority: 'MEDIUM', description: '', locationUrl: '', houseNumber: '' });
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to create ticket — please try again.');
+                  } finally {
+                    setIsCreatingTicket(false);
+                  }
+              }}
+                className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+              >{isCreatingTicket ? 'Creating…' : 'Create Ticket'}</button>
             </div>
           </div>
         </div>
