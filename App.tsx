@@ -718,8 +718,8 @@ const handleLogout = useCallback(() => {
   const [isSavingActivity, setIsSavingActivity] = useState(false);
 
   // Activity Handlers (API-Connected)
-  const handleAddActivity = useCallback(async (act: any) => {
-      if (isSavingActivity) return; // prevent double-submit
+  const handleAddActivity = useCallback(async (act: any): Promise<{ success: boolean; error?: string }> => {
+      if (isSavingActivity) return { success: false, error: 'Already saving — please wait.' };
       setIsSavingActivity(true);
       const newId = generateActivityId();
       const now = new Date().toISOString();
@@ -733,17 +733,24 @@ const handleLogout = useCallback(() => {
               body: JSON.stringify(payload)
           });
           if (!res.ok) {
-              // Rollback
+              // Rollback optimistic entry
               setActivities(prev => prev.filter(a => a.id !== newId));
-              console.error('Failed to create activity:', res.status);
-          } else {
-              // Reload immediately so server-canonical ID replaces temp client ID
-              await loadActivities();
-              syncActivityLocationToCustomer(act);
+              let errMsg = `Server error (${res.status})`;
+              try {
+                  const body = await res.json();
+                  if (body?.error) errMsg = body.error;
+              } catch {}
+              console.error('Failed to create activity:', res.status, errMsg);
+              return { success: false, error: errMsg };
           }
-      } catch (e) {
+          // Reload so server-canonical ID replaces the temp client ID
+          await loadActivities();
+          syncActivityLocationToCustomer(act);
+          return { success: true };
+      } catch (e: any) {
           console.error("Failed to add activity", e);
           setActivities(prev => prev.filter(a => a.id !== newId));
+          return { success: false, error: e?.message || 'Network error — please retry.' };
       } finally {
           setIsSavingActivity(false);
       }
