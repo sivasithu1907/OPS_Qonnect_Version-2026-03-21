@@ -1898,12 +1898,28 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
       return res.status(400).json({ error: "Customer name is required" });
     }
 
-    // Check for existing customer with same phone number
-    if (phone && String(phone).trim().length > 4) {
-      const normalizedPhone = String(phone).trim().replace(/[^0-9+]/g, '');
+    // Normalize phone to canonical E.164 (Qatar +974 prefix for 8-digit locals)
+    const normalizeQatarPhone = (raw) => {
+        if (!raw) return null;
+        let clean = String(raw).replace(/[^0-9+]/g, '');
+        if (!clean) return null;
+        if (/^[0-9]{8}$/.test(clean)) return `+974${clean}`;
+        if (clean.startsWith('00')) clean = '+' + clean.substring(2);
+        if (!clean.startsWith('+') && clean.startsWith('974')) clean = '+' + clean;
+        // Still 8 digits with no prefix — Qatar local
+        if (!clean.startsWith('+') && clean.length === 8) return `+974${clean}`;
+        return clean;
+    };
+    const canonicalPhone = phone ? normalizeQatarPhone(phone) : null;
+
+    // Check for existing customer with same phone number (compare normalized values both sides)
+    if (canonicalPhone && canonicalPhone.length > 4) {
       const existing = await pool.query(
-        `SELECT * FROM customers WHERE REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') = $1 LIMIT 1`,
-        [normalizedPhone]
+        `SELECT * FROM customers WHERE REGEXP_REPLACE(REGEXP_REPLACE(phone, '[^0-9+]', '', 'g'), '^00', '+') = $1
+           OR REGEXP_REPLACE(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), '^974', '+974') = $1
+           OR phone = $1
+         LIMIT 1`,
+        [canonicalPhone]
       );
       if (existing.rows.length > 0) {
         const r = existing.rows[0];
@@ -1940,7 +1956,7 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
       [
         id,
         String(name).trim(),
-        phone ? String(phone).trim() : null,
+        canonicalPhone || null,
         email ? String(email).trim() : null,
         address ? String(address).trim() : null,
         notes ? String(notes).trim() : null,
