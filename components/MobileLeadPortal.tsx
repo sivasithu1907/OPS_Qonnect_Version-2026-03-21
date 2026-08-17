@@ -30,7 +30,7 @@ interface MobileLeadPortalProps {
   onAssign: (ticketId: string, techId: string) => void;
   onUpdateTicket?: (ticket: Ticket) => void;
   onUpdateActivity?: (activity: Activity) => void;
-  onAddActivity?: (activity: any) => void;
+  onAddActivity?: (activity: any) => Promise<{ success: boolean; error?: string }> | void;
   onDeleteActivity?: (id: string) => void;
   onAddCustomer?: (customer: Customer) => Promise<Customer | null> | void;
   onSaveCustomer?: (customer: Customer) => void;
@@ -231,6 +231,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   // Create Activity (quick) — all form state fully initialized for clean resets
   const [showCreateActivity, setShowCreateActivity] = useState(false);
+  const [isPlanningActivity, setIsPlanningActivity] = useState(false);
   const EMPTY_CREATE_FORM = {
       type: '', serviceCategory: '', customerId: '', description: '',
       plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '', assignedEngineerId: ''
@@ -4155,7 +4156,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
               <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                       <h3 className="font-bold text-lg text-slate-900">Plan New Activity</h3>
-                      <button onClick={() => { setShowCreateActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }}><X size={20} className="text-slate-400" /></button>
+                      <button onClick={() => { setShowCreateActivity(false); setIsPlanningActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ ...EMPTY_CREATE_FORM }); }}><X size={20} className="text-slate-400" /></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                       {/* Customer — phone-first search */}
@@ -4384,39 +4385,58 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                       </div>
                   </div>
                   <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
-                      <button onClick={() => { setShowCreateActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' }); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
-                      <button onClick={() => {
+                      <button onClick={() => { setShowCreateActivity(false); setIsPlanningActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ ...EMPTY_CREATE_FORM }); }} className="flex-1 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">Cancel</button>
+                      <button
+                          disabled={isPlanningActivity}
+                          onClick={async () => {
+                          if (isPlanningActivity) return;
                           if (!actSelectedCustomer) { toast.error('Please select or create a customer first'); return; }
-                          // Guard: reject temporary IDs produced before the phone-first fix (safety net)
-                          if (!actSelectedCustomer.id || actSelectedCustomer.id.startsWith('c') && /^\d+$/.test(actSelectedCustomer.id.slice(1)) && actSelectedCustomer.name === actSelectedCustomer.phone) {
+                          // Guard: reject temp IDs from pre-fix flow (phone stored as name)
+                          if (!actSelectedCustomer.id || (actSelectedCustomer.id.startsWith('c') && /^\d+$/.test(actSelectedCustomer.id.slice(1)) && actSelectedCustomer.name === actSelectedCustomer.phone)) {
                               toast.error('Invalid customer selection. Please search again.'); return;
                           }
                           if (!createActivityForm.type) { toast.error('Please select an activity type'); return; }
                           if (actServiceCats.length === 0) { toast.error('Please select at least one service category'); return; }
                           if (!createActivityForm.plannedDate) { toast.error('Please set a planned date'); return; }
                           const plannedDt = new Date(createActivityForm.plannedDate);
-                          onAddActivity({
-                              type: createActivityForm.type,
-                              serviceCategory: actServiceCats.join(', '),
-                              customerId: actSelectedCustomer.id,
-                              description: createActivityForm.description || undefined,
-                              plannedDate: plannedDt.toISOString(),
-                              priority: createActivityForm.priority,
-                              status: 'PLANNED',
-                              locationUrl: createActivityForm.locationUrl || undefined,
-                              houseNumber: createActivityForm.houseNumber || undefined,
-                              // Use selected engineer if chosen, otherwise self-assign (Team Lead)
-                              leadTechId: (createActivityForm as any).assignedEngineerId || currentUserId,
-                          });
-                          setShowCreateActivity(false);
-                          setActPhoneSearch('');
-                          setActCustSearch('');
-                          setActSelectedCustomer(null);
-                          setActNewCustName('');
-                          setActCustError('');
-                          setActServiceCats([]);
-                          setCreateActivityForm({ type: '', serviceCategory: '', customerId: '', description: '', plannedDate: '', priority: 'MEDIUM', locationUrl: '', houseNumber: '' });
-                      }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800">Plan Activity</button>
+                          if (isNaN(plannedDt.getTime())) { toast.error('Invalid planned date — please re-select'); return; }
+                          setIsPlanningActivity(true);
+                          try {
+                              const result = await Promise.resolve(onAddActivity({
+                                  type: createActivityForm.type,
+                                  serviceCategory: actServiceCats.join(', '),
+                                  customerId: actSelectedCustomer.id,
+                                  description: createActivityForm.description || undefined,
+                                  plannedDate: plannedDt.toISOString(),
+                                  priority: createActivityForm.priority,
+                                  status: 'PLANNED',
+                                  locationUrl: createActivityForm.locationUrl || undefined,
+                                  houseNumber: createActivityForm.houseNumber || undefined,
+                                  leadTechId: (createActivityForm as any).assignedEngineerId || currentUserId,
+                              }));
+                              // result may be undefined if caller returns void (backwards-compat)
+                              if (result && !result.success) {
+                                  toast.error(result.error || 'Failed to create activity. Please retry.');
+                                  return; // keep modal open
+                              }
+                              // Success — close and reset
+                              toast.success('Activity planned successfully');
+                              setShowCreateActivity(false);
+                              setActPhoneSearch('');
+                              setActCustSearch('');
+                              setActSelectedCustomer(null);
+                              setActNewCustName('');
+                              setActCustError('');
+                              setActServiceCats([]);
+                              setCreateActivityForm({ ...EMPTY_CREATE_FORM });
+                          } catch (err: any) {
+                              toast.error(err?.message || 'Unexpected error — please retry.');
+                          } finally {
+                              setIsPlanningActivity(false);
+                          }
+                      }} className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
+                          {isPlanningActivity ? 'Planning…' : 'Plan Activity'}
+                      </button>
                   </div>
               </div>
           </div>
