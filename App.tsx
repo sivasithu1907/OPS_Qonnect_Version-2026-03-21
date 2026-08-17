@@ -716,15 +716,20 @@ const handleLogout = useCallback(() => {
 
   // Activity save guard — prevents double-submit
   const [isSavingActivity, setIsSavingActivity] = useState(false);
+  // Ref-based guard prevents stale-closure false-blocks when useCallback deps change mid-flight.
+  const _isSavingActivityRef = useRef(false);
 
   // Activity Handlers (API-Connected)
-  const handleAddActivity = useCallback(async (act: any): Promise<{ success: boolean; error?: string }> => {
-      if (isSavingActivity) return { success: false, error: 'Already saving — please wait.' };
+  // Returns { success, error? } so callers (e.g. Lead Portal) can await the result
+  // and show the correct feedback without needing to rely on side-effects alone.
+  const handleAddActivity = async (act: any): Promise<{ success: boolean; error?: string }> => {
+      if (_isSavingActivityRef.current) return { success: false, error: 'Already saving — please wait.' };
+      _isSavingActivityRef.current = true;
       setIsSavingActivity(true);
       const newId = generateActivityId();
       const now = new Date().toISOString();
       const payload = { ...act, id: newId, reference: newId, status: act.status || 'PLANNED', createdAt: now, updatedAt: now };
-      // Optimistic: show immediately
+      // Optimistic: add to local state immediately so the activity appears at once
       setActivities(prev => [payload as Activity, ...prev]);
       try {
           const res = await fetch("/api/activities", {
@@ -752,9 +757,10 @@ const handleLogout = useCallback(() => {
           setActivities(prev => prev.filter(a => a.id !== newId));
           return { success: false, error: e?.message || 'Network error — please retry.' };
       } finally {
+          _isSavingActivityRef.current = false;
           setIsSavingActivity(false);
       }
-  }, [isSavingActivity]);
+  };
 
   const handleUpdateActivity = useCallback(async (updated: Activity) => {
       // Note: removed isSavingActivity guard — was silently dropping status updates
