@@ -230,6 +230,62 @@ export const api = {
             api.post(`/api/sales-appointment-requests/${sarId}/link-activity`, { activityId, linkNote }),
         unlinkActivity: (sarId: string) => api.post(`/api/sales-appointment-requests/${sarId}/unlink-activity`, {}),
     },
+
+    // Freelancer Management — profiles, daily attendance/wages, payments &
+    // allocations, and CEO review links. See backend/freelancers.js.
+    freelancers: {
+        list: (params?: { q?: string; isActive?: boolean }) => {
+            const qs = params
+                ? '?' + Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
+                : '';
+            return api.get(`/api/freelancers${qs}`);
+        },
+        checkDuplicates: (name: string, phone?: string) =>
+            api.get(`/api/freelancers/check-duplicates?name=${encodeURIComponent(name)}${phone ? `&phone=${encodeURIComponent(phone)}` : ''}`),
+        create: (data: any) => api.post('/api/freelancers', data),
+        get: (id: string) => api.get(`/api/freelancers/${id}`),
+        update: (id: string, data: any) => api.put(`/api/freelancers/${id}`, data),
+    },
+
+    freelancerAttendance: {
+        list: (params?: Record<string, string | undefined>) => {
+            const qs = params
+                ? '?' + Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
+                : '';
+            return api.get(`/api/freelancer-attendance${qs}`);
+        },
+        confirm: (data: any) => api.post('/api/freelancer-attendance', data),
+        get: (id: string) => api.get(`/api/freelancer-attendance/${id}`),
+        update: (id: string, data: any) => api.put(`/api/freelancer-attendance/${id}`, data),
+        void: (id: string, reason: string) => api.post(`/api/freelancer-attendance/${id}/void`, { reason }),
+    },
+
+    freelancerOverview: (params?: Record<string, string | undefined>) => {
+        const qs = params
+            ? '?' + Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
+            : '';
+        return api.get(`/api/freelancer-overview${qs}`);
+    },
+
+    freelancerPayments: {
+        list: (params?: Record<string, string | undefined>) => {
+            const qs = params
+                ? '?' + Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
+                : '';
+            return api.get(`/api/freelancer-payments${qs}`);
+        },
+        record: (data: any) => api.post('/api/freelancer-payments', data),
+        get: (id: string) => api.get(`/api/freelancer-payments/${id}`),
+        attachment: (id: string) => api.get(`/api/freelancer-payments/${id}/attachment`),
+        reverse: (id: string, reason: string) => api.post(`/api/freelancer-payments/${id}/reverse`, { reason }),
+    },
+
+    freelancerReviewLinks: {
+        list: () => api.get('/api/freelancer-review-links'),
+        create: (data: { label?: string; scope?: Record<string, any>; expiresInDays?: number }) =>
+            api.post('/api/freelancer-review-links', data),
+        revoke: (token: string) => api.post(`/api/freelancer-review-links/${token}/revoke`, {}),
+    },
 };
 
 export default api;
