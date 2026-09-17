@@ -58,6 +58,15 @@ export const STATUS_META: Record<string, StatusMeta> = {
   COMPLETED:           { icon: <CheckCircle2 size={11} />, badge: 'bg-emerald-100 text-emerald-700' },
   CANCELLED:           { icon: <XCircle size={11} />,      badge: 'bg-slate-200 text-slate-500' },
   DELAYED:             { icon: <AlertCircle size={11} />,  badge: 'bg-red-100 text-red-700' },
+
+  // Freelancer Management — attendance & payment status pills
+  CONFIRMED:           { icon: <CheckCircle2 size={11} />, badge: 'bg-emerald-100 text-emerald-700' },
+  VOIDED:              { icon: <XCircle size={11} />,      badge: 'bg-slate-200 text-slate-500' },
+  UNPAID:              { icon: <Clock size={11} />,        badge: 'bg-red-100 text-red-700' },
+  PARTIALLY_PAID:      { icon: <AlertCircle size={11} />,  badge: 'bg-amber-100 text-amber-700', label: 'Partially Paid' },
+  PAID:                { icon: <CheckCircle2 size={11} />, badge: 'bg-emerald-100 text-emerald-700' },
+  RECORDED:            { icon: <CheckCircle2 size={11} />, badge: 'bg-emerald-100 text-emerald-700' },
+  REVERSED:            { icon: <RotateCcw size={11} />,    badge: 'bg-orange-100 text-orange-700' },
 };
 
 const FALLBACK: StatusMeta = { icon: <Clock size={11} />, badge: 'bg-slate-100 text-slate-600' };
