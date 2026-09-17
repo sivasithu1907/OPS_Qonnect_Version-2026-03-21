@@ -1,5 +1,5 @@
 import { TicketStatus, Role, ActivityStatus } from './types';
-import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList, ShieldCheck, RefreshCw, Settings as SettingsIcon, Star } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Smartphone, Users, Activity as ActivityIcon, Calendar, Contact, FileBarChart, UserCog, Database, MessageCircle, ClipboardList, ShieldCheck, RefreshCw, Settings as SettingsIcon, Star, Wallet } from 'lucide-react';
 
 export const APP_NAME = "Qonnect";
 
@@ -98,12 +98,23 @@ export const NAVIGATION_ITEMS = [
     category: 'Sales'
   },
 
+  // ── 💰 Finance — freelancer profiles, daily attendance/wages, and
+  // payments. Team Leads confirm attendance; payment recording is Admin
+  // only (enforced server-side, independent of what this nav array shows). ──
+  {
+    id: 'freelancers',
+    label: 'Freelancer Management',
+    icon: <Wallet size={20} />,
+    roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
+    category: 'Finance'
+  },
+
   // ── 🗂 Data — master data shared across the system (not operational
   // workflow). Clients today; Sites/Assets/Installations etc. would join
   // this same category later, so new items just need `category: 'Data'`
   // added, no structural change. ──
-  { 
-    id: 'customers', 
+  {
+    id: 'customers',
     label: 'Clients', 
     icon: <Contact size={20} />, 
     roles: [Role.ADMIN, Role.VIEWER, Role.TEAM_LEAD],
