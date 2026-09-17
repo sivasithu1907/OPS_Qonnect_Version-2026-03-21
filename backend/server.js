@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { pool } from "./db.js";
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { initFreelancerSchema, registerFreelancerRoutes } from './freelancers.js';
 
 dotenv.config();
 const app = express();
@@ -665,7 +666,12 @@ async function initDb() {
         SET level = 'FIELD_ENGINEER'
         WHERE level IS NULL OR level = '' OR level = 'ADMIN';
     `);
-    
+
+    // 7b. Freelancer Management — profiles, daily attendance/wages, payments
+    // & allocations, and CEO review links. Additive/idempotent, same as
+    // every other table above; see backend/freelancers.js for the full schema.
+    await initFreelancerSchema(pool);
+
 // 8. WhatsApp Logs Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS whatsapp_logs (
@@ -923,6 +929,11 @@ const authenticate = (req, res, next) => {
         return res.status(401).json({ error: 'Unauthorized — invalid token' });
     }
 };
+
+// ── Freelancer Management routes (profiles, attendance/wages, payments,
+// CEO review links) — registered here, once authenticate/writeRateLimit/
+// deleteRateLimit/logAudit all exist. See backend/freelancers.js.
+registerFreelancerRoutes(app, { pool, authenticate, writeRateLimit, deleteRateLimit, logAudit });
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -3688,13 +3699,24 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
             mergedDetails.supportingEngineerIds = supportingEngineerIds || [];
         }
         // Validate freelancers array if present
+        // `freelancerId` (link to a permanent Freelancer Management profile)
+        // and `dailyRate` (the agreed rate for this assignment, editable per
+        // job — separate from the freelancer's own default rate) are kept
+        // alongside the original name/role/phone fields so the Freelancer
+        // Management "Confirm Attendance" flow can resolve back to a real
+        // profile and pre-fill the correct rate. Both are optional — plain
+        // free-text freelancer rows (no profile link) keep working exactly
+        // as before.
         if (mergedDetails.freelancers && Array.isArray(mergedDetails.freelancers)) {
             mergedDetails.freelancers = mergedDetails.freelancers
                 .filter(f => f && typeof f.name === 'string' && f.name.trim())
                 .map(f => ({
                     name: f.name.trim(),
                     role: ['FIELD_ENGINEER','TECHNICAL_ASSOCIATE'].includes(f.role) ? f.role : 'TECHNICAL_ASSOCIATE',
-                    phone: f.phone ? String(f.phone).trim() : ''
+                    phone: f.phone ? String(f.phone).trim() : '',
+                    freelancerId: f.freelancerId ? String(f.freelancerId).trim() : undefined,
+                    dailyRate: (f.dailyRate !== undefined && f.dailyRate !== null && f.dailyRate !== '' && isFinite(Number(f.dailyRate)))
+                        ? Number(f.dailyRate) : undefined,
                 }));
         }
 
