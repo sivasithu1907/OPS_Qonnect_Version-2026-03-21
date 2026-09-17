@@ -211,6 +211,165 @@ export interface VisitRecord {
   status: string;
 }
 
+// --- Freelancer Management ---
+// A freelancer row attached to an Activity at planning/dispatch time
+// (activity.details.freelancers[]). `freelancerId`/`dailyRate` are optional
+// so plain free-text rows created before this feature keep working exactly
+// as before — they simply have no linked profile and no per-assignment rate.
+export interface ActivityFreelancerAssignment {
+  name: string;
+  role: 'FIELD_ENGINEER' | 'TECHNICAL_ASSOCIATE';
+  phone: string;
+  freelancerId?: string;
+  dailyRate?: number;
+}
+
+// A permanent, reusable freelancer profile (Freelancer Management module).
+export interface Freelancer {
+  id: string;
+  name: string;
+  phone: string;
+  role: 'FIELD_ENGINEER' | 'TECHNICAL_ASSOCIATE';
+  skill?: string;
+  defaultDailyRate: number;
+  notes?: string;
+  isActive: boolean;
+  createdBy?: string | null;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+  stats?: {
+    personDays: number;
+    totalWages: number;
+    totalPaid: number;
+    balance: number;
+  };
+  recentAttendance?: FreelancerAttendance[];
+}
+
+export type FreelancerPaymentStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+
+export interface FreelancerAttendanceActivityLink {
+  activityId: string;
+  activityReference: string;
+  activityType?: string;
+  customerName?: string;
+  odooLink?: string;
+  salesLeadName?: string;
+  teamLeadName?: string;
+  plannedDate?: string;
+}
+
+export interface FreelancerAttendanceAllocation {
+  activityId: string;
+  activityReference?: string;
+  amount: number;
+}
+
+export interface FreelancerAttendancePaymentHistoryEntry {
+  paymentId: string;
+  amount: number;
+  paymentDate: string;
+  status: 'RECORDED' | 'REVERSED';
+  recipientName: string;
+}
+
+// One confirmed (or voided) payable day for a freelancer.
+export interface FreelancerAttendance {
+  id: string;
+  freelancerId: string;
+  freelancerName: string;
+  freelancerPhone?: string;
+  workDate: string; // Qatar local calendar date, 'YYYY-MM-DD'
+  agreedDailyRate: number;
+  status: 'CONFIRMED' | 'VOIDED';
+  paidAmount: number;
+  balance: number;
+  paymentStatus: FreelancerPaymentStatus;
+  primaryActivityId?: string | null;
+  crmReference?: string;
+  customerName?: string;
+  salesLeadId?: string | null;
+  salesLeadName?: string;
+  teamLeadId?: string | null;
+  teamLeadName?: string;
+  workSummary?: string;
+  confirmedBy: string;
+  confirmedByName?: string;
+  confirmedAt: string;
+  voidedBy?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string;
+  createdAt: string;
+  updatedAt: string;
+  activities?: FreelancerAttendanceActivityLink[];
+  allocations?: FreelancerAttendanceAllocation[];
+  paymentHistory?: FreelancerAttendancePaymentHistoryEntry[];
+}
+
+export interface FreelancerPaymentAllocationDetail {
+  attendanceId: string;
+  freelancerId: string;
+  freelancerName: string;
+  workDate: string;
+  amount: number;
+}
+
+export interface FreelancerPayment {
+  id: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod?: string;
+  recipientFreelancerId: string;
+  recipientName: string;
+  reference?: string;
+  hasAttachment: boolean;
+  notes?: string;
+  status: 'RECORDED' | 'REVERSED';
+  recordedBy: string;
+  recordedByName?: string;
+  recordedAt: string;
+  reversedBy?: string | null;
+  reversedAt?: string | null;
+  reversalReason?: string;
+  createdAt: string;
+  allocations?: FreelancerPaymentAllocationDetail[];
+}
+
+export interface FreelancerOverviewTotals {
+  uniqueFreelancers: number;
+  personDays: number;
+  totalWages: number;
+  totalPaid: number;
+  totalBalance: number;
+}
+
+export interface FreelancerOverview {
+  totals: FreelancerOverviewTotals;
+  byPaymentStatus: Record<string, number>;
+  byFreelancer: Array<{
+    freelancerId: string;
+    name: string;
+    personDays: number;
+    totalWages: number;
+    totalPaid: number;
+    balance: number;
+  }>;
+}
+
+export interface FreelancerReviewLink {
+  token: string;
+  label: string;
+  scope: Record<string, any>;
+  createdByName: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt?: string | null;
+  lastViewedAt?: string | null;
+  viewCount: number;
+  isActive: boolean;
+}
+
 export interface Activity {
   id: string; // e.g. ACT-00045
   reference: string;
