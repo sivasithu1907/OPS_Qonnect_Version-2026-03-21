@@ -39,6 +39,7 @@ const CompletedJobSummary = lazy(() => import('./components/CompletedJobSummary'
 const MasterDashboard = lazy(() => import('./components/MasterDashboard'));
 const SalesAppointmentRequests = lazy(() => import('./components/SalesAppointmentRequests'));
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
+const FreelancerManagement = lazy(() => import('./components/FreelancerManagement'));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -2253,6 +2254,14 @@ useEffect(() => {
                         }}
                         autoOpenCreate={pendingQuickCreate === 'sar'}
                         onAutoOpenHandled={() => setPendingQuickCreate(null)}
+                    />
+                )}
+
+                {activeView === 'freelancers' && (
+                    <FreelancerManagement
+                        currentUser={currentUser || undefined}
+                        activities={activities}
+                        technicians={technicians}
                     />
                 )}
 
