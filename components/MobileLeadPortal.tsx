@@ -15,9 +15,12 @@ import PlanningModule from './PlanningModule';
 import CustomerRecords from './CustomerRecords';
 const SalesAppointmentRequests = lazy(() => import('./SalesAppointmentRequests'));
 const CompletionFeedbackModal = lazy(() => import('./CompletionFeedbackModal'));
+const FreelancerManagement = lazy(() => import('./FreelancerManagement'));
+import FreelancerAssignmentPicker from './shared/FreelancerAssignmentPicker';
 import { INPUT_STYLES, SEARCH_INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
 import { normalizePhone, validatePhone, formatPhoneDisplay } from '../utils/phoneUtils';
+import type { ActivityFreelancerAssignment } from '../types';
 
 // --- Props ---
 interface MobileLeadPortalProps {
@@ -118,7 +121,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
   // State
   const [activeTab, setActiveTab] = useState<'home' | 'my_jobs' | 'team' | 'planner' | 'more'>('home'); 
-  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients' | 'tickets' | 'sales_requests'>('none');
+  const [mobileModule, setMobileModule] = useState<'none' | 'planner' | 'reports' | 'clients' | 'tickets' | 'sales_requests' | 'freelancers'>('none');
   const [homeFilter, setHomeFilter] = useState<'all'|'progress'|'carry'|'pending'|'all_history'>('all'); 
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -187,7 +190,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Activity Dispatch State (Team Lead picks the execution crew)
   const [dispatchPrimaryId, setDispatchPrimaryId] = useState('');
   const [dispatchSupportIds, setDispatchSupportIds] = useState<string[]>([]);
-  const [dispatchFreelancers, setDispatchFreelancers] = useState<{name:string;role:string;phone:string}[]>([]);
+  const [dispatchFreelancers, setDispatchFreelancers] = useState<ActivityFreelancerAssignment[]>([]);
 
   // Activity reschedule modal state
   const [showActivityReschedule, setShowActivityReschedule] = useState(false);
@@ -1427,7 +1430,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           <ChevronLeft size={24} className="text-slate-600"/>
                       </button>
                       <h2 className="font-bold text-lg text-slate-900 capitalize">
-                          {mobileModule === 'sales_requests' ? 'Sales Appointment Requests' : mobileModule}
+                          {mobileModule === 'sales_requests' ? 'Sales Appointment Requests' : mobileModule === 'freelancers' ? 'Freelancer Management' : mobileModule}
                       </h2>
                   </div>
                   
@@ -1567,6 +1570,29 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               </Suspense>
                           </div>
                       )}
+                      {mobileModule === 'freelancers' && (
+                          <div className="h-full overflow-y-auto overflow-x-hidden w-full max-w-full min-w-0 bg-slate-50">
+                              <Suspense fallback={
+                                <div className="flex items-center justify-center h-32 text-slate-400 text-sm gap-2">
+                                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                                  Loading…
+                                </div>
+                              }>
+                                <FreelancerManagement
+                                  currentUser={{
+                                    id:    currentUserId || '',
+                                    techId: currentUserId,
+                                    name:  currentTech?.name || 'Team Lead',
+                                    email: currentTech?.email || '',
+                                    role:  (currentTech?.systemRole as Role) || Role.TEAM_LEAD,
+                                  }}
+                                  activities={activities}
+                                  technicians={technicians}
+                                  isMobile={true}
+                                />
+                              </Suspense>
+                          </div>
+                      )}
                   </div>
               </div>
           );
@@ -1635,6 +1661,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   <div className="flex-1 text-left">
                                       <span className="text-slate-900 font-medium block">Clients</span>
                                       <span className="text-[10px] text-slate-500">Customer records</span>
+                                  </div>
+                                  <ChevronRight size={16} className="text-slate-500" />
+                              </button>
+                              <button onClick={() => { setMobileModule('freelancers'); }} className="w-full flex items-center gap-3 p-4 active:bg-amber-50 transition-colors">
+                                  <div className="p-2 bg-amber-50 rounded-lg"><Briefcase size={20} className="text-amber-500" /></div>
+                                  <div className="flex-1 text-left">
+                                      <span className="text-slate-900 font-medium block">Freelancer Management</span>
+                                      <span className="text-[10px] text-slate-500">Confirm attendance, review wages</span>
                                   </div>
                                   <ChevronRight size={16} className="text-slate-500" />
                               </button>
@@ -3707,65 +3741,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     )}
                 </div>
 
-                {/* Freelancers Section — inline add/remove during dispatch */}
-                <div>
-                    <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Freelancers</label>
-                        <button
-                            type="button"
-                            onClick={() => setDispatchFreelancers((prev: any[]) => [...prev, { name: '', role: 'TECHNICAL_ASSOCIATE', phone: '' }])}
-                            className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200"
-                        >
-                            + Add Freelancer
-                        </button>
-                    </div>
-                    {dispatchFreelancers.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic">No freelancers added.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {dispatchFreelancers.map((fl: any, i: number) => (
-                                <div key={i} className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 relative">
-                                    <button
-                                        type="button"
-                                        onClick={() => setDispatchFreelancers((prev: any[]) => prev.filter((_: any, idx: number) => idx !== i))}
-                                        className="absolute top-2 right-2 text-slate-400 hover:text-red-500 text-sm font-bold"
-                                    >✕</button>
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        <div>
-                                            <div className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Name *</div>
-                                            <input
-                                                value={fl.name}
-                                                onChange={e => setDispatchFreelancers((prev: any[]) => prev.map((f: any, idx: number) => idx === i ? {...f, name: e.target.value} : f))}
-                                                placeholder="Freelancer name"
-                                                className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs"
-                                            />
-                                        </div>
-                                        <div>
-                                            <div className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Role</div>
-                                            <select
-                                                value={fl.role}
-                                                onChange={e => setDispatchFreelancers((prev: any[]) => prev.map((f: any, idx: number) => idx === i ? {...f, role: e.target.value} : f))}
-                                                className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs"
-                                            >
-                                                <option value="TECHNICAL_ASSOCIATE">Tech Associate</option>
-                                                <option value="FIELD_ENGINEER">Field Engineer</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[9px] text-slate-400 uppercase font-bold mb-0.5">Phone (optional)</div>
-                                        <input
-                                            value={fl.phone}
-                                            onChange={e => setDispatchFreelancers((prev: any[]) => prev.map((f: any, idx: number) => idx === i ? {...f, phone: e.target.value} : f))}
-                                            placeholder="+974 XXXX XXXX"
-                                            className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs"
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                {/* Freelancers Section — Select Existing / Add New during dispatch,
+                    same shared picker as the Activity Planner. */}
+                <FreelancerAssignmentPicker value={dispatchFreelancers} onChange={setDispatchFreelancers} theme="amber" />
 
                 {/* Entire Team Shortcut */}
                 <button
