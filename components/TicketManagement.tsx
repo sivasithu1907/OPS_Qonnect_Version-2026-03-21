@@ -587,11 +587,18 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       };
 
       // Await the API call to get the DB-generated customer (with proper QNC-CUST-XXXX ID)
-      const created = await onAddCustomer(newCustomer);
-      
-      // Use the DB-created customer ID, fall back to local ID if API failed
-      const finalId = created?.id || newCustomer.id;
-      const finalName = created?.name || newCustomer.name;
+      let created: Customer | null = null;
+      try { created = (await onAddCustomer(newCustomer)) as unknown as Customer | null; }
+      catch (err: any) { toast.error(err?.message || 'Customer could not be saved. Please try again.'); return; }
+
+      // Only link a customer the server actually saved — never the temporary
+      // local ID, which does not exist in the database.
+      if (!created?.id) {
+          toast.error('Customer could not be saved — the ticket was not linked. Please try again.');
+          return;
+      }
+      const finalId = created.id;
+      const finalName = created.name || newCustomer.name;
       
       // Update form to link to new customer
       updateField('customerId', finalId);
@@ -695,9 +702,17 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           };
 
           // Await API to get the DB-generated customer ID (QNC-CUST-XXXX)
-          const created = await onAddCustomer(newCustomer);
-          const finalCustomerId = created?.id || newCustomer.id;
-          const finalCustomerName = created?.name || newCustomer.name;
+          let created: Customer | null = null;
+      try { created = (await onAddCustomer(newCustomer)) as unknown as Customer | null; }
+      catch (err: any) { toast.error(err?.message || 'Customer could not be saved. Please try again.'); return; }
+          // Only use a customer the server actually saved — never the temporary
+          // local ID, which does not exist in the database.
+          if (!created?.id) {
+              toast.error('Customer could not be saved — the ticket was not created. Please try again.');
+              return;
+          }
+          const finalCustomerId = created.id;
+          const finalCustomerName = created.name || newCustomer.name;
 
           onCreateTicket({
               customerId: finalCustomerId,
