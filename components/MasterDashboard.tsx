@@ -110,7 +110,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       const workDate = (a.status === 'DONE' && (a as any).completedAt) ? (a as any).completedAt : (a.plannedDate || a.createdAt);
       return {
         id: a.id, kind: 'activity' as const, reference: a.reference,
-        title: cust?.name || 'Unknown', subtitle: a.type,
+        title: cust?.name || (a as any).customerName || 'Unknown', subtitle: a.type,
         type: (a as any).serviceCategory || 'ELV Systems', category: (a as any).serviceCategory || a.type,
         activityType: a.type || '', status: a.status, priority: a.priority,
         date: new Date(workDate),
@@ -404,7 +404,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
       .map(({ activity: a, sortTime }) => {
         const cust = customers.find(c => c.id === a.customerId);
         const tech = technicians.find(t => t.id === ((a as any).primaryEngineerId || a.leadTechId));
-        return { activity: a, customerName: cust?.name || 'Unknown', engineerName: tech?.name || 'Unassigned', displayTime: sortTime };
+        return { activity: a, customerName: cust?.name || (a as any).customerName || 'Unknown', engineerName: tech?.name || 'Unassigned', displayTime: sortTime };
       });
   }, [execToday.todaysActivities, customers, technicians]);
 
@@ -418,7 +418,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
     });
     activities.forEach(a => {
       const cust = customers.find(c => c.id === a.customerId);
-      events.push({ id: a.id, kind: 'activity', label: cust?.name || a.type, who: technicians.find(tc => tc.id === ((a as any).primaryEngineerId || a.leadTechId))?.name || 'Unassigned', time: new Date(a.updatedAt || a.plannedDate || a.createdAt), status: a.status });
+      events.push({ id: a.id, kind: 'activity', label: cust?.name || (a as any).customerName || a.type, who: technicians.find(tc => tc.id === ((a as any).primaryEngineerId || a.leadTechId))?.name || 'Unassigned', time: new Date(a.updatedAt || a.plannedDate || a.createdAt), status: a.status });
     });
     return events.sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 8);
   }, [tickets, activities, customers, technicians]);
@@ -908,7 +908,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase">Customer</h4>
-                  <div className="text-sm font-bold text-slate-800">{cust?.name || (isTicket ? d.customerName : 'Unknown')}</div>
+                  <div className="text-sm font-bold text-slate-800">{cust?.name || d.customerName || 'Unknown'}</div>
                   {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{cust?.phone || d.phoneNumber}</div>}
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5">
