@@ -6,6 +6,23 @@ import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phon
 import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight, ClipboardList } from 'lucide-react';
 import { ContextualActions, whatsappAction, createTicketAction, createActivityAction } from './shared/ContextualActions';
 import { CustomerTimelineSkeleton } from './shared/Skeletons';
+import { ClientPaginationBar, AlphabetRail, AlphabetStrip } from './shared/ClientListControls';
+import {
+  ClientSortKey, CLIENT_SORT_OPTIONS, DEFAULT_CLIENT_PAGE_SIZE,
+  sortCustomers, buildLetterIndex, getNameLetter, clampPage, createdAtMs,
+} from '../utils/customerListUtils';
+
+// Nearest ancestor that actually scrolls (the app shell scrolls an inner div,
+// not the window). Used so page changes only move the list, not the whole app.
+const getScrollParent = (el: HTMLElement | null): HTMLElement | null => {
+  let n = el?.parentElement || null;
+  while (n) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+    n = n.parentElement;
+  }
+  return null;
+};
 
 interface CustomerRecordsProps {
   customers: Customer[];
@@ -79,6 +96,18 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  // --- Sorting / pagination / alphabet navigation state ---
+  const [sortKey, setSortKey] = useState<ClientSortKey>('name-asc');
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_CLIENT_PAGE_SIZE);
+  const [page, setPage] = useState(1);
+  const [activeLetter, setActiveLetter] = useState('');
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [jumpTick, setJumpTick] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const pendingJumpIdRef = useRef<string | null>(null);
+  const scrollToListTopRef = useRef(false);
+  const suppressLetterSyncUntilRef = useRef(0);
+
   // --- Filtering Logic ---
   const filteredCustomers = useMemo(() => {
       if (!searchTerm.trim()) return customers;
@@ -87,7 +116,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       const safeSearch = normalizePhone(searchTerm); // Use safe normalized value for comparison
 
       return customers.filter(c => {
-          const nameMatch = c.name.toLowerCase().includes(lowerTerm);
+          const nameMatch = (c.name || '').toLowerCase().includes(lowerTerm);
           const emailMatch = c.email?.toLowerCase().includes(lowerTerm);
           
           // Phone match: only when search term actually contains digits (avoid "" matching everything)
@@ -106,6 +135,108 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       return filteredCustomers.slice(0, 8);
   }, [filteredCustomers, searchTerm]);
 
+  // complete dataset -> search/filter (above) -> sort -> paginate (below)
+  const sortedCustomers = useMemo(() => sortCustomers(filteredCustomers, sortKey), [filteredCustomers, sortKey]);
+  const totalFiltered = sortedCustomers.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  // Always render a valid page even if the data shrank (delete / refresh / search).
+  const currentPage = clampPage(page, totalFiltered, pageSize);
+  const pageCustomers = useMemo(
+      () => sortedCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+      [sortedCustomers, currentPage, pageSize]
+  );
+  useEffect(() => { if (page !== currentPage) setPage(currentPage); }, [page, currentPage]);
+
+  const nameSortActive = sortKey === 'name-asc' || sortKey === 'name-desc';
+  const showAlphabet = nameSortActive && totalFiltered > 0;
+  const letterIndex = useMemo(() => buildLetterIndex(sortedCustomers), [sortedCustomers]);
+  const availableLetters = useMemo(() => new Set(letterIndex.keys()), [letterIndex]);
+
+  // Page/sort/size handlers. Search, sort and page-size changes all go back to page 1.
+  const handleSearchChange = (v: string) => { setSearchTerm(v); setPage(1); setShowSuggestions(true); };
+  const handleSortChange = (v: ClientSortKey) => { setSortKey(v); setPage(1); };
+  const handlePageSizeChange = (n: number) => { setPageSize(n); setPage(1); };
+  const goToPage = (p: number) => {
+      const target = clampPage(p, totalFiltered, pageSize);
+      if (target === currentPage) return;
+      scrollToListTopRef.current = true;
+      setPage(target);
+  };
+
+  // Jump to the first client for a letter in the FULL filtered+sorted dataset,
+  // switch to the page that holds it, then scroll that row into view.
+  const jumpToLetter = (letter: string) => {
+      const idx = letterIndex.get(letter);
+      if (idx === undefined) return;
+      pendingJumpIdRef.current = sortedCustomers[idx].id;
+      suppressLetterSyncUntilRef.current = Date.now() + 700;
+      setActiveLetter(letter);
+      setPage(Math.floor(idx / pageSize) + 1);
+      setJumpTick(t => t + 1);
+  };
+
+  // After a page change from the pagination controls: bring the top of the
+  // list back into view, scrolling only the page's own scroller, and only if
+  // the list top is currently scrolled out of view.
+  useEffect(() => {
+      if (!scrollToListTopRef.current) return;
+      scrollToListTopRef.current = false;
+      const el = listRef.current;
+      if (!el) return;
+      const sp = getScrollParent(el);
+      const topEdge = sp ? sp.getBoundingClientRect().top : 0;
+      const delta = el.getBoundingClientRect().top - topEdge;
+      if (delta < 0) {
+          const stickyOffset = isMobile && showAlphabet ? 52 : 8;
+          if (sp) sp.scrollTop += delta - stickyOffset;
+          else window.scrollBy(0, delta - stickyOffset);
+      }
+  }, [currentPage, pageSize]);
+
+  // Letter-jump: runs after the target page has rendered.
+  useEffect(() => {
+      const id = pendingJumpIdRef.current;
+      if (!id) return;
+      pendingJumpIdRef.current = null;
+      const row = listRef.current?.querySelector<HTMLElement>(`[data-client-id="${id.replace(/"/g, '\\"')}"]`);
+      row?.scrollIntoView({ block: 'start' });
+      setFlashId(id);
+      const t = window.setTimeout(() => setFlashId(cur => (cur === id ? null : cur)), 1600);
+      return () => window.clearTimeout(t);
+  }, [jumpTick]);
+
+  // Keep the highlighted rail letter in step with the first visible contact.
+  useEffect(() => {
+      if (!showAlphabet) return;
+      let raf = 0;
+      const update = () => {
+          raf = 0;
+          if (Date.now() < suppressLetterSyncUntilRef.current) return;
+          const root = listRef.current;
+          if (!root) return;
+          const rows = root.querySelectorAll<HTMLElement>('[data-client-id]');
+          if (!rows.length) return;
+          const sp = getScrollParent(root);
+          const topEdge = (sp ? sp.getBoundingClientRect().top : 0) + (isMobile ? 48 : 0);
+          let letter = rows[0].dataset.clientLetter || '';
+          for (let i = 0; i < rows.length; i++) {
+              const r = rows[i];
+              if (r.getBoundingClientRect().bottom > topEdge + 4) { letter = r.dataset.clientLetter || letter; break; }
+          }
+          setActiveLetter(letter);
+      };
+      const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+      // capture: scroll events do not bubble, and the scroller is an inner div
+      document.addEventListener('scroll', onScroll, true);
+      window.addEventListener('resize', onScroll);
+      update();
+      return () => {
+          document.removeEventListener('scroll', onScroll, true);
+          window.removeEventListener('resize', onScroll);
+          if (raf) cancelAnimationFrame(raf);
+      };
+  }, [showAlphabet, pageCustomers, isMobile]);
+
   // Click Outside Handler
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -119,6 +250,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
 
   const handleSuggestionClick = (c: Customer) => {
       setSearchTerm(c.name);
+      setPage(1);
       setShowSuggestions(false);
       openModal('view', c);
   };
@@ -370,25 +502,43 @@ onSaveCustomer(data as Customer);
             )}
         </div>
 
-        {/* Customer List Container */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        {/* Phones: compact horizontal letter strip (name sorting only) */}
+        {isMobile && showAlphabet && (
+            <AlphabetStrip activeLetter={activeLetter} available={availableLetters} onSelect={jumpToLetter} />
+        )}
+
+        {/* Customer List Container (+ desktop alphabet rail beside it) */}
+        <div className={!isMobile && showAlphabet ? 'flex items-start gap-3' : ''}>
+        <div ref={listRef} data-testid="client-list" className="flex-1 min-w-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className={`${isMobile ? 'p-4' : 'p-6'} border-b border-slate-100 flex flex-wrap justify-between items-center gap-3 bg-slate-50`}>
                 <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                     <Contact size={20} className="text-slate-500" /> 
                     All Clients
                 </h3>
                 
+                <div className={`flex flex-wrap items-center gap-3 ${isMobile ? 'w-full' : ''}`}>
+                {/* Sort */}
+                <label htmlFor="client-sort" className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <span>Sort by</span>
+                    <select
+                        id="client-sort"
+                        data-testid="client-sort"
+                        value={sortKey}
+                        onChange={(e) => handleSortChange(e.target.value as ClientSortKey)}
+                        className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm font-medium text-slate-700 focus:outline-none focus:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    >
+                        {CLIENT_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                </label>
+
                 {/* Search With Autocomplete */}
-                <div className="relative" ref={searchContainerRef}>
+                <div className={`relative ${isMobile ? 'flex-1 min-w-[9rem]' : ''}`} ref={searchContainerRef}>
                     <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
                     <input 
                         type="text" 
                         placeholder="Search..." 
                         value={searchTerm}
-                        onChange={(e) => {
-                            setSearchTerm(e.target.value);
-                            setShowSuggestions(true);
-                        }}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                         onFocus={() => setShowSuggestions(true)}
                         className={`pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 bg-white ${isMobile ? 'w-full' : 'w-64'}`} 
                     />
@@ -409,23 +559,35 @@ onSaveCustomer(data as Customer);
                         </div>
                     )}
                 </div>
+                </div>
             </div>
+
+            <ClientPaginationBar
+                position="top"
+                total={totalFiltered}
+                totalAll={customers.length}
+                page={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                onPageChange={goToPage}
+                onPageSizeChange={handlePageSizeChange}
+            />
 
             {/* Conditional Rendering: Card List (Mobile) vs Table (Desktop) */}
             {isMobile ? (
                 <div className="p-3 space-y-3">
-                    {filteredCustomers.length === 0 ? (
+                    {totalFiltered === 0 ? (
                         <div className="p-8 text-center text-slate-400 italic">
                             No clients found matching "{searchTerm}"
                         </div>
                     ) : (
-                        filteredCustomers.map(cust => {
+                        pageCustomers.map(cust => {
                             const mapUrl = (cust.address && cust.address.startsWith('http')) ? cust.address 
                                 : (cust.buildingNumber && cust.buildingNumber.startsWith('http')) ? cust.buildingNumber : '';
                             const bldg = cust.buildingNumber && cust.buildingNumber !== 'N/A' && !cust.buildingNumber.startsWith('http') ? cust.buildingNumber : '';
                             const historyCount = getCustomerHistory(cust.id).length;
                             return (
-                                <div key={cust.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div key={cust.id} data-client-id={cust.id} data-client-letter={getNameLetter(cust.name)} className={`scroll-mt-16 bg-white rounded-xl border shadow-sm overflow-hidden transition-colors ${flashId === cust.id ? 'border-amber-300 ring-2 ring-amber-200' : 'border-slate-200'}`}>
                                     {/* Card header — tap to view details */}
                                     <div onClick={() => openModal('view', cust)} className="p-4 active:bg-slate-50 cursor-pointer">
                                         <div className="flex items-center gap-3">
@@ -487,15 +649,15 @@ onSaveCustomer(data as Customer);
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredCustomers.length === 0 ? (
+                            {totalFiltered === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">
                                         No clients found matching "{searchTerm}"
                                     </td>
                                 </tr>
                             ) : (
-                                filteredCustomers.map(cust => (
-                                    <tr key={cust.id} className="hover:bg-slate-50 group">
+                                pageCustomers.map(cust => (
+                                    <tr key={cust.id} data-client-id={cust.id} data-client-letter={getNameLetter(cust.name)} className={`scroll-mt-4 group transition-colors ${flashId === cust.id ? 'bg-amber-50' : 'hover:bg-slate-50'}`}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 {cust.avatar ? (
@@ -507,7 +669,12 @@ onSaveCustomer(data as Customer);
                                                 )}
                                                 <div>
                                                     <div className="font-bold text-slate-800">{cust.name}</div>
-                                                    <div className="text-xs text-slate-400">ID: {cust.id}</div>
+                                                    <div className="text-xs text-slate-400">
+                                                        ID: {cust.id}
+                                                        {!nameSortActive && createdAtMs(cust) !== null && (
+                                                            <span> · Added {new Date(cust.createdAt as string).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
@@ -566,6 +733,23 @@ onSaveCustomer(data as Customer);
                     </table>
                 </div>
             )}
+
+            <ClientPaginationBar
+                position="bottom"
+                total={totalFiltered}
+                totalAll={customers.length}
+                page={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                onPageChange={goToPage}
+                onPageSizeChange={handlePageSizeChange}
+            />
+        </div>
+
+        {/* Desktop alphabet rail: visual navigation aid only (no customer grouping data) */}
+        {!isMobile && showAlphabet && (
+            <AlphabetRail activeLetter={activeLetter} available={availableLetters} onSelect={jumpToLetter} />
+        )}
         </div>
 
         {/* --- Modals --- */}
