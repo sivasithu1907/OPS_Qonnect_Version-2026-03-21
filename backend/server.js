@@ -965,7 +965,7 @@ app.get('/api/tv-data', async (req, res) => {
             pool.query("SELECT id, name, role, status, avatar, level, phone FROM users WHERE status != 'INACTIVE'"),
             pool.query("SELECT * FROM teams"),
             pool.query("SELECT * FROM sites"),
-            pool.query("SELECT id, name, phone, email, address, avatar, building_number FROM customers")
+            pool.query("SELECT id, name, phone, email, address, avatar, building_number, created_at FROM customers")
         ]);
 
         const tickets = ticketsRes.rows.map(r => ({
@@ -1015,6 +1015,7 @@ app.get('/api/tv-data', async (req, res) => {
             id: r.id, name: r.name, phone: r.phone || '',
             email: r.email || '', address: r.address || '',
             avatar: r.avatar || '', buildingNumber: r.building_number || '',
+            createdAt: r.created_at || null,
         }));
 
         res.json({ tickets, activities, technicians, teams, sites, customers, timestamp: new Date().toISOString() });
@@ -1196,7 +1197,7 @@ app.get("/api/mobile/lead", authenticate, async (req, res) => {
             // No LIMIT: the portal looks customers up by id/phone from this array,
             // so it must hold every customer (a LIMIT 200 here silently hid any
             // customer sorted after the first 200 names).
-            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name"),
+            pool.query("SELECT id, name, phone, address, building_number, created_at FROM customers ORDER BY name"),
             pool.query("SELECT * FROM teams ORDER BY name"),
             pool.query("SELECT * FROM sites ORDER BY name")
         ]);
@@ -1209,7 +1210,7 @@ app.get("/api/mobile/lead", authenticate, async (req, res) => {
                 phone: r.phone, avatar: r.avatar || null,
                 jobRole: r.job_role, level: r.level || '', role: r.systemRole
             })),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number, createdAt: r.created_at || null })),
             teams: teamsR.rows.map(r => ({ ...r, leadId: r.lead_id, memberIds: r.member_ids })),
             sites: sitesR.rows.map(r => ({ ...r, clientName: r.client_name, assignedTeamId: r.assigned_team_id }))
         });
@@ -1240,7 +1241,7 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
                         AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
                         ORDER BY planned_date DESC LIMIT 200`, [userId]),
             // No LIMIT — see /api/mobile/lead above.
-            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name"),
+            pool.query("SELECT id, name, phone, address, building_number, created_at FROM customers ORDER BY name"),
             // Previously this lightweight endpoint never returned technicians
             // at all — meaning anything resolving "my own name" (e.g. the
             // Completion Feedback flow's auto-filled engineer name) from the
@@ -1253,7 +1254,7 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
         res.json({
             tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivityLite),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number, createdAt: r.created_at || null })),
             technicians: techsR.rows,
         });
     } catch (e) {
@@ -1320,7 +1321,7 @@ app.get("/api/init", authenticate, async (req, res) => {
                 phone: r.phone, avatar: r.avatar || null,
                 jobRole: r.job_role, level: r.level || ''
             })),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number })),
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number, createdAt: r.created_at || null })),
             teams: teamsR.rows.map(r => ({ ...r, leadId: r.lead_id, memberIds: r.member_ids })),
             sites: sitesR.rows.map(r => ({ ...r, clientName: r.client_name, assignedTeamId: r.assigned_team_id }))
         });
@@ -1348,7 +1349,7 @@ app.get("/api/refresh", authenticate, async (req, res) => {
         res.json({
             tickets: ticketsR.rows.map(r => mapTicket(r)),
             activities: activitiesR.rows.map(mapActivityLite),
-            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number }))
+            customers: customersR.rows.map(r => ({ ...r, buildingNumber: r.building_number, createdAt: r.created_at || null }))
         });
     } catch (e) {
         console.error("Refresh error:", e);
@@ -1915,7 +1916,8 @@ app.get("/api/customers", authenticate, async (req, res) => {
       buildingNumber: r.building_number || r.address || '',
       avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
       isActive: r.is_active !== false,
-      notes: r.notes || ''
+      notes: r.notes || '',
+      createdAt: r.created_at || null
     })));
   } catch (e) {
     console.error("customers list error:", e);
@@ -1974,6 +1976,7 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
           avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
           isActive: r.is_active !== false,
           notes: r.notes || '',
+          createdAt: r.created_at || null,
           existed: true
         });
       }
@@ -2017,7 +2020,8 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
       buildingNumber: r.building_number || '',
       avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
       isActive: r.is_active !== false,
-      notes: r.notes || ''
+      notes: r.notes || '',
+      createdAt: r.created_at || null
     });
   } catch (e) {
     console.error("customers create error:", e);
@@ -2080,7 +2084,8 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
       email: r.email || '', address: r.address || '',
       buildingNumber: r.building_number || '',
       avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
-      isActive: r.is_active !== false, notes: r.notes || ''
+      isActive: r.is_active !== false, notes: r.notes || '',
+      createdAt: r.created_at || null
     });
   } catch (e) {
     console.error("customers update error:", e);
