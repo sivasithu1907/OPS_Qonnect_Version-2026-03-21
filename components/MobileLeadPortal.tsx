@@ -528,7 +528,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
       if (searchLower) {
           actItems = actItems.filter(item => {
               const a = item.data as any;
-              const custName = (customers || []).find((c: any) => c.id === a.customerId)?.name || '';
+              const custName = (customers || []).find((c: any) => c.id === a.customerId)?.name || a.customerName || '';
               return (a.reference || a.id || '').toLowerCase().includes(searchLower) ||
                      custName.toLowerCase().includes(searchLower) ||
                      (a.type || '').toLowerCase().includes(searchLower) ||
@@ -2708,8 +2708,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 </div>
                                                 <div className="space-y-2">
                                                     {section.items.map((a: any) => {
-                                                        const custName = (customers || []).find((c: any) => c.id === a.customerId)?.name || '';
-                                                        const custPhone = (customers || []).find((c: any) => c.id === a.customerId)?.phone || '';
+                                                        const custName = (customers || []).find((c: any) => c.id === a.customerId)?.name || a.customerName || '';
+                                                        const custPhone = (customers || []).find((c: any) => c.id === a.customerId)?.phone || a.customerPhone || '';
                                                         return (
                                                             <div key={a.id} onClick={() => setViewActivity(a)} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm active:scale-[0.98] transition-transform cursor-pointer">
                                                                 <div className="flex items-center justify-between mb-1.5">
@@ -2809,14 +2809,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         {viewJob.type === 'activity' && (() => {
                                             const ac = viewJob.data;
                                             const acCustomer = customers?.find((cu: any) => cu.id === ac.customerId);
-                                            return acCustomer ? <p className="text-sm text-slate-500 mt-0.5">{acCustomer.name}</p> : null;
+                                            const acName = acCustomer?.name || ac.customerName; return acName ? <p className="text-sm text-slate-500 mt-0.5">{acName}</p> : null;
                                         })()}
                                     </div>
 
                                     {/* Customer Contact Card */}
                                     {(() => {
-                                        const custName = viewJob.type === 'ticket' ? viewJob.data.customerName : ((customers || []).find((c: any) => c.id === viewJob.data.customerId)?.name || 'Unknown');
-                                        const custPhone = viewJob.type === 'ticket' ? viewJob.data.phoneNumber : ((customers || []).find((c: any) => c.id === viewJob.data.customerId)?.phone || '');
+                                        const custName = viewJob.type === 'ticket' ? viewJob.data.customerName : ((customers || []).find((c: any) => c.id === viewJob.data.customerId)?.name || viewJob.data.customerName || 'Unknown');
+                                        const custPhone = viewJob.type === 'ticket' ? viewJob.data.phoneNumber : ((customers || []).find((c: any) => c.id === viewJob.data.customerId)?.phone || viewJob.data.customerPhone || '');
                                         const locUrl = viewJob.data.locationUrl;
                                         const bldg = viewJob.data.houseNumber;
                                         return (
@@ -3226,8 +3226,8 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                         const status = j.data.status;
                                         const ref = j.type === 'ticket' ? `#${j.data.id}` : (j.data.reference || j.data.id);
                                         const title = j.type === 'ticket' ? j.data.category : (j.data.type || 'Activity');
-                                        const custName = j.type === 'ticket' ? j.data.customerName : ((customers || []).find((c: any) => c.id === j.data.customerId)?.name || '');
-                                        const custPhone = j.type === 'ticket' ? j.data.phoneNumber : ((customers || []).find((c: any) => c.id === j.data.customerId)?.phone || '');
+                                        const custName = j.type === 'ticket' ? j.data.customerName : ((customers || []).find((c: any) => c.id === j.data.customerId)?.name || j.data.customerName || '');
+                                        const custPhone = j.type === 'ticket' ? j.data.phoneNumber : ((customers || []).find((c: any) => c.id === j.data.customerId)?.phone || j.data.customerPhone || '');
                                         const loc = j.data.houseNumber || '';
                                         const priority = j.data.priority;
 
@@ -4271,7 +4271,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                               avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(trimmedName)}&background=random`
                                                           };
                                                           const created = await Promise.resolve(onAddCustomer(newCust));
-                                                          if (!created) throw new Error('No customer returned from server.');
+                                                          if (!created || !created.id) throw new Error('Customer could not be saved, so nothing was created. Please check the details and your connection, then try again.');
                                                           setActSelectedCustomer(created);
                                                       } catch (err: any) {
                                                           setActCustError(err?.message || 'Customer creation failed. Please try again.');
@@ -4606,7 +4606,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
                         };
                         const created = onAddCustomer ? await onAddCustomer(newCust) : null;
-                        if (!created) {
+                        if (!created || !created.id) {
                             toast.error('Customer creation failed — please try again.');
                             return;
                         }
