@@ -223,6 +223,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'site', label: 'Site / Customer', getValue: (a: Activity) => {
           const customer = customers.find((c: any) => c.id === (a as any).customerId);
           if (customer) return customer.name;
+          if ((a as any).customerName) return (a as any).customerName;
           const site = sites.find(s => s.id === a.siteId);
           if (site) return site.name;
           return (a as any).houseNumber || 'Unknown';
