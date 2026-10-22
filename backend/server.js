@@ -961,7 +961,7 @@ app.get('/api/tv-data', async (req, res) => {
                 visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 100`),
             pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
+                details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
             pool.query("SELECT id, name, role, status, avatar, level, phone FROM users WHERE status != 'INACTIVE'"),
             pool.query("SELECT * FROM teams"),
             pool.query("SELECT * FROM sites"),
@@ -984,6 +984,7 @@ app.get('/api/tv-data', async (req, res) => {
             siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
             durationHours: Number(r.duration_hours),
             ...r.details,
+            customerName: resolveActivityCustomerName(r, r.details),
             // Column values MUST override JSONB details (details may have stale frontend timestamps)
             startedAt: r.started_at || (r.details || {}).startedAt || null,
             completedAt: r.completed_at || (r.details || {}).completedAt || null,
@@ -1076,12 +1077,28 @@ function mapTicket(r, includeFullPhotos = false) {
 
 /* ---------- Activity row mapper (matches /api/activities format exactly) ---------- */
 // Lite version — excludes photos for list endpoints (saves 99% bandwidth)
+// SQL fragment appended to activity SELECT lists: the live name of the customer
+// linked by customer_id. It is a parameter-free primary-key sub-select (no join,
+// so the unqualified column names in those SELECTs stay unambiguous), and it
+// resolves correctly no matter how many customers exist or which ones the
+// frontend happens to have loaded.
+const ACTIVITY_LINKED_CUSTOMER_NAME_SQL =
+    `(SELECT c.name FROM customers c WHERE c.id = activities.customer_id) AS linked_customer_name`;
+
+// Single source of truth for an activity's customer name: the linked customer
+// record first, then the name snapshot stored on the activity row, then the one
+// in details. Empty only when none of them holds a usable name.
+function resolveActivityCustomerName(r, d) {
+    const pick = (v) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+    return pick(r.linked_customer_name) || pick(r.customer_name) || pick(d && d.customerName) || '';
+}
+
 function mapActivityLite(r) {
     const d = r.details || {};
     return {
         id: r.id, reference: r.reference, type: r.type, priority: r.priority,
         status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
-        customerName: r.customer_name || d.customerName || '',
+        customerName: resolveActivityCustomerName(r, d),
         customerPhone: d.customerPhone || '',
         siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
         serviceCategory: d.serviceCategory || r.service_category || '',
@@ -1116,7 +1133,7 @@ function mapActivity(r) {
     return {
         id: r.id, reference: r.reference, type: r.type, priority: r.priority,
         status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
-        customerName: r.customer_name || d.customerName || '',
+        customerName: resolveActivityCustomerName(r, d),
         customerPhone: d.customerPhone || '',
         siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
         serviceCategory: d.serviceCategory || r.service_category || '',
@@ -1172,11 +1189,14 @@ app.get("/api/mobile/lead", authenticate, async (req, res) => {
             // to see history" to mean anything. Both fixed below.
             pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities
+                details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities
                 WHERE type != 'WHATSAPP_SUPPORT' AND (status NOT IN ('CANCELLED') AND (status != 'DONE' OR completed_at > NOW() - INTERVAL '30 days'))
                 ORDER BY planned_date DESC LIMIT 250`),
             pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
-            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200"),
+            // No LIMIT: the portal looks customers up by id/phone from this array,
+            // so it must hold every customer (a LIMIT 200 here silently hid any
+            // customer sorted after the first 200 names).
+            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name"),
             pool.query("SELECT * FROM teams ORDER BY name"),
             pool.query("SELECT * FROM sites ORDER BY name")
         ]);
@@ -1215,11 +1235,12 @@ app.get("/api/mobile/tech", authenticate, async (req, res) => {
             // their own portal at all, active or completed. This is the same gap
             // already fixed in the Activity Planner / Operations Monitor / the
             // frontend completedJobs filter — now consistent here too.
-            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE ${activityInvolvesPersonClause(1)}
+            pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name, customer_phone, site_id, lead_tech_id, description, duration_hours, details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE ${activityInvolvesPersonClause(1)}
                         AND type != 'WHATSAPP_SUPPORT'
                         AND (status NOT IN ('DONE','CANCELLED') OR planned_date > NOW() - INTERVAL '30 days')
                         ORDER BY planned_date DESC LIMIT 200`, [userId]),
-            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name LIMIT 200"),
+            // No LIMIT — see /api/mobile/lead above.
+            pool.query("SELECT id, name, phone, address, building_number FROM customers ORDER BY name"),
             // Previously this lightweight endpoint never returned technicians
             // at all — meaning anything resolving "my own name" (e.g. the
             // Completion Feedback flow's auto-filled engineer name) from the
@@ -1253,7 +1274,7 @@ app.get("/api/refresh-lite", authenticate, async (req, res) => {
                 visit_history, created_at, updated_at FROM tickets WHERE updated_at > $1 ORDER BY updated_at DESC`, [since]),
             pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE updated_at > $1 AND type != 'WHATSAPP_SUPPORT' ORDER BY updated_at DESC`, [since])
+                details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE updated_at > $1 AND type != 'WHATSAPP_SUPPORT' ORDER BY updated_at DESC`, [since])
         ]);
         const hasChanges = ticketsR.rows.length > 0 || activitiesR.rows.length > 0;
         res.json({
@@ -1281,9 +1302,11 @@ app.get("/api/init", authenticate, async (req, res) => {
                 visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 200`),
             pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
+                details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
             pool.query('SELECT id, name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users'),
-            pool.query(`SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY name LIMIT 200`),
+            // No LIMIT: the desktop Clients list, selectors and phone-duplicate
+            // checks all read from this array and must see every customer.
+            pool.query(`SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY name`),
             pool.query("SELECT * FROM teams ORDER BY name"),
             pool.query("SELECT * FROM sites ORDER BY name")
         ]);
@@ -1318,8 +1341,9 @@ app.get("/api/refresh", authenticate, async (req, res) => {
                 visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 200`),
             pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
-            pool.query(`SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY name LIMIT 200`)
+                details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
+            // No LIMIT — see /api/init above.
+            pool.query(`SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY name`)
         ]);
         res.json({
             tickets: ticketsR.rows.map(r => mapTicket(r)),
@@ -1873,13 +1897,12 @@ app.get("/api/customers", authenticate, async (req, res) => {
         SELECT * FROM customers
         WHERE id ILIKE $1 OR name ILIKE $1 OR phone ILIKE $1 OR email ILIKE $1
         ORDER BY created_at DESC
-        LIMIT 200
         `,
         [`%${q}%`]
       );
     } else {
       result = await pool.query(
-        `SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY created_at DESC LIMIT 200`
+        `SELECT id, name, phone, email, address, building_number, avatar, notes, is_active, created_at FROM customers ORDER BY created_at DESC`
       );
     }
 
@@ -3614,7 +3637,7 @@ app.get("/api/sites", authenticate, async (req, res) => {
 // Get full activity with photos (for detail view only)
 app.get("/api/activities/:id/full", authenticate, async (req, res) => {
     try {
-        const { rows } = await pool.query("SELECT * FROM activities WHERE id = $1", [req.params.id]);
+        const { rows } = await pool.query(`SELECT *, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE id = $1`, [req.params.id]);
         if (rows.length === 0) return res.status(404).json({ error: "Not found" });
         res.json(mapActivity(rows[0]));
     } catch (e) { res.status(500).json({ error: "Failed" }); }
@@ -3624,7 +3647,7 @@ app.get("/api/activities", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
                 customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`);
+                details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`);
     res.json(rows.map(mapActivityLite));
   } catch (e) { res.status(500).json({error: "Failed to load activities"}); }
 });
