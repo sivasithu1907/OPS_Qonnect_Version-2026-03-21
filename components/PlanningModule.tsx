@@ -245,7 +245,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       if (act.houseNumber && !act.houseNumber.startsWith('http')) return `House: ${act.houseNumber}`;
       const cust = customers.find(c => c.id === act.customerId);
       if (cust?.buildingNumber && !cust.buildingNumber.startsWith('http')) return `Bldg: ${cust.buildingNumber}`;
-      if (cust?.name) return cust.name;
+      if (cust?.name || (act as any).customerName) return cust?.name || (act as any).customerName;
       if (act.locationUrl || act.houseNumber?.startsWith('http') || cust?.address?.startsWith('http')) return 'Map linked';
       return 'N/A';
   };
@@ -340,9 +340,11 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
               setSelectedCustomerId(dbCustomer.id);
               return dbCustomer;
           }
-          // Fallback: use temp ID if DB didn't return a customer (should not happen)
-          setSelectedCustomerId(cust.id);
-          return cust;
+          // The server did not confirm the save. Never fall back to the temporary
+          // client-side ID — it does not exist in the database, so the activity
+          // would be linked to a customer that is not there. Fail visibly instead
+          // (App's handleAddCustomer has already shown the server's reason).
+          throw new Error('Customer could not be saved, so nothing was created. Please try again.');
       } catch (err) {
           console.error('handleNewCustomer error:', err);
           // Propagate error so CustomerSelector can show it (modal stays open)
@@ -802,7 +804,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               <span className={`inline-block text-[7px] font-bold px-1 py-0.5 rounded border mb-0.5 ${roleTag.cls}`}>{roleTag.label}</span>
                           )}
                           {/* Client Name */}
-                          {actCustomer && <div className="text-[10px] font-medium text-slate-800 truncate">{actCustomer.name}</div>}
+                          {(actCustomer?.name || (act as any).customerName) && <div className="text-[10px] font-medium text-slate-800 truncate">{actCustomer?.name || (act as any).customerName}</div>}
                           <div className="text-[9px] text-slate-400 mt-0.5">{new Date(act.plannedDate).toLocaleTimeString('en-GB',{timeZone:'Asia/Qatar',hour:'2-digit',minute:'2-digit'})}{act.durationHours ? ` · ${act.durationHours}h` : ''}</div>
                           {/* TAs */}
                           {actTAs.length > 0 && (
