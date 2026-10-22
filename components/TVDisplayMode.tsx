@@ -222,7 +222,7 @@ const TVDisplayMode: React.FC = () => {
                         {dayActs.map((act: any) => (
                           <div key={act.id} className={`mb-1 p-1.5 rounded border text-[10px] ${getStatusBg(act.status)}`}>
                             <div className="font-bold truncate">{act.type}</div>
-                            <div className="truncate font-medium opacity-90">{customers.find((c: any) => c.id === act.customerId)?.name || ''}</div>
+                            <div className="truncate font-medium opacity-90">{customers.find((c: any) => c.id === act.customerId)?.name || (act as any).customerName || ''}</div>
                             {act.serviceCategory && <div className="truncate opacity-60">{act.serviceCategory}</div>}
                             {act.remarks && <div className="truncate opacity-60">{act.remarks.substring(0, 30)}</div>}
                             <div className="flex items-center justify-between mt-0.5">
