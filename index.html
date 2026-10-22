@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Qonnect Field Operations</title>
+    <!-- Browser-tab icon + app icons. All local static files from /public.
+         The ?v=2 suffix is deliberate: nginx serves .ico/.png/.svg with a
+         1-year "immutable" cache, so browsers that already stored the old
+         (or missing) icon would otherwise never re-request it. Bump the
+         number whenever the icon artwork changes again.
+         Order matters: the .ico is the universal fallback; the SVG (sharp at
+         any size, switches its roof to white on dark browser themes) is
+         preferred by browsers that support SVG favicons. -->
+    <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" sizes="180x180" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
