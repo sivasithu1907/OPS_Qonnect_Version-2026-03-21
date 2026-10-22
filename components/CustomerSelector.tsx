@@ -116,7 +116,15 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
     setIsSaving(true);
     try {
       const result = await onCreateNew(tempCustomer);
-      const saved = (result as Customer) || tempCustomer;
+      // Only ever select the customer the server actually saved (its ID is the
+      // canonical one — for a phone that already exists it is the existing
+      // customer's ID). Never fall back to the temporary client-side ID: it
+      // does not exist in the database.
+      if (!result || !(result as Customer).id) {
+        setSaveError('Customer could not be saved, so nothing was created. Please check the details and your connection, then try again.');
+        return;
+      }
+      const saved = result as Customer;
       onSelect(saved);
       setSearchTerm(saved.name);
       setNewName('');
@@ -124,7 +132,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
       setShowCreateModal(false);
     } catch (err) {
       console.error('Save customer error:', err);
-      setSaveError('Failed to save. Please try again.');
+      setSaveError((err as any)?.message || 'Failed to save. Please try again.');
     } finally {
       setIsSaving(false);
     }
