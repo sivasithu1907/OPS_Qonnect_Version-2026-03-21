@@ -325,7 +325,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                   id: a.id,
                   type: 'activity' as const,
                   refLine: a.reference,
-                  clientLine: customers.find(c=>c.id===a.customerId)?.name || sites.find(s=>s.id===a.siteId)?.name || a.houseNumber || 'Unknown Client',
+                  clientLine: customers.find(c=>c.id===a.customerId)?.name || (a as any).customerName || sites.find(s=>s.id===a.siteId)?.name || a.houseNumber || 'Unknown Client',
                   descLine: a.description || a.type,
                   time: new Date(a.updatedAt || a.createdAt),
                   status: a.status
@@ -397,7 +397,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
       });
       activities.forEach(a => {
           if (a.status === 'CANCELLED' || a.status === 'DONE') return;
-          const custLabel = customers.find(c => c.id === a.customerId)?.name || a.houseNumber || a.reference || a.id;
+          const custLabel = customers.find(c => c.id === a.customerId)?.name || (a as any).customerName || a.houseNumber || a.reference || a.id;
           if (a.status === 'CARRY_FORWARD') alerts.push({ id: `cfa-${a.id}`, icon: <History size={12} />, label: 'Carry Forward', ref: a.reference || a.id, client: custLabel, tone: 'amber', onClick: () => handleItemClick('activity', a.id) });
           if ((a.escalationLevel || 0) > 0) alerts.push({ id: `esc-${a.id}`, icon: <ShieldAlert size={12} />, label: 'Escalated', ref: a.reference || a.id, client: custLabel, tone: 'red', onClick: () => handleItemClick('activity', a.id) });
       });
@@ -421,7 +421,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
           else if (tech.status === 'BUSY') liveStatus = 'Busy';
 
           const clientName = activeActivity
-              ? (customers.find(c => c.id === activeActivity.customerId)?.name || sites.find(s => s.id === activeActivity.siteId)?.name || activeActivity.houseNumber || null)
+              ? (customers.find(c => c.id === activeActivity.customerId)?.name || (activeActivity as any).customerName || sites.find(s => s.id === activeActivity.siteId)?.name || activeActivity.houseNumber || null)
               : activeTicket ? (customers.find(c => c.id === activeTicket.customerId)?.name || activeTicket.customerName || null) : null;
 
           const refLabel = activeActivity ? (activeActivity.reference || activeActivity.id) : activeTicket ? activeTicket.id : null;
@@ -986,7 +986,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     })(),
                                     description: a.description || a.type,
                                     escalationLevel: a.escalationLevel || 0,
-                                    clientLine: customers.find(c => c.id === a.customerId)?.name || a.houseNumber || ''
+                                    clientLine: customers.find(c => c.id === a.customerId)?.name || (a as any).customerName || a.houseNumber || ''
                                 };
                             });
 
@@ -1131,7 +1131,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                         return a.durationHours || 2;
                                     })();
                                     const style = getPositionStyle(startTime, duration);
-                                    const custName = customers.find((c: any) => c.id === a.customerId)?.name || '';
+                                    const custName = customers.find((c: any) => c.id === a.customerId)?.name || a.customerName || '';
                                     return (
                                         <div key={a.id} className={`absolute top-3 bottom-3 rounded border shadow-sm p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-md transition-all z-10 overflow-hidden ${
                                             s === 'DONE' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 opacity-80' :
@@ -1275,7 +1275,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                              <div>
                                  <div className="text-sm font-bold text-slate-800">
                                      {selectedItem.type === 'activity' ? 
-                                        (customers?.find(c => c.id === (selectedItem.data as Activity).customerId)?.name || 'Unknown') : 
+                                        (customers?.find(c => c.id === (selectedItem.data as Activity).customerId)?.name || (selectedItem.data as any).customerName || 'Unknown') : 
                                         (selectedItem.data as Ticket).customerName}
                                  </div>
                                  <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
@@ -1307,7 +1307,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                     const parts: string[] = [];
                                     if (d.houseNumber) parts.push(d.houseNumber);
                                     if (cust?.buildingNumber) parts.push(`Bldg: ${cust.buildingNumber}`);
-                                    if (cust?.name) parts.push(cust.name);
+                                    if (cust?.name || d.customerName) parts.push(cust?.name || d.customerName);
                                     if (parts.length === 0) {
                                         const site = sites.find(s=>s.id===d.siteId);
                                         parts.push(site?.name || 'Unknown Location');
