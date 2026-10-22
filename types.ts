@@ -130,6 +130,8 @@ export interface Customer {
   address?: string; // Now used for Location URL
   avatar?: string;
   buildingNumber?: string; // New Optional Field
+  // ISO timestamp from customers.created_at. Absent/null when the server has none; never fabricated.
+  createdAt?: string | null;
 }
 
 export interface AnalysisResult {
