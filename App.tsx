@@ -122,6 +122,24 @@ function App() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  // Customers saved during this session that a server list may not contain yet
+  // (e.g. a list request that was already in flight when the contact was saved).
+  // Every customer-list load goes through applyCustomerList below, which keeps
+  // these in the list until a server response includes them, so a freshly
+  // saved contact can never flicker out of view after a refresh.
+  const pendingCustomersRef = useRef<Map<string, { customer: Customer; at: number }>>(new Map());
+  const applyCustomerList = (list: Customer[]) => {
+    const pending = pendingCustomersRef.current;
+    if (pending.size === 0) { setCustomers(list); return; }
+    const seen = new Set(list.map(c => c.id));
+    const now = Date.now();
+    const extras: Customer[] = [];
+    pending.forEach((entry, id) => {
+      if (seen.has(id) || now - entry.at > 120000) pending.delete(id);
+      else extras.push(entry.customer);
+    });
+    setCustomers(extras.length ? [...list, ...extras] : list);
+  };
   const [teams, setTeams] = useState<Team[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   // Lifted up from SalesAppointmentRequests.tsx (which still fetches its own
@@ -901,17 +919,28 @@ const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err?.error || "Failed to create customer");
+      throw new Error(err?.error || `Failed to create customer (HTTP ${res.status})`);
     }
 
-    // Return the DB-created customer (with real server-assigned ID)
+    // Return the DB-created customer (with real server-assigned ID). When the
+    // phone already belongs to a customer, the server returns that existing
+    // record (canonical ID) instead — callers must use this returned ID.
     const created = await res.json();
+    if (!created || !created.id) throw new Error("Server did not return a customer ID");
+    // Show it immediately and keep it visible until a server list includes it.
+    pendingCustomersRef.current.set(created.id, { customer: created as Customer, at: Date.now() });
+    setCustomers(prev => prev.some(p => p.id === created.id)
+      ? prev.map(p => p.id === created.id ? { ...p, ...created } : p)
+      : [...prev, created as Customer]);
     await loadCustomers();
     return created as Customer;
-  } catch (e) {
+  } catch (e: any) {
     console.error(e);
-    toast.error("Failed to create customer");
-    return null;
+    // Throw (rather than return null + toast) so each caller can show the real
+    // reason where its user can see it — the standalone Team Lead portal has no
+    // toast host mounted, so a toast raised here would never be displayed there.
+    const reason = e instanceof TypeError ? 'network error — check your connection' : (e?.message || 'unknown error');
+    throw new Error(`Customer was not saved: ${reason}`);
   }
 };
 
@@ -964,6 +993,7 @@ const handleDeleteCustomer = async (id: string) => {
       throw new Error(err?.error || "Failed to delete customer");
     }
 
+    pendingCustomersRef.current.delete(id);
     await loadCustomers();
   } catch (e) {
     console.error(e);
@@ -1063,7 +1093,7 @@ const loadCustomers = async () => {
   try {
     const res = await fetch("/api/customers", { headers: getAuthHeaders() });
     const data = await res.json();
-    if (Array.isArray(data)) setCustomers(data);
+    if (Array.isArray(data)) applyCustomerList(data);
   } catch (e) {
     console.error("Failed to load customers", e);
   }
@@ -1092,7 +1122,7 @@ const loadCustomers = async () => {
               });
               setTechnicians(usersWithLevel);
           }
-          if (data.customers) setCustomers(data.customers);
+          if (data.customers) applyCustomerList(data.customers);
           if (data.teams) setTeams(data.teams);
           if (data.sites) setSites(data.sites);
       } catch (e) {
@@ -1119,7 +1149,7 @@ const loadCustomers = async () => {
               return { ...u, level, role: u.systemRole };
           });
           if (data.users) setTechnicians(usersWithLevel);
-          if (data.customers) setCustomers(data.customers);
+          if (data.customers) applyCustomerList(data.customers);
           if (data.tickets) setTickets(data.tickets);
           if (data.activities) setActivities(data.activities);
           if (data.teams) setTeams(data.teams);
@@ -1139,7 +1169,7 @@ const loadCustomers = async () => {
           const data = await res.json();
           if (data.tickets) setTickets(data.tickets);
           if (data.activities) setActivities(data.activities);
-          if (data.customers) setCustomers(data.customers);
+          if (data.customers) applyCustomerList(data.customers);
       } catch (e) {
           console.error("Fast refresh failed:", e);
       }
