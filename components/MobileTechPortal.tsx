@@ -820,7 +820,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                         {/* Client Information */}
                                         <div className="bg-white rounded-xl p-4 border border-slate-100">
                                             <SectionLabel icon={<Phone size={11}/>}>Client Information</SectionLabel>
-                                            <div className="text-sm font-bold text-slate-800">{actCustomer?.name || 'Unknown Client'}</div>
+                                            <div className="text-sm font-bold text-slate-800">{actCustomer?.name || (act as any).customerName || 'Unknown Client'}</div>
                                             {actCustomer?.phone ? (
                                                 <a href={`tel:${actCustomer.phone}`} className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
                                                     <Phone size={14}/> Call Customer — {actCustomer.phone}
@@ -1470,8 +1470,8 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
             {historyDetailJob && (() => {
                 const hj = historyDetailJob;
                 const isAct = hj.kind === 'activity';
-                const custName = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.name || 'Unknown') : (hj.customerName || 'Unknown');
-                const custPhone = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.phone || '') : (hj.phoneNumber || '');
+                const custName = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.name || hj.customerName || 'Unknown') : (hj.customerName || 'Unknown');
+                const custPhone = isAct ? ((customers as any[]).find((c: any) => c.id === hj.customerId)?.phone || hj.customerPhone || '') : (hj.phoneNumber || '');
                 const fmtDt = (iso: string) => iso ? `${new Date(iso).toLocaleDateString('en-GB', {timeZone:'Asia/Qatar', day:'2-digit', month:'short', year:'numeric'})} ${new Date(iso).toLocaleTimeString('en-GB', {timeZone:'Asia/Qatar', hour:'2-digit', minute:'2-digit'})}` : '—';
                 const photos = hj.photos || [];
                 return (
