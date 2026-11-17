@@ -25,6 +25,7 @@ dist-ssr
 
 # Environment files
 .env
+.env.staging
 backend/.env
 frontend/.env
 

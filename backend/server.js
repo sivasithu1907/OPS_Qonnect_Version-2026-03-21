@@ -21,7 +21,12 @@ import {
     SQL_TICKET_REMOVE_PHOTOS, SQL_ACTIVITY_REMOVE_PHOTOS, detailsKeepingPhotos,
 } from './photos.js';
 
+import { allowed, isEnabled, guardedFetch, callN8n, switchStates, assertStagingIsolation, logBlocked } from './integrations.js';
+
 dotenv.config();
+// APP_ENV=staging: refuse to start if the configuration could reach production services or real external APIs.
+assertStagingIsolation();
+console.log(JSON.stringify({ level: 'INFO', type: 'integration_switches', ...switchStates(), appEnv: process.env.APP_ENV || null, timestamp: new Date().toISOString() }));
 const app = express();
 // The app runs behind the nginx container (one proxy hop). Without this, req.ip is
 // always the proxy's address, so every per-IP limiter (login, TV, writes) would treat
@@ -121,7 +126,12 @@ const deleteRateLimit = (req, res, next) => {
 };
 
 /* ---------- WhatsApp Send Helper ---------- */
-async function sendWhatsAppText(to, bodyText) {
+// opts.category === 'notification' marks a notification to a person (team lead / customer): it needs
+// ENABLE_EXTERNAL_NOTIFICATIONS as well as ENABLE_WHATSAPP. Conversation replies need ENABLE_WHATSAPP only.
+// A blocked send resolves { skipped: true } — nothing is sent, nothing is logged as SENT.
+async function sendWhatsAppText(to, bodyText, opts = {}) {
+  const needs = opts.category === 'notification' ? ['whatsapp', 'notifications'] : ['whatsapp'];
+  if (!allowed(needs, 'WhatsApp message')) return { skipped: true, reason: 'integration disabled' };
   if (!process.env.WA_ACCESS_TOKEN || !process.env.WA_PHONE_NUMBER_ID) {
     throw new Error("WhatsApp credentials missing (WA_ACCESS_TOKEN / WA_PHONE_NUMBER_ID)");
   }
@@ -135,7 +145,7 @@ async function sendWhatsAppText(to, bodyText) {
     text: { body: bodyText }
   };
 
-  const resp = await fetch(url, {
+  const resp = await guardedFetch('whatsapp', url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -166,17 +176,22 @@ async function sendWhatsAppText(to, bodyText) {
   return data;
 }
 
+// Customer status notifications (ticket workflow): need ENABLE_WHATSAPP and ENABLE_EXTERNAL_NOTIFICATIONS.
+const sendCustomerNotification = (to, text) => sendWhatsAppText(to, text, { category: 'notification' });
+
 // ==============================
 // Notify all Team Leads via WhatsApp
 // ==============================
 async function notifyTeamLeads(message) {
+  // Checked BEFORE touching the database or any recipient list: a disabled switch means no recipients are even looked up.
+  if (!allowed(['whatsapp', 'notifications'], 'team lead notification')) return;
   try {
     const { rows } = await pool.query(
       "SELECT phone FROM users WHERE role = 'TEAM_LEAD' AND status = 'ACTIVE' AND phone IS NOT NULL"
     );
     for (const lead of rows) {
       try {
-        await sendWhatsAppText(lead.phone, message);
+        await sendWhatsAppText(lead.phone, message, { category: 'notification' });
       } catch (e) {
         console.error(`Failed to notify team lead ${lead.phone}:`, e.message);
       }
@@ -1040,6 +1055,8 @@ const TV_ACTIVITY_DETAIL_FIELDS = [
     'salesLeadId', 'salesLeadName', 'escalationLevel', 'carryForwardNote', 'nextPlannedAt', 'cancellationReason',
 ];
 app.get('/api/tv-data', async (req, res) => {
+    // ENABLE_TV=false: the endpoint does not exist as far as any caller can tell (checked before the token, so no token is processed).
+    if (!isEnabled('tv')) { logBlocked('tv', 'tv-data request'); return res.status(404).json({ error: 'TV display is disabled', code: 'TV_DISABLED' }); }
     res.setHeader('Cache-Control', 'no-store');
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
     if (tvFailureCount(ip) >= TV_FAIL_MAX) {
@@ -1930,35 +1947,35 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
                     const apptText = appointmentTime
                         ? `\nAppointment: ${new Date(appointmentTime).toLocaleString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
                         : `\nAppointment: *To be confirmed* — our team will reach out shortly.`;
-                    await sendWhatsAppText(customer_phone,
+                    await sendCustomerNotification(customer_phone,
                         `Hello ${customerName}, your service request *${ticketId}* has been assigned to *${techName}*.${apptText}\n\nWe will keep you updated on the progress.`
                     );
                 }
 
                 // ── Notification 3a: Engineer on the way ──
                 if (status === 'ON_MY_WAY') {
-                    await sendWhatsAppText(customer_phone,
+                    await sendCustomerNotification(customer_phone,
                         `Hello ${customerName}, your Qonnect engineer is now *on the way* to your location for service request *${ticketId}*.\n\nPlease ensure someone is available to receive them.`
                     );
                 }
 
                 // ── Notification 3b: Engineer arrived ──
                 if (status === 'ARRIVED') {
-                    await sendWhatsAppText(customer_phone,
+                    await sendCustomerNotification(customer_phone,
                         `Hello ${customerName}, your Qonnect engineer has *arrived* at your location for service request *${ticketId}*.`
                     );
                 }
 
                 // ── Notification 3c: Work started ──
                 if (status === 'IN_PROGRESS') {
-                    await sendWhatsAppText(customer_phone,
+                    await sendCustomerNotification(customer_phone,
                         `Hello ${customerName}, work has *started* on your service request *${ticketId}*. We will notify you once completed.`
                     );
                 }
 
                 // ── Notification: Resolved — review request ──
                 if (status === 'RESOLVED') {
-                    await sendWhatsAppText(customer_phone,
+                    await sendCustomerNotification(customer_phone,
                         `Hello ${customerName}, your service request *${ticketId}* has been *resolved*. We hope you are satisfied with our service.\n\nIf you need further assistance, please message us here.`
                     );
                 }
@@ -1980,13 +1997,9 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
         }
 
         // 3. n8n webhook trigger (if configured)
-        if (process.env.N8N_WEBHOOK_URL && status === 'ASSIGNED') {
+        if (status === 'ASSIGNED') {
             try {
-                await fetch(`${process.env.N8N_WEBHOOK_URL}/ticket-assigned`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ ticketId, status, assignedTechId, appointmentTime })
-                });
+                await callN8n('/ticket-assigned', { ticketId, status, assignedTechId, appointmentTime });
             } catch (e) { console.error("n8n webhook error:", e.message); }
         }
 
@@ -5347,6 +5360,7 @@ app.get("/api/whatsapp/logs", authenticate, async (req, res) => {
 });
 
 app.get("/api/whatsapp/webhook", (req, res) => {
+    if (!isEnabled('whatsapp')) { logBlocked('whatsapp', 'webhook verification'); return res.status(404).json({ error: 'WhatsApp integration is disabled', code: 'INTEGRATION_DISABLED' }); }
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
@@ -5363,6 +5377,7 @@ app.get("/api/whatsapp/webhook", (req, res) => {
 // Bot flow is on hold. Incoming messages are acknowledged (200) but not processed.
 // Re-enable by removing this stub and uncommenting the full handler below.
 app.post("/api/whatsapp/webhook", async (req, res) => {
+    if (!isEnabled('whatsapp')) { logBlocked('whatsapp', 'webhook delivery'); return res.status(404).json({ error: 'WhatsApp integration is disabled', code: 'INTEGRATION_DISABLED' }); }
     console.log('[WA Webhook] Received — bot flow disabled, returning 200');
     return res.sendStatus(200);
 });
@@ -5408,9 +5423,9 @@ async function _disabled_whatsapp_webhook(req, res) {
 			const imageId = message.image && message.image.id;
 			const caption = (message.image && message.image.caption) || '';
 			if (imageId) {
-				const mediaResp = await fetch('https://graph.facebook.com/v17.0/' + imageId, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const mediaResp = await guardedFetch('whatsapp', 'https://graph.facebook.com/v17.0/' + imageId, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
 				const mediaData = await mediaResp.json();
-				const imgResp = await fetch(mediaData.url, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const imgResp = await guardedFetch('whatsapp', mediaData.url, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
 				const imgBuffer = await imgResp.arrayBuffer();
 				const base64Image = Buffer.from(imgBuffer).toString('base64');
 				const mimeType = mediaData.mime_type || 'image/jpeg';
@@ -5443,9 +5458,9 @@ async function _disabled_whatsapp_webhook(req, res) {
 		try {
 			const audioId = message.audio && message.audio.id;
 			if (audioId) {
-				const mediaResp = await fetch('https://graph.facebook.com/v17.0/' + audioId, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const mediaResp = await guardedFetch('whatsapp', 'https://graph.facebook.com/v17.0/' + audioId, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
 				const mediaData = await mediaResp.json();
-				const audioResp = await fetch(mediaData.url, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
+				const audioResp = await guardedFetch('whatsapp', mediaData.url, { headers: { Authorization: 'Bearer ' + process.env.WA_ACCESS_TOKEN } });
 				const audioBuffer = await audioResp.arrayBuffer();
 				const base64Audio = Buffer.from(audioBuffer).toString('base64');
 				const mimeType = mediaData.mime_type || 'audio/ogg';
@@ -6027,13 +6042,8 @@ PREVIOUS BOT QUESTION (for context):
 		).catch(e => console.error("Notify error:", e.message));
 
 		// n8n webhook
-		if (process.env.N8N_WEBHOOK_URL) {
-			fetch(`${process.env.N8N_WEBHOOK_URL}/ticket-created`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ ticketId, customerName: newName, phone, issueCategory: newCategory, priority, action: "site_visit", location: newVilla || newState.area || "Not provided", summary: newIssueDesc })
-			}).catch(e => console.error("n8n error:", e.message));
-		}
+		callN8n('/ticket-created', { ticketId, customerName: newName, phone, issueCategory: newCategory, priority, action: "site_visit", location: newVilla || newState.area || "Not provided", summary: newIssueDesc })
+			.catch(e => console.error("n8n error:", e.message));
 
 		finalReply = `Thank you ${newName}. We have created a site visit ticket for your request. Your Ticket ID is *${ticketId}*. Our team will follow up shortly to schedule your appointment. You will receive the details here once confirmed.`;
 

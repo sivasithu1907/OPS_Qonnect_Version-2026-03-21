@@ -10,6 +10,8 @@ const TVDisplayMode: React.FC = () => {
   const [activePanel, setActivePanel] = useState<'monitor' | 'calendar' | 'dashboard'>('monitor');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // ENABLE_TV=false on the server: /api/tv-data answers 404 TV_DISABLED. Show a plain notice and stop polling.
+  const [tvDisabled, setTvDisabled] = useState(false);
 
   const [tickets, setTickets] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -37,6 +39,10 @@ const TVDisplayMode: React.FC = () => {
         headers: tvToken ? { 'X-TV-Token': tvToken } : {},
         cache: 'no-store',
       });
+      if (res.status === 404) {
+        const body = await res.json().catch(() => ({} as any));
+        if (body && body.code === 'TV_DISABLED') { setTvDisabled(true); setLoading(false); return; }
+      }
       if (res.status === 503) throw new Error('TV display is not configured on the server (TV_TOKEN)');
       if (res.status === 401) throw new Error('TV access denied — check the token in the TV URL (#tv:TOKEN)');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -59,9 +65,10 @@ const TVDisplayMode: React.FC = () => {
   useEffect(() => { fetchTVData(); }, []);
 
   useEffect(() => {
+    if (tvDisabled) return;
     const timer = setInterval(() => { setCurrentTime(new Date()); fetchTVData(); }, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [tvDisabled]);
 
   useEffect(() => {
     const toggle = setInterval(() => {
@@ -116,6 +123,17 @@ const TVDisplayMode: React.FC = () => {
     if (s === 'CARRY_FORWARD') return 'CARRY FWD';
     return s.replace(/_/g, ' ');
   };
+
+  if (tvDisabled) {
+    return (
+      <div className="fixed inset-0 bg-slate-900 flex items-center justify-center" data-testid="tv-disabled">
+        <div className="flex flex-col items-center text-center">
+          <div className="text-xl font-bold text-white mb-2">TV display is disabled</div>
+          <div className="text-sm text-slate-400">This server has the TV display switched off.</div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

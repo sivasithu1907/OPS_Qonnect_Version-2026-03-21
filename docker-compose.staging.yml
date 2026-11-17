@@ -1,0 +1,138 @@
+# ════════════════════════════════════════════════════════════════════════════════
+# QONNECT FIELD OPERATIONS — STAGING (isolated)
+#
+#   Use ONLY with the explicit project name and env file, from a SEPARATE checkout directory:
+#     docker compose -p qonnect-fieldops-staging -f docker-compose.staging.yml --env-file .env.staging <command>
+#
+#   This file shares NOTHING with production:
+#     • own project name, own PostgreSQL container, own named volume, own images
+#     • the database and the backend sit on an `internal: true` network: they have NO route to the internet, to the
+#       host, or to any other Docker network (production Field Operations, Smart House, n8n are unreachable)
+#     • nothing but the frontend is published, and only on the host's loopback: 127.0.0.1:3001
+#     • all four integration switches are hard-coded "false" here (a stray variable cannot turn them on)
+#     • it reads ONLY STAGING_* variables, never the production names (DB_PASSWORD, JWT_SECRET, WA_*, N8N_*, TV_*, API_KEY)
+#
+#   Before every start, run the preflight:
+#     docker compose -p qonnect-fieldops-staging -f docker-compose.staging.yml --env-file .env.staging config --format json \
+#       | node scripts/validate_staging_compose.mjs
+# ════════════════════════════════════════════════════════════════════════════════
+name: qonnect-fieldops-staging
+
+services:
+  staging-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fieldops_staging
+      POSTGRES_USER: staging_fieldops
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?STAGING_DB_PASSWORD must be set in .env.staging}
+    # Small footprint for a 2-core / 3.7 GB host that also runs production and other apps.
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "effective_cache_size=192MB", "-c", "work_mem=4MB",
+              "-c", "maintenance_work_mem=32MB", "-c", "max_connections=30"]
+    volumes:
+      - staging_pgdata:/var/lib/postgresql/data
+    networks: [staging_internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U staging_fieldops -d fieldops_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 384M, pids: 128 }
+        reservations: { memory: 128M }
+    cpu_shares: 256          # production wins when the CPU is contended
+    security_opt: ["no-new-privileges:true"]
+
+  backend:
+    build: ./backend
+    image: qonnect-fieldops-staging/backend:local
+    restart: unless-stopped
+    depends_on:
+      staging-db:
+        condition: service_healthy
+    # No env_file: the container receives exactly the variables listed below and nothing from any other .env.
+    environment:
+      APP_ENV: staging                      # turns on the start-up isolation guard (backend/integrations.js)
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=256"
+      PORT: "8080"
+      DB_HOST: staging-db
+      DB_PORT: "5432"
+      DB_USER: staging_fieldops
+      DB_PASSWORD: ${STAGING_DB_PASSWORD:?STAGING_DB_PASSWORD must be set in .env.staging}
+      DB_NAME: fieldops_staging
+      JWT_SECRET: ${STAGING_JWT_SECRET:?STAGING_JWT_SECRET must be set in .env.staging (>= 32 chars, different from production)}
+      # Not a real key: external AI calls cannot succeed (and the backend refuses to start with anything but a "staging-…" value).
+      API_KEY: staging-no-external-ai
+      # ── integration switches: HARD-CODED OFF ──
+      ENABLE_WHATSAPP: "false"
+      ENABLE_TV: "false"
+      ENABLE_N8N: "false"
+      ENABLE_EXTERNAL_NOTIFICATIONS: "false"
+      # ── integration credentials: intentionally empty ──
+      WA_ACCESS_TOKEN: ""
+      WA_PHONE_NUMBER_ID: ""
+      WA_VERIFY_TOKEN: ""
+      N8N_WEBHOOK_URL: ""
+      TV_TOKEN: ""
+      TV_ALLOW_QUERY_TOKEN: "false"
+      CORS_ORIGIN: ${STAGING_CORS_ORIGIN:-http://127.0.0.1:3001}
+      ACTIVITY_UNVERSIONED_WRITES: ${STAGING_ACTIVITY_UNVERSIONED_WRITES:-reject}
+      # Used only while the staging database has no enabled ADMIN (first start). Remove from .env.staging afterwards.
+      INITIAL_ADMIN_EMAIL: ${STAGING_INITIAL_ADMIN_EMAIL:-}
+      INITIAL_ADMIN_PASSWORD: ${STAGING_INITIAL_ADMIN_PASSWORD:-}
+      INITIAL_ADMIN_NAME: ${STAGING_INITIAL_ADMIN_NAME:-}
+      TRUST_PROXY_HOPS: "1"
+    networks: [staging_internal]          # internal-only: no internet, no host, no other project
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 400M, pids: 256 }
+        reservations: { memory: 128M }
+    cpu_shares: 256
+    security_opt: ["no-new-privileges:true"]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: qonnect-fieldops-staging/frontend:local
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    # The ONLY published port of the whole stack, on the host loopback only. Reach it through a host reverse proxy or
+    # an SSH tunnel:  ssh -L 3001:127.0.0.1:3001 <server>
+    ports:
+      - "127.0.0.1:3001:80"
+    # nginx proxies /api/ to http://backend:8080 — `backend` resolves only on the staging internal network.
+    networks: [staging_internal, staging_edge]
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 64M, pids: 64 }
+        reservations: { memory: 16M }
+    cpu_shares: 256
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  # No internet, no host gateway, no other Docker network. Holds the database and the backend.
+  staging_internal:
+    name: qonnect-fieldops-staging_internal
+    driver: bridge
+    internal: true
+  # Needed only so Docker can publish 127.0.0.1:3001 for the frontend container. Nothing else is attached to it.
+  staging_edge:
+    name: qonnect-fieldops-staging_edge
+    driver: bridge
+
+volumes:
+  # Created and owned by this project. Never `external: true`, never the production volume.
+  staging_pgdata:
+    name: qonnect-fieldops-staging_pgdata
