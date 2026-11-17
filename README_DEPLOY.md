@@ -57,7 +57,7 @@ This is safe to run multiple times — all statements use `IF NOT EXISTS`.
 ## 4. Post-Deploy Checklist
 
 - [ ] Visit `https://ops.yourdomain.com/api/health` → should return `{"status":"ok"}`
-- [ ] Log in as `admin@qonnect.qa` / `Qonnect@123` and change the password immediately
+- [ ] Log in with the administrator account created from `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` (fresh installs only — there is no built-in default account any more), then remove those two variables from `.env`
 - [ ] Go to **User Management** → add WhatsApp phone numbers to all Team Lead accounts (required for notifications)
 - [ ] Create your real users (Admin, Team Leads, Field Engineers)
 - [ ] Test a WhatsApp message end-to-end

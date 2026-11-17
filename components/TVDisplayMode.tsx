@@ -20,12 +20,25 @@ const TVDisplayMode: React.FC = () => {
 
   const fetchTVData = async () => {
     try {
-      // TV_TOKEN: read from URL hash (#tv:TOKEN) or localStorage
-      // Example URL: https://qonnectops.duckdns.org/#tv:mysecrettoken
+      // TV token: from the URL hash (#tv:TOKEN — the app now recognises this form) or the value
+      // saved earlier in localStorage. A token found in the hash is saved and then removed from
+      // the address bar, so it is not left visible on the screen.
       const hash = window.location.hash; // e.g. '#tv:mysecrettoken'
-      const tvToken = hash.includes(':') ? hash.split(':')[1] : localStorage.getItem('tv_token') || '';
-      const url = tvToken ? `/api/tv-data?token=${encodeURIComponent(tvToken)}` : '/api/tv-data';
-      const res = await fetch(url);
+      let tvToken = '';
+      try { tvToken = localStorage.getItem('tv_token') || ''; } catch { /* storage unavailable */ }
+      if (hash.startsWith('#tv:') && hash.length > 4) {
+        tvToken = decodeURIComponent(hash.slice(4));
+        try { localStorage.setItem('tv_token', tvToken); } catch { /* storage unavailable */ }
+        window.history.replaceState(null, '', window.location.pathname + window.location.search + '#tv');
+      }
+      // The token is sent in a request header — never in the URL — so it does
+      // not end up in server / proxy access logs or browser history.
+      const res = await fetch('/api/tv-data', {
+        headers: tvToken ? { 'X-TV-Token': tvToken } : {},
+        cache: 'no-store',
+      });
+      if (res.status === 503) throw new Error('TV display is not configured on the server (TV_TOKEN)');
+      if (res.status === 401) throw new Error('TV access denied — check the token in the TV URL (#tv:TOKEN)');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setTickets(data.tickets || []);

@@ -2247,9 +2247,9 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
                     {matchingActivities.map((m: any) => {
                       const eng = technicians.find(t => t.id === m.assignedEngineerId);
                       const dateLabel = m.completedAt
-                        ? new Date(m.completedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                        ? new Date(m.completedAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short' })
                         : m.plannedDate
-                        ? new Date(m.plannedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                        ? new Date(m.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short' })
                         : '—';
                       return (
                         <label key={m.activityId} className="flex items-start gap-2 p-2 rounded-lg hover:bg-amber-100/50 cursor-pointer bg-white border border-amber-100">

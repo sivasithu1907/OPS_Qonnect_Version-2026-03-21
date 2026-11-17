@@ -1070,7 +1070,7 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                                 className={`absolute top-3 bottom-3 rounded border p-1.5 flex flex-col justify-center cursor-pointer hover:z-20 hover:shadow-lg hover:brightness-95 transition-all z-20 overflow-hidden ${barClasses}`}
                                                 style={style}
                                                 onClick={() => handleItemClick(isTicket ? 'ticket' : 'activity', item.id)}
-                                                title={`${item.description} - ${new Date(item.plannedDate).toLocaleTimeString()}`}
+                                                title={`${item.description} - ${new Date(item.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar' })}`}
                                             >
                                                 {/* Top row: ref + priority dot + support count */}
                                                 <div className="flex items-center gap-1 font-bold text-[11px] leading-snug truncate">

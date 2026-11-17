@@ -513,6 +513,8 @@ const UserManagement: React.FC<UserManagementProps> = ({
                                         ref={passwordRef}
                                         name="password" 
                                         type={showPassword ? "text" : "password"} 
+                                        required={!editingUser}
+                                        minLength={editingUser ? undefined : 8}
                                         placeholder={editingUser ? "Unchanged" : "Create Password"} 
                                         className="w-full pl-9 pr-10 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-900/10" 
                                     />

@@ -2,7 +2,7 @@
 // Strategy: Network-first for API calls, Cache-first for static assets
 // This ensures deploys always serve fresh code immediately
 
-const CACHE_NAME = 'qonnect-v4'; // v4: new favicon/app icons (old caches are dropped on activate)
+const CACHE_NAME = 'qonnect-v5'; // v5: activity version check (F-1) — open tabs get the "new version" banner. v4: new favicon/app icons
 const OFFLINE_URL = '/offline.html';
 
 // Static assets to pre-cache on install. Deliberately does NOT include the

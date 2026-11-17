@@ -15,6 +15,13 @@ const getAuthHeaders = (): Record<string, string> => {
     };
 };
 
+import { withoutPlaceholderPhotos } from '../utils/photoUtils';
+
+// Job payloads (tickets / activities) must never carry the 'HAS_PHOTOS' list flag back
+// to the server as if it were photo data (QA-03). Applied centrally for every caller.
+const cleanBody = (url: string, body: any) =>
+    /^\/api\/(tickets|activities)(\/|$)/.test(url) ? withoutPlaceholderPhotos(body) : body;
+
 const handleResponse = async (res: Response) => {
     if (res.status === 401) {
         localStorage.removeItem('qonnect_token');
@@ -41,7 +48,7 @@ export const api = {
         const res = await fetch(url, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify(body)
+            body: JSON.stringify(cleanBody(url, body))
         });
         return handleResponse(res);
     },
@@ -51,7 +58,7 @@ export const api = {
         const res = await fetch(url, {
             method: 'PUT',
             headers: getAuthHeaders(),
-            body: JSON.stringify(body)
+            body: JSON.stringify(cleanBody(url, body))
         });
         return handleResponse(res);
     },

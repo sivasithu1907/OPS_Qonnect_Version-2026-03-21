@@ -37,6 +37,14 @@ const parseDateYYYYMMDD = (str: string): Date => {
     return new Date(y, m - 1, d);
 };
 
+// Qatar (UTC+3, no daylight saving) is the operating timezone. Report days are Qatar days no matter
+// which country the browser is in: "today" is Qatar's today, and a range runs from 00:00 to 23:59:59.999 Qatar time.
+const qatarToday = (): Date => parseDateYYYYMMDD(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Qatar', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
+// A Date whose LOCAL fields show the Qatar wall-clock time of the given instant (for day/hour bucketing)
+const qatarWall = (d: Date): Date => new Date(d.getTime() + (3 * 60 + d.getTimezoneOffset()) * 60000);
+const qatarDayStart = (ymd: string): Date => new Date(`${ymd}T00:00:00+03:00`);
+const qatarDayEnd = (ymd: string): Date => new Date(`${ymd}T23:59:59.999+03:00`);
+
 const startOfMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
 const endOfMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
@@ -118,6 +126,10 @@ interface ReportTemplate {
     fieldIds: string[];
 }
 
+// A cancelled job was never completed: its completion time must not feed durations or
+// "Actual Completion Time" columns (older rows may still carry a completed_at from before the fix).
+const completionTimeOf = (x: any): any => (x && x.status === 'CANCELLED') ? null : (x ? x.completedAt : null);
+
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#64748b', '#8b5cf6'];
 
 const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, technicians, sites, customers = [], onNavigate }) => {
@@ -139,8 +151,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
   const [reportType, setReportType] = useState<'tickets' | 'operations'>('tickets');
   
   // Date Range State - Default: This Month (MTD)
-  const [startDate, setStartDate] = useState(() => formatDateYYYYMMDD(startOfMonth(new Date())));
-  const [endDate, setEndDate] = useState(() => formatDateYYYYMMDD(new Date()));
+  const [startDate, setStartDate] = useState(() => formatDateYYYYMMDD(startOfMonth(qatarToday())));
+  const [endDate, setEndDate] = useState(() => formatDateYYYYMMDD(qatarToday()));
   const [currentPreset, setCurrentPreset] = useState<DatePreset>('thisMonth');
 
   // --- Export Modal State ---
@@ -193,9 +205,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'tech', label: 'Assigned Engineer', getValue: (t: Ticket) => technicians.find(tech => tech.id === t.assignedTechId)?.name || 'Unassigned' },
       { id: 'desc', label: 'Description', getValue: (t: Ticket) => (t.messages?.find((m: any) => m.sender === 'CLIENT')?.content || (t as any).ai_summary || t.category || '') },
       { id: 'started_at', label: 'Actual Start Time', getValue: (t: Ticket) => (t as any).startedAt ? new Date((t as any).startedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
-      { id: 'completed_at', label: 'Actual Completion Time', getValue: (t: Ticket) => (t as any).completedAt ? new Date((t as any).completedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
+      { id: 'completed_at', label: 'Actual Completion Time', getValue: (t: Ticket) => completionTimeOf(t) ? new Date(completionTimeOf(t)).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
       { id: 'actual_duration', label: 'Actual Duration (Hrs)', getValue: (t: Ticket) => {
-          const s = (t as any).startedAt; const e = (t as any).completedAt;
+          const s = (t as any).startedAt; const e = completionTimeOf(t);
           if (s && e) return ((new Date(e).getTime() - new Date(s).getTime()) / 3600000).toFixed(2);
           return '';
       }},
@@ -211,9 +223,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
       { id: 'date', label: 'Planned Date', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' }) },
       { id: 'time', label: 'Planned Time', getValue: (a: Activity) => new Date(a.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour: '2-digit', minute: '2-digit' }) },
       { id: 'started_at', label: 'Actual Start Time', getValue: (a: Activity) => (a as any).startedAt ? new Date((a as any).startedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
-      { id: 'completed_at', label: 'Actual Completion Time', getValue: (a: Activity) => (a as any).completedAt ? new Date((a as any).completedAt).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
+      { id: 'completed_at', label: 'Actual Completion Time', getValue: (a: Activity) => completionTimeOf(a) ? new Date(completionTimeOf(a)).toLocaleString('en-GB', { timeZone: 'Asia/Qatar' }) : '' },
       { id: 'actual_duration', label: 'Actual Duration (Hrs)', getValue: (a: Activity) => {
-          const s = (a as any).startedAt; const e = (a as any).completedAt;
+          const s = (a as any).startedAt; const e = completionTimeOf(a);
           if (s && e) return ((new Date(e).getTime() - new Date(s).getTime()) / 3600000).toFixed(2);
           return '';
       }},
@@ -250,9 +262,9 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
 
   // Helper to trigger specific presets from quick buttons
   const triggerPreset = (preset: DatePreset) => {
-      const now = new Date();
-      let start = new Date();
-      let end = new Date();
+      const now = qatarToday();
+      let start = qatarToday();
+      let end = qatarToday();
 
       switch (preset) {
           case 'today':
@@ -301,11 +313,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
   const REPORT_ACTIVITY_STATUSES = ['DONE', 'CARRY_FORWARD', 'CANCELLED'];
 
   const filteredTickets = useMemo(() => {
-      const start = parseDateYYYYMMDD(startDate);
-      start.setHours(0,0,0,0);
-      
-      const end = parseDateYYYYMMDD(endDate);
-      end.setHours(23,59,59,999);
+      const start = qatarDayStart(startDate);
+      const end = qatarDayEnd(endDate);
 
       return tickets.filter(t => {
           // Only show resolved/carry-forwarded/cancelled tickets
@@ -322,11 +331,8 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
   }, [tickets, startDate, endDate]);
 
   const filteredActivities = useMemo(() => {
-      const start = parseDateYYYYMMDD(startDate);
-      start.setHours(0,0,0,0);
-      
-      const end = parseDateYYYYMMDD(endDate);
-      end.setHours(23,59,59,999);
+      const start = qatarDayStart(startDate);
+      const end = qatarDayEnd(endDate);
 
       return activities.filter(a => {
           // Only show done/carry-forwarded/cancelled activities
@@ -366,11 +372,12 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
 
       filteredData.forEach((item: any) => {
           // For tickets use createdAt; for activities use plannedDate
-          const dateObj = new Date(
+          // Bucket on the Qatar wall-clock day/hour, whatever timezone the browser is in
+          const dateObj = qatarWall(new Date(
             reportType === 'tickets' 
               ? (item.createdAt || item.plannedDate) 
               : (item.plannedDate || item.createdAt)
-          );
+          ));
           let bucketTime = 0;
           let label = '';
 
@@ -688,10 +695,10 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                     </p>
                     <h3 className="text-3xl font-bold text-slate-900 mt-2">
                         {(() => {
-                            const completed = filteredData.filter((d: any) => (d.startedAt && d.completedAt));
+                            const completed = filteredData.filter((d: any) => (d.startedAt && completionTimeOf(d)));
                             if (completed.length === 0) return '—';
                             const avg = completed.reduce((sum: number, d: any) => {
-                                return sum + (new Date(d.completedAt).getTime() - new Date(d.startedAt).getTime()) / 3600000;
+                                return sum + (new Date(completionTimeOf(d)).getTime() - new Date(d.startedAt).getTime()) / 3600000;
                             }, 0) / completed.length;
                             return avg < 1 ? `${Math.round(avg * 60)}m` : `${avg.toFixed(1)}h`;
                         })()}
@@ -942,7 +949,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
                                 <div className="flex justify-between text-xs"><span className="text-slate-400">{isTicket ? 'Created' : 'Planned'}</span><span className="text-slate-700">{fmtDt(isTicket ? d.createdAt : d.plannedDate)}</span></div>
                                 {d.startedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Started</span><span className="text-emerald-600">{fmtDt(d.startedAt)}</span></div>}
-                                {d.completedAt && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(d.completedAt)}</span></div>}
+                                {completionTimeOf(d) && <div className="flex justify-between text-xs"><span className="text-slate-400">Completed</span><span className="text-emerald-600">{fmtDt(completionTimeOf(d))}</span></div>}
                             </div>
                             {/* Assigned */}
                             {tech && (

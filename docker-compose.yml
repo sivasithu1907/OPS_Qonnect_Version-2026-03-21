@@ -5,7 +5,9 @@ services:
     environment:
       POSTGRES_DB: fieldops
       POSTGRES_USER: fieldops
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-fieldops_pass}
+      # No built-in fallback password: compose refuses to start if DB_PASSWORD is unset.
+      # (An existing database volume keeps the password it was created with — see BATCH1_SECURITY_DEPLOYMENT.md.)
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,23 +27,40 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: ${DB_USER:-fieldops}
-      DB_PASSWORD: ${DB_PASSWORD:-fieldops_pass}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       DB_NAME: ${DB_NAME:-fieldops}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       API_KEY: ${API_KEY}
       WA_ACCESS_TOKEN: ${WA_ACCESS_TOKEN:-}
       WA_PHONE_NUMBER_ID: ${WA_PHONE_NUMBER_ID:-}
       WA_VERIFY_TOKEN: ${WA_VERIFY_TOKEN:-}
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://qonnectops.duckdns.org}
+      # TV display (/api/tv-data) is DISABLED unless TV_TOKEN is set (>= 24 chars).
+      TV_TOKEN: ${TV_TOKEN:-}
+      # F-1: how the API treats a workflow-critical activity change that carries NO version token
+      # (an old, cached browser bundle). `reject` (default, safe) answers HTTP 428 and saves nothing.
+      # `allow-logged` accepts it for a short rollout window and logs every such write as UNVERIFIED.
+      ACTIVITY_UNVERSIONED_WRITES: ${ACTIVITY_UNVERSIONED_WRITES:-reject}
+      TV_ALLOW_QUERY_TOKEN: ${TV_ALLOW_QUERY_TOKEN:-false}
+      # Only used when the database has no enabled ADMIN (fresh install). Remove after first start.
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
+      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-}
+      # Number of reverse proxies in front of the API (the frontend nginx container = 1).
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
+    # QA-29: the API is reachable from the frontend container over the internal Docker
+    # network (nginx proxies /api/ to backend:8080). It is published on the HOST'S
+    # LOOPBACK ONLY, so a host-level reverse proxy / local debugging can still use
+    # http://localhost:8080 but the port is no longer open to the internet.
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   frontend:
     build:

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import toast, { Toaster } from './components/Toast';
 import { generateActivityId } from './utils/idUtils';
+import { realPhotosOnly, withoutPlaceholderPhotos } from './utils/photoUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
 import {
@@ -176,7 +177,7 @@ function App() {
   const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
 
   // TV Display Mode — detected from URL hash
-  const [isTVMode, setIsTVMode] = useState(() => window.location.hash === '#tv');
+  const [isTVMode, setIsTVMode] = useState(() => /^#tv(:|$)/.test(window.location.hash));
 
   // ── Command Palette (Sprint 2.1) ────────────────────────────────────────
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -194,7 +195,7 @@ function App() {
 
   // Listen for hash changes (TV mode toggle)
   useEffect(() => {
-    const handleHash = () => setIsTVMode(window.location.hash === '#tv');
+    const handleHash = () => setIsTVMode(/^#tv(:|$)/.test(window.location.hash));
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
@@ -622,7 +623,7 @@ const handleLogout = useCallback(() => {
                   // own optimistic state, then vanish the moment loadTickets()
                   // reloaded fresh data from the server — where it had never
                   // actually been saved.
-                  photos: updated.photos || undefined,
+                  photos: realPhotosOnly(updated.photos).length > 0 ? realPhotosOnly(updated.photos) : undefined,
               })
           });
           // Reload from DB to keep state fresh (mirrors handleUpdateActivity)
@@ -781,37 +782,79 @@ const handleLogout = useCallback(() => {
       }
   };
 
+  // ── F-1: stale-data protection ───────────────────────────────────────────────
+  // Every activity carries a server-issued `version`. It travels with the data the user was
+  // looking at (portals spread the activity they hold), and is sent as `baseVersion`.
+  //  • Writes for one job are sent strictly one after another, so a quick On-my-way → Arrived
+  //    sequence never races itself.
+  //  • When one of OUR OWN earlier writes returned a newer version, a later write built from the
+  //    older copy is re-based onto it (ownVersionAlias). A change made by SOMEONE ELSE is never
+  //    re-based: the server answers 409 and nothing is overwritten.
+  //  • A 409 / 428 is NEVER retried automatically: the latest data is reloaded, the user is told,
+  //    and has to look at it and act again.
+  const activityWriteQueue = useRef<Map<string, Promise<void>>>(new Map());
+  const ownVersionAlias = useRef<Map<string, string>>(new Map());
+  const [activityConflictMsg, setActivityConflictMsg] = useState<string | null>(null);
+
   const handleUpdateActivity = useCallback(async (updated: Activity) => {
       // Note: removed isSavingActivity guard — was silently dropping status updates
       setIsSavingActivity(true);
       // Optimistic UI update immediately — so buttons reflect new status instantly
       setActivities(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
-      try {
-          const res = await fetch(`/api/activities/${updated.id}`, {
-              method: "PUT",
-              headers: getAuthHeaders(),
-              body: JSON.stringify(updated)
-          });
-          if (res.ok) {
-              // For status changes (DONE, CANCELLED etc): trust optimistic update — don't reload
-              // Reloading races with polling and can briefly show stale status
-              const statusChanged = updated.status !== undefined;
-              if (!statusChanged) {
-                  // Only reload for non-status changes (e.g. field edits) to get server fields
+
+      const send = async (): Promise<void> => {
+          try {
+              // Resolve the version at SEND time (an earlier queued write may have changed it)
+              let v: string | undefined = (updated as any).version;
+              const seen = new Set<string>();
+              while (v && ownVersionAlias.current.has(v) && !seen.has(v)) { seen.add(v); v = ownVersionAlias.current.get(v); }
+              // `version` is state, `baseVersion` is the request's precondition
+              const { version: _ignored, ...rest } = withoutPlaceholderPhotos(updated) as any;
+              const body = v ? { ...rest, baseVersion: v } : rest;
+              const res = await fetch(`/api/activities/${updated.id}`, {
+                  method: "PUT",
+                  headers: getAuthHeaders(),
+                  // Never send the lightweight 'HAS_PHOTOS' list flag back as if it were the photos (QA-03)
+                  body: JSON.stringify(body)
+              });
+              if (res.ok) {
+                  const data = await res.json().catch(() => null);
+                  if (data?.version) {
+                      const o = (updated as any).version;
+                      if (o && o !== data.version) ownVersionAlias.current.set(o, data.version);
+                      if (v && v !== data.version) ownVersionAlias.current.set(v, data.version);
+                      setActivities(prev => prev.map(a => a.id === updated.id ? { ...a, version: data.version } : a));
+                  }
+                  // For status changes (DONE, CANCELLED etc): trust optimistic update — don't reload
+                  // Reloading races with polling and can briefly show stale status
+                  const statusChanged = updated.status !== undefined;
+                  if (!statusChanged) {
+                      // Only reload for non-status changes (e.g. field edits) to get server fields
+                      await loadActivities();
+                  }
+                  syncActivityLocationToCustomer(updated);
+              } else if (res.status === 409 || res.status === 428) {
+                  // Conflict: nothing was saved. No automatic retry — reload the latest job first.
+                  const err = await res.json().catch(() => ({} as any));
+                  console.warn('Activity update refused:', res.status, err?.code);
                   await loadActivities();
+                  setActivityConflictMsg(err?.error || 'This job was changed by someone else. The latest version has been loaded — please check it and try again.');
+              } else {
+                  // Rollback on failure
+                  console.error('Failed to update activity:', res.status);
+                  await loadActivities(); // Reload to restore correct state
               }
-              syncActivityLocationToCustomer(updated);
-          } else {
-              // Rollback on failure
-              console.error('Failed to update activity:', res.status);
-              await loadActivities(); // Reload to restore correct state
+          } catch (e) {
+              console.error("Failed to update activity", e);
+              await loadActivities();
+          } finally {
+              setIsSavingActivity(false);
           }
-      } catch (e) {
-          console.error("Failed to update activity", e);
-          await loadActivities();
-      } finally {
-          setIsSavingActivity(false);
-      }
+      };
+      const previous = activityWriteQueue.current.get(updated.id) ?? Promise.resolve();
+      const task = previous.then(send);
+      activityWriteQueue.current.set(updated.id, task.catch(() => {}));
+      return task;
   }, [isSavingActivity]);
 
   // When an activity has a customer + location/building, update the customer record if its fields are empty.
@@ -1027,7 +1070,12 @@ const handleDeleteCustomer = async (id: string) => {
               });
               if (!res.ok) throw new Error("Failed to update user");
           } else {
-              // Create new user
+              // Create new user. A password must be chosen by the administrator — the old
+              // silent fallback to a well-known default ("Qonnect@123") is gone (QA-07).
+              if (!u.password) {
+                  toast.error("Please set a password for the new user (the Generate button can create one).");
+                  return;
+              }
               const res = await fetch("/api/users", {
                   method: "POST",
                   headers: getAuthHeaders(),
@@ -1035,7 +1083,7 @@ const handleDeleteCustomer = async (id: string) => {
                       id: u.id,
                       name: u.name,
                       email: u.email,
-                      password: u.password || "Qonnect@123",
+                      password: u.password,
                       job_role: (u as any).jobRole || null,
                       level: u.level || null,
                       role: u.systemRole || u.role || null,
@@ -1073,6 +1121,11 @@ const handleDeleteCustomer = async (id: string) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to change password");
+      // The server invalidates older sessions when a password changes and returns
+      // a fresh token for this one, so the person who just changed it stays signed in.
+      if (data && data.token) {
+          try { localStorage.setItem('qonnect_token', data.token); } catch { /* storage unavailable */ }
+      }
   };
 
   // System Import Handler
@@ -1449,6 +1502,12 @@ useEffect(() => {
 
     return (
       <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
+        {activityConflictMsg && (
+          <div role="alert" data-testid="activity-conflict-banner" className="fixed top-0 inset-x-0 z-[2000] flex items-start gap-3 bg-amber-50 border-b-2 border-amber-400 px-4 py-3 shadow-lg">
+            <div className="flex-1 text-sm text-amber-900"><span className="font-bold">Job not saved. </span>{activityConflictMsg}</div>
+            <button onClick={() => setActivityConflictMsg(null)} className="shrink-0 rounded-lg bg-amber-500 px-3 py-1 text-sm font-bold text-white">OK</button>
+          </div>
+        )}
         <ErrorBoundary name='LeadPortal'>
         <Suspense fallback={<LoadingFallback />}>
         <MobileLeadPortal
@@ -1487,6 +1546,12 @@ useEffect(() => {
   if (activeView === 'tech_portal') {
     return (
       <div className="fixed inset-0 z-[999] overflow-hidden" style={{background:'#f1f5f9'}}>
+        {activityConflictMsg && (
+          <div role="alert" data-testid="activity-conflict-banner" className="fixed top-0 inset-x-0 z-[2000] flex items-start gap-3 bg-amber-50 border-b-2 border-amber-400 px-4 py-3 shadow-lg">
+            <div className="flex-1 text-sm text-amber-900"><span className="font-bold">Job not saved. </span>{activityConflictMsg}</div>
+            <button onClick={() => setActivityConflictMsg(null)} className="shrink-0 rounded-lg bg-amber-500 px-3 py-1 text-sm font-bold text-white">OK</button>
+          </div>
+        )}
         <ErrorBoundary name='TechPortal'>
         <Suspense fallback={<LoadingFallback />}>
         <MobileTechPortal
@@ -1517,6 +1582,12 @@ useEffect(() => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+      {activityConflictMsg && (
+        <div role="alert" data-testid="activity-conflict-banner" className="fixed top-0 inset-x-0 z-[2000] flex items-start gap-3 bg-amber-50 border-b-2 border-amber-400 px-4 py-3 shadow-lg">
+          <div className="flex-1 text-sm text-amber-900"><span className="font-bold">Job not saved. </span>{activityConflictMsg}</div>
+          <button onClick={() => setActivityConflictMsg(null)} className="shrink-0 rounded-lg bg-amber-500 px-3 py-1 text-sm font-bold text-white">OK</button>
+        </div>
+      )}
       <Toaster
         position="top-right"
         toastOptions={{

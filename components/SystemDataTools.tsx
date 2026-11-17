@@ -37,6 +37,11 @@ interface SystemLog {
     status: 'SUCCESS' | 'FAILED';
 }
 
+// Batch 1 (QA-06): restoring from a backup is switched off. The server refuses
+// every import request (503 IMPORT_DISABLED); this flag keeps the screen honest
+// and stops files being read or "executed" from here. Export is unaffected.
+const IMPORT_TEMPORARILY_DISABLED = true;
+
 const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, currentUser }) => {
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -117,12 +122,14 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
   const handleFileDrop = (e: React.DragEvent) => {
       e.preventDefault();
       setDragActive(false);
+      if (IMPORT_TEMPORARILY_DISABLED) return;
       if (e.dataTransfer.files && e.dataTransfer.files[0]) {
           processFile(e.dataTransfer.files[0]);
       }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (IMPORT_TEMPORARILY_DISABLED) return;
       if (e.target.files && e.target.files[0]) {
           processFile(e.target.files[0]);
       }
@@ -202,6 +209,7 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
   };
 
   const executeImport = async () => {
+      if (IMPORT_TEMPORARILY_DISABLED) return;
       if (!stagedData) return;
       setLoading(true);
 
@@ -301,7 +309,7 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
                     <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
                         <RefreshCw size={24} />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className={`flex items-center gap-2 ${IMPORT_TEMPORARILY_DISABLED ? 'hidden' : ''}`}>
                         <span className="text-xs font-medium text-slate-500">Dry Run</span>
                         <div 
                             onClick={() => importStep === 'upload' && setDryRunMode(!dryRunMode)}
@@ -314,7 +322,23 @@ const SystemDataTools: React.FC<SystemDataToolsProps> = ({ data, onImport, curre
                 
                 <h2 className="text-lg font-bold text-slate-800 mb-2">Import Data</h2>
                 
-                {importStep === 'upload' && (
+                {IMPORT_TEMPORARILY_DISABLED && (
+                    <div
+                        data-testid="import-disabled-notice"
+                        role="status"
+                        className="flex-1 border-2 border-dashed border-amber-200 bg-amber-50 rounded-xl flex flex-col items-center justify-center p-6 text-center"
+                    >
+                        <AlertTriangle size={32} className="text-amber-500 mb-3" />
+                        <p className="text-sm font-bold text-amber-800">Importing is temporarily unavailable</p>
+                        <p className="text-xs text-amber-700 mt-1 max-w-xs">
+                            Restoring from a backup file is switched off while a safer restore process is built,
+                            so existing records, photos and ticket history cannot be overwritten. Your data was not changed.
+                            Exporting backups still works.
+                        </p>
+                    </div>
+                )}
+
+                {!IMPORT_TEMPORARILY_DISABLED && importStep === 'upload' && (
                     <div 
                         className={`flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 transition-colors ${dragActive ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}
                         onDragEnter={() => setDragActive(true)}

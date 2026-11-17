@@ -1,0 +1,25 @@
+# Build context hygiene (QA-29): nothing secret or irrelevant is sent to the Docker daemon
+# or copied into an image layer. The frontend image is built from the repo root.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+node_modules
+**/node_modules
+dist
+npm-debug.log*
+*.log
+*.sql
+*.backup
+**/*.backup
+*.save
+*.save.*
+# The frontend image does not need the API sources.
+backend
+docs
+README*.md
+FRONTEND_FIXES.md

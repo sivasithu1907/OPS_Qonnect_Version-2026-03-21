@@ -395,7 +395,7 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                 <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
                    <span className="flex items-center gap-2 min-w-0">
                        <Clock size={12} className="text-slate-400 shrink-0" />
-                       <span className="truncate">{new Date(act.plannedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>
+                       <span className="truncate">{new Date(act.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar', day: '2-digit', month: 'short' })}</span>
                    </span>
                    {lead && (
                        <span className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5 truncate max-w-[110px]">
@@ -1049,7 +1049,8 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                       houseNumber: houseNumber,
                       
                       salesLeadId: salesLeadIdState || undefined,
-                      leadTechId: selectedLeadTechId || (canSelfAssign ? currentUserId : undefined),
+                      // F-3: an omitted field now means "unchanged", so emptying the lead in the edit form must say so explicitly (null).
+                      leadTechId: selectedLeadTechId || (canSelfAssign ? currentUserId : (editingActivity ? null : undefined)),
                       // Deduplicate: remove from assistants if already in supporting (and vice versa)
                       assistantTechIds: assistantTechState.filter(id => !supportingEngineerState.includes(id)),
                       supportingEngineerIds: supportingEngineerState.filter(id => !assistantTechState.includes(id)),
@@ -1675,6 +1676,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                           // Both timestamps treated as Qatar local time (UTC+3) — consistent conversion
                           if (actOverrideStartedAt) updates.startedAt = new Date(actOverrideStartedAt + ':00+03:00').toISOString();
                           if (actOverrideCompletedAt) updates.completedAt = new Date(actOverrideCompletedAt + ':00+03:00').toISOString();
+                          // F-4: only an explicit correction (Admin / Team Lead) may set start / completion times;
+                          // ordinary status changes use the server clock.
+                          if (actOverrideStartedAt || actOverrideCompletedAt) updates.timeCorrection = true;
                           if (actOverrideNote) updates.completionNote = (actOverrideTarget.completionNote ? actOverrideTarget.completionNote + '\n' : '') + '[Admin Override] ' + actOverrideNote;
                           onUpdateActivity(updates);
                           setShowActOverride(false);

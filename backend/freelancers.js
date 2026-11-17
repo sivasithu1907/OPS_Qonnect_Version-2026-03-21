@@ -469,15 +469,31 @@ function validateAllocations(allocations, linkedActivityIds, agreedRateCents) {
 // Public review page — plain, dependency-free HTML (served through the same
 // /api/ path nginx already proxies, so no frontend/infra changes are needed).
 // ---------------------------------------------------------------------------
-function renderReviewPageHtml(token) {
+
+// ── Batch 1 (QA-05): review-page hardening ─────────────────────────────────
+// Review tokens are 32 random bytes in base64url = exactly 43 URL-safe chars.
+// Anything else is rejected BEFORE it is used, reflected or sent to the database.
+export const REVIEW_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
+export const isValidReviewToken = (t) => typeof t === 'string' && REVIEW_TOKEN_RE.test(t);
+
+// Serialise a value for safe use inside an inline <script>: JSON.stringify does
+// NOT escape "</script>", "<!--" or the U+2028/2029 line separators.
+function jsonForScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+}
+
+function renderReviewPageHtml(token, nonce) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
 <title>Freelancer Review — Qonnect</title>
-<style>
+<style nonce="${nonce}">
   :root { --amber:#FFCC00; --ink:#0F172A; --muted:#64748B; --line:#E2E8F0; --bg:#F8FAFC; }
   * { box-sizing: border-box; }
   body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif; background:var(--bg); color:var(--ink); }
@@ -520,9 +536,9 @@ function renderReviewPageHtml(token) {
     <div id="payments"><div class="empty">Loading…</div></div>
   </div>
 </div>
-<script>
+<script nonce="${nonce}">
 (function () {
-  var token = ${JSON.stringify(token)};
+  var token = ${jsonForScript(token)};
   fetch('/api/public/freelancer-review/' + encodeURIComponent(token))
     .then(function (r) { if (!r.ok) throw new Error('This review link is no longer available.'); return r.json(); })
     .then(render)
@@ -532,7 +548,19 @@ function renderReviewPageHtml(token) {
       document.getElementById('payments').innerHTML = '';
     });
 
-  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+  // Escapes every HTML-significant character, INCLUDING quotes, so the result is safe
+  // in element text and in quoted attribute values alike.
+  function esc(s) {
+    return (s == null ? '' : String(s)).replace(/[&<>"'\u0060]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '\u0060': '&#96;' }[c];
+    });
+  }
+  // Only absolute http(s) links are ever rendered as links (blocks javascript:, data:, vbscript: …).
+  function safeUrl(u) {
+    try { var p = new URL(String(u), 'https://invalid.invalid/'); return (p.protocol === 'https:' || p.protocol === 'http:') && /^https?:/i.test(String(u).trim()) ? p.href : ''; }
+    catch (e) { return ''; }
+  }
+  var STATUS = { PAID: 1, PARTIALLY_PAID: 1, UNPAID: 1 };
   function money(n) { return 'QAR ' + Number(n || 0).toFixed(2); }
 
   function render(data) {
@@ -553,7 +581,8 @@ function renderReviewPageHtml(token) {
     var att = data.attendance || [];
     document.getElementById('attendance').innerHTML = att.length ? att.map(function (a) {
       var acts = (a.activities || []).map(function (x) {
-        return esc(x.customerName || x.activityReference) + (x.odooLink ? ' (<a href="' + esc(x.odooLink) + '" target="_blank" rel="noopener">CRM</a>)' : '');
+        var link = safeUrl(x.odooLink);
+        return esc(x.customerName || x.activityReference) + (link ? ' (<a href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">CRM</a>)' : '');
       }).join(', ');
       return '<div class="row"><div>' +
         '<div class="name">' + esc(a.freelancerName) + ' · ' + esc(a.workDate) + '</div>' +
@@ -562,7 +591,7 @@ function renderReviewPageHtml(token) {
         '</div><div style="text-align:right;">' +
         '<div class="amt">' + money(a.agreedDailyRate) + '</div>' +
         '<div class="muted">Paid ' + money(a.paidAmount) + ' · Bal ' + money(a.balance) + '</div>' +
-        '<span class="pill ' + esc(a.paymentStatus) + '">' + esc(a.paymentStatus.replace(/_/g, ' ')) + '</span>' +
+        '<span class="pill ' + (STATUS[a.paymentStatus] ? a.paymentStatus : '') + '">' + esc(String(a.paymentStatus || '').replace(/_/g, ' ')) + '</span>' +
         '</div></div>';
     }).join('') : '<div class="empty">No attendance records in this scope.</div>';
 
@@ -1382,13 +1411,29 @@ export function registerFreelancerRoutes(app, { pool, authenticate, writeRateLim
   // Deliberately excludes: payment references/proof attachments, phone
   // numbers, and any data outside the token's own scope.
   app.get('/api/public/freelancer-review/:token/page', async (req, res) => {
+    // Browser-side protections for this unauthenticated page (QA-05): a strict CSP
+    // (scripts only via a per-response nonce, no framing, no plugins, no <base>),
+    // no caching and no referrer — the token lives in the URL, so it must not leak.
+    const nonce = crypto.randomBytes(16).toString('base64');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-    res.send(renderReviewPageHtml(req.params.token));
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy',
+      `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'`);
+    // A malformed token is never echoed back or embedded in the page.
+    if (!isValidReviewToken(req.params.token)) {
+      return res.status(404).send('<!DOCTYPE html><meta charset="utf-8"><title>Not available</title><p>This review link is not available.</p>');
+    }
+    res.send(renderReviewPageHtml(req.params.token, nonce));
   });
 
   app.get('/api/public/freelancer-review/:token', async (req, res) => {
     try {
+      if (!isValidReviewToken(req.params.token)) {
+        return res.status(404).json({ error: 'This review link is no longer available.' });
+      }
       const { rows } = await pool.query('SELECT * FROM freelancer_review_tokens WHERE token=$1', [req.params.token]);
       const tok = rows[0];
       if (!tok || tok.revoked_at || new Date(tok.expires_at) < new Date()) {

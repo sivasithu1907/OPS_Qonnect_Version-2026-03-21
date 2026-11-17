@@ -276,7 +276,9 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
           if (photoJobType === 'activity') {
               const act = activities.find(a => a.id === photoJobId);
               if (act && onUpdateActivity) {
-                  onUpdateActivity({ ...act, photos: updatedPhotos } as any);
+                  // F-3: a photo upload is a PARTIAL update — only the photos (and the version it was based on).
+                  // Sending the whole, possibly stale, record would look like a status/date/team change.
+                  onUpdateActivity({ id: act.id, version: (act as any).version, photos: updatedPhotos } as any);
               }
           } else {
               const ticket = tickets.find(t => t.id === photoJobId);
@@ -861,7 +863,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             <SectionLabel icon={<Clock size={11}/>}>Activity Details</SectionLabel>
                                             {act.serviceCategory && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Category</span><span className="font-semibold text-slate-700">{act.serviceCategory}</span></div>}
                                             <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Priority</span><span className={`font-bold ${act.priority === 'URGENT' ? 'text-red-600' : act.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{act.priority}</span></div>
-                                            {act.plannedDate && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Planned</span><span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString()} {new Date(act.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
+                                            {act.plannedDate && <div className="flex justify-between text-sm"><span className="text-slate-400 font-medium">Planned</span><span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' })} {new Date(act.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit',minute:'2-digit'})}</span></div>}
                                         </div>
                                         {/* Step progress */}
                                         {actStatus !== 'DONE' && actStatus !== 'CARRY_FORWARD' && (
@@ -1680,7 +1682,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                               });
                               setShowCancelModal(false);
                               setCancelTargetAct(null);
-                              setViewJob(null);
+                              setSelectedJobId(null); // QA-09: was setViewJob(null) — undefined in this component (ReferenceError after the cancel was sent)
                           }}
                           className="py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
                           Confirm Cancel

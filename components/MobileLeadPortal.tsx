@@ -2472,9 +2472,9 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Details</div>
                     <div className="flex justify-between text-sm"><span className="text-slate-400">Type</span><span className="font-semibold text-slate-700">{act.type}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-slate-400">Priority</span><span className={`font-bold ${act.priority === 'URGENT' ? 'text-red-600' : act.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-600'}`}>{act.priority}</span></div>
-                    {act.plannedDate && <div className="flex justify-between text-sm"><span className="text-slate-400">Planned</span><span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString()} {new Date(act.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
-                    {act.startedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Started</span><span className="font-semibold text-emerald-600">{new Date(act.startedAt).toLocaleDateString()} {new Date(act.startedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
-                    {act.completedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Completed</span><span className="font-semibold text-emerald-600">{new Date(act.completedAt).toLocaleDateString()} {new Date(act.completedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>}
+                    {act.plannedDate && <div className="flex justify-between text-sm"><span className="text-slate-400">Planned</span><span className="font-semibold text-slate-700">{new Date(act.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' })} {new Date(act.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit',minute:'2-digit'})}</span></div>}
+                    {act.startedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Started</span><span className="font-semibold text-emerald-600">{new Date(act.startedAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' })} {new Date(act.startedAt).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit',minute:'2-digit'})}</span></div>}
+                    {act.completedAt && <div className="flex justify-between text-sm"><span className="text-slate-400">Completed</span><span className="font-semibold text-emerald-600">{new Date(act.completedAt).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' })} {new Date(act.completedAt).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit',minute:'2-digit'})}</span></div>}
                 </div>
 
                 {/* Team / Resources */}
@@ -2936,7 +2936,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-slate-400 font-medium">Planned</span>
                                                 <span className="font-semibold text-slate-700">
-                                                    {new Date(viewJob.data.plannedDate).toLocaleDateString()} {new Date(viewJob.data.plannedDate).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+                                                    {new Date(viewJob.data.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' })} {new Date(viewJob.data.plannedDate).toLocaleTimeString('en-GB', { timeZone: 'Asia/Qatar', hour:'2-digit',minute:'2-digit'})}
                                                 </span>
                                             </div>
                                         )}

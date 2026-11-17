@@ -422,7 +422,7 @@ const ConfirmAttendanceModal: React.FC<{
                   <input type="checkbox" checked={selectedActivityIds.includes(a.id)} onChange={() => toggleActivity(a.id)} />
                   <span className="flex-1">
                     <span className="font-semibold text-slate-700">{a.customerName || a.reference}</span>
-                    <span className="text-slate-400"> · {a.reference} · {new Date(a.plannedDate).toLocaleDateString()}</span>
+                    <span className="text-slate-400"> · {a.reference} · {new Date(a.plannedDate).toLocaleDateString('en-GB', { timeZone: 'Asia/Qatar' })}</span>
                   </span>
                 </label>
               ))}

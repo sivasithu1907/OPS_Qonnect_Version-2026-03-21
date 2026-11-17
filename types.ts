@@ -373,6 +373,8 @@ export interface FreelancerReviewLink {
 }
 
 export interface Activity {
+  /** F-1: server-issued record version (the row's updated_at). Sent back as baseVersion; never edited by the UI. */
+  version?: string;
   id: string; // e.g. ACT-00045
   reference: string;
   type: ActivityType;

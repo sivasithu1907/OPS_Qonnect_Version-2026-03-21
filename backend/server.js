@@ -7,9 +7,29 @@ import { pool } from "./db.js";
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { initFreelancerSchema, registerFreelancerRoutes } from './freelancers.js';
+import { ActivityUpdateBuilder, ActivityValidationError, ActivityForbiddenError, ActivityConflictError, planActivityTimestamps, planRescheduleRecord,
+    resolveFieldUpdates, resolveTeamUpdates, isWorkflowCritical, evaluateVersion, versionOf, planTimeCorrectionRecord, parseClientTimestamp, parseClientVisitHistory, mergeVisitHistory } from './activityUpdate.js';
+import {
+    ROLE, ASSIGNABLE_ROLES, ASSIGNABLE_STATUSES, STAFF_MANAGERS, ADMIN_ONLY,
+    createAuthenticate, requireRoles, passwordFingerprint, countActiveAdmins,
+    activityParticipantIds, isActivityParticipant, isTicketAssignee, sameIdSet, normId,
+    validateNewPassword, safeEqual,
+} from './authz.js';
+import {
+    sanitizePhotos, photoId, photoIdsOf, PHOTO_PLACEHOLDER,
+    SQL_TICKET_APPEND_PHOTOS, SQL_ACTIVITY_APPEND_PHOTOS,
+    SQL_TICKET_REMOVE_PHOTOS, SQL_ACTIVITY_REMOVE_PHOTOS, detailsKeepingPhotos,
+} from './photos.js';
 
 dotenv.config();
 const app = express();
+// The app runs behind the nginx container (one proxy hop). Without this, req.ip is
+// always the proxy's address, so every per-IP limiter (login, TV, writes) would treat
+// ALL users as a single client. Set TRUST_PROXY_HOPS=0 if the API is ever exposed directly.
+{
+    const hops = Number(process.env.TRUST_PROXY_HOPS ?? 1);
+    if (Number.isInteger(hops) && hops > 0) app.set('trust proxy', hops);
+}
 app.use(compression()); // Gzip API responses
 
 // --- Security Headers (Phase 3) ---
@@ -32,6 +52,12 @@ app.use((req, res, next) => {
     next();
 });
 
+// Secrets that travel in a URL (TV token in a query string, the freelancer review
+// token in the path) must never reach the logs (QA-04 / QA-05).
+const redactUrl = (u) => String(u || '')
+    .replace(/([?&](?:token|access_token|key|password)=)[^&#]*/gi, '$1[redacted]')
+    .replace(/(\/freelancer-review\/)[^/?#]+/i, '$1[redacted]');
+
 // --- Request Logging (Phase 3) ---
 app.use((req, res, next) => {
     const start = Date.now();
@@ -42,10 +68,11 @@ app.use((req, res, next) => {
             console.log(JSON.stringify({
                 level: logLevel,
                 method: req.method,
-                url: req.url,
+                url: redactUrl(req.url),
                 status: res.statusCode,
                 duration: `${duration}ms`,
                 user: req.user?.email || 'anonymous',
+                ip: req.ip,
                 timestamp: new Date().toISOString()
             }));
         }
@@ -696,28 +723,47 @@ await pool.query(`
   );
 `);
 
-// ── Ensure a default admin exists on first boot only ──────────────────
-    // Previously this ran an UPDATE on every single server start that reset
-    // admin@qonnect.qa's password back to the hardcoded "admin123" default,
-    // even if someone had deliberately changed it — any container
-    // restart/rebuild silently clobbered the real admin password. Now the
-    // password (and hashing work) only happens the first time the account
-    // is created; once it exists, restarts leave its credentials alone.
-    // Role/status are still kept in sync defensively (cheap, non-destructive
-    // to credentials) so this designated account can't accidentally end up
-    // demoted or deactivated by stale data.
-    const adminCheck = await pool.query("SELECT id FROM users WHERE email = 'admin@qonnect.qa'");
-    if (adminCheck.rows.length === 0) {
-        const hashedAdminPass = await bcrypt.hash("admin123", 10);
-        await pool.query(
-            "INSERT INTO users (id, name, email, password, role, status) VALUES ($1, $2, $3, $4, $5, $6)",
-            ["u-admin", "System Admin", "admin@qonnect.qa", hashedAdminPass, "ADMIN", "ACTIVE"]
-        );
-        console.log("✅ Default admin created: admin@qonnect.qa / admin123");
+// ── Administrator bootstrap (Batch 1 — QA-07) ────────────────────────────
+// Previous behaviour: if "admin@qonnect.qa" was missing, it was created with the
+// hard-coded password "admin123" (printed to the log), and on EVERY restart that
+// account was force-set back to role=ADMIN / status=ACTIVE — so a deliberately
+// demoted or deactivated default admin was silently re-enabled at each boot.
+//
+// New behaviour:
+//   • Existing users are NEVER modified here (no re-promotion, no reactivation,
+//     no password change).
+//   • An administrator is only bootstrapped when the database has NO enabled
+//     ADMIN at all, and only from operator-supplied environment variables:
+//       INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_PASSWORD (and optional INITIAL_ADMIN_NAME).
+//     No credential is hard-coded and no password is ever logged.
+//   • With neither an admin nor the variables, the server still starts and logs
+//     a clear warning (it never invents credentials).
+{
+    const adminCount = await countActiveAdmins(pool);
+    if (adminCount === 0) {
+        const bootEmail = (process.env.INITIAL_ADMIN_EMAIL || '').trim();
+        const bootPass = process.env.INITIAL_ADMIN_PASSWORD || '';
+        const bootName = (process.env.INITIAL_ADMIN_NAME || 'System Administrator').trim();
+        const pwProblem = bootPass ? validateNewPassword(bootPass) : 'not set';
+        if (!bootEmail || pwProblem) {
+            console.warn("⚠️  No enabled ADMIN account exists and no valid INITIAL_ADMIN_EMAIL / INITIAL_ADMIN_PASSWORD was provided — nobody can administer the system until one is supplied (see README_DEPLOY.md).");
+        } else {
+            const taken = await pool.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [bootEmail]);
+            if (taken.rows.length > 0) {
+                console.warn("⚠️  INITIAL_ADMIN_EMAIL belongs to an existing, non-admin account — it was NOT modified. Promote it deliberately from an existing administrator account or the database.");
+            } else {
+                const hashedAdminPass = await bcrypt.hash(bootPass, 10);
+                await pool.query(
+                    "INSERT INTO users (id, name, email, password, role, status) VALUES ($1, $2, $3, $4, 'ADMIN', 'ACTIVE')",
+                    [`u-admin-${Date.now()}`, bootName, bootEmail, hashedAdminPass]
+                );
+                console.log(`✅ Initial administrator created: ${bootEmail} (remove INITIAL_ADMIN_PASSWORD from the environment now)`);
+            }
+        }
     } else {
-        await pool.query("UPDATE users SET role = 'ADMIN', status = 'ACTIVE' WHERE email = 'admin@qonnect.qa'");
-        console.log("✅ Default admin present — password left untouched");
+        console.log("✅ Administrator account(s) present — nothing was changed");
     }
+}
     // Fix any legacy role values
     await pool.query("UPDATE users SET role = 'ADMIN' WHERE role = 'OPERATIONS_MANAGER'");
     
@@ -905,30 +951,43 @@ if (!process.env.JWT_SECRET) {
     process.exit(1);
 }
 
-const authenticate = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Unauthorized — no token' });
-    }
-    const token = authHeader.split(' ')[1];
-    try {
-        req.user = jwt.verify(token, process.env.JWT_SECRET);
-        // VIEWER accounts are strictly read-only. Blocking it here — inside
-        // the shared authenticate() middleware that virtually every route
-        // already calls — means every existing and future mutating endpoint
-        // is covered automatically, instead of relying on each individual
-        // route remembering to check the role itself (several routes, e.g.
-        // ticket/user create & update, currently have no per-route role
-        // check at all, so this is the one place that reliably closes it
-        // off for VIEWER regardless of which endpoint they hit).
-        if (req.user.role === 'VIEWER' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-            return res.status(403).json({ error: 'View-only accounts cannot make changes.' });
-        }
-        next();
-    } catch (e) {
-        return res.status(401).json({ error: 'Unauthorized — invalid token' });
-    }
-};
+// Batch 1 (QA-19): every request re-loads the account from the database, so a
+// deleted / deactivated / demoted user loses access on their NEXT request and
+// the role used for authorisation is always the current one. See authz.js.
+const authenticate = createAuthenticate({ pool, jwt, secret: process.env.JWT_SECRET });
+
+// ── Record-level authorisation helpers (Batch 1 — QA-02) ─────────────────────
+// ADMIN and TEAM_LEAD run operations and may touch any job. A FIELD_ENGINEER may
+// only touch jobs they are genuinely on — decided from the STORED assignment
+// (tickets.assigned_tech_id; activities.lead_tech_id + details primary /
+// supporting / assistant ids), never from ids supplied in the request.
+// Everyone else (SALES, VIEWER, NONE) is denied by default.
+const forbid = (res, msg = 'You do not have permission to perform this action.') =>
+    res.status(403).json({ error: msg });
+
+/** Loads the ticket and checks the caller may modify it. Returns the row, or null after responding. */
+async function authorizeTicketWrite(req, res) {
+    const r = await pool.query('SELECT id, assigned_tech_id, appointment_time, status FROM tickets WHERE id = $1', [req.params.id]);
+    const row = r.rows[0];
+    if (!row) { res.status(404).json({ error: 'Ticket not found' }); return null; }
+    const role = req.user.role;
+    if (STAFF_MANAGERS.includes(role)) return row;
+    if (role === ROLE.FIELD_ENGINEER && isTicketAssignee(row, req.user.id)) return row;
+    forbid(res, 'You can only update tickets that are assigned to you.');
+    return null;
+}
+
+/** Same for activities; also returns the stored row (lead, details). */
+async function authorizeActivityWrite(req, res) {
+    const r = await pool.query('SELECT id, lead_tech_id, details FROM activities WHERE id = $1', [req.params.id]);
+    const row = r.rows[0];
+    if (!row) { res.status(404).json({ error: 'Activity not found' }); return null; }
+    const role = req.user.role;
+    if (STAFF_MANAGERS.includes(role)) return row;
+    if (role === ROLE.FIELD_ENGINEER && isActivityParticipant(row, req.user.id)) return row;
+    forbid(res, 'You can only update jobs you are assigned to.');
+    return null;
+}
 
 // ── Freelancer Management routes (profiles, attendance/wages, payments,
 // CEO review links) — registered here, once authenticate/writeRateLimit/
@@ -940,56 +999,103 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ── TV Display Data ──
-// Protected by a static TV_TOKEN from .env — set TV_TOKEN in backend/.env
-// TV screen accesses via: /api/tv-data?token=<TV_TOKEN>
-// Falls back to open if TV_TOKEN is not configured (backward compatible)
+// ── TV Display Data (Batch 1 — QA-04) ──
+// Wall-mounted TV screens are not logged-in users, so this endpoint uses a
+// shared secret (TV_TOKEN). Rules:
+//   • FAILS CLOSED — if TV_TOKEN is missing or shorter than 24 characters the
+//     endpoint answers 503 and returns nothing (it used to be completely open).
+//   • The token is read from the `X-TV-Token` header (or `Authorization: Bearer`)
+//     so it does not end up in URLs / access logs. The legacy `?token=` query
+//     form is only honoured when TV_ALLOW_QUERY_TOKEN=true (temporary switch for
+//     screens that still run the old page).
+//   • Constant-time comparison + per-IP throttling of wrong guesses.
+//   • Data minimisation — the payload is an allow-list: no customer phone
+//     numbers, e-mails, addresses, map links, building/house numbers, free-text
+//     notes, photos or freelancer phone numbers.
+const TV_TOKEN_MIN_LENGTH = 24;
+const tvFailures = new Map();
+const TV_FAIL_WINDOW_MS = 15 * 60 * 1000;
+const TV_FAIL_MAX = 30;
+function tvFailureCount(ip) {
+    const now = Date.now();
+    const recent = (tvFailures.get(ip) || []).filter(t => now - t < TV_FAIL_WINDOW_MS);
+    tvFailures.set(ip, recent);
+    return recent.length;
+}
+function tvAuthorize(req) {
+    const configured = process.env.TV_TOKEN || '';
+    if (configured.length < TV_TOKEN_MIN_LENGTH) return { ok: false, status: 503, error: 'TV display is not configured' };
+    let provided = req.headers['x-tv-token'];
+    if (!provided) {
+        const h = req.headers.authorization || '';
+        if (h.startsWith('Bearer ')) provided = h.slice(7).trim();
+    }
+    if (!provided && process.env.TV_ALLOW_QUERY_TOKEN === 'true' && typeof req.query.token === 'string') provided = req.query.token;
+    if (!provided || typeof provided !== 'string') return { ok: false, status: 401, error: 'TV access denied' };
+    if (!safeEqual(provided, configured)) return { ok: false, status: 401, error: 'TV access denied' };
+    return { ok: true };
+}
+const TV_ACTIVITY_DETAIL_FIELDS = [
+    'serviceCategory', 'durationUnit', 'assistantTechIds', 'primaryEngineerId', 'supportingEngineerIds',
+    'salesLeadId', 'salesLeadName', 'escalationLevel', 'carryForwardNote', 'nextPlannedAt', 'cancellationReason',
+];
 app.get('/api/tv-data', async (req, res) => {
-    const tvToken = process.env.TV_TOKEN;
-    if (tvToken) {
-        const provided = req.query.token || req.headers['x-tv-token'];
-        if (!provided || provided !== tvToken) {
-            return res.status(401).json({ error: 'TV access denied — invalid or missing token' });
-        }
+    res.setHeader('Cache-Control', 'no-store');
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    if (tvFailureCount(ip) >= TV_FAIL_MAX) {
+        return res.status(429).json({ error: 'Too many failed attempts' });
+    }
+    const auth = tvAuthorize(req);
+    if (!auth.ok) {
+        if (auth.status === 401) tvFailures.get(ip).push(Date.now());
+        return res.status(auth.status).json({ error: auth.error });
     }
     try {
         const [ticketsRes, activitiesRes, usersRes, teamsRes, sitesRes, customersRes] = await Promise.all([
-            pool.query(`SELECT id, customer_id, customer_name, phone_number, category, type, priority, status,
-                location_url, house_number, ai_summary, assigned_tech_id, appointment_time,
-                odoo_link, notes, carry_forward_note, next_planned_at, assignment_note,
-                completion_note, cancellation_reason, last_escalated_at, started_at, completed_at,
-                visit_history, created_at, updated_at FROM tickets ORDER BY updated_at DESC LIMIT 100`),
+            pool.query(`SELECT id, customer_id, customer_name, category, type, priority, status,
+                assigned_tech_id, appointment_time, started_at, completed_at, created_at, updated_at
+                FROM tickets ORDER BY updated_at DESC LIMIT 100`),
             pool.query(`SELECT id, reference, type, priority, status, planned_date, customer_id, customer_name,
-                customer_phone, site_id, lead_tech_id, description, duration_hours,
-                details, started_at, completed_at, visit_history, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
-            pool.query("SELECT id, name, role, status, avatar, level, phone FROM users WHERE status != 'INACTIVE'"),
-            pool.query("SELECT * FROM teams"),
-            pool.query("SELECT * FROM sites"),
-            pool.query("SELECT id, name, phone, email, address, avatar, building_number, created_at FROM customers")
+                site_id, lead_tech_id, description, duration_hours,
+                details, started_at, completed_at, created_at, updated_at, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE type != 'WHATSAPP_SUPPORT' ORDER BY created_at DESC LIMIT 200`),
+            pool.query("SELECT id, name, role, status, avatar, level FROM users WHERE status != 'INACTIVE'"),
+            pool.query("SELECT id, name, lead_id, member_ids, status FROM teams"),
+            pool.query("SELECT id, name, client_name, priority, status FROM sites"),
+            pool.query("SELECT id, name, created_at FROM customers")
         ]);
 
         const tickets = ticketsRes.rows.map(r => ({
             id: r.id, customerId: r.customer_id, customerName: r.customer_name,
-            phoneNumber: r.phone_number, category: r.category, type: r.type,
+            category: r.category, type: r.type,
             priority: r.priority, status: r.status, assignedTechId: r.assigned_tech_id,
             createdAt: r.created_at, updatedAt: r.updated_at,
-            appointmentTime: r.appointment_time, houseNumber: r.house_number,
-            locationUrl: r.location_url, startedAt: r.started_at, completedAt: r.completed_at,
+            appointmentTime: r.appointment_time, startedAt: r.started_at, completedAt: r.completed_at,
             messages: [], // Exclude messages for privacy
         }));
 
-        const activities = activitiesRes.rows.map(r => ({
-            id: r.id, reference: r.reference, type: r.type, priority: r.priority,
-            status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
-            siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
-            durationHours: Number(r.duration_hours),
-            ...r.details,
-            customerName: resolveActivityCustomerName(r, r.details),
-            // Column values MUST override JSONB details (details may have stale frontend timestamps)
-            startedAt: r.started_at || (r.details || {}).startedAt || null,
-            completedAt: r.completed_at || (r.details || {}).completedAt || null,
-            createdAt: r.created_at, updatedAt: r.updated_at,
-        }));
+        const activities = activitiesRes.rows.map(r => {
+            const d = r.details || {};
+            const safeDetails = {};
+            for (const k of TV_ACTIVITY_DETAIL_FIELDS) if (d[k] !== undefined) safeDetails[k] = d[k];
+            // Freelancers: keep name/role for the staffing view, never phone numbers or rates.
+            if (Array.isArray(d.freelancers)) {
+                safeDetails.freelancers = d.freelancers
+                    .filter(f => f && typeof f.name === 'string')
+                    .map(f => ({ name: f.name, role: f.role }));
+            }
+            return {
+                id: r.id, reference: r.reference, type: r.type, priority: r.priority,
+                status: r.status, plannedDate: r.planned_date, customerId: r.customer_id,
+                siteId: r.site_id, leadTechId: r.lead_tech_id, description: r.description,
+                durationHours: Number(r.duration_hours),
+                ...safeDetails,
+                customerName: resolveActivityCustomerName(r, d),
+                // Column values MUST override JSONB details (details may have stale frontend timestamps)
+                startedAt: r.started_at || d.startedAt || null,
+                completedAt: r.completed_at || d.completedAt || null,
+                createdAt: r.created_at, updatedAt: r.updated_at,
+            };
+        });
 
         const technicians = usersRes.rows.map(r => {
             // Normalise: SALES-level users with no DB role get systemRole='SALES'
@@ -997,7 +1103,7 @@ app.get('/api/tv-data', async (req, res) => {
             return {
                 id: r.id, name: r.name, systemRole: sysRole, status: r.status || 'AVAILABLE',
                 avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name)}&background=random`,
-                level: r.level || r.role, isActive: true, email: '', role: sysRole, phone: r.phone,
+                level: r.level || r.role, isActive: true, email: '', role: sysRole, phone: '',
             };
         });
 
@@ -1008,13 +1114,11 @@ app.get('/api/tv-data', async (req, res) => {
 
         const sites = sitesRes.rows.map(r => ({
             id: r.id, name: r.name, clientName: r.client_name || '',
-            location: r.location || '', priority: r.priority || 'MEDIUM', status: r.status || 'ACTIVE',
+            location: '', priority: r.priority || 'MEDIUM', status: r.status || 'ACTIVE',
         }));
 
         const customers = customersRes.rows.map(r => ({
-            id: r.id, name: r.name, phone: r.phone || '',
-            email: r.email || '', address: r.address || '',
-            avatar: r.avatar || '', buildingNumber: r.building_number || '',
+            id: r.id, name: r.name, phone: '', email: '', address: '', avatar: '', buildingNumber: '',
             createdAt: r.created_at || null,
         }));
 
@@ -1122,7 +1226,7 @@ function mapActivityLite(r) {
         primaryEngineerId: d.primaryEngineerId || null,
         supportingEngineerIds: d.supportingEngineerIds || [],
         currentVisitRemark: d.currentVisitRemark || '',
-        createdAt: r.created_at, updatedAt: r.updated_at,
+        createdAt: r.created_at, updatedAt: r.updated_at, version: versionOf(r.updated_at),
         startedAt: r.started_at || (d).startedAt || null,
         completedAt: r.completed_at || (d).completedAt || null,
         visitHistory: r.visit_history || [],
@@ -1157,7 +1261,7 @@ function mapActivity(r) {
         primaryEngineerId: d.primaryEngineerId || null,
         supportingEngineerIds: d.supportingEngineerIds || [],
         currentVisitRemark: d.currentVisitRemark || '',
-        createdAt: r.created_at, updatedAt: r.updated_at,
+        createdAt: r.created_at, updatedAt: r.updated_at, version: versionOf(r.updated_at),
         startedAt: r.started_at || (r.details || {}).startedAt || null,
         completedAt: r.completed_at || (r.details || {}).completedAt || null,
         visitHistory: r.visit_history || [],
@@ -1383,7 +1487,8 @@ app.get("/api/tickets/:id/full", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM tickets WHERE id = $1", [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: "Not found" });
-    res.json(mapTicket(rows[0], true));
+    // `photoIds` lets an authorised caller name a photo for explicit removal.
+    res.json({ ...mapTicket(rows[0], true), photoIds: photoIdsOf(rows[0].photos) });
   } catch (e) {
     console.error("Ticket full fetch error:", e);
     res.status(500).json({ error: "Failed to fetch ticket" });
@@ -1391,7 +1496,7 @@ app.get("/api/tickets/:id/full", authenticate, async (req, res) => {
 });
 
 // 2. Create a new ticket in DB (Fixed for Foreign Key sync)
-app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/tickets", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
   const client = await pool.connect();
   try {
     let { id, customerId, customerName, category, priority, locationUrl, houseNumber, messages, phoneNumber, initialMessage } = req.body;
@@ -1510,9 +1615,22 @@ app.post("/api/tickets", authenticate, writeRateLimit, async (req, res) => {
 app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
     try {
         const id = req.params.id;
-        const { category, priority, type, customerId, customerName,
+        const current = await authorizeTicketWrite(req, res);
+        if (!current) return;
+        let { category, priority, type, customerId, customerName,
                 assignedTechId, appointmentTime, locationUrl, houseNumber, odooLink, notes, photos } = req.body;
         const { phoneNumber } = req.body; // also capture phoneNumber for update
+
+        if (req.user.role === ROLE.FIELD_ENGINEER) {
+            // A technician may update the job they hold, but cannot hand it to someone
+            // else, re-schedule it behind the lead's back, or re-point it at another customer.
+            if (normId(assignedTechId) && normId(assignedTechId) !== normId(current.assigned_tech_id)) {
+                return forbid(res, 'Only a Team Lead or Admin can reassign a ticket.');
+            }
+            assignedTechId = current.assigned_tech_id;
+            appointmentTime = current.appointment_time;
+            customerId = undefined; customerName = undefined;
+        }
 
         // Previously this endpoint had no audit logging at all — editing a
         // ticket's category, priority, location, etc. left zero trace.
@@ -1539,7 +1657,6 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
                 customer_name    = COALESCE($10, customer_name),
                 type             = COALESCE($12, type),
                 phone_number     = COALESCE($13, phone_number),
-                photos           = COALESCE($14::jsonb, photos),
                 updated_at       = NOW()
              WHERE id = $11`,
             [
@@ -1549,10 +1666,18 @@ app.put("/api/tickets/:id", authenticate, writeRateLimit, async (req, res) => {
                 odooLink || null, notes || null,
                 customerId || null, customerName || null,
                 id,
-                type || null, phoneNumber || null,
-                photos ? JSON.stringify(photos) : null
+                type || null, phoneNumber || null
             ]
         );
+
+        // Photos (QA-03): a `photos` value in a normal update can only ADD genuine
+        // photos. Placeholders, empty arrays and omissions never touch what is
+        // stored; the append is atomic in SQL so parallel uploads cannot overwrite
+        // each other. Removal is only possible via POST /api/tickets/:id/photos/remove.
+        const newTicketPhotos = sanitizePhotos(photos);
+        if (newTicketPhotos.length > 0) {
+            await pool.query(SQL_TICKET_APPEND_PHOTOS, [JSON.stringify(newTicketPhotos), id]);
+        }
 
         if (before.rows[0]) {
             const b = before.rows[0];
@@ -1597,6 +1722,7 @@ app.get("/api/tickets/:id/messages", authenticate, async (req, res) => {
 app.post("/api/tickets/:id/message", authenticate, writeRateLimit, async (req, res) => {
     try {
         const id = req.params.id;
+        if (!(await authorizeTicketWrite(req, res))) return;
         const { sender, content } = req.body;
         if (!sender || !content) return res.status(400).json({ error: "sender and content required" });
         const newMsg = {
@@ -1620,8 +1746,46 @@ app.post("/api/tickets/:id/message", authenticate, writeRateLimit, async (req, r
     }
 });
 
+// ── Explicit photo operations (Batch 1 — QA-03) ───────────────────────────────
+// Add: same permission as updating the job. Remove: Team Lead / Admin only, and
+// only the photos named by content id — nothing is ever removed implicitly.
+const PHOTO_ID_RE = /^[0-9a-f]{24}$/;
+function photoRoutes(entity, table, appendSql, removeSql, authorize) {
+    app.post(`/api/${entity}/:id/photos`, authenticate, writeRateLimit, async (req, res) => {
+        try {
+            if (!(await authorize(req, res))) return;
+            const photos = sanitizePhotos(req.body?.photos);
+            if (photos.length === 0) return res.status(400).json({ error: 'No valid photos supplied' });
+            await pool.query(appendSql, [JSON.stringify(photos), req.params.id]);
+            logAudit(req, { action: 'PHOTO_ADD', entityType: entity === 'tickets' ? 'TICKET' : 'ACTIVITY', entityId: req.params.id, entityLabel: req.params.id, details: { count: photos.length } });
+            res.json({ ok: true, added: photos.length, photoIds: photos.map(photoId) });
+        } catch (e) {
+            console.error('Photo add error:', e);
+            res.status(500).json({ error: 'Failed to add photos' });
+        }
+    });
+    app.post(`/api/${entity}/:id/photos/remove`, authenticate, requireRoles(STAFF_MANAGERS), deleteRateLimit, async (req, res) => {
+        try {
+            const ids = Array.isArray(req.body?.photoIds) ? req.body.photoIds : [];
+            if (ids.length === 0 || ids.length > 50 || !ids.every(i => typeof i === 'string' && PHOTO_ID_RE.test(i))) {
+                return res.status(400).json({ error: 'photoIds must be a list of photo ids' });
+            }
+            const exists = await pool.query(`SELECT 1 FROM ${table} WHERE id = $1`, [req.params.id]);
+            if (!exists.rows[0]) return res.status(404).json({ error: 'Not found' });
+            await pool.query(removeSql, [ids, req.params.id]);
+            logAudit(req, { action: 'PHOTO_REMOVE', entityType: entity === 'tickets' ? 'TICKET' : 'ACTIVITY', entityId: req.params.id, entityLabel: req.params.id, details: { photoIds: ids } });
+            res.json({ ok: true });
+        } catch (e) {
+            console.error('Photo remove error:', e);
+            res.status(500).json({ error: 'Failed to remove photos' });
+        }
+    });
+}
+photoRoutes('tickets', 'tickets', SQL_TICKET_APPEND_PHOTOS, SQL_TICKET_REMOVE_PHOTOS, authorizeTicketWrite);
+photoRoutes('activities', 'activities', SQL_ACTIVITY_APPEND_PHOTOS, SQL_ACTIVITY_REMOVE_PHOTOS, authorizeActivityWrite);
+
 // 3. Delete a ticket in DB (Admin only)
-app.delete("/api/tickets/:id", authenticate, deleteRateLimit, async (req, res) => {
+app.delete("/api/tickets/:id", authenticate, requireRoles(STAFF_MANAGERS), deleteRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
     const existing = await pool.query("SELECT customer_name FROM tickets WHERE id=$1", [id]);
@@ -1645,6 +1809,11 @@ app.put("/api/tickets/:id/status", authenticate, writeRateLimit, async (req, res
     try {
         const { status, assignedTechId, appointmentTime, carryForwardNote, nextPlannedAt, completionNote, startedAt: adminStartedAt, completedAt: adminCompletedAt } = req.body;
         const ticketId = req.params.id;
+        const ticketForAuth = await authorizeTicketWrite(req, res);
+        if (!ticketForAuth) return;
+        if (req.user.role === ROLE.FIELD_ENGINEER && normId(assignedTechId) && normId(assignedTechId) !== normId(ticketForAuth.assigned_tech_id)) {
+            return forbid(res, 'Only a Team Lead or Admin can reassign a ticket.');
+        }
 
         // Fetch current status to detect transitions for timestamp tracking
         const current = await pool.query("SELECT status, started_at FROM tickets WHERE id=$1", [ticketId]);
@@ -1926,7 +2095,7 @@ app.get("/api/customers", authenticate, async (req, res) => {
 });
 
 // Create customer (with duplicate phone prevention)
-app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/customers", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
   try {
     const { name, phone, email, address, notes, is_active, buildingNumber } = req.body || {};
 
@@ -2033,7 +2202,30 @@ app.post("/api/customers", authenticate, writeRateLimit, async (req, res) => {
 app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
-    const { name, phone, email, address, buildingNumber, notes, is_active } = req.body || {};
+    let { name, phone, email, address, buildingNumber, notes, is_active } = req.body || {};
+
+    // Authorisation (QA-02). Team Lead / Admin: full contact management.
+    // Field engineer: ONLY the app's "fill in the missing location" sync — i.e. set an
+    // address / building number that is currently empty — and only for a customer on
+    // a job the engineer is actually assigned to. Everyone else: denied.
+    if (!STAFF_MANAGERS.includes(req.user.role)) {
+      if (req.user.role !== ROLE.FIELD_ENGINEER) return forbid(res);
+      if ([name, phone, email, notes, is_active].some(v => v !== undefined)) {
+        return forbid(res, 'You can only add a missing address or building number to a client.');
+      }
+      const linked = await pool.query(
+        `SELECT 1 FROM tickets WHERE customer_id = $1 AND assigned_tech_id = $2
+         UNION ALL
+         SELECT 1 FROM activities WHERE customer_id = $1 AND ${activityInvolvesPersonClause(2)}
+         LIMIT 1`,
+        [id, req.user.id]
+      );
+      if (!linked.rows[0]) return forbid(res, 'You can only update clients on jobs assigned to you.');
+      const cur = await pool.query('SELECT address, building_number FROM customers WHERE id = $1', [id]);
+      if (!cur.rows[0]) return res.status(404).json({ error: 'Not found' });
+      if ((cur.rows[0].address || '').trim()) address = undefined;               // never overwrite existing data
+      if ((cur.rows[0].building_number || '').trim()) buildingNumber = undefined;
+    }
 
     const before = await pool.query(
       `SELECT name, phone, email, address, building_number, notes, is_active FROM customers WHERE id = $1`,
@@ -2094,7 +2286,7 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
 });
 
 // Delete customer
-app.delete("/api/customers/:id", authenticate, deleteRateLimit, async (req, res) => {
+app.delete("/api/customers/:id", authenticate, requireRoles(STAFF_MANAGERS), deleteRateLimit, async (req, res) => {
   try {
     const id = req.params.id;
     const existing = await pool.query(`SELECT name FROM customers WHERE id=$1`, [id]);
@@ -2223,13 +2415,47 @@ app.post('/api/chat', authenticate, async (req, res) => {
 // ==============================
 // Authentication & Users (JWT)
 // ==============================
+// Per-account failure throttle (Batch 1 — QA-28). The per-IP limiter above stops
+// one address hammering the login form; this one stops a distributed guess
+// against a single account (login) or a single target (password change).
+const accountFailures = new Map();
+const ACCOUNT_FAIL_WINDOW_MS = 15 * 60 * 1000;
+const ACCOUNT_FAIL_MAX = 8;
+function accountThrottled(key) {
+    const now = Date.now();
+    const recent = (accountFailures.get(key) || []).filter(t => now - t < ACCOUNT_FAIL_WINDOW_MS);
+    accountFailures.set(key, recent);
+    return recent.length >= ACCOUNT_FAIL_MAX;
+}
+function recordAccountFailure(key) {
+    const list = accountFailures.get(key) || [];
+    list.push(Date.now());
+    accountFailures.set(key, list);
+    if (accountFailures.size > 5000) {            // keep memory bounded
+        const now = Date.now();
+        for (const [k, v] of accountFailures) if (v.every(t => now - t >= ACCOUNT_FAIL_WINDOW_MS)) accountFailures.delete(k);
+    }
+}
+const clearAccountFailures = (key) => accountFailures.delete(key);
+// A syntactically valid bcrypt hash of a random value, used to keep response time
+// similar whether or not the e-mail exists.
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync(`dummy-${Date.now()}-${Math.random()}`, 10);
+
 app.post("/api/login", loginRateLimit, async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
+    const { email, password } = req.body || {};
+    if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: "Email and password are required" });
+    }
+    const emailKey = `login:${email.trim().toLowerCase()}`;
+    if (accountThrottled(emailKey)) {
+        return res.status(429).json({ error: 'Too many failed attempts for this account. Try again in 15 minutes.' });
+    }
 
     const { rows } = await pool.query("SELECT * FROM users WHERE LOWER(email) = LOWER($1)", [email.trim()]);
     if (rows.length === 0) {
+        await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
+        recordAccountFailure(emailKey);
         logAudit(req, { action: 'LOGIN_FAILED', entityType: 'USER', entityLabel: email.trim(), actorOverride: { name: email.trim() } });
         return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -2239,6 +2465,7 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
 
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
+        recordAccountFailure(emailKey);
         logAudit(req, { action: 'LOGIN_FAILED', entityType: 'USER', entityId: user.id, entityLabel: user.name, actorOverride: { id: user.id, name: user.name, role: user.role } });
         return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -2246,8 +2473,11 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
     // Block inactive users
     if (user.status === 'INACTIVE') return res.status(403).json({ error: "Account is inactive. Contact admin." });
 
+    clearAccountFailures(emailKey);
+    // `pwv` ties the token to the current password, so a password change/reset
+    // invalidates sessions issued before it (see authz.js).
     const token = jwt.sign(
-        { id: user.id, role: user.role, email: user.email },
+        { id: user.id, role: user.role, email: user.email, pwv: passwordFingerprint(user.password) },
         process.env.JWT_SECRET,
         { expiresIn: '12h' }
     );
@@ -2262,19 +2492,22 @@ app.post("/api/login", loginRateLimit, async (req, res) => {
     console.error("Login error:", error);
     res.status(500).json({ error: "Login failed" });
   }
+});
 
 // ── /api/me — verify token and return current user (used on app startup) ──
+// (Batch 1: this route was previously declared INSIDE the login handler, so it
+// only existed after the first login since the last restart. It is now a normal
+// top-level route. authenticate() already rejects deleted/inactive accounts.)
 app.get("/api/me", authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT id, name, email, role, status, avatar FROM users WHERE id = $1", [req.user.id]);
-    if (rows.length === 0) return res.status(404).json({ error: "User not found" });
+    if (rows.length === 0) return res.status(401).json({ error: "User not found" });
     const u = rows[0];
-    if (u.status === 'INACTIVE') return res.status(403).json({ error: "Account inactive" });
+    if (u.status === 'INACTIVE') return res.status(401).json({ error: "Account inactive" });
     res.json({ id: u.id, name: u.name, email: u.email, role: u.role, techId: u.id, avatar: u.avatar || null });
   } catch (e) {
     res.status(500).json({ error: "Failed to verify session" });
   }
-});
 });
 
 // ── Bulk Reassignment ───────────────────────────────────────────────────
@@ -2347,14 +2580,15 @@ app.get("/api/reassignment/open-jobs/:personId", authenticate, async (req, res) 
 // engineer, not as the lead; a job where they were "Lead" gets the new
 // person as lead. This is a deliberate choice (confirmed before building):
 // replace, not add alongside.
-app.post("/api/reassignment/execute", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/reassignment/execute", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
     try {
         const { fromPersonId, toPersonId, jobIds } = req.body || {};
         if (!fromPersonId || !toPersonId) return res.status(400).json({ error: 'fromPersonId and toPersonId are required' });
         if (!Array.isArray(jobIds) || jobIds.length === 0) return res.status(400).json({ error: 'jobIds must be a non-empty array' });
 
-        const toUserRow = await pool.query('SELECT id, name FROM users WHERE id = $1', [toPersonId]);
+        const toUserRow = await pool.query("SELECT id, name, status FROM users WHERE id = $1", [toPersonId]);
         if (!toUserRow.rows[0]) return res.status(400).json({ error: 'Target engineer not found' });
+        if (toUserRow.rows[0].status === 'INACTIVE') return res.status(400).json({ error: 'Target engineer is inactive' });
         const fromUserRow = await pool.query('SELECT id, name FROM users WHERE id = $1', [fromPersonId]);
         const fromName = fromUserRow.rows[0]?.name || fromPersonId;
         const toName = toUserRow.rows[0].name;
@@ -2401,7 +2635,7 @@ app.post("/api/reassignment/execute", authenticate, writeRateLimit, async (req, 
 
                 if (updated) {
                     await pool.query(
-                        'UPDATE activities SET lead_tech_id = $1, details = $2, updated_at = NOW() WHERE id = $3',
+                        `UPDATE activities SET lead_tech_id = $1, details = ${detailsKeepingPhotos(2)}, updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond') WHERE id = $3`,
                         [newLeadTechId, JSON.stringify(d), jobId]
                     );
                     movedActivities++;
@@ -2546,6 +2780,20 @@ app.post("/api/system/import", authenticate, writeRateLimit, async (req, res) =>
     if (req.user?.role !== 'ADMIN') {
         return res.status(403).json({ error: "Admin access required" });
     }
+    // ── Batch 1 (QA-06): IMPORT IS DISABLED ──────────────────────────────────
+    // This restore overwrote live records with whatever the file contained —
+    // including newer ticket history, messages and photos (the audit showed
+    // photos/messages being replaced by the lightweight export's placeholders).
+    // Until a safe, previewable, non-destructive restore is designed, the endpoint
+    // refuses every request regardless of who calls it or what the UI shows.
+    // The original implementation below is intentionally left in place (and is
+    // unreachable) so the future replacement can start from it.
+    logAudit(req, { action: 'IMPORT_BLOCKED', entityType: 'SYSTEM', entityLabel: 'System import' });
+    return res.status(503).json({
+        error: 'System import is temporarily unavailable while a safe restore process is being built. Your data was not changed.',
+        code: 'IMPORT_DISABLED',
+    });
+    // eslint-disable-next-line no-unreachable
 
     const { tickets = [], activities = [], customers = [], teams = [], sites = [], technicians = [] } = req.body || {};
     const result = {
@@ -2778,7 +3026,7 @@ app.get("/api/recurring-schedules", authenticate, async (req, res) => {
 });
 
 // Create a new AMC contract
-app.post("/api/recurring-schedules", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/recurring-schedules", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
     try {
         const { customerId, customerName, category, intervalType, nextDueDate, preferredTime, notes } = req.body || {};
         if (!customerId || !nextDueDate) {
@@ -2811,7 +3059,7 @@ app.post("/api/recurring-schedules", authenticate, writeRateLimit, async (req, r
 });
 
 // Pause/resume a schedule, or edit its fields
-app.put("/api/recurring-schedules/:id", authenticate, writeRateLimit, async (req, res) => {
+app.put("/api/recurring-schedules/:id", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
     try {
         const { isActive, nextDueDate, intervalType, preferredTime, notes } = req.body || {};
         const { rows } = await pool.query(
@@ -2844,7 +3092,7 @@ app.put("/api/recurring-schedules/:id", authenticate, writeRateLimit, async (req
 });
 
 // Delete a schedule
-app.delete("/api/recurring-schedules/:id", authenticate, deleteRateLimit, async (req, res) => {
+app.delete("/api/recurring-schedules/:id", authenticate, requireRoles(STAFF_MANAGERS), deleteRateLimit, async (req, res) => {
     try {
         const existing = await pool.query('SELECT customer_name FROM recurring_schedules WHERE id=$1', [req.params.id]);
         const r = await pool.query(`DELETE FROM recurring_schedules WHERE id = $1`, [req.params.id]);
@@ -2978,7 +3226,7 @@ setTimeout(() => {
 // Manual trigger — no longer surfaced in the UI (processing is automatic
 // now), but left in place in case it's ever useful to trigger on demand
 // without waiting for the hourly check.
-app.post("/api/recurring-schedules/process", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/recurring-schedules/process", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
     try {
         const created = await processAmcSchedules(req.user);
         res.json({ ok: true, created: created.length, activities: created });
@@ -3055,6 +3303,21 @@ app.post("/api/service-feedback", authenticate, writeRateLimit, async (req, res)
 
         if (!activityId && !ticketId) {
             return res.status(400).json({ error: 'activityId or ticketId is required' });
+        }
+
+        // Authorisation (QA-02): feedback is recorded by the people who close jobs.
+        // Team Lead / Admin for any job; a field engineer only for a job they are on.
+        if (!STAFF_MANAGERS.includes(req.user.role)) {
+            if (req.user.role !== ROLE.FIELD_ENGINEER) return forbid(res);
+            let involved = false;
+            if (activityId) {
+                const a = await pool.query('SELECT lead_tech_id, details FROM activities WHERE id = $1', [activityId]);
+                involved = !!a.rows[0] && isActivityParticipant(a.rows[0], req.user.id);
+            } else {
+                const t = await pool.query('SELECT assigned_tech_id FROM tickets WHERE id = $1', [ticketId]);
+                involved = !!t.rows[0] && isTicketAssignee(t.rows[0], req.user.id);
+            }
+            if (!involved) return forbid(res, 'You can only record feedback for jobs assigned to you.');
         }
 
         // Not every customer is willing or available to rate the service —
@@ -3361,7 +3624,7 @@ app.get("/api/sla/alerts", authenticate, async (req, res) => {
     }
 });
 
-app.post("/api/sla/alerts/:ticketId/acknowledge", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/sla/alerts/:ticketId/acknowledge", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
     try {
         // alertType isn't in the URL (the existing frontend only sends the
         // ticketId) — re-derive it the same way the GET above does, so the
@@ -3386,22 +3649,39 @@ app.post("/api/sla/alerts/:ticketId/acknowledge", authenticate, writeRateLimit, 
     }
 });
 
-// POST User (Create)
-app.post("/api/users", authenticate, writeRateLimit, async (req, res) => {
+// ── User management (Batch 1 — QA-01, QA-19, QA-28) ─────────────────────────
+// Only ADMIN may create, edit, reset the password of, or delete accounts. A
+// user may change ONLY their own password, and only by proving the current one.
+// The last enabled administrator can never be demoted, disabled or deleted.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USER_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+const isStr = (v) => typeof v === 'string';
+
+// POST User (Create) — ADMIN only
+app.post("/api/users", authenticate, requireRoles(ADMIN_ONLY), writeRateLimit, async (req, res) => {
     try {
-        const { id, name, email, password, role, status, phone, job_role, level } = req.body;
-        if (!name || !email || !password) {
+        const { id, name, email, password, role, status, phone, job_role, level } = req.body || {};
+        if (!isStr(name) || !name.trim() || !isStr(email) || !email.trim() || !isStr(password) || !password) {
             return res.status(400).json({ error: "name, email, and password are required" });
         }
+        if (!EMAIL_RE.test(email.trim())) return res.status(400).json({ error: "A valid email address is required" });
+        const pwProblem = validateNewPassword(password);
+        if (pwProblem) return res.status(400).json({ error: pwProblem });
         // SALES and TECHNICAL_ASSOCIATE don't need a system role — default to 'NONE'
         const finalRole = role || 'NONE';
+        if (!ASSIGNABLE_ROLES.includes(finalRole)) return res.status(400).json({ error: "Invalid role" });
+        const finalStatus = status === 'AVAILABLE' ? 'ACTIVE' : (status || 'ACTIVE');
+        if (!ASSIGNABLE_STATUSES.includes(finalStatus)) return res.status(400).json({ error: "Invalid status" });
+        if (id !== undefined && id !== null && id !== '' && (!isStr(id) || !USER_ID_RE.test(id))) {
+            return res.status(400).json({ error: "Invalid user id" });
+        }
         const hashedPass = await bcrypt.hash(password, 10);
         const userId = id || `u-${Date.now()}`;
         const { rows } = await pool.query(
             `INSERT INTO users (id, name, email, password, role, status, phone, job_role, level)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING id, name, email, role as "systemRole", status, phone, job_role, level`,
-            [userId, name.trim(), email.trim(), hashedPass, finalRole, (status === 'AVAILABLE' ? 'ACTIVE' : (status || 'ACTIVE')), phone || null, job_role || null, level || null]
+            [userId, name.trim(), email.trim(), hashedPass, finalRole, finalStatus, phone || null, job_role || null, level || null]
         );
         logAudit(req, {
             action: 'CREATE',
@@ -3418,19 +3698,43 @@ app.post("/api/users", authenticate, writeRateLimit, async (req, res) => {
     }
 });
 
-// PUT User (Update)
-app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
+// PUT User (Update) — ADMIN only. A `password` field here is an administrator
+// RESET of someone's password (audited separately, invalidates their sessions).
+app.put("/api/users/:id", authenticate, requireRoles(ADMIN_ONLY), writeRateLimit, async (req, res) => {
     try {
-        const { name, email, password, role, status, phone, avatar, job_role, level } = req.body;
+        const { name, email, password, role, status, phone, avatar, job_role, level } = req.body || {};
         const id = req.params.id;
-        let hashedPass = null;
-        if (password) {
-            hashedPass = await bcrypt.hash(password, 10);
-        }
-        const before = await pool.query(
-            `SELECT name, email, role as "systemRole", status, phone, avatar, job_role, level FROM users WHERE id = $1`,
+
+        const beforeRes = await pool.query(
+            `SELECT name, email, role, role as "systemRole", status, phone, avatar, job_role, level FROM users WHERE id = $1`,
             [id]
         );
+        const target = beforeRes.rows[0];
+        if (!target) return res.status(404).json({ error: "User not found" });
+
+        if (role !== undefined && role !== null && role !== '' && !ASSIGNABLE_ROLES.includes(role)) {
+            return res.status(400).json({ error: "Invalid role" });
+        }
+        const newStatus = status ? (status === 'AVAILABLE' ? 'ACTIVE' : status) : null;
+        if (newStatus && !ASSIGNABLE_STATUSES.includes(newStatus)) return res.status(400).json({ error: "Invalid status" });
+        if (email !== undefined && email !== null && email !== '' && (!isStr(email) || !EMAIL_RE.test(email.trim()))) {
+            return res.status(400).json({ error: "A valid email address is required" });
+        }
+        let hashedPass = null;
+        if (password) {
+            const pwProblem = validateNewPassword(password);
+            if (pwProblem) return res.status(400).json({ error: pwProblem });
+            hashedPass = await bcrypt.hash(password, 10);
+        }
+
+        // Last-administrator protection: never allow the final enabled ADMIN to
+        // be demoted or disabled (by anyone, including themselves).
+        const targetIsEnabledAdmin = target.role === 'ADMIN' && target.status !== 'INACTIVE';
+        const losesAdmin = (role && role !== 'ADMIN') || newStatus === 'INACTIVE';
+        if (targetIsEnabledAdmin && losesAdmin && (await countActiveAdmins(pool, id)) === 0) {
+            return res.status(409).json({ error: "This is the last active administrator — it cannot be demoted or deactivated." });
+        }
+
         const { rows } = await pool.query(
             `UPDATE users SET
                 name     = COALESCE($1, name),
@@ -3445,11 +3749,11 @@ app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
              WHERE id = $8
              RETURNING id, name, email, role as "systemRole", status, phone, avatar, job_role, level`,
             [
-                name ? name.trim() : null,
-                email ? email.trim() : null,
+                name ? String(name).trim() : null,
+                email ? String(email).trim() : null,
                 hashedPass,
                 role || null,
-                status ? (status === 'AVAILABLE' ? 'ACTIVE' : status) : null,
+                newStatus,
                 phone || null,
                 avatar || null,
                 id,
@@ -3467,10 +3771,13 @@ app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
             details: {
                 // Password is never part of the diff — even a hashed value
                 // has no place in an audit log, hence the separate boolean.
-                ...diffFields(before.rows[0] || {}, r),
+                ...diffFields((({ role: _role, ...rest }) => rest)(target), r),
                 passwordChanged: !!password,
             },
         });
+        if (password) {
+            logAudit(req, { action: 'PASSWORD_RESET', entityType: 'USER', entityId: id, entityLabel: r.name, details: { byAdminId: req.user.id } });
+        }
         res.json({
             ...r,
             isActive: r.status === 'ACTIVE',
@@ -3478,30 +3785,47 @@ app.put("/api/users/:id", authenticate, writeRateLimit, async (req, res) => {
         });
     } catch (e) {
         console.error("User update error:", e);
+        if (e.code === "23505") return res.status(409).json({ error: "Email already exists" });
         res.status(500).json({ error: "Failed to update user" });
     }
 });
 
-// DELETE User
-// Change own password
+// Change OWN password. Admin resets go through PUT /api/users/:id above.
 app.put("/api/users/:id/password", authenticate, writeRateLimit, async (req, res) => {
     try {
-        const { currentPassword, newPassword } = req.body;
+        const { currentPassword, newPassword } = req.body || {};
         const id = req.params.id;
 
-        if (!currentPassword || !newPassword) {
+        // A user may only change their own password — never someone else's, not
+        // even by guessing: this is checked before anything about the target is read.
+        if (id !== req.user.id) {
+            logAudit(req, { action: 'PASSWORD_CHANGE_DENIED', entityType: 'USER', entityId: id, entityLabel: req.user.name || req.user.id });
+            return res.status(403).json({ error: "You can only change your own password." });
+        }
+        if (!isStr(currentPassword) || !isStr(newPassword) || !currentPassword || !newPassword) {
             return res.status(400).json({ error: "Current and new password are required" });
         }
-        if (newPassword.length < 8) {
-            return res.status(400).json({ error: "New password must be at least 8 characters" });
+        const pwProblem = validateNewPassword(newPassword);
+        if (pwProblem) return res.status(400).json({ error: pwProblem });
+        if (newPassword === currentPassword) return res.status(400).json({ error: "New password must be different from the current password" });
+
+        const throttleKey = `pwchange:${req.user.id}`;
+        if (accountThrottled(throttleKey)) {
+            return res.status(429).json({ error: "Too many incorrect attempts. Try again in 15 minutes." });
         }
 
         // Verify current password
         const { rows } = await pool.query("SELECT password FROM users WHERE id = $1", [id]);
         if (!rows[0]) return res.status(404).json({ error: "User not found" });
 
-        const isValid = await bcrypt.compare(currentPassword, rows[0].password);
-        if (!isValid) return res.status(401).json({ error: "Current password is incorrect" });
+        const isValid = await bcrypt.compare(currentPassword, rows[0].password || DUMMY_BCRYPT_HASH);
+        if (!isValid) {
+            recordAccountFailure(throttleKey);
+            logAudit(req, { action: 'PASSWORD_CHANGE_FAILED', entityType: 'USER', entityId: id, entityLabel: req.user.name || id });
+            // 403 (not 401): a mistyped password must not look like an expired session.
+            return res.status(403).json({ error: "Current password is incorrect" });
+        }
+        clearAccountFailures(throttleKey);
 
         // Hash and save new password
         const hashedPass = await bcrypt.hash(newPassword, 10);
@@ -3514,16 +3838,32 @@ app.put("/api/users/:id/password", authenticate, writeRateLimit, async (req, res
             entityLabel: req.user?.name || id,
         });
 
-        res.json({ ok: true, message: "Password changed successfully" });
+        // Older sessions are now invalid (password fingerprint changed); hand
+        // back a fresh token so the person making the change stays signed in.
+        const freshToken = jwt.sign(
+            { id, role: req.user.role, email: req.user.email, pwv: passwordFingerprint(hashedPass) },
+            process.env.JWT_SECRET,
+            { expiresIn: '12h' }
+        );
+        res.json({ ok: true, message: "Password changed successfully", token: freshToken });
     } catch (e) {
         console.error("Change password error:", e);
         res.status(500).json({ error: "Failed to change password" });
     }
 });
 
-app.delete("/api/users/:id", authenticate, deleteRateLimit, async (req, res) => {
+// DELETE User — ADMIN only; never yourself, never the last enabled administrator
+app.delete("/api/users/:id", authenticate, requireRoles(ADMIN_ONLY), deleteRateLimit, async (req, res) => {
     try {
-        const existing = await pool.query("SELECT name, email FROM users WHERE id = $1", [req.params.id]);
+        const existing = await pool.query("SELECT name, email, role, status FROM users WHERE id = $1", [req.params.id]);
+        if (!existing.rows[0]) return res.status(404).json({ error: "User not found" });
+        if (req.params.id === req.user.id) {
+            return res.status(409).json({ error: "You cannot delete your own account." });
+        }
+        const t = existing.rows[0];
+        if (t.role === 'ADMIN' && t.status !== 'INACTIVE' && (await countActiveAdmins(pool, req.params.id)) === 0) {
+            return res.status(409).json({ error: "This is the last active administrator — it cannot be deleted." });
+        }
         const r = await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
         if (r.rowCount === 0) return res.status(404).json({ error: "User not found" });
         logAudit(req, {
@@ -3556,7 +3896,7 @@ app.get("/api/teams", authenticate, async (req, res) => {
 });
 
 // POST Team (Create)
-app.post("/api/teams", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/teams", authenticate, requireRoles(ADMIN_ONLY), writeRateLimit, async (req, res) => {
     try {
         const { id, name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
         if (!name) return res.status(400).json({ error: "Team name is required" });
@@ -3582,7 +3922,7 @@ app.post("/api/teams", authenticate, writeRateLimit, async (req, res) => {
 });
 
 // PUT Team (Update)
-app.put("/api/teams/:id", authenticate, writeRateLimit, async (req, res) => {
+app.put("/api/teams/:id", authenticate, requireRoles(ADMIN_ONLY), writeRateLimit, async (req, res) => {
     try {
         const { name, leadId, memberIds, status, currentSiteId, workloadLevel } = req.body;
         const id = req.params.id;
@@ -3616,7 +3956,7 @@ app.put("/api/teams/:id", authenticate, writeRateLimit, async (req, res) => {
 });
 
 // DELETE Team
-app.delete("/api/teams/:id", authenticate, deleteRateLimit, async (req, res) => {
+app.delete("/api/teams/:id", authenticate, requireRoles(ADMIN_ONLY), deleteRateLimit, async (req, res) => {
     try {
         const r = await pool.query("DELETE FROM teams WHERE id = $1", [req.params.id]);
         if (r.rowCount === 0) return res.status(404).json({ error: "Team not found" });
@@ -3644,7 +3984,7 @@ app.get("/api/activities/:id/full", authenticate, async (req, res) => {
     try {
         const { rows } = await pool.query(`SELECT *, ${ACTIVITY_LINKED_CUSTOMER_NAME_SQL} FROM activities WHERE id = $1`, [req.params.id]);
         if (rows.length === 0) return res.status(404).json({ error: "Not found" });
-        res.json(mapActivity(rows[0]));
+        res.json({ ...mapActivity(rows[0]), photoIds: photoIdsOf(rows[0].details?.photos) });
     } catch (e) { res.status(500).json({ error: "Failed" }); }
 });
 
@@ -3658,11 +3998,13 @@ app.get("/api/activities", authenticate, async (req, res) => {
 });
 
 // POST Activity (Create)
-app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
+app.post("/api/activities", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
     try {
         let { id, reference, type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, ...details } = req.body;
         // Server controls timestamps — remove from client-sent details
         delete details.startedAt; delete details.completedAt; delete details.createdAt; delete details.updatedAt;
+        // Photos (QA-03): never store a placeholder as a photo on a new activity.
+        if (details.photos !== undefined) details.photos = sanitizePhotos(details.photos);
         // Remove timestamp fields — server controls these
         delete details.startedAt;
         delete details.completedAt;
@@ -3698,29 +4040,147 @@ app.post("/api/activities", authenticate, writeRateLimit, async (req, res) => {
 
 // PUT Activity (Update)
 app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) => {
+    // QA-09: the read-modify-write below runs inside ONE transaction that holds a
+    // row lock, so two sessions updating the same job are applied one after the
+    // other (no lost visit-history records, no doubled carry-forward record).
+    let tx = null;
+    let txOpen = false;
     try {
-        const { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
-        // Save admin-provided timestamps BEFORE deleting from details
+        // Authorisation first (QA-02): staff managers may edit any job; a field
+        // engineer only a job they are on according to the STORED assignment.
+        const storedActivity = await authorizeActivityWrite(req, res);
+        if (!storedActivity) return;
+        const isManager = STAFF_MANAGERS.includes(req.user.role);
+        // A team mismatch from an ENGINEER is judged after the row lock: if the screen was simply stale
+        // (someone changed the team since it loaded) the right answer is 409 "reload", not 403.
+        let deferredTeamForbid = null;
+        // F-4: only Admin / Team Lead may ask for a start / completion time correction.
+        const wantsCorrection = req.body.timeCorrection === true;
+        if (wantsCorrection && !isManager) return forbid(res, 'Only a Team Lead or Admin can correct start / completion times.');
+        let { type, priority, status, plannedDate, customerId, siteId, leadTechId, description, durationHours, primaryEngineerId, supportingEngineerIds, ...details } = req.body;
+
+        if (req.user.role === ROLE.FIELD_ENGINEER) {
+            // An engineer may move the job through its workflow and record that THEY are
+            // executing it, but may not hand it to, or add, other people.
+            const storedD = storedActivity.details || {};
+            const participants = activityParticipantIds(storedActivity);
+            if (leadTechId !== undefined && normId(leadTechId) !== normId(storedActivity.lead_tech_id)) {
+                return forbid(res, 'Only a Team Lead or Admin can change the lead of a job.');
+            }
+            if (primaryEngineerId === undefined) {
+                primaryEngineerId = storedD.primaryEngineerId || null;
+            } else if (normId(primaryEngineerId) && normId(primaryEngineerId) !== normId(storedD.primaryEngineerId) && normId(primaryEngineerId) !== req.user.id) {
+                return forbid(res, 'You can only record yourself as the primary engineer.');
+            }
+            if (supportingEngineerIds !== undefined) {
+                const list = Array.isArray(supportingEngineerIds) ? supportingEngineerIds : [];
+                if (!list.every(id => participants.has(String(id)))) {
+                    deferredTeamForbid = 'You cannot add people to a job — only a Team Lead or Admin can.';
+                }
+            }
+            if (!deferredTeamForbid && details.assistantTechIds !== undefined && !sameIdSet(details.assistantTechIds, storedD.assistantTechIds)) {
+                deferredTeamForbid = 'Only a Team Lead or Admin can change the assigned team.';
+            }
+        }
+        // Photos (QA-03): extracted from the body so they can NEVER flow into the
+        // JSON document write below. Genuine new photos are appended atomically.
+        const incomingPhotos = sanitizePhotos(details.photos);
+        delete details.photos;
+        // Client-supplied timestamps / history are validated up front (a bad value is a
+        // 400, never a database error). planActivityTimestamps() decides below which of
+        // them is stored; they never go into the details document.
         const adminStartedAt = req.body.startedAt || null;
         const adminCompletedAt = req.body.completedAt || null;
+        parseClientTimestamp(adminStartedAt, 'startedAt');
+        parseClientTimestamp(adminCompletedAt, 'completedAt');
+        const incomingHistory = parseClientVisitHistory(req.body.visitHistory);
         // Remove timestamp fields from details JSONB — timestamps go in dedicated columns
         delete details.startedAt;
         delete details.completedAt;
         delete details.createdAt;
         delete details.updatedAt;
+        // F-1 / F-4 control fields are never stored in the details document
+        delete details.version;
+        delete details.baseVersion;
+        delete details.timeCorrection;
 
-        // Fetch current row to detect transitions and merge details
-        const current = await pool.query("SELECT type, priority, status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id, customer_id, description, duration_hours FROM activities WHERE id=$1", [req.params.id]);
+        // Fetch the current row WITH A ROW LOCK to detect transitions and merge details
+        tx = await pool.connect();
+        await tx.query('BEGIN');
+        txOpen = true;
+        await tx.query("SET LOCAL lock_timeout = '8s'");
+        const current = await tx.query("SELECT type, priority, status, started_at, completed_at, details, visit_history, planned_date, lead_tech_id, site_id, customer_id, description, duration_hours, updated_at FROM activities WHERE id=$1 FOR UPDATE", [req.params.id]);
         if (!current.rows[0]) return res.status(404).json({ error: "Activity not found" });
+        // Ownership is re-checked against the LOCKED row, so an assignment change that
+        // landed after the first check cannot be bypassed.
+        if (req.user.role === ROLE.FIELD_ENGINEER && !isActivityParticipant(current.rows[0], req.user.id)) {
+            return forbid(res, 'You can only update jobs you are assigned to.');
+        }
+        if (deferredTeamForbid) {
+            const bv = req.body.baseVersion;
+            if (bv && typeof bv === 'string' && !Number.isNaN(new Date(bv).getTime()) && new Date(bv).toISOString() !== versionOf(current.rows[0].updated_at)) {
+                const e = new ActivityConflictError(409, 'ACTIVITY_CHANGED', 'This job was changed by someone else. The latest version has been loaded — please check it and try again.');
+                e.current = { status: current.rows[0].status, plannedDate: current.rows[0].planned_date, version: versionOf(current.rows[0].updated_at) };
+                console.log(JSON.stringify({ type: 'activity_version_refused', code: e.code, id: req.params.id, by: req.user.id, role: req.user.role, to: req.body.status }));
+                throw e;
+            }
+            return forbid(res, deferredTeamForbid);
+        }
         const prevStatus = current.rows[0]?.status;
         const alreadyStarted = current.rows[0]?.started_at;
         const existingDetails = current.rows[0]?.details || {};
         const existingHistory = current.rows[0]?.visit_history || [];
+
+        // ── F-3: omitted fields stay as stored; explicit clearing only where allowed ──
+        const fieldRes = resolveFieldUpdates(req.body, current.rows[0], { isManager });
+        ({ type, priority, status, plannedDate, siteId, leadTechId, description, durationHours } = fieldRes.values);
+        const team = resolveTeamUpdates(req.body, existingDetails, { isManager });
+        primaryEngineerId = team.primaryEngineerId;
+        supportingEngineerIds = team.supportingEngineerIds;
+
+        // ── F-4: one authoritative instant for this request (the database clock) ──
+        const nowIso = new Date((await tx.query('SELECT clock_timestamp() AS now')).rows[0].now).toISOString();
+        const tsPlan = planActivityTimestamps({ status, prevStatus, startedAt: adminStartedAt, completedAt: adminCompletedAt, correction: wantsCorrection, nowIso });
+        const correctionApplied = wantsCorrection && (
+            (tsPlan.started.mode === 'value' && tsPlan.started.value === tsPlan.correctionStartedAt && new Date(tsPlan.started.value).getTime() !== (current.rows[0].started_at ? new Date(current.rows[0].started_at).getTime() : null)) ||
+            (tsPlan.completed.mode === 'value' && tsPlan.completed.value === tsPlan.correctionCompletedAt && new Date(tsPlan.completed.value).getTime() !== (current.rows[0].completed_at ? new Date(current.rows[0].completed_at).getTime() : null)));
+        if (tsPlan.clientTimesIgnored) console.log(JSON.stringify({ type: 'activity_client_time_ignored', id: req.params.id, by: req.user.id, role: req.user.role }));
+        if (correctionApplied) {
+            const effStarted = tsPlan.started.mode === 'value' ? tsPlan.started.value : (tsPlan.started.mode === 'null' ? null : current.rows[0].started_at);
+            const effCompleted = tsPlan.completed.mode === 'value' ? tsPlan.completed.value : (tsPlan.completed.mode === 'null' ? null : current.rows[0].completed_at);
+            if (effStarted && effCompleted && new Date(effCompleted).getTime() < new Date(effStarted).getTime()) {
+                throw new ActivityValidationError('completedAt cannot be earlier than startedAt');
+            }
+        }
+
+        // ── F-1: stale-data protection (version = the row's updated_at, checked under the row lock) ──
+        const critical = isWorkflowCritical({
+            stored: current.rows[0], storedDetails: existingDetails, correctionApplied,
+            next: {
+                status, plannedDate, leadTechId, primaryEngineerId, supportingEngineerIds,
+                assistantTechIds: Object.prototype.hasOwnProperty.call(req.body, 'assistantTechIds') ? req.body.assistantTechIds : undefined,
+            },
+        });
+        let versionCheck;
+        try {
+            versionCheck = evaluateVersion({
+                baseVersion: req.body.baseVersion, storedUpdatedAt: current.rows[0].updated_at, critical,
+                unversionedPolicy: process.env.ACTIVITY_UNVERSIONED_WRITES === 'allow-logged' ? 'allow-logged' : 'reject',
+            });
+        } catch (e) {
+            if (e instanceof ActivityConflictError) {
+                e.current = { status: current.rows[0].status, plannedDate: current.rows[0].planned_date, version: versionOf(current.rows[0].updated_at) };
+                console.log(JSON.stringify({ type: 'activity_version_refused', code: e.code, id: req.params.id, by: req.user.id, role: req.user.role, to: status }));
+            }
+            throw e;
+        }
+        if (versionCheck.unverified) console.log(JSON.stringify({ type: 'activity_unversioned_write_allowed', id: req.params.id, by: req.user.id, role: req.user.role, from: prevStatus, to: status }));
         // PROTECT: Always use existing customer_id — never overwrite from status updates
         const safeCustomerId = current.rows[0].customer_id;
 
         // Merge execution fields into details JSONB
         const mergedDetails = { ...existingDetails, ...details };
+        delete mergedDetails.photos; // photos are preserved/appended in SQL, never rewritten from this copy
         // ALWAYS overwrite team assignments — even if null/empty (to clear old members)
         mergedDetails.primaryEngineerId = primaryEngineerId || null;
         if (supportingEngineerIds !== undefined) {
@@ -3748,6 +4208,9 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                 }));
         }
 
+        // The version handed back to the client is read AFTER every write of this request (photos bump it too).
+        const readVersion = async () => versionOf((await tx.query('SELECT updated_at FROM activities WHERE id=$1', [req.params.id])).rows[0].updated_at);
+
         // ── CARRY FORWARD HANDLING ──
         // When status is CARRY_FORWARD: record current visit in history, mark as CARRY_FORWARD on original date,
         // then the frontend will create a NEW activity for the rescheduled date
@@ -3756,7 +4219,7 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
             const visitRecord = {
                 date: current.rows[0].planned_date,
                 startedAt: current.rows[0].started_at || null,
-                completedAt: new Date().toISOString(),
+                completedAt: nowIso,
                 assignedTeam: {
                     leadTechId: current.rows[0].lead_tech_id || leadTechId,
                     primaryEngineerId: existingDetails.primaryEngineerId || primaryEngineerId,
@@ -3778,10 +4241,16 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
             if (details.nextPlannedAt) {
                 mergedDetails.nextPlannedAt = details.nextPlannedAt;
             }
-            await pool.query(
-                `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=$9, visit_history=$10, updated_at=NOW(), completed_at=NOW(), started_at=NULL WHERE id=$11`,
-                [type, priority, current.rows[0].planned_date, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id]
+            await tx.query(
+                `UPDATE activities SET type=$1, priority=$2, status='CARRY_FORWARD', planned_date=$3, customer_id=COALESCE($4, customer_id), site_id=$5, lead_tech_id=$6, description=$7, duration_hours=$8, details=${detailsKeepingPhotos(9)}, visit_history=$10, updated_at=GREATEST(clock_timestamp(), updated_at + interval '1 millisecond'), completed_at=$12::timestamptz, started_at=NULL WHERE id=$11`,
+                [type, priority, current.rows[0].planned_date, safeCustomerId, siteId, leadTechId, description, durationHours, JSON.stringify(mergedDetails), JSON.stringify(updatedHistory), req.params.id, nowIso]
             );
+            if (incomingPhotos.length > 0) await tx.query(SQL_ACTIVITY_APPEND_PHOTOS, [JSON.stringify(incomingPhotos), req.params.id]);
+            // ── Sync the linked SAR to CARRY_FORWARD in the SAME transaction (QA-08) ──
+            await syncSarWithActivity(req.params.id, 'CARRY_FORWARD', tx, 'manual_carry_forward');
+            const cfVersion = await readVersion();
+            await tx.query('COMMIT');
+            txOpen = false;
             logAudit(req, {
                 action: 'STATUS_CHANGE',
                 entityType: 'ACTIVITY',
@@ -3789,55 +4258,59 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                 entityLabel: mergedDetails.customerName || req.params.id,
                 details: { from: prevStatus, to: 'CARRY_FORWARD', carryForwardNote: visitRecord.carryForwardReason || undefined, nextPlannedAt: mergedDetails.nextPlannedAt || undefined },
             });
-            // ── Sync the linked SAR to CARRY_FORWARD before returning ──
-            // The early return previously bypassed the SAR sync below, leaving
-            // SARs stuck at IN_PROGRESS while their activity showed CARRY_FORWARD.
-            await syncSarWithActivity(req.params.id, 'CARRY_FORWARD', null, 'manual_carry_forward');
-            return res.json({ok: true, visitRecorded: true});
+            return res.json({ok: true, visitRecorded: true, version: cfVersion});
         }
 
-        // ── NORMAL STATUS TRANSITIONS (fully parameterized — no string interpolation) ──
-        // Build SET clause and params array together to avoid SQL injection in timestamps
-        const baseParams = [
-            type, priority, status, plannedDate,
-            safeCustomerId, siteId, leadTechId,
-            description, durationHours,
-            JSON.stringify(mergedDetails)
-        ];
-        let extraClauses = '';
-        const extraParams = [];
-
-        // Admin-provided startedAt (explicit override) — always parameterized
-        if (adminStartedAt) {
-            extraParams.push(new Date(adminStartedAt).toISOString());
-            extraClauses += `, started_at = $${baseParams.length + extraParams.length}`;
-        } else if (
-            ['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(status) &&
-            !['IN_PROGRESS', 'ON_MY_WAY', 'ARRIVED'].includes(prevStatus)
-        ) {
-            // A job entering active execution for the first time (from PLANNED or
-            // CARRY_FORWARD) gets a fresh started_at right now. Previously this
-            // only fired when status became IN_PROGRESS specifically — so a job
-            // that went CARRY_FORWARD → ON_MY_WAY → ARRIVED kept its OLD started_at
-            // from before the carry-forward all the way through those two states,
-            // which is why the Operations Monitor timeline showed a stale start
-            // time (or fell back to a hardcoded 08:00) until it finally reached
-            // IN_PROGRESS. Resetting on the first active-state transition means
-            // the displayed start time is always the real, current one.
-            extraClauses += ', started_at = NOW()';
+        // ── NORMAL STATUS TRANSITIONS (fully parameterized, every column assigned ONCE — QA-09) ──
+        // The SET list is built in ActivityUpdateBuilder (backend/activityUpdate.js): one Map entry
+        // per column, so a status rule and a client-echoed timestamp can never produce
+        // "multiple assignments to same column" again.
+        if (status === 'CANCELLED') {
+            delete mergedDetails.primaryEngineerId;
+            delete mergedDetails.supportingEngineerIds;
+            // A cancellation is not a completion: completed_at is cleared by tsPlan, started_at is kept.
+            // The cancellation time is recorded once, in details, from the server clock (F-4); a client
+            // completedAt is ignored. A repeated cancel never overwrites it.
+            if (prevStatus !== 'CANCELLED' && !existingDetails.cancelledAt) {
+                mergedDetails.cancelledAt = nowIso;
+            } else if (existingDetails.cancelledAt) {
+                mergedDetails.cancelledAt = existingDetails.cancelledAt;
+            }
         }
 
-        // Admin-provided completedAt (explicit override) — always parameterized
-        if (adminCompletedAt) {
-            extraParams.push(new Date(adminCompletedAt).toISOString());
-            extraClauses += `, completed_at = $${baseParams.length + extraParams.length}`;
-        } else if (status === 'DONE' && prevStatus !== 'DONE') {
-            extraClauses += ', completed_at = NOW()';
-            // Record completed visit in history — parameterized jsonb
-            const visitRecord = {
+        // Visit history: stored records are never dropped; records the client echoes back are
+        // added only if not already stored; a completed visit is appended once.
+        const merged = mergeVisitHistory(existingHistory, incomingHistory);
+        const nextHistory = merged.history;
+        let historyChanged = merged.changed;
+        // Rescheduling a started job back to PLANNED clears started_at: keep the previous start in history first.
+        const rescheduleRec = planRescheduleRecord({
+            status, prevStatus,
+            stored: current.rows[0],
+            history: nextHistory,
+            team: {
+                leadTechId: current.rows[0].lead_tech_id || leadTechId,
+                primaryEngineerId: existingDetails.primaryEngineerId || null,
+                supportingEngineerIds: existingDetails.supportingEngineerIds || [],
+                assistantTechIds: existingDetails.assistantTechIds || [],
+                freelancers: existingDetails.freelancers || []
+            },
+            remarks: mergedDetails.currentVisitRemark || existingDetails.remarks || '',
+            nowIso
+        });
+        if (rescheduleRec) { nextHistory.push(rescheduleRec); historyChanged = true; }
+        // F-4 correction: keep the values it replaces, then record who changed them (auditable)
+        const correctionRec = correctionApplied
+            ? planTimeCorrectionRecord({ stored: current.rows[0], plan: tsPlan, by: req.user.id, role: req.user.role, nowIso })
+            : null;
+        if (correctionRec) { nextHistory.push(correctionRec); historyChanged = true; }
+        // F-5: exactly ONE DONE record, written here by the server on the transition into DONE
+        // (client-sent DONE records were already discarded by mergeVisitHistory).
+        if (tsPlan.recordDoneVisit) {
+            nextHistory.push({
                 date: current.rows[0].planned_date || plannedDate,
-                startedAt: current.rows[0].started_at || null,
-                completedAt: new Date().toISOString(),
+                startedAt: (tsPlan.started.mode === 'value' ? tsPlan.started.value : current.rows[0].started_at) || null,
+                completedAt: tsPlan.completed.mode === 'value' ? tsPlan.completed.value : nowIso,
                 assignedTeam: {
                     leadTechId: leadTechId || current.rows[0].lead_tech_id,
                     primaryEngineerId: mergedDetails.primaryEngineerId || primaryEngineerId,
@@ -3846,44 +4319,42 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                 },
                 remarks: mergedDetails.remarks || details.remarks || mergedDetails.completionNote || '',
                 status: 'DONE'
-            };
-            const updatedHistory = [...existingHistory, visitRecord];
-            extraParams.push(JSON.stringify(updatedHistory));
-            extraClauses += `, visit_history = $${baseParams.length + extraParams.length}::jsonb`;
+            });
+            historyChanged = true;
         }
-
-        // Only clear timestamps when EXPLICITLY rescheduling (prevStatus was not PLANNED).
-        // IMPORTANT: We do NOT wipe data when an admin edits a PLANNED activity normally.
-        if (status === 'PLANNED' && prevStatus !== 'PLANNED') {
-            // Rescheduling back to planned — clear execution timestamps only
-            extraClauses += ', started_at = NULL, completed_at = NULL';
-        }
-        if (status === 'CANCELLED') {
-            extraClauses += ', started_at = NULL, completed_at = NULL';
-            delete mergedDetails.primaryEngineerId;
-            delete mergedDetails.supportingEngineerIds;
-            // Re-apply mergedDetails since we mutated it after setting baseParams
-            baseParams[9] = JSON.stringify(mergedDetails);
-        }
-
-        // id is always the last param
-        const allParams = [...baseParams, ...extraParams, req.params.id];
-        const idParam = `$${allParams.length}`;
 
         // Handle cancellationReason for cancelled activities
         const cancellationReason = req.body.cancellationReason || mergedDetails.cancellationReason || null;
-        const visitHistory = req.body.visitHistory
-            ? JSON.stringify(req.body.visitHistory)
-            : (mergedDetails.visitHistory ? JSON.stringify(mergedDetails.visitHistory) : null);
-        const visitHistoryClause = visitHistory ? `, visit_history = $${allParams.length + 1}::jsonb` : '';
-        const cancelClause = cancellationReason ? `, cancellation_reason = $${allParams.length + (visitHistory ? 2 : 1)}` : '';
-        if (visitHistory) allParams.push(visitHistory);
-        if (cancellationReason) allParams.push(cancellationReason);
 
-        await pool.query(
-            `UPDATE activities SET type=$1, priority=$2, status=$3, planned_date=$4, customer_id=COALESCE($5, customer_id), site_id=$6, lead_tech_id=$7, description=$8, duration_hours=$9, details=$10, updated_at=NOW()${extraClauses}${visitHistoryClause}${cancelClause} WHERE id=${idParam}`,
-            allParams
-        );
+        const update = new ActivityUpdateBuilder()
+            .param('type', type)
+            .param('priority', priority)
+            .param('status', status)
+            .param('planned_date', plannedDate)
+            .param('customer_id', safeCustomerId, n => `COALESCE($${n}, customer_id)`)
+            .param('site_id', siteId)
+            .param('lead_tech_id', leadTechId)
+            .param('description', description)
+            .param('duration_hours', durationHours)
+            .param('details', JSON.stringify(mergedDetails), n => detailsKeepingPhotos(n))
+            .raw('updated_at', "GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')")
+            .timestamp('started_at', tsPlan.started)
+            .timestamp('completed_at', tsPlan.completed);
+        if (historyChanged) update.param('visit_history', JSON.stringify(nextHistory), n => `$${n}::jsonb`);
+        if (cancellationReason) update.param('cancellation_reason', cancellationReason);
+        const built = update.build(req.params.id);
+
+        await tx.query(built.sql, built.params);
+        if (incomingPhotos.length > 0) await tx.query(SQL_ACTIVITY_APPEND_PHOTOS, [JSON.stringify(incomingPhotos), req.params.id]);
+
+        // ── SAR Sync (QA-08): keep the linked SAR's status in sync with this activity ──
+        // Same transaction as the update: if the sync fails the whole request fails
+        // (HTTP 500, nothing saved) instead of answering 200 or half-saving.
+        // LINKED SARs are excluded inside the helper.
+        await syncSarWithActivity(req.params.id, status, tx, 'activity_update');
+        const newVersion = await readVersion();
+        await tx.query('COMMIT');
+        txOpen = false;
 
         logAudit(req, {
             action: prevStatus !== status ? 'STATUS_CHANGE' : 'UPDATE',
@@ -3901,17 +4372,32 @@ app.put("/api/activities/:id", authenticate, writeRateLimit, async (req, res) =>
                   ),
         });
 
-        // ── SAR Sync: keep the linked SAR's status in sync with this activity ──
-        // Uses linked_activity_id as the primary join key (robust to missing
-        // details.salesRequestId on older records). LINKED SARs are excluded.
-        await syncSarWithActivity(req.params.id, status, null, 'activity_update');
-
-        res.json({ok: true});
-    } catch(e) { console.error(e); res.status(500).json({error: "Failed to update activity"}); }
+        if (correctionRec) {
+            logAudit(req, {
+                action: 'UPDATE',
+                entityType: 'ACTIVITY',
+                entityId: req.params.id,
+                entityLabel: mergedDetails.customerName || req.params.id,
+                details: { timeCorrection: { previous: correctionRec.previous, corrected: correctionRec.corrected } },
+            });
+        }
+        res.json({ ok: true, version: newVersion });
+    } catch(e) {
+        if (e instanceof ActivityValidationError) return res.status(400).json({ error: e.message });
+        if (e instanceof ActivityForbiddenError) return res.status(403).json({ error: e.message });
+        if (e instanceof ActivityConflictError) return res.status(e.status).json({ error: e.message, code: e.code, current: e.current || null });
+        if (e && e.code === '55P03') return res.status(409).json({ error: "This job is being updated by someone else. Please try again." });
+        console.error(e); res.status(500).json({error: "Failed to update activity"});
+    } finally {
+        if (tx) {
+            if (txOpen) { try { await tx.query('ROLLBACK'); } catch (_) { /* connection already gone */ } }
+            tx.release();
+        }
+    }
 });
 
 // DELETE Activity
-app.delete("/api/activities/:id", authenticate, deleteRateLimit, async (req, res) => {
+app.delete("/api/activities/:id", authenticate, requireRoles(STAFF_MANAGERS), deleteRateLimit, async (req, res) => {
     try {
         const existing = await pool.query("SELECT customer_name FROM activities WHERE id=$1", [req.params.id]);
         await pool.query("DELETE FROM activities WHERE id=$1", [req.params.id]);
@@ -4388,7 +4874,7 @@ app.get('/api/dashboard/pending-sales-requests', authenticate, async (req, res) 
 });
 
 /* ── POST /api/sales-appointment-requests ── */
-app.post('/api/sales-appointment-requests', authenticate, writeRateLimit, async (req, res) => {
+app.post('/api/sales-appointment-requests', authenticate, requireRoles(ROLE.ADMIN, ROLE.TEAM_LEAD, ROLE.SALES), writeRateLimit, async (req, res) => {
     try {
         const role = req.user.role;
         const userId = req.user.id;
@@ -5710,25 +6196,6 @@ Return ONLY the reply text, no JSON, no markdown.`;
       }
 }  // end handleIncomingMessage
 
-initDb().then(() => {
-  // --- Uncaught Error Handlers (Phase 3) ---
-process.on('uncaughtException', (err) => {
-    console.error(JSON.stringify({ level: 'FATAL', type: 'uncaughtException', error: err.message, stack: err.stack, timestamp: new Date().toISOString() }));
-    process.exit(1);
-});
-process.on('unhandledRejection', (reason) => {
-    console.error(JSON.stringify({ level: 'ERROR', type: 'unhandledRejection', error: String(reason), timestamp: new Date().toISOString() }));
-});
-
-// --- Global Express Error Handler (Phase 3) ---
-app.use((err, req, res, next) => {
-    console.error(JSON.stringify({ level: 'ERROR', type: 'expressError', url: req.url, method: req.method, error: err.message, timestamp: new Date().toISOString() }));
-    if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-// --- AUTO CARRY-FORWARD CRON (runs at 10 PM Qatar / 7 PM UTC daily) ---
 // ═══════════════════════════════════════════════════════════════════════════════
 // SAR ↔ Activity status synchronisation helper
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -5809,6 +6276,25 @@ const syncSarWithActivity = async (activityId, newActivityStatus, client = null,
     return { updated: true, sarId: sar.id };
 };
 
+initDb().then(() => {
+  // --- Uncaught Error Handlers (Phase 3) ---
+process.on('uncaughtException', (err) => {
+    console.error(JSON.stringify({ level: 'FATAL', type: 'uncaughtException', error: err.message, stack: err.stack, timestamp: new Date().toISOString() }));
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error(JSON.stringify({ level: 'ERROR', type: 'unhandledRejection', error: String(reason), timestamp: new Date().toISOString() }));
+});
+
+// --- Global Express Error Handler (Phase 3) ---
+app.use((err, req, res, next) => {
+    console.error(JSON.stringify({ level: 'ERROR', type: 'expressError', url: redactUrl(req.url), method: req.method, error: err.message, timestamp: new Date().toISOString() }));
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// --- AUTO CARRY-FORWARD CRON (runs at 10 PM Qatar / 7 PM UTC daily) ---
 // ═══════════════════════════════════════════════════════════════════════════════
 // Startup reconciliation — repair SARs whose status diverged from their linked
 // activity (e.g. after a bug that caused early returns to skip SAR sync).
@@ -5893,7 +6379,7 @@ const runAutoCarryForward = async () => {
                                E'[Auto] Not completed by end of day — reschedule required',
                            next_planned_at    = NULL,
                            completed_at       = NOW(),
-                           updated_at         = NOW()
+                           updated_at         = GREATEST(clock_timestamp(), updated_at + interval '1 millisecond')
                      WHERE id = $1
                 `, [row.id]);
                 await syncSarWithActivity(row.id, 'CARRY_FORWARD', client, 'auto_carry_forward');
