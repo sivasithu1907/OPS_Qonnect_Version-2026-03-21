@@ -6,6 +6,7 @@ import {
   X, ExternalLink, Camera, RotateCcw, MessageSquare, 
   Briefcase, UserCheck, Image as ImageIcon, AlertTriangle
 } from 'lucide-react';
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 
 interface CompletedJobSummaryProps {
   type: 'ticket' | 'activity';
@@ -85,7 +86,7 @@ const CompletedJobSummary: React.FC<CompletedJobSummaryProps> = ({ type, item, t
             <h4 className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><User size={10} /> Customer</h4>
             <div className="text-sm font-bold text-slate-800">{customer?.name || (item as any).customerName || 'Unknown'}</div>
             {(isTicket ? (item as Ticket).phoneNumber : customer?.phone) && (
-              <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10} /> {isTicket ? (item as Ticket).phoneNumber : customer?.phone}</div>
+              <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10} /> {formatPhoneDisplay(isTicket ? (item as Ticket).phoneNumber : customer?.phone)}</div>
             )}
           </div>
 

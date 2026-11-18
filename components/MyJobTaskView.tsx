@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Ticket, TicketStatus, TicketType } from '../types';
 import { Phone, MapPin, ShieldCheck, CheckCircle2, Clock, X, Navigation, Play, Car, Home, Camera, RotateCcw, AlertTriangle } from 'lucide-react';
 import { getStatusMeta } from './shared/StatusBadge';
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 
 interface MyJobTaskViewProps {
   ticket: Ticket;
@@ -275,7 +276,7 @@ export const MyJobTaskView: React.FC<MyJobTaskViewProps> = ({ ticket, onUpdateSt
             {ticket.phoneNumber ? (
               <a href={`tel:${ticket.phoneNumber}`} onClick={e=>e.stopPropagation()}
                 className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
-                <Phone size={14}/> Call Customer — {ticket.phoneNumber}
+                <Phone size={14}/> Call Customer — {formatPhoneDisplay(ticket.phoneNumber)}
               </a>
             ) : (
               <div className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs">

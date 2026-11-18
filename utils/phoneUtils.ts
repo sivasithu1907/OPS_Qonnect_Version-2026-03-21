@@ -1,74 +1,94 @@
 
+/**
+ * ONE definition of a customer phone number for the whole application (the backend mirrors it in backend/customers.js `parsePhone`;
+ * a unit test runs both over the same corpus).
+ *
+ * Accepted (all are the same Qatar number, stored as "+97450000001", shown as "+974 5000 0001"):
+ *   50000001 · 5000 0001 · +97450000001 · +974 50000001 · +974 5000 0001 · 97450000001 · 0097450000001
+ * Qatar numbers have exactly 8 digits after 974. A bare number with any other length (e.g. 500000001 = 9 digits) is INVALID —
+ * it is reported, never "fixed". A number written with "+" or "00" and another country code is a legitimate international
+ * number and is kept exactly as written (digits only, 7–15 digits); the Qatar code is never added to it.
+ */
+export type PhoneStatus = 'empty' | 'incomplete' | 'valid' | 'invalid';
+export interface ParsedPhone {
+  status: PhoneStatus;
+  kind: 'qatar' | 'international' | '';
+  /** "+97450000001" when status is valid, otherwise ''. */
+  canonical: string;
+  /** comparison key (same as phoneKey). */
+  key: string;
+  error?: string;
+}
+
+const QATAR_HELP = 'Qatar mobile numbers have 8 digits, e.g. 5000 0001 or +974 5000 0001. For a number outside Qatar start with + and the country code.';
+
+export const parsePhone = (input: unknown): ParsedPhone => {
+  const s = String(input ?? '').trim();
+  const key = phoneKey(s);
+  const out = (status: PhoneStatus, extra: Partial<ParsedPhone> = {}): ParsedPhone => ({ status, kind: '', canonical: '', key, ...extra });
+  if (!s) return out('empty');
+  // only digits, spaces, dots, dashes, brackets and ONE leading "+" are allowed
+  if (/[^\d\s+().\-]/.test(s) || /\+/.test(s.replace(/^\(?\+/, ''))) {
+    return out('invalid', { error: 'Use digits only (spaces, dashes and a leading + are fine).' });
+  }
+  const hasPlus = /^\(?\+/.test(s);
+  let d = s.replace(/\D/g, '');
+  if (!d) return out('incomplete');
+  const explicit = hasPlus || d.startsWith('00');
+  if (!hasPlus && d.startsWith('00')) d = d.slice(2);
+  const qatar = (digits: string): ParsedPhone => ({ status: 'valid', kind: 'qatar', canonical: '+' + digits, key: digits });
+
+  if (explicit) {
+    if (d.startsWith('974')) {
+      const local = d.length - 3;
+      if (local === 8) return qatar(d);
+      if (local < 8) return out('incomplete');
+      return out('invalid', { error: `A Qatar number has 8 digits after +974 (you entered ${local}).` });
+    }
+    if (d.startsWith('0')) return out('invalid', { error: 'A country code cannot start with 0.' });
+    if (d.length > 15) return out('invalid', { error: 'An international number has at most 15 digits.' });
+    if (d.length < 7) return out('incomplete');
+    return { status: 'valid', kind: 'international', canonical: '+' + d, key: d };
+  }
+  // no "+" / "00": a Qatar number, written locally (8 digits) or with 974 (11 digits)
+  if (d.length < 8) return out('incomplete');
+  if (d.length === 8) return qatar('974' + d);
+  if (d.startsWith('974')) {
+    if (d.length === 11) return qatar(d);
+    if (d.length < 11) return out('incomplete');
+    return out('invalid', { error: `A Qatar number has 8 digits after 974 (you entered ${d.length - 3}).` });
+  }
+  return out('invalid', { error: `Qatar mobile numbers have 8 digits (you entered ${d.length}). For a number outside Qatar start with + and the country code.` });
+};
+
+/** The form value to STORE: "+97450000001" for every valid Qatar spelling; the digits with "+" for an international number. */
 export const normalizePhone = (input: unknown): string => {
-  // 1. Safe conversion to string (handles null, undefined, numbers)
-  const str = String(input ?? "");
-
-  // 2. Remove all non-digit and non-plus characters
-  let clean = str.replace(/[^0-9+]/g, '');
-
-  // 3. Handle generic cases
-  if (!clean) return '';
-
-  // 4. Qatar Default Logic
-  // If input is exactly 8 digits (e.g. 55552222), assume Qatar and append +974
-  if (/^[0-9]{8}$/.test(clean)) {
-    return `+974${clean}`;
-  }
-
-  // If it starts with 00, replace with +
-  if (clean.startsWith('00')) {
-    clean = '+' + clean.substring(2);
-  }
-
-  // If no + prefix, usually ensure it has one if it looks like a local number context
-  if (!clean.startsWith('+')) {
-      if (clean.startsWith('974')) {
-          clean = '+' + clean;
-      } else {
-          // If ambiguous/short, we just return the clean digits/chars 
-          // to allow partial matching in search, or default to Qatar if it matches length rules later.
-          // For strict normalization we might prepend +974, but for partial search terms (e.g. "3300") 
-          // we don't want to force +9743300 unless it's a full number.
-          // However, the previous logic defaulted to +974 for non-plus inputs.
-          // We will stick to the safer behavior of only adding +974 if it looks like a full number 
-          // OR if we want to force Qatari context. 
-          // Reverting to previous logic: Default to +974 if it looks like a number.
-          if (clean.length === 8) return `+974${clean}`;
-      }
-  }
-
-  return clean;
+  const p = parsePhone(input);
+  return p.status === 'valid' ? p.canonical : String(input ?? '').trim();
 };
 
 export const validatePhone = (input: unknown): { isValid: boolean; error?: string; formatted?: string } => {
-  const formatted = normalizePhone(input);
-
-  if (!formatted) return { isValid: false, error: 'Invalid input format' };
-
-  // Check Qatar (+974) specifically
-  if (formatted.startsWith('+974')) {
-    const localPart = formatted.substring(4);
-    if (localPart.length !== 8) {
-      return { isValid: false, error: 'Qatar numbers must be exactly 8 digits.', formatted };
-    }
-  } else {
-    // Basic international check (E.164 usually 7-15 digits)
-    if (formatted.length < 8 || formatted.length > 16) {
-        return { isValid: false, error: 'Invalid international number length.', formatted };
-    }
-  }
-
-  return { isValid: true, formatted };
+  const p = parsePhone(input);
+  if (p.status === 'valid') return { isValid: true, formatted: p.canonical };
+  if (p.status === 'empty') return { isValid: false, error: 'Phone number is required.' };
+  if (p.status === 'incomplete') return { isValid: false, error: `The phone number is incomplete. ${QATAR_HELP}` };
+  return { isValid: false, error: p.error || 'Invalid phone number.' };
 };
 
+/** "+974 5000 0001" for any valid Qatar spelling (including numbers stored in an older format); everything else is shown as stored. */
 export const formatPhoneDisplay = (input: unknown): string => {
-    const e164 = String(input ?? "");
-    if (!e164) return '';
-    // Format +974 5555 2222
-    if (e164.startsWith('+974') && e164.length === 12) {
-        return `${e164.substring(0, 4)} ${e164.substring(4, 8)} ${e164.substring(8, 12)}`;
-    }
-    return e164;
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+  const p = parsePhone(raw);
+  if (p.status === 'valid' && p.kind === 'qatar') return `+974 ${p.canonical.slice(4, 8)} ${p.canonical.slice(8)}`;
+  if (p.status === 'valid') return p.canonical;
+  return raw;
+};
+
+/** `tel:` target for a stored/typed number: canonical when valid, otherwise exactly what is stored. */
+export const phoneTel = (input: unknown): string => {
+  const p = parsePhone(input);
+  return p.status === 'valid' ? p.canonical : String(input ?? '').trim();
 };
 
 /**

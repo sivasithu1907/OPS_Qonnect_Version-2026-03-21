@@ -27,6 +27,9 @@ import api from '../services/api';
 import { searchCustomers, CustomerMatch } from '../utils/customerSearch';
 import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
 import CustomerMatchList from './shared/CustomerMatchList';
+import { lookupCustomers, CustomerLookup } from '../utils/useCustomerLookup';
+import { PhoneLookupNotice } from './shared/CustomerLookupNotice';
+import { validatePhone, samePhone, formatPhoneDisplay } from '../utils/phoneUtils';
 import { SarListSkeleton } from './shared/Skeletons';
 import { EmptySAR } from './shared/EmptyState';
 import { ContextualActions, callAction, whatsappAction, navigateAction, odooAction } from './shared/ContextualActions';
@@ -269,6 +272,12 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     setCustResults(searchCustomers(custList, custSearch, { limit: 8, fuzzy: false, minDigits: 4 }));
   }, [custSearch, custList, selectedCustomerId]);
 
+  // The number typed in "Contact Number": invalid / "will be saved as" / "already registered" (until a client is picked).
+  const phoneLookup = useMemo<CustomerLookup | null>(
+    () => (!showForm || selectedCustomerId ? null : lookupCustomers(custList, '', formData.contactNumber)),
+    [showForm, selectedCustomerId, custList, formData.contactNumber]
+  );
+
   // Name lookup under "Customer Name": existing clients with the same / similar name (close spellings labelled as suggestions).
   const nameResults = useMemo(() => {
     if (!showForm || selectedCustomerId || nameDismissed) return [] as CustomerMatch<any>[];
@@ -435,7 +444,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     setFormData(prev => ({
       ...prev,
       customerName:  c.name || '',
-      contactNumber: c.phone || prev.contactNumber,
+      contactNumber: formatPhoneDisplay(c.phone) || prev.contactNumber,
       locationUrl:   urlFree && url ? url : prev.locationUrl,
       houseNumber:   bldFree && building ? building : prev.houseNumber,
     }));
@@ -464,8 +473,15 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
   const validateForm = () => {
     const errs: Record<string, string> = {};
     if (!formData.customerName.trim())   errs.customerName  = 'Customer name is required';
-    const phoneDigits = formData.contactNumber.replace(/[^0-9]/g, '');
-    if (phoneDigits.length < 8)          errs.contactNumber = 'Enter a valid phone number (min 8 digits)';
+    // A picked client keeps its stored number as it is; a typed or changed number must be a valid Qatar / international number,
+    // and a number that already belongs to a client must be used through "Use Existing Customer" (never typed in again).
+    const picked = selectedCustomerId ? custList.find(c => c.id === selectedCustomerId) : undefined;
+    const keepsStored = !!selectedCustomerId && (!picked || samePhone(picked.phone, formData.contactNumber));
+    if (!keepsStored) {
+      const pv = validatePhone(formData.contactNumber);
+      if (!pv.isValid) errs.contactNumber = pv.error || 'Enter a valid phone number';
+      else if (!selectedCustomerId && phoneLookup?.existing) errs.contactNumber = `This mobile number is already registered to ${phoneLookup.existing.name}. Use the existing customer.`;
+    }
     if (!formData.locationUrl.trim())    errs.locationUrl   = 'Location URL is required';
     if (!formData.houseNumber.trim())    errs.houseNumber   = 'House/Building number is required';
     const isTroubleshooting = formData.activityType === 'Troubleshooting';
@@ -484,7 +500,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
       const payload = {
         customerId:      selectedCustomerId,
         customerName:    formData.customerName.trim(),
-        contactNumber:   formData.contactNumber.trim(),
+        contactNumber:   (validatePhone(formData.contactNumber).formatted) || formData.contactNumber.trim(),
         locationUrl:     formData.locationUrl.trim(),
         houseNumber:     formData.houseNumber.trim(),
         odooReference:   formData.odooReference.trim(),
@@ -886,8 +902,14 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           custLoading={custLoading}
           existingJobMatches={existingJobMatches}
           checkingExistingJob={checkingExistingJob}
-          onCustSearchChange={v => { setCustSearch(v); }}
+          onCustSearchChange={v => {
+            setCustSearch(v);
+            // A different number typed after a client was picked means a different client: drop the pick (never link a request to the wrong one).
+            const pk = selectedCustomerId ? custList.find(c => c.id === selectedCustomerId) : undefined;
+            if (pk && !samePhone(pk.phone, v)) setSelectedCustomerId(undefined);
+          }}
           onSelectCustomer={selectCustomer}
+          phoneLookup={phoneLookup}
           onToggleServiceCat={toggleServiceCat}
           onFieldChange={(field, value) => {
             if (field === 'customerName') setNameDismissed(false);
@@ -1434,7 +1456,7 @@ const RequestCard: React.FC<CardProps> = ({ request: r, canEdit, canDelete, isSc
             </div>
             <h3 className="font-bold text-slate-900 text-base leading-snug">{r.customerName}</h3>
             <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm text-slate-500">
-              <span className="flex items-center gap-1 min-w-0"><Phone size={12} className="shrink-0" />{r.contactNumber}</span>
+              <span className="flex items-center gap-1 min-w-0"><Phone size={12} className="shrink-0" />{formatPhoneDisplay(r.contactNumber)}</span>
               {r.houseNumber && <span className="flex items-center gap-1 min-w-0"><Building size={12} className="shrink-0" /><span className="truncate">{r.houseNumber}</span></span>}
               {/* Odoo reference is sometimes a long or occasionally malformed
                   URL (e.g. two links pasted together with no separator) —
@@ -1540,6 +1562,7 @@ interface FormModalProps {
   salesLeadName: string;
   onCustSearchChange: (v: string) => void;
   onSelectCustomer: (c: any) => void;
+  phoneLookup: CustomerLookup | null;
   onToggleServiceCat: (c: string) => void;
   onFieldChange: (field: string, value: any) => void;
   onClose: () => void;
@@ -1550,7 +1573,7 @@ const FormModal: React.FC<FormModalProps> = ({
   editing, formData, formErrors, submitting,
   custResults, nameResults, onDismissNameResults, locConflict, onUseClientLocation, onKeepJobLocation,
   custLoading, existingJobMatches, checkingExistingJob, salesLeadName,
-  onCustSearchChange, onSelectCustomer, onToggleServiceCat, onFieldChange,
+  onCustSearchChange, onSelectCustomer, phoneLookup, onToggleServiceCat, onFieldChange,
   onClose, onSubmit
 }) => (
   <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
@@ -1605,7 +1628,7 @@ const FormModal: React.FC<FormModalProps> = ({
                 // Drive customer search from contact number
                 onCustSearchChange(v);
               }}
-              placeholder="+974 XXXX XXXX — type to search existing clients"
+              placeholder="5000 0001 or +974 5000 0001 — type to search existing clients"
               className={`${INPUT_STYLES} ${formErrors.contactNumber ? 'border-red-400' : ''}`}
             />
             {custLoading && (
@@ -1632,6 +1655,7 @@ const FormModal: React.FC<FormModalProps> = ({
           <p className="mt-1 text-xs text-slate-400">
             Type phone number to search — select existing client or enter name below to create new
           </p>
+          {phoneLookup && <PhoneLookupNotice lookup={phoneLookup} prefix="sar" onUseExisting={onSelectCustomer} />}
           <FieldError msg={formErrors.contactNumber} />
 
           {/* Existing-job heads-up — non-blocking. Sales has no visibility
@@ -1912,7 +1936,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           {/* Request summary */}
           <div className="bg-slate-50 rounded-xl p-4 text-sm space-y-1">
             <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Client</span><span className="font-semibold text-slate-800">{r.customerName}</span></div>
-            <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Phone</span><span className="text-slate-700">{r.contactNumber}</span></div>
+            <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Phone</span><span className="text-slate-700">{formatPhoneDisplay(r.contactNumber)}</span></div>
             <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Type</span><span className="text-slate-700">{r.activityType}</span></div>
             <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Service</span><span className="text-slate-700">{r.serviceCategory}</span></div>
             {r.remarks && <div className="flex gap-2"><span className="text-slate-500 w-24 shrink-0">Remarks</span><span className="text-slate-600 italic">{r.remarks}</span></div>}
@@ -2202,7 +2226,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
 
           <SectionLabel icon={<UserIcon size={11} />}>Client Information</SectionLabel>
           <div className="space-y-0">
-            {row('Contact Number', r.contactNumber)}
+            {row('Contact Number', formatPhoneDisplay(r.contactNumber))}
             {row('House / Building', r.houseNumber)}
             {row('Location URL', r.locationUrl, r.locationUrl)}
           </div>
@@ -2336,7 +2360,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{MATCH_STATUS_LABEL[m.status] || m.status}</span>
                             </div>
                             <div className="mt-0.5 text-slate-600">
-                              {m.customerName} {m.contactNumber ? `· ${m.contactNumber}` : ''}
+                              {m.customerName} {m.contactNumber ? `· ${formatPhoneDisplay(m.contactNumber)}` : ''}
                             </div>
                             <div className="text-slate-400 mt-0.5">
                               {dateLabel} {eng?.name ? `· ${eng.name}` : ''} {m.activityType ? `· ${m.activityType}` : ''} {m.serviceCategory ? `· ${m.serviceCategory}` : ''}

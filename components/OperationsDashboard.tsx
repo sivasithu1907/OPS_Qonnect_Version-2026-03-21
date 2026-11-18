@@ -9,6 +9,7 @@ import {
   Zap, ArrowRight, X, ExternalLink, Users, ChevronRight, User, Phone,
   FileText, MessageSquare, RotateCcw, Briefcase
 } from 'lucide-react';
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 
 interface OperationsDashboardProps {
   teams: Team[];
@@ -1286,9 +1287,9 @@ const OperationsDashboard: React.FC<OperationsDashboardProps> = ({
                                             const phone = t.phoneNumber;
                                             if (phone && phone.length > 8 && /^\+?\d/.test(phone)) return phone;
                                             const c = customers?.find(cx => cx.id === t.customerId);
-                                            return c?.phone || phone || 'N/A';
+                                            return formatPhoneDisplay(c?.phone || phone) || 'N/A';
                                         })()) : 
-                                        (customers?.find(c => c.id === (selectedItem.data as Activity).customerId)?.phone || 'Contact on file')}
+                                        (formatPhoneDisplay(customers?.find(c => c.id === (selectedItem.data as Activity).customerId)?.phone) || 'Contact on file')}
                                  </div>
                              </div>
                          </div>

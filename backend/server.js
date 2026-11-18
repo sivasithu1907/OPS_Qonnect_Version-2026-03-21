@@ -22,7 +22,7 @@ import {
 } from './photos.js';
 
 import { allowed, isEnabled, guardedFetch, callN8n, switchStates, assertStagingIsolation, logBlocked } from './integrations.js';
-import { phoneKey, phoneKeySql, canonicalPhone, findCustomerByPhone, lockCustomerPhone, withCustomerPhoneLock, customerSummary, validateGoogleMapsUrl, hasUnsafeScheme } from './customers.js';
+import { phoneKey, phoneKeySql, canonicalPhone, strictPhone, findCustomerByPhone, lockCustomerPhone, withCustomerPhoneLock, customerSummary, validateGoogleMapsUrl, hasUnsafeScheme } from './customers.js';
 
 dotenv.config();
 // APP_ENV=staging: refuse to start if the configuration could reach production services or real external APIs.
@@ -1540,6 +1540,13 @@ async function resolveCustomerForTicket(client, { customerId, customerName, phon
       return existing.id;           // the existing client wins; no second record is created
     }
   }
+  // A typed number is validated when this request would put it on a customer record (a new customer, or one that has no number yet).
+  // An existing client that is only being linked keeps whatever it already has — nothing is validated or rewritten for it.
+  const sp = phoneNumber ? strictPhone(phoneNumber) : { ok: true, canonical: '' };
+  const idRow = await client.query('SELECT phone FROM customers WHERE id = $1', [customerId]);
+  if (!sp.ok && (!idRow.rows[0] || !String(idRow.rows[0].phone || '').trim())) {
+    const err = new Error(sp.error); err.code = 'INVALID_PHONE'; err.httpStatus = 400; throw err;
+  }
   await client.query(`
     INSERT INTO customers (id, name, phone, address, building_number)
     VALUES ($1, $2, $3, $4, $5)
@@ -1547,7 +1554,7 @@ async function resolveCustomerForTicket(client, { customerId, customerName, phon
       phone           = COALESCE(NULLIF(customers.phone,''), NULLIF(EXCLUDED.phone,'')),
       building_number = COALESCE(NULLIF(customers.building_number,''), NULLIF(EXCLUDED.building_number,'')),
       address         = COALESCE(NULLIF(customers.address,''), NULLIF(EXCLUDED.address,''))
-  `, [customerId, customerName, (phoneNumber ? canonicalPhone(phoneNumber) : '') || '', locationUrl || '', houseNumber || '']);
+  `, [customerId, customerName, sp.ok ? (sp.canonical || '') : '', locationUrl || '', houseNumber || '']);
   return customerId;
 }
 
@@ -1621,6 +1628,7 @@ app.post("/api/tickets", authenticate, requireRoles(STAFF_MANAGERS), writeRateLi
     res.status(201).json(ticket);
   } catch (e) {
     await client.query('ROLLBACK');
+    if (e && e.code === 'INVALID_PHONE') return res.status(400).json({ error: e.message, code: 'INVALID_PHONE' });
     console.error("Ticket creation error:", e);
     res.status(500).json({ error: "Failed to create ticket and customer" });
   } finally {
@@ -2133,10 +2141,16 @@ app.post("/api/customers", authenticate, requireRoles(STAFF_MANAGERS), writeRate
       if (!v.ok) return res.status(400).json({ error: `Google Maps URL: ${v.error}`, code: 'INVALID_LOCATION' });
     }
 
-    const canonical = phone ? canonicalPhone(phone) : null;
-    const key = phoneKey(phone);
+    // The number is validated strictly (Qatar = 8 digits; "+"/"00" + another country code = international). Nothing is "fixed" silently.
+    let canonical = null;
+    if (phone && String(phone).trim()) {
+      const sp = strictPhone(phone);
+      if (!sp.ok) return res.status(400).json({ error: sp.error, code: sp.code });
+      canonical = sp.canonical;
+    }
+    const key = phoneKey(canonical || phone);
 
-    const out = await withCustomerPhoneLock(pool, key ? phone : null, async (client, existing) => {
+    const out = await withCustomerPhoneLock(pool, key ? canonical : null, async (client, existing) => {
       if (key && key.length > 4 && existing) return { existing };
       const id = await nextCustomerId(client);
       const { rows } = await client.query(
@@ -2247,9 +2261,16 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
     );
     if (!before.rows[0]) return res.status(404).json({ error: "Not found" });
 
-    // A number written in any format is stored in one canonical format.
-    const newPhone = phone !== undefined ? (phone ? canonicalPhone(phone) : null) : null;
-    const phoneChanged = phone !== undefined && !!phone && phoneKey(phone) !== phoneKey(before.rows[0].phone);
+    // A CHANGED number is validated strictly and stored in the canonical format (+97450000001). A number that is the same as
+    // the stored one (in any spelling) is left exactly as stored — editing a client never rewrites an unchanged phone record.
+    const phoneChanged = phone !== undefined && !!String(phone || '').trim() && phoneKey(phone) !== phoneKey(before.rows[0].phone);
+    let newPhone = null;
+    if (phoneChanged) {
+      const sp = strictPhone(phone);
+      if (!sp.ok) return res.status(400).json({ error: sp.error, code: sp.code });
+      newPhone = sp.canonical;
+      phone = sp.canonical;
+    }
 
     const runUpdate = (db) => db.query(
       `
@@ -4968,6 +4989,11 @@ app.post('/api/sales-appointment-requests', authenticate, requireRoles(ROLE.ADMI
 
         let resolvedCustomerId = customerId || null;
         if (!resolvedCustomerId && phoneKey(rawPhone)) {
+            // A number that would create a NEW client must be a valid Qatar / international number (an existing client is just linked).
+            const sp = strictPhone(rawPhone);
+            if (!sp.ok && !(await findCustomerByPhone(pool, rawPhone))) {
+                return res.status(400).json({ error: sp.error, code: 'INVALID_PHONE' });
+            }
             resolvedCustomerId = await withCustomerPhoneLock(pool, rawPhone, async (dbc, existing) => {
                 if (existing) return existing.id;
                 const custId = `CUST-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -4976,7 +5002,7 @@ app.post('/api/sales-appointment-requests', authenticate, requireRoles(ROLE.ADMI
                      VALUES ($1, $2, $3, $4, $5, true)
                      ON CONFLICT DO NOTHING
                      RETURNING id`,
-                    [custId, customerName.trim(), canonicalPhone(rawPhone),
+                    [custId, customerName.trim(), sp.ok ? sp.canonical : canonicalPhone(rawPhone),
                      locationUrl?.trim() || null, houseNumber?.trim() || null]
                 );
                 return custRes.rows[0] ? custRes.rows[0].id : null;

@@ -12,6 +12,7 @@ import {
   Tag, Home, History, ArrowRight, MessageSquare, UserX, CornerDownRight
 } from 'lucide-react';
 import { SEARCH_INPUT_STYLES } from '../constants';
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 
 interface DashboardProps {
   tickets: Ticket[];
@@ -952,7 +953,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                           <div>
                               <h4 className="text-lg font-bold text-slate-800">{activeModalTicket.customerName}</h4>
                               <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-                                  <span className="flex items-center gap-1"><Phone size={14} aria-hidden="true" /> {activeModalTicket.phoneNumber}</span>
+                                  <span className="flex items-center gap-1"><Phone size={14} aria-hidden="true" /> {formatPhoneDisplay(activeModalTicket.phoneNumber)}</span>
                               </div>
                           </div>
                       </div>
@@ -1131,7 +1132,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tickets, technicians = [], onNavi
                           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
                               <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
                               <div className="text-sm font-bold text-slate-800">{t.customerName}</div>
-                              {t.phoneNumber && <div className="text-xs text-slate-500">{t.phoneNumber}</div>}
+                              {t.phoneNumber && <div className="text-xs text-slate-500">{formatPhoneDisplay(t.phoneNumber)}</div>}
                           </div>
                           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 grid grid-cols-2 gap-2">
                               <div><span className="text-[10px] text-slate-400 block">Type</span><span className="text-xs font-medium">{t.type || '—'}</span></div>

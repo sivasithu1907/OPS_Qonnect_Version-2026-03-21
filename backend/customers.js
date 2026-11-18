@@ -24,6 +24,56 @@ export const canonicalPhone = (input) => {
   return international ? '+' + key : key;
 };
 
+/**
+ * Strict phone parsing for numbers a person TYPES (mirrors utils/phoneUtils.ts `parsePhone`; a unit test runs both over one corpus).
+ * Qatar numbers: exactly 8 digits (bare, or after 974 / +974 / 00974). "+"/"00" + another country code = international, kept as
+ * written (7–15 digits). Anything else is invalid — reported, never silently fixed.
+ * Returns { status: 'empty'|'incomplete'|'valid'|'invalid', kind, canonical, key, error }.
+ */
+export const parsePhone = (input) => {
+  const s = String(input ?? '').trim();
+  const key = phoneKey(s);
+  const out = (status, extra = {}) => ({ status, kind: '', canonical: '', key, ...extra });
+  if (!s) return out('empty');
+  if (/[^\d\s+().\-]/.test(s) || /\+/.test(s.replace(/^\(?\+/, ''))) return out('invalid', { error: 'Use digits only (spaces, dashes and a leading + are fine).' });
+  const hasPlus = /^\(?\+/.test(s);
+  let d = s.replace(/\D/g, '');
+  if (!d) return out('incomplete');
+  const explicit = hasPlus || d.startsWith('00');
+  if (!hasPlus && d.startsWith('00')) d = d.slice(2);
+  const qatar = (digits) => ({ status: 'valid', kind: 'qatar', canonical: '+' + digits, key: digits });
+  if (explicit) {
+    if (d.startsWith('974')) {
+      const local = d.length - 3;
+      if (local === 8) return qatar(d);
+      if (local < 8) return out('incomplete');
+      return out('invalid', { error: `A Qatar number has 8 digits after +974 (you entered ${local}).` });
+    }
+    if (d.startsWith('0')) return out('invalid', { error: 'A country code cannot start with 0.' });
+    if (d.length > 15) return out('invalid', { error: 'An international number has at most 15 digits.' });
+    if (d.length < 7) return out('incomplete');
+    return { status: 'valid', kind: 'international', canonical: '+' + d, key: d };
+  }
+  if (d.length < 8) return out('incomplete');
+  if (d.length === 8) return qatar('974' + d);
+  if (d.startsWith('974')) {
+    if (d.length === 11) return qatar(d);
+    if (d.length < 11) return out('incomplete');
+    return out('invalid', { error: `A Qatar number has 8 digits after 974 (you entered ${d.length - 3}).` });
+  }
+  return out('invalid', { error: `Qatar mobile numbers have 8 digits (you entered ${d.length}). For a number outside Qatar start with + and the country code.` });
+};
+
+/** Validates a typed number for storage. ok:true → `canonical` is the value to store; ok:false → `error` (HTTP 400, code INVALID_PHONE). */
+export const strictPhone = (input) => {
+  const p = parsePhone(input);
+  if (p.status === 'valid') return { ok: true, canonical: p.canonical, key: p.key };
+  const error = p.status === 'incomplete'
+    ? 'The phone number is incomplete. Qatar mobile numbers have 8 digits, e.g. 5000 0001 or +974 5000 0001. For a number outside Qatar start with + and the country code.'
+    : (p.error || 'Invalid phone number.');
+  return { ok: false, error, code: 'INVALID_PHONE' };
+};
+
 /** SQL expression computing the same key from a stored phone column. */
 export const phoneKeySql = (col) => {
   const digits = `regexp_replace(${col}, '[^0-9]', '', 'g')`;

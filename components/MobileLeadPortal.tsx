@@ -24,6 +24,8 @@ import { searchCustomers } from '../utils/customerSearch';
 import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
 import { isDuplicateCustomerError } from '../utils/customerErrors';
 import CustomerMatchList from './shared/CustomerMatchList';
+import { lookupCustomers } from '../utils/useCustomerLookup';
+import { PhoneLookupNotice } from './shared/CustomerLookupNotice';
 import type { ActivityFreelancerAssignment } from '../types';
 
 // --- Props ---
@@ -2200,7 +2202,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                     <div>
                                         <div className="text-xs font-bold text-slate-400 uppercase mb-0.5">Client</div>
                                         <div className="font-bold text-slate-800">{viewTicket.customerName}</div>
-                                        <div className="text-xs text-slate-500 mt-0.5">{viewTicket.phoneNumber}</div>
+                                        <div className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(viewTicket.phoneNumber)}</div>
                                     </div>
                                 </div>
 
@@ -2866,7 +2868,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                 <div className="p-4">
                                                     <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Customer</div>
                                                     <div className="font-bold text-slate-900">{custName}</div>
-                                                    {custPhone && <div className="text-xs text-slate-500 mt-0.5">{custPhone}</div>}
+                                                    {custPhone && <div className="text-xs text-slate-500 mt-0.5">{formatPhoneDisplay(custPhone)}</div>}
                                                     {bldg && <div className="text-xs text-slate-500 mt-0.5">{bldg}</div>}
                                                 </div>
                                                 <div className="flex border-t border-slate-100 divide-x divide-slate-100">
@@ -4190,7 +4192,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                   <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                                   <div className="flex-1 min-w-0">
                                       <p className="text-sm font-bold text-emerald-800 truncate">{actSelectedCustomer.name}</p>
-                                      <p className="text-[10px] text-emerald-600">{actSelectedCustomer.phone}</p>
+                                      <p className="text-[10px] text-emerald-600">{formatPhoneDisplay(actSelectedCustomer.phone)}</p>
                                   </div>
                                   <button
                                       onClick={() => {
@@ -4225,6 +4227,11 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                           placeholder="Enter phone number or name to search..."
                                           className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1"
                                       />
+                                      {/* live reading of the typed number: invalid (e.g. 9 digits) / will be saved as +974 XXXX XXXX */}
+                                      {!/[A-Za-z]/.test(actPhoneSearch) && actPhoneSearch.replace(/\D/g, '').length >= 4 && (
+                                          <PhoneLookupNotice lookup={lookupCustomers(customers, '', actPhoneSearch)} prefix="mobile-act-live" dense
+                                              onUseExisting={c => { setActSelectedCustomer(c); setActPhoneSearch(c.phone || actPhoneSearch); setActNewCustName(''); setActCustError(''); setActDuplicate(null); }} />
+                                      )}
                                   </div>
 
                                   {/* ── Matches: exact number, exact/partial name, then close spellings (labelled suggestions) ── */}
@@ -4530,6 +4537,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm"
                     />
                 </div>
+                {!/[A-Za-z]/.test(ticketPhoneSearch) && ticketPhoneSearch.replace(/\D/g, '').length >= 4 && !ticketSelectedCustomer && (
+                    <PhoneLookupNotice lookup={lookupCustomers(customers, '', ticketPhoneSearch)} prefix="mobile-ticket-live" dense
+                        onUseExisting={c => { setTicketSelectedCustomer(c); setTicketPhoneSearch(c.phone || ticketPhoneSearch); setTicketDuplicate(null); setCreateTicketForm(p => ({...p, customerName: c.name, phone: c.phone || ticketPhoneSearch})); }} />
+                )}
                 {/* Search results: exact number, name, then close spellings (labelled suggestions) */}
                 {ticketPhoneSearch.trim().length >= 2 && !ticketSelectedCustomer && (() => {
                     const found = searchCustomers(customers || [], ticketPhoneSearch, { limit: 5, fuzzy: true, fuzzyLimit: 3, minDigits: 3 });
@@ -4576,7 +4587,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                         <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                         <div>
                             <p className="text-sm font-bold text-emerald-800">{ticketSelectedCustomer.name}</p>
-                            <p className="text-[10px] text-emerald-600">{ticketSelectedCustomer.phone}</p>
+                            <p className="text-[10px] text-emerald-600">{formatPhoneDisplay(ticketSelectedCustomer.phone)}</p>
                         </div>
                         <button onClick={() => { setTicketSelectedCustomer(null); setTicketPhoneSearch(''); setCreateTicketForm(p => ({...p, customerName: '', phone: ''})); }} className="ml-auto text-xs text-slate-400 hover:text-slate-600">Change</button>
                     </div>

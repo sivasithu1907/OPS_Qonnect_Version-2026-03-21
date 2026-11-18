@@ -10,6 +10,7 @@ import {
     ArrowRight, FileSpreadsheet, Printer, Save, Trash2, X, ChevronUp, ChevronDown, CheckSquare, Eye
 } from 'lucide-react';
 import ReactDatePicker from "react-datepicker";
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 
 // Robust import handling for DatePicker across different module systems
 const DatePicker = ((ReactDatePicker as any).default || ReactDatePicker) as typeof ReactDatePicker;
@@ -936,7 +937,7 @@ const ReportsModule: React.FC<ReportsModuleProps> = ({ tickets, activities, tech
                             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
                                 <div className="text-sm font-bold text-slate-800">{cust?.name || d.customerName || 'Unknown'}</div>
-                                {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{cust?.phone || d.phoneNumber}</div>}
+                                {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{formatPhoneDisplay(cust?.phone || d.phoneNumber)}</div>}
                             </div>
                             {/* Service */}
                             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 grid grid-cols-2 gap-2">

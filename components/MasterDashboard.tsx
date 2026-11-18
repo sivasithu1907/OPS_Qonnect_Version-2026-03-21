@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { MasterDashboardSkeleton } from './shared/Skeletons';
 import { EmptyJobsTable } from './shared/EmptyState';
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 
 interface MasterDashboardProps {
   tickets: Ticket[];
@@ -909,7 +910,7 @@ const MasterDashboard: React.FC<MasterDashboardProps> = ({ tickets, activities, 
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase">Customer</h4>
                   <div className="text-sm font-bold text-slate-800">{cust?.name || d.customerName || 'Unknown'}</div>
-                  {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{cust?.phone || d.phoneNumber}</div>}
+                  {(cust?.phone || d.phoneNumber) && <div className="text-xs text-slate-500">{formatPhoneDisplay(cust?.phone || d.phoneNumber)}</div>}
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-1.5">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase">Timing</h4>

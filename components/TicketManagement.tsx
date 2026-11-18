@@ -6,6 +6,8 @@ import { TICKET_CATEGORIES, SEARCH_INPUT_STYLES, INPUT_STYLES } from '../constan
 import { analyzeTicketMessage } from '../services/geminiService';
 import CustomerSelector from './CustomerSelector';
 import { validatePhone, normalizePhone, formatPhoneDisplay, samePhone } from '../utils/phoneUtils';
+import { useCustomerLookup } from '../utils/useCustomerLookup';
+import { PhoneLookupNotice, CustomerSuggestions } from './shared/CustomerLookupNotice';
 import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
 import { isDuplicateCustomerError } from '../utils/customerErrors';
 import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2, Eye, Edit, Phone as PhoneIcon, RotateCcw, Briefcase, ExternalLink } from 'lucide-react';
@@ -244,16 +246,12 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
     }
   }, [isCreateModalOpen]);
 
-  // Duplicate Check Effect
+  // Live lookup for the "New Client Details" block: same number in any spelling (50000001 / +974 5000 0001 / 97450000001)
+  // → "already registered"; typing a name → similar existing clients (suggestions).
+  const newClientLookup = useCustomerLookup(customers, isNewClientMode ? createForm.customerName : '', isNewClientMode ? createForm.phone : '');
   useEffect(() => {
-      if (isNewClientMode && createForm.phone) {
-          // same number in any format (50000001 / +974 5000 0001 / 97450000001)
-          const match = customers.find(c => samePhone(c.phone, createForm.phone));
-          setDuplicateWarning(match || null);
-      } else {
-          setDuplicateWarning(null);
-      }
-  }, [createForm.phone, isNewClientMode, customers]);
+      setDuplicateWarning(isNewClientMode ? newClientLookup.existing : null);
+  }, [newClientLookup.existing, isNewClientMode]);
 
   // Handle external navigation/filtering
   useEffect(() => {
@@ -677,7 +675,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       const baseValid = category !== '' && type !== '' && priority !== '' && description.trim() !== '';
       
       if (isNewClientMode) {
-          return baseValid && customerName.trim() !== '' && phone.trim() !== '' && !duplicateWarning;
+          return baseValid && customerName.trim() !== '' && phone.trim() !== '' && !duplicateWarning && newClientLookup.phone.status !== 'invalid';
       } else {
           return baseValid && customerId !== '';
       }
@@ -1677,6 +1675,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                         className={INPUT_STYLES}
                                         placeholder="Full Name"
                                     />
+                                    <CustomerSuggestions lookup={newClientLookup} prefix="ticket-new-name" show="name"
+                                        onPick={(c) => handleCustomerSelect(customers.find(x => x.id === c.id) || c)}
+                                        heading="Existing clients with this or a similar name — suggestions only, nothing is merged" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mobile Number <span className="text-red-500">*</span></label>
@@ -1686,25 +1687,13 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                         value={createForm.phone}
                                         onChange={(e) => setCreateForm(prev => ({ ...prev, phone: e.target.value }))}
                                         className={INPUT_STYLES}
-                                        placeholder="+974 3300 0000"
+                                        placeholder="5000 0001 or +974 5000 0001"
                                     />
-                                    {duplicateWarning && (
-                                        <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-xs text-red-700 flex flex-col gap-1">
-                                            <div className="flex items-center gap-1 font-bold">
-                                                <AlertCircle size={12} /> Client already exists
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span>Matches: <b>{duplicateWarning.name}</b></span>
-                                                <button 
-                                                    type="button" 
-                                                    onClick={handleSelectExistingFromWarning}
-                                                    className="bg-red-100 hover:bg-red-200 text-red-800 px-2 py-0.5 rounded border border-red-200 font-bold transition-colors"
-                                                >
-                                                    Select Existing
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <PhoneLookupNotice lookup={newClientLookup} prefix="ticket-new" dense
+                                        onUseExisting={(c) => { handleCustomerSelect(customers.find(x => x.id === c.id) || c); setIsNewClientMode(false); setDuplicateWarning(null); }} />
+                                    <CustomerSuggestions lookup={newClientLookup} prefix="ticket-new-phone" show="phone"
+                                        onPick={(c) => { handleCustomerSelect(customers.find(x => x.id === c.id) || c); setIsNewClientMode(false); setDuplicateWarning(null); }}
+                                        heading="Existing clients with a similar number — suggestions only" />
                                 </div>
                             </div>
                         </div>

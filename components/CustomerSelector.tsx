@@ -8,6 +8,8 @@ import { searchCustomers } from '../utils/customerSearch';
 import { isDuplicateCustomerError } from '../utils/customerErrors';
 import { phoneKey, samePhone } from '../utils/phoneUtils';
 import CustomerMatchList from './shared/CustomerMatchList';
+import { useCustomerLookup } from '../utils/useCustomerLookup';
+import { PhoneLookupNotice, CustomerSuggestions } from './shared/CustomerLookupNotice';
 
 interface CustomerSelectorProps {
   customers: Customer[];
@@ -47,6 +49,8 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
   // A client that already owns the typed mobile number (found on this screen or reported by the server).
   const [duplicate, setDuplicate] = useState<Customer | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Live lookup while the "Add New Customer" dialog is open (complete number → already registered; typing → similar names).
+  const newLookup = useCustomerLookup(customers, showCreateModal ? newName : '', showCreateModal ? newPhone : '');
 
   const selectedCustomer = useMemo(
     () => customers.find(c => c.id === selectedCustomerId) || null,
@@ -84,6 +88,14 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectedCustomer]);
 
+  const useExistingCustomer = (c: Customer) => {
+    const full = customers.find(x => x.id === c.id) || c;
+    onSelect(full);
+    setSearchTerm(full.name);
+    setNewName(''); setNewPhone(''); setDuplicate(null); setPhoneError(null); setSaveError(null);
+    setShowCreateModal(false);
+  };
+
   // ── Customer create — runs completely outside parent form via Portal ──
   const handleSaveCustomer = async () => {
     setPhoneError(null);
@@ -102,7 +114,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
 
     const formattedPhone = validation.formatted || newPhone;
     // Same number in any format (50000001 = +974 5000 0001 = 97450000001) is the same client — never create a second one.
-    const exists = customers.find(c => samePhone(c.phone, formattedPhone));
+    const exists = newLookup.existing || customers.find(c => samePhone(c.phone, formattedPhone));
     if (exists) {
       setDuplicate(exists);
       return;
@@ -188,6 +200,8 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
                 />
               </div>
+              <CustomerSuggestions lookup={newLookup} prefix="planner-new-name" show="name" onPick={useExistingCustomer}
+                heading="Existing clients with this or a similar name — suggestions only, nothing is merged" />
             </div>
 
             {/* Phone field */}
@@ -202,16 +216,20 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
                   value={newPhone}
                   onChange={e => { setNewPhone(e.target.value); setPhoneError(null); setDuplicate(null); }}
                   disabled={isSaving}
-                  placeholder="3300 0000"
+                  placeholder="5000 0001 or +974 5000 0001"
                   className={`w-full bg-white text-slate-900 border rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 ${phoneError ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
                 />
               </div>
-              {phoneError && <p className="text-xs text-red-600 mt-1 font-medium">{phoneError}</p>}
-              <p className="text-[10px] text-slate-400 mt-1">Default country: Qatar (+974)</p>
+              {phoneError && !newLookup.existing && newLookup.phone.status !== 'invalid' && <p data-testid="planner-new-phone-submit-error" className="text-xs text-red-600 mt-1 font-medium">{phoneError}</p>}
+              <PhoneLookupNotice lookup={newLookup} prefix="planner-new" onUseExisting={useExistingCustomer}
+                rootTestId="duplicate-customer" useTestId="use-existing-customer" dense />
+              <CustomerSuggestions lookup={newLookup} prefix="planner-new-phone" show="phone" onPick={useExistingCustomer}
+                heading="Existing clients with a similar number — suggestions only" />
+              <p className="text-[10px] text-slate-400 mt-1">Qatar numbers: 8 digits or +974. Other countries: start with + and the country code.</p>
             </div>
 
-            {duplicate && (
+            {duplicate && !(newLookup.existing && newLookup.existing.id === duplicate.id) && (
               <div data-testid="duplicate-customer" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 mb-4">
                 <div className="font-bold flex items-center gap-1.5"><AlertCircle size={14} /> This mobile number is already registered</div>
                 <div className="mt-1 text-sm"><b>{duplicate.name}</b> <span className="font-mono">{formatPhoneDisplay(duplicate.phone)}</span></div>

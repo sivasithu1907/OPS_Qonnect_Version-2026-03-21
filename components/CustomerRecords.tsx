@@ -6,6 +6,8 @@ import { validatePhone, normalizePhone, formatPhoneDisplay, samePhone } from '..
 import { searchCustomers, filterCustomers, MATCH_LABEL } from '../utils/customerSearch';
 import { validateGoogleMapsUrl, getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
 import { isDuplicateCustomerError } from '../utils/customerErrors';
+import { useCustomerLookup } from '../utils/useCustomerLookup';
+import { PhoneLookupNotice, CustomerSuggestions } from './shared/CustomerLookupNotice';
 import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight, ClipboardList } from 'lucide-react';
 import { ContextualActions, whatsappAction, createTicketAction, createActivityAction } from './shared/ContextualActions';
 import { CustomerTimelineSkeleton } from './shared/Skeletons';
@@ -99,6 +101,9 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [duplicateOf, setDuplicateOf] = useState<Customer | null>(null);   // existing client that owns the typed mobile number
+  // What is typed in the form RIGHT NOW (the inputs stay uncontrolled so nothing typed is ever lost) — drives the live lookup.
+  const [liveName, setLiveName] = useState('');
+  const [livePhone, setLivePhone] = useState('');
   const [submitting, setSubmitting] = useState(false);          // blocks a second Save while a request is in flight
   const justCreatedIdRef = useRef<string | null>(null);        // new client to scroll to once it is in the list
   
@@ -268,6 +273,9 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       </div>
   ) : null;
 
+  // Live lookup while the Add / Edit form is open: complete number → "already registered"; typing → similar names (suggestions only).
+  const formLookup = useCustomerLookup(customers, modalType === 'add' ? liveName : '', modalType === 'add' || modalType === 'edit' ? livePhone : '', activeItem?.id);
+
   const handleSuggestionClick = (c: Customer) => {
       setSearchTerm(c.name);
       setPage(1);
@@ -280,6 +288,8 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       setActiveItem(item || null);
       setFormError(null);
       setDuplicateOf(null);
+      setLiveName(item?.name || '');
+      setLivePhone(item?.phone ? formatPhoneDisplay(item.phone) : '');
       if (item?.avatar) {
           setAvatarPreview(item.avatar);
       } else {
@@ -336,7 +346,10 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       
       // Building Number and Location are optional
       // Validate Phone
-      const phoneValidation = validatePhone(rawData.phone);
+      // An unchanged number (any spelling) on an existing client is left exactly as stored — a legacy record stays editable and
+      // nothing is rewritten. A new or changed number must be a valid Qatar (8 digits) or international (+country code) number.
+      const unchangedPhone = !isCreateModal(modalType) && !!activeItem?.phone && samePhone(rawData.phone, activeItem.phone);
+      const phoneValidation: { isValid: boolean; error?: string; formatted?: string } = unchangedPhone ? { isValid: true, formatted: activeItem!.phone } : validatePhone(rawData.phone);
       if (!phoneValidation.isValid) {
           setFormError(phoneValidation.error || 'Invalid phone number');
           return;
@@ -899,23 +912,38 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                         {/* Fields */}
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
-                            <input name="name" defaultValue={activeItem?.name} required disabled={readOnly} className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" placeholder="e.g. John Doe"/>
+                            <input name="name" defaultValue={activeItem?.name} onChange={e => setLiveName(e.target.value)} required disabled={readOnly} autoComplete="off" className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" placeholder="e.g. John Doe"/>
+                            {modalType === 'add' && (
+                              <CustomerSuggestions lookup={formLookup} prefix="client-name" show="name" onPick={(c) => openModal('view', c)}
+                                heading="Existing clients with this or a similar name — suggestions only, nothing is merged" />
+                            )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
                                 <div className="flex">
-                                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 text-slate-500 text-sm font-medium">+974</span>
+                                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 text-slate-500"><Phone size={14} /></span>
                                     <input 
                                         name="phone" 
-                                        defaultValue={activeItem?.phone ? activeItem.phone.replace(/^\+974\s?/, '').replace(/^974/, '') : ''}
+                                        data-testid="client-phone-input"
+                                        defaultValue={activeItem?.phone ? formatPhoneDisplay(activeItem.phone) : ''}
+                                        onChange={e => { setLivePhone(e.target.value); setDuplicateOf(null); }}
+                                        inputMode="tel"
+                                        autoComplete="off"
                                         required 
                                         disabled={readOnly}
                                         className="rounded-none rounded-r-lg flex-1 bg-white border border-slate-300 p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
-                                        placeholder="3300 0000"
+                                        placeholder="5000 0001 or +974 5000 0001"
                                     />
                                 </div>
+                                {!readOnly && (
+                                  <>
+                                    <PhoneLookupNotice lookup={formLookup} prefix="client" onUseExisting={(c) => openModal('view', c)} useLabel="Open existing client" useTestId="client-duplicate-open" />
+                                    <CustomerSuggestions lookup={formLookup} prefix="client-phone" show="phone" onPick={(c) => openModal('view', c)}
+                                      heading="Existing clients with a similar number — suggestions only" />
+                                  </>
+                                )}
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-slate-500 uppercase">
@@ -970,7 +998,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                             />
                         </div>
 
-                        {duplicateOf && (
+                        {duplicateOf && !(formLookup.existing && formLookup.existing.id === duplicateOf.id) && (
                             <div data-testid="client-duplicate" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
                                 <div className="font-semibold">This mobile number already belongs to an existing client.</div>
                                 <div className="mt-1"><span data-testid="client-duplicate-name" className="font-bold">{duplicateOf.name}</span> · <span className="font-mono">{formatPhoneDisplay(duplicateOf.phone)}</span></div>

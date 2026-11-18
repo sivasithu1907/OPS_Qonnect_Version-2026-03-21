@@ -9,6 +9,7 @@ import { MyJobTaskView } from './MyJobTaskView';
 import CompletionFeedbackModal from './CompletionFeedbackModal';
 import { getStatusMeta } from './shared/StatusBadge';
 import { JobDetailSkeleton } from './shared/Skeletons';
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 
 interface MobileTechPortalProps {
   tickets: Ticket[];
@@ -825,7 +826,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                             <div className="text-sm font-bold text-slate-800">{actCustomer?.name || (act as any).customerName || 'Unknown Client'}</div>
                                             {actCustomer?.phone ? (
                                                 <a href={`tel:${actCustomer.phone}`} className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors">
-                                                    <Phone size={14}/> Call Customer — {actCustomer.phone}
+                                                    <Phone size={14}/> Call Customer — {formatPhoneDisplay(actCustomer.phone)}
                                                 </a>
                                             ) : (
                                                 <div className="mt-2 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-50 border border-slate-200 text-slate-400 rounded-xl text-xs">
@@ -1493,7 +1494,7 @@ const MobileTechPortal: React.FC<MobileTechPortalProps> = ({
                                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase">Customer</div>
                                     <div className="text-sm font-bold text-slate-800">{custName}</div>
-                                    {custPhone && <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {custPhone}</div>}
+                                    {custPhone && <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {formatPhoneDisplay(custPhone)}</div>}
                                 </div>
                                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 space-y-1.5">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase">Timing</div>
