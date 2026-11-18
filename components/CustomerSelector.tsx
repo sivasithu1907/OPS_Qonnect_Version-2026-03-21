@@ -10,6 +10,7 @@ import { phoneKey, samePhone } from '../utils/phoneUtils';
 import CustomerMatchList from './shared/CustomerMatchList';
 import { useCustomerLookup } from '../utils/useCustomerLookup';
 import { PhoneLookupNotice, CustomerSuggestions } from './shared/CustomerLookupNotice';
+import ResponsiveModal from './shared/ResponsiveModal';
 
 interface CustomerSelectorProps {
   customers: Customer[];
@@ -160,120 +161,107 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
   };
 
   // ── Portal modal — rendered at document.body, completely outside any <form> ──
+  const closeCreate = () => { setShowCreateModal(false); setNewName(''); setNewPhone(''); setPhoneError(null); setSaveError(null); setDuplicate(null); };
   const createModal = showCreateModal && !onManualCreate
-    ? ReactDOM.createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onMouseDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}
-        >
-          <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 mx-4 animate-in zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg text-slate-900">Add New Customer</h3>
-              <button
-                type="button"
-                onClick={() => { setShowCreateModal(false); setNewName(''); setNewPhone(''); setPhoneError(null); setSaveError(null); setDuplicate(null); }}
-                disabled={isSaving}
-                className="text-slate-400 hover:text-slate-600 disabled:opacity-40"
-              >
-                <X size={20} />
+    ? (
+        <ResponsiveModal
+          portal
+          zIndexClass="z-[9999]"
+          size="sm"
+          title="Add New Customer"
+          testId="planner-new-customer-modal"
+          onClose={closeCreate}
+          busy={isSaving}
+          status={saveError ? (
+            <div role="alert" className="p-2 bg-red-50 border border-red-100 rounded text-xs text-red-700 flex items-start gap-1.5">
+              <AlertCircle size={14} className="shrink-0 mt-0.5" aria-hidden="true" /> <span className="min-w-0 break-words">{saveError}</span>
+            </div>
+          ) : undefined}
+          footer={(
+            <div className="qn-rm-actions">
+              <button type="button" onClick={closeCreate} disabled={isSaving}
+                className="qn-touch px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40">Cancel</button>
+              {/* Save button — type="button" so it NEVER submits any form */}
+              <button type="button" onClick={handleSaveCustomer} disabled={isSaving}
+                className="qn-touch bg-emerald-600 text-white px-5 py-2 rounded-lg font-bold shadow-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+                {isSaving ? (<><Loader2 size={18} className="animate-spin" /> Saving...</>) : (<><Save size={18} /> Save Customer</>)}
               </button>
             </div>
-
-            {/* Name field */}
-            <div className="mb-4">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <User size={16} className="absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={e => { setNewName(e.target.value); setDuplicate(null); }}
-                  disabled={isSaving}
-                  placeholder="e.g. John Doe"
-                  className="w-full bg-white text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60"
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
-                />
-              </div>
-              <CustomerSuggestions lookup={newLookup} prefix="planner-new-name" show="name" onPick={useExistingCustomer}
-                heading="Existing clients with this or a similar name — suggestions only, nothing is merged" />
+          )}
+        >
+          {/* Name field */}
+          <div className="min-w-0">
+            <label htmlFor="planner-new-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">
+              Full Name <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <User size={16} className="absolute left-3 top-3 text-slate-400" aria-hidden="true" />
+              <input
+                id="planner-new-name"
+                type="text"
+                value={newName}
+                onChange={e => { setNewName(e.target.value); setDuplicate(null); }}
+                disabled={isSaving}
+                placeholder="e.g. John Doe"
+                autoComplete="off"
+                className="w-full bg-white text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60"
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
+              />
             </div>
-
-            {/* Phone field */}
-            <div className="mb-4">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                Mobile Number <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Phone size={16} className="absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  value={newPhone}
-                  onChange={e => { setNewPhone(e.target.value); setPhoneError(null); setDuplicate(null); }}
-                  disabled={isSaving}
-                  placeholder="5000 0001 or +974 5000 0001"
-                  className={`w-full bg-white text-slate-900 border rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 ${phoneError ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
-                />
-              </div>
-              {phoneError && !newLookup.existing && newLookup.phone.status !== 'invalid' && <p data-testid="planner-new-phone-submit-error" className="text-xs text-red-600 mt-1 font-medium">{phoneError}</p>}
-              <PhoneLookupNotice lookup={newLookup} prefix="planner-new" onUseExisting={useExistingCustomer}
-                rootTestId="duplicate-customer" useTestId="use-existing-customer" dense />
-              <CustomerSuggestions lookup={newLookup} prefix="planner-new-phone" show="phone" onPick={useExistingCustomer}
-                heading="Existing clients with a similar number — suggestions only" />
-              <p className="text-[10px] text-slate-400 mt-1">Qatar numbers: 8 digits or +974. Other countries: start with + and the country code.</p>
-            </div>
-
-            {duplicate && !(newLookup.existing && newLookup.existing.id === duplicate.id) && (
-              <div data-testid="duplicate-customer" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 mb-4">
-                <div className="font-bold flex items-center gap-1.5"><AlertCircle size={14} /> This mobile number is already registered</div>
-                <div className="mt-1 text-sm"><b>{duplicate.name}</b> <span className="font-mono">{formatPhoneDisplay(duplicate.phone)}</span></div>
-                <div className="mt-0.5 text-[11px] text-amber-800">No new client was created and the existing record was not changed. What you typed is kept.</div>
-                <button
-                  type="button"
-                  data-testid="use-existing-customer"
-                  onClick={() => {
-                    const ex = duplicate;
-                    const full = customers.find(c => c.id === ex.id) || ex;
-                    onSelect(full);
-                    setSearchTerm(full.name);
-                    setNewName(''); setNewPhone(''); setDuplicate(null); setPhoneError(null); setSaveError(null);
-                    setShowCreateModal(false);
-                  }}
-                  className="mt-2 w-full bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg font-bold"
-                >
-                  Use existing client
-                </button>
-              </div>
-            )}
-
-            {saveError && (
-              <div className="p-2 bg-red-50 border border-red-100 rounded text-xs text-red-700 flex items-center gap-1.5 mb-4">
-                <AlertCircle size={14} /> {saveError}
-              </div>
-            )}
-
-            {/* Save button — type="button" so it NEVER submits any form */}
-            <button
-              type="button"
-              onClick={handleSaveCustomer}
-              disabled={isSaving}
-              className="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-bold shadow-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {isSaving ? (
-                <><Loader2 size={18} className="animate-spin" /> Saving...</>
-              ) : (
-                <><Save size={18} /> Save Customer</>
-              )}
-            </button>
+            <CustomerSuggestions lookup={newLookup} prefix="planner-new-name" show="name" onPick={useExistingCustomer} />
           </div>
-        </div>,
-        document.body
+
+          {/* Phone field */}
+          <div className="min-w-0">
+            <label htmlFor="planner-new-phone" className="block text-xs font-bold text-slate-500 uppercase mb-1">
+              Mobile Number <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Phone size={16} className="absolute left-3 top-3 text-slate-400" aria-hidden="true" />
+              <input
+                id="planner-new-phone"
+                type="text"
+                inputMode="tel"
+                value={newPhone}
+                onChange={e => { setNewPhone(e.target.value); setPhoneError(null); setDuplicate(null); }}
+                disabled={isSaving}
+                placeholder="5000 0001 or +974 5000 0001"
+                autoComplete="off"
+                className={`w-full bg-white text-slate-900 border rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 ${phoneError ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSaveCustomer(); } }}
+              />
+            </div>
+            {phoneError && !newLookup.existing && newLookup.phone.status !== 'invalid' && <p data-testid="planner-new-phone-submit-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">{phoneError}</p>}
+            <PhoneLookupNotice lookup={newLookup} prefix="planner-new" onUseExisting={useExistingCustomer}
+              rootTestId="duplicate-customer" useTestId="use-existing-customer" dense />
+            <CustomerSuggestions lookup={newLookup} prefix="planner-new-phone" show="phone" onPick={useExistingCustomer}
+              exclude={newLookup.nameMatches.map(m => m.customer.id)} />
+            <p className="text-[11px] text-slate-400 mt-1">Qatar numbers: 8 digits or +974. Other countries: start with + and the country code.</p>
+          </div>
+
+          {duplicate && !(newLookup.existing && newLookup.existing.id === duplicate.id) && (
+            <div data-testid="duplicate-customer" role="alert" ref={el => { if (el) el.scrollIntoView({ block: 'nearest' }); }} className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+              <div className="font-bold flex items-center gap-1.5"><AlertCircle size={14} aria-hidden="true" /> This mobile number is already registered</div>
+              <div className="mt-1 text-sm break-words"><b>{duplicate.name}</b> <span className="font-mono whitespace-nowrap">{formatPhoneDisplay(duplicate.phone)}</span></div>
+              <div className="mt-0.5 text-[11px] text-amber-800">No new client was created and the existing record was not changed. What you typed is kept.</div>
+              <button
+                type="button"
+                data-testid="use-existing-customer"
+                onClick={() => {
+                  const ex = duplicate;
+                  const full = customers.find(c => c.id === ex.id) || ex;
+                  onSelect(full);
+                  setSearchTerm(full.name);
+                  setNewName(''); setNewPhone(''); setDuplicate(null); setPhoneError(null); setSaveError(null);
+                  setShowCreateModal(false);
+                }}
+                className="qn-touch mt-2 w-full bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg font-bold"
+              >
+                Use existing client
+              </button>
+            </div>
+          )}
+        </ResponsiveModal>
       )
     : null;
 

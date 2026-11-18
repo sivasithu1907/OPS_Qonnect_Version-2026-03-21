@@ -8,6 +8,7 @@ import CustomerSelector from './CustomerSelector';
 import { validatePhone, normalizePhone, formatPhoneDisplay, samePhone } from '../utils/phoneUtils';
 import { useCustomerLookup } from '../utils/useCustomerLookup';
 import { PhoneLookupNotice, CustomerSuggestions } from './shared/CustomerLookupNotice';
+import ResponsiveModal from './shared/ResponsiveModal';
 import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
 import { isDuplicateCustomerError } from '../utils/customerErrors';
 import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2, Eye, Edit, Phone as PhoneIcon, RotateCcw, Briefcase, ExternalLink } from 'lucide-react';
@@ -1620,15 +1621,26 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
       {/* New Ticket Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm qn-modal-backdrop">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                  <h3 className="font-bold text-lg text-slate-900">Create New Ticket</h3>
-                  <button type="button" onClick={() => setIsCreateModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
-             </div>
-             
-             <form onSubmit={handleCreateSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-                 
+        <ResponsiveModal
+          as="form"
+          onSubmit={handleCreateSubmit}
+          testId="ticket-create-modal"
+          size="md"
+          title="Create New Ticket"
+          onClose={() => setIsCreateModalOpen(false)}
+          footer={(
+            <div className="qn-rm-actions">
+              <button type="button" onClick={() => setIsCreateModalOpen(false)} className="qn-touch px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
+              <button
+                type="submit"
+                disabled={isCreateFormValid ? !isCreateFormValid() : true}
+                className={`qn-touch px-6 py-2 text-white font-medium rounded-xl shadow-lg transition-all ${isCreateFormValid && isCreateFormValid() ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20' : 'bg-slate-300 cursor-not-allowed'}`}
+              >
+                {isNewClientMode ? 'Create Client & Ticket' : 'Create Ticket'}
+              </button>
+            </div>
+          )}
+        >
                  {/* Auto-filled Date */}
                  <div className="space-y-1">
                      <label className="text-xs font-semibold text-slate-500 uppercase">Created Date</label>
@@ -1657,7 +1669,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                 <button 
                                     type="button" 
                                     onClick={() => { setIsNewClientMode(false); setDuplicateWarning(null); }}
-                                    className="text-xs text-blue-600 font-semibold hover:underline"
+                                    className="qn-touch text-xs text-blue-600 font-semibold hover:underline"
                                 >
                                     Cancel / Select Existing
                                 </button>
@@ -1665,24 +1677,28 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             
                             <div className="space-y-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Client Name <span className="text-red-500">*</span></label>
+                                    <label htmlFor="ticket-new-client-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Client Name <span className="text-red-500">*</span></label>
                                     <input 
+                                        id="ticket-new-client-name"
                                         type="text"
                                         required
                                         autoFocus
+                                        autoComplete="off"
                                         value={createForm.customerName}
                                         onChange={(e) => setCreateForm(prev => ({ ...prev, customerName: e.target.value }))}
                                         className={INPUT_STYLES}
                                         placeholder="Full Name"
                                     />
                                     <CustomerSuggestions lookup={newClientLookup} prefix="ticket-new-name" show="name"
-                                        onPick={(c) => handleCustomerSelect(customers.find(x => x.id === c.id) || c)}
-                                        heading="Existing clients with this or a similar name — suggestions only, nothing is merged" />
+                                        onPick={(c) => handleCustomerSelect(customers.find(x => x.id === c.id) || c)} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mobile Number <span className="text-red-500">*</span></label>
+                                    <label htmlFor="ticket-new-client-phone" className="block text-xs font-bold text-slate-500 uppercase mb-1">Mobile Number <span className="text-red-500">*</span></label>
                                     <input 
+                                        id="ticket-new-client-phone"
                                         type="text"
+                                        inputMode="tel"
+                                        autoComplete="off"
                                         required
                                         value={createForm.phone}
                                         onChange={(e) => setCreateForm(prev => ({ ...prev, phone: e.target.value }))}
@@ -1693,17 +1709,17 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                         onUseExisting={(c) => { handleCustomerSelect(customers.find(x => x.id === c.id) || c); setIsNewClientMode(false); setDuplicateWarning(null); }} />
                                     <CustomerSuggestions lookup={newClientLookup} prefix="ticket-new-phone" show="phone"
                                         onPick={(c) => { handleCustomerSelect(customers.find(x => x.id === c.id) || c); setIsNewClientMode(false); setDuplicateWarning(null); }}
-                                        heading="Existing clients with a similar number — suggestions only" />
+                                        exclude={newClientLookup.nameMatches.map(m => m.customer.id)} />
                                 </div>
                             </div>
                         </div>
                      )}
                  </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-500 uppercase">Category <span className="text-red-500">*</span></label>
-                        <div className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-xl bg-white min-h-[36px]">
+                        <label id="tk-category-label" className="text-xs font-semibold text-slate-500 uppercase">Category <span className="text-red-500">*</span></label>
+                        <div role="group" aria-labelledby="tk-category-label" className="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-xl bg-white min-h-[36px]">
                           {TICKET_CATEGORIES.map(c => {
                             const cats = (createForm.category || '').split(', ').filter(Boolean);
                             const sel = cats.includes(c);
@@ -1711,14 +1727,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                               const curr = (createForm.category || '').split(', ').filter(Boolean);
                               const next = sel ? curr.filter(x => x !== c) : [...curr, c];
                               setCreateForm({...createForm, category: next.join(', ')});
-                            }} className={`text-[11px] px-2.5 py-1.5 rounded-xl border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
+                            }} aria-pressed={sel} className={`text-[11px] px-2.5 py-1.5 min-h-[2.25rem] rounded-xl border-2 transition-all ${sel ? 'bg-amber-50 border-amber-400 text-amber-800 font-bold shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>{sel ? '\u2713 ' : ''}{c}</button>;
                           })}
                         </div>
                     </div>
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-500 uppercase">Priority <span className="text-red-500">*</span></label>
+                        <label htmlFor="tk-priority" className="text-xs font-semibold text-slate-500 uppercase">Priority <span className="text-red-500">*</span></label>
                         <div className="relative">
                             <select 
+                                id="tk-priority"
                                 value={createForm.priority}
                                 onChange={(e) => setCreateForm({...createForm, priority: e.target.value})}
                                 required
@@ -1736,8 +1753,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                     <h4 className="text-xs font-bold text-slate-700 uppercase mb-3">Location Details</h4>
                     <div className="grid grid-cols-1 gap-3">
                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold text-slate-500 uppercase">Location URL</label>
+                            <label htmlFor="tk-location-url" className="text-[10px] font-semibold text-slate-500 uppercase">Location URL</label>
                             <input 
+                                id="tk-location-url"
+                                inputMode="url"
+                                autoComplete="off"
                                 value={createForm.locationUrl}
                                 onChange={(e) => setCreateForm({...createForm, locationUrl: e.target.value})}
                                 className={INPUT_STYLES}
@@ -1745,8 +1765,10 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold text-slate-500 uppercase">House Number</label>
+                            <label htmlFor="tk-house-number" className="text-[10px] font-semibold text-slate-500 uppercase">House Number</label>
                             <input 
+                                id="tk-house-number"
+                                autoComplete="off"
                                 value={createForm.houseNumber}
                                 onChange={(e) => setCreateForm({...createForm, houseNumber: e.target.value})}
                                 className={INPUT_STYLES}
@@ -1758,8 +1780,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                 <div className="font-semibold">The selected client has a different saved location.</div>
                                 <div className="mt-0.5">Your job location was kept. Replace it with the client's saved one?</div>
                                 <div className="flex gap-2 mt-2">
-                                    <button type="button" data-testid="use-client-location" onClick={useClientLocation} className="px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
-                                    <button type="button" data-testid="keep-job-location" onClick={() => setLocationConflict(null)} className="px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
+                                    <button type="button" data-testid="use-client-location" onClick={useClientLocation} className="qn-touch px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
+                                    <button type="button" data-testid="keep-job-location" onClick={() => setLocationConflict(null)} className="qn-touch px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
                                 </div>
                             </div>
                         )}
@@ -1768,8 +1790,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
 
                 {/* Odoo Ref */}
                 <div className="space-y-1">
-                     <label className="text-xs font-semibold text-slate-500 uppercase">Odoo Reference</label>
+                     <label htmlFor="tk-odoo" className="text-xs font-semibold text-slate-500 uppercase">Odoo Reference</label>
                      <input 
+                        id="tk-odoo"
+                        inputMode="url"
+                        autoComplete="off"
                         value={createForm.odooLink}
                         onChange={(e) => setCreateForm({...createForm, odooLink: e.target.value})}
                         className={INPUT_STYLES}
@@ -1777,10 +1802,11 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                      />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-500 uppercase">Ticket Type <span className="text-red-500">*</span></label>
+                        <label htmlFor="tk-type" className="text-xs font-semibold text-slate-500 uppercase">Ticket Type <span className="text-red-500">*</span></label>
                         <select 
+                            id="tk-type"
                             value={createForm.type}
                             onChange={(e) => setCreateForm({...createForm, type: e.target.value})}
                             required
@@ -1791,8 +1817,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         </select>
                     </div>
                     <div className="space-y-1">
-                        <label className="text-xs font-semibold text-slate-500 uppercase">Assign Field Engineer</label>
+                        <label htmlFor="tk-assign" className="text-xs font-semibold text-slate-500 uppercase">Assign Field Engineer</label>
                         <select 
+                            id="tk-assign"
                             value={createForm.assignedTechId}
                             onChange={(e) => setCreateForm({...createForm, assignedTechId: e.target.value})}
                             className={INPUT_STYLES}
@@ -1815,8 +1842,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                     <label className="text-xs font-semibold text-slate-500 uppercase">Initial Message / Description <span className="text-red-500">*</span></label>
+                     <label htmlFor="tk-description" className="text-xs font-semibold text-slate-500 uppercase">Initial Message / Description <span className="text-red-500">*</span></label>
                      <textarea 
+                        id="tk-description"
                         value={createForm.description}
                         onChange={(e) => setCreateForm({...createForm, description: e.target.value})}
                         required 
@@ -1825,21 +1853,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                         placeholder="Describe the issue..."
                     />
                  </div>
-
-                 <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
-                      <button type="button" onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">Cancel</button>
-                      <button 
-                        type="submit" 
-                        disabled={isCreateFormValid ? !isCreateFormValid() : true}
-                        className={`px-6 py-2 text-white font-medium rounded-xl shadow-lg transition-all ${isCreateFormValid && isCreateFormValid() ? 'bg-slate-900 hover:bg-slate-800 shadow-slate-900/20' : 'bg-slate-300 cursor-not-allowed'}`}
-                      >
-                          {isNewClientMode ? 'Create Client & Ticket' : 'Create Ticket'}
-                      </button>
-                  </div>
-
-             </form>
-          </div>
-        </div>
+        </ResponsiveModal>
       )}
 
     {/* ── Admin Override Modal ── */}

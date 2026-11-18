@@ -114,6 +114,49 @@
   }
 }
 
+
+/* ── Responsive dialog shell (components/shared/ResponsiveModal.tsx) ─────────────────────────────
+   Header and footer are fixed; only .qn-rm-body scrolls. Phones and short landscape windows get a full-screen sheet. */
+.qn-rm-backdrop { inset: 0; display: flex; align-items: stretch; justify-content: center; background: rgba(0,0,0,.5); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); overscroll-behavior: contain; }
+.qn-rm-panel { display: flex; flex-direction: column; background: #fff; width: 100%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; outline: none; }
+.qn-rm-header { flex: none; display: flex; align-items: center; gap: .75rem; padding: max(.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) .75rem max(1rem, env(safe-area-inset-left)); border-bottom: 1px solid #e2e8f0; background: #fff; }
+.qn-rm-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1.0625rem; font-weight: 700; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qn-rm-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; margin: -.25rem -.5rem -.25rem 0; border-radius: .75rem; color: #64748b; }
+.qn-rm-close:hover { background: #f1f5f9; color: #0f172a; }
+.qn-rm-body { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 1rem max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left)); }
+.qn-rm-body > * + * { margin-top: 1rem; }
+.qn-rm-status { flex: none; padding: .5rem max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left)); background: #fff; max-height: 6rem; overflow-y: auto; }
+.qn-rm-footer { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: .75rem; padding: .75rem max(1rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); border-top: 1px solid #e2e8f0; background: #fff; box-shadow: 0 -4px 10px -8px rgba(15,23,42,.25); }
+.qn-rm-footer .qn-rm-actions { display: flex; gap: .75rem; margin-left: auto; min-width: 0; }
+.qn-rm-body input:not([type=checkbox]):not([type=radio]):not([type=file]), .qn-rm-body select, .qn-rm-body textarea { max-width: 100%; min-width: 0; }
+.qn-rm-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 640px) { .qn-rm-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 640px) and (min-height: 521px) {
+  .qn-rm-backdrop { align-items: center; padding: 1rem; }
+  .qn-rm-panel { height: auto; max-height: 100%; max-width: var(--qn-rm-w, 40rem); border-radius: 1rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,.35); }
+  .qn-rm-header { padding: 1rem 1.5rem; }
+  .qn-rm-body { padding: 1.25rem 1.5rem; }
+  .qn-rm-status { padding: .5rem 1.5rem 0; }
+  .qn-rm-footer { padding: .875rem 1.5rem; box-shadow: none; }
+}
+/* phones / short landscape windows: full-screen sheet, comfortable touch targets, 16px inputs (no iOS zoom on focus) */
+@media (max-width: 639px), (max-height: 520px) {
+  .qn-rm-body input:not([type=checkbox]):not([type=radio]):not([type=file]), .qn-rm-body select, .qn-rm-body textarea { font-size: 16px; min-height: 44px; }
+  .qn-rm-footer button, .qn-rm-footer .qn-rm-btn { min-height: 44px; }
+}
+@media (max-width: 639px) {
+  .qn-rm-footer .qn-rm-actions { flex: 1 1 auto; }
+  /* secondary (Cancel) takes one share, the primary action two — so "Create Client & Ticket" / "Save Customer" stay on one line */
+  .qn-rm-footer .qn-rm-actions > button { flex: 1 1 0; white-space: nowrap; }
+  .qn-rm-footer .qn-rm-actions > button:last-child { flex: 2 1 0; }
+}
+@media (pointer: coarse) {
+  .qn-rm-footer button, .qn-rm-footer .qn-rm-btn, .qn-rm-close { min-height: 44px; }
+  .qn-rm-close { min-width: 44px; }
+  .qn-rm-body input:not([type=checkbox]):not([type=radio]):not([type=file]), .qn-rm-body select { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .qn-rm-panel { animation: none !important; } }
+
 /* ── 5. Dropdown / menu entrance ────────────────────────────────────────── */
 @media (prefers-reduced-motion: no-preference) {
   .qn-dropdown {
@@ -265,3 +308,6 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* touch-friendly minimum height for buttons inside the responsive dialogs (phones, tablets, any touch screen) */
+@media (pointer: coarse), (max-width: 639px) { .qn-touch { min-height: 44px; } }

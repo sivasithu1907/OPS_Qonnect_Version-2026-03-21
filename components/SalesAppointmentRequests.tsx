@@ -29,6 +29,7 @@ import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
 import CustomerMatchList from './shared/CustomerMatchList';
 import { lookupCustomers, CustomerLookup } from '../utils/useCustomerLookup';
 import { PhoneLookupNotice } from './shared/CustomerLookupNotice';
+import ResponsiveModal from './shared/ResponsiveModal';
 import { validatePhone, samePhone, formatPhoneDisplay } from '../utils/phoneUtils';
 import { SarListSkeleton } from './shared/Skeletons';
 import { EmptySAR } from './shared/EmptyState';
@@ -1575,275 +1576,280 @@ const FormModal: React.FC<FormModalProps> = ({
   custLoading, existingJobMatches, checkingExistingJob, salesLeadName,
   onCustSearchChange, onSelectCustomer, phoneLookup, onToggleServiceCat, onFieldChange,
   onClose, onSubmit
-}) => (
-  <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-    <div
-      className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-      onClick={e => e.stopPropagation()}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-5 border-b border-slate-200 sticky top-0 bg-white z-10 min-w-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
-            <ClipboardList size={18} className="text-amber-600" />
-          </div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
-            {editing ? 'Edit Appointment Request' : 'New Appointment Request'}
-          </h2>
-        </div>
-        <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
-          <X size={18} />
+}) => {
+  // A customer already listed under the contact-number field is not listed again under the name field.
+  // The owner of a complete typed number is shown once — in the "already registered" box with its Use Existing Customer button.
+  const dupId = phoneLookup?.existing?.id;
+  const custResultsShown = custResults.filter((m: any) => m.customer.id !== dupId);
+  const nameResultsShown = nameResults.filter((m: any) => m.customer.id !== dupId && !custResultsShown.some((c: any) => c.customer.id === m.customer.id));
+  return (
+  <ResponsiveModal
+    size="md"
+    backdropClose
+    busy={submitting}
+    testId="sar-form-modal"
+    title={editing ? 'Edit Appointment Request' : 'New Appointment Request'}
+    icon={<div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center"><ClipboardList size={18} className="text-amber-600" aria-hidden="true" /></div>}
+    onClose={onClose}
+    status={formErrors._global ? (
+      <div role="alert" className="px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 break-words">{formErrors._global}</div>
+    ) : undefined}
+    footer={(
+      <div className="qn-rm-actions">
+        <button
+          type="button"
+          onClick={onClose}
+          className="qn-touch px-5 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={submitting}
+          className="qn-touch flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-slate-900 bg-[#FFCC00] hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed rounded-xl transition-colors shadow-sm"
+        >
+          {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+          {editing ? 'Save Changes' : 'Submit Request'}
         </button>
       </div>
-
-      <div className="px-4 sm:px-6 py-5 space-y-5">
-
-        {/* Global error */}
-        {formErrors._global && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-            {formErrors._global}
-          </div>
-        )}
-
-        {/* Sales Lead (read-only) */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Sales Lead</label>
-          <div className={`${INPUT_STYLES} bg-slate-50 text-slate-500 cursor-default`}>
-            {salesLeadName}
-          </div>
-          <p className="mt-1 text-xs text-slate-400">Automatically set to your account</p>
-        </div>
-
-        {/* Contact number — primary customer lookup field */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Contact Number <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <input
-              value={formData.contactNumber}
-              onChange={e => {
-                const v = e.target.value;
-                onFieldChange('contactNumber', v);
-                // Drive customer search from contact number
-                onCustSearchChange(v);
-              }}
-              placeholder="5000 0001 or +974 5000 0001 — type to search existing clients"
-              className={`${INPUT_STYLES} ${formErrors.contactNumber ? 'border-red-400' : ''}`}
-            />
-            {custLoading && (
-              <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
-            )}
-            {/* Results dropdown (shared match list: exact number first, close spellings labelled as suggestions) */}
-            {custResults.length > 0 && (
-              <div data-testid="sar-customer-results" className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-56 overflow-y-auto">
-                <CustomerMatchList matches={custResults} onPick={onSelectCustomer} dense testId="sar-customer-matches" />
-              </div>
-            )}
-            {/* No match — offer create new */}
-            {!custLoading && custResults.length === 0 && formData.contactNumber.replace(/[^0-9]/g,'').length >= 4 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-amber-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                <div className="px-4 py-3 flex items-center justify-between">
-                  <span className="text-sm text-slate-500">No existing client found</span>
-                  <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                    <Plus size={11} /> New client will be created
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-          <p className="mt-1 text-xs text-slate-400">
-            Type phone number to search — select existing client or enter name below to create new
-          </p>
-          {phoneLookup && <PhoneLookupNotice lookup={phoneLookup} prefix="sar" onUseExisting={onSelectCustomer} />}
-          <FieldError msg={formErrors.contactNumber} />
-
-          {/* Existing-job heads-up — non-blocking. Sales has no visibility
-              into field work, so this surfaces it before they submit. */}
-          {checkingExistingJob && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 size={12} className="animate-spin" /> Checking for existing jobs…
-            </div>
-          )}
-          {!checkingExistingJob && existingJobMatches.length > 0 && (
-            <div className="mt-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
-              <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-1.5">
-                <AlertCircle size={14} />
-                {existingJobMatches.length === 1 ? 'This customer already has a job' : `This customer already has ${existingJobMatches.length} jobs`}
-              </div>
-              <div className="space-y-1.5">
-                {existingJobMatches.map((m: any) => (
-                  <div key={m.activityId} className="text-xs text-amber-700">
-                    <span className="font-mono font-semibold">{m.activityId}</span>
-                    {' — '}
-                    <span className="font-semibold">{m.status === 'CARRY_FORWARD' ? 'Carry Forward' : m.status === 'DONE' ? 'Completed' : m.status === 'IN_PROGRESS' ? 'In Progress' : 'Planned'}</span>
-                    {m.serviceCategory && <span> · {m.serviceCategory}</span>}
-                    {m.carryForwardNote && (
-                      <div className="mt-0.5 text-amber-600 italic">"{m.carryForwardNote}"</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] text-amber-600">
-                If this request is about the same work, mention it in Remarks below — your Team Lead can link it to the existing job instead of creating a new one.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Customer Name — auto-filled from client lookup, or enter manually for new client */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Customer Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            value={formData.customerName}
-            onChange={e => onFieldChange('customerName', e.target.value)}
-            placeholder="Auto-filled from existing client, or enter new client name"
-            className={`${INPUT_STYLES} ${formErrors.customerName ? 'border-red-400' : ''}`}
-          />
-          {nameResults.length > 0 && (
-            <div data-testid="sar-name-results" className="mt-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-100">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Existing clients — select to avoid a duplicate</span>
-                <button type="button" onClick={onDismissNameResults} className="text-[11px] text-slate-400 hover:text-slate-600">Not them</button>
-              </div>
-              <CustomerMatchList matches={nameResults} onPick={onSelectCustomer} dense testId="sar-name-matches" />
-            </div>
-          )}
-          <FieldError msg={formErrors.customerName} />
-        </div>
-
-        {/* Location URL */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Location URL <span className="text-red-500">*</span>
-          </label>
-          <input
-            value={formData.locationUrl}
-            onChange={e => onFieldChange('locationUrl', e.target.value)}
-            placeholder="https://maps.google.com/…"
-            className={`${INPUT_STYLES} ${formErrors.locationUrl ? 'border-red-400' : ''}`}
-          />
-          <FieldError msg={formErrors.locationUrl} />
-        </div>
-
-        {/* House / Building Number */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            House / Building Number <span className="text-red-500">*</span>
-          </label>
-          <input
-            value={formData.houseNumber}
-            onChange={e => onFieldChange('houseNumber', e.target.value)}
-            placeholder="Building 12, Villa 5A…"
-            className={`${INPUT_STYLES} ${formErrors.houseNumber ? 'border-red-400' : ''}`}
-          />
-          <FieldError msg={formErrors.houseNumber} />
-          {locConflict && (
-            <div data-testid="location-conflict" className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-              <div className="font-semibold">The selected client has a different saved location.</div>
-              <div className="mt-0.5">The location you entered for this job was kept. Replace it with the client's saved one?</div>
-              <div className="flex gap-2 mt-2">
-                <button type="button" data-testid="use-client-location" onClick={onUseClientLocation} className="px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
-                <button type="button" data-testid="keep-job-location" onClick={onKeepJobLocation} className="px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Odoo CRM Link */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Odoo CRM Link{formData.activityType !== 'Troubleshooting' && <span className="text-red-500"> *</span>}
-            {formData.activityType === 'Troubleshooting' && <span className="text-slate-400 font-normal text-xs ml-1">(optional)</span>}
-          </label>
-          <input
-            value={formData.odooReference}
-            onChange={e => onFieldChange('odooReference', e.target.value)}
-            placeholder="https://odoo.qonnect.com/web#id=XXXX&model=crm.lead"
-            className={`${INPUT_STYLES} ${formErrors.odooReference ? 'border-red-400' : ''}`}
-          />
-          <FieldError msg={formErrors.odooReference} />
-        </div>
-
-        {/* Activity Type */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Activity Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={formData.activityType}
-            onChange={e => onFieldChange('activityType', e.target.value)}
-            className={`${INPUT_STYLES} ${formErrors.activityType ? 'border-red-400' : ''}`}
-          >
-            {SALES_ACTIVITY_TYPES.map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-          <FieldError msg={formErrors.activityType} />
-        </div>
-
-        {/* Service Category (multi-select chips) */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-            Service Category <span className="text-red-500">*</span>
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {SERVICE_CATEGORIES.map(cat => {
-              const selected = formData.serviceCategory.includes(cat);
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => onToggleServiceCat(cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                    selected
-                      ? 'bg-amber-400 text-slate-900 border-amber-400 shadow-sm'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-amber-300 hover:bg-amber-50'
-                  }`}
-                >
-                  {cat}
-                </button>
-              );
-            })}
-          </div>
-          <FieldError msg={formErrors.serviceCategory} />
-        </div>
-
-        {/* Remarks (optional) */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Remarks (Optional)</label>
-          <textarea
-            value={formData.remarks}
-            onChange={e => onFieldChange('remarks', e.target.value)}
-            rows={3}
-            placeholder="Any special notes or instructions…"
-            className={INPUT_STYLES}
-          />
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSubmit}
-            disabled={submitting}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-slate-900 bg-[#FFCC00] hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed rounded-xl transition-colors shadow-sm"
-          >
-            {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-            {editing ? 'Save Changes' : 'Submit Request'}
-          </button>
-        </div>
+    )}
+  >
+    {/* Sales Lead (read-only) */}
+    <div className="min-w-0">
+      <label htmlFor="sar-sales-lead" className="block text-sm font-semibold text-slate-700 mb-1.5">Sales Lead <span className="text-slate-400 font-normal text-xs">— automatically set to your account</span></label>
+      <div id="sar-sales-lead" className={`${INPUT_STYLES} bg-slate-50 text-slate-500 cursor-default truncate`}>
+        {salesLeadName}
       </div>
     </div>
-  </div>
-);
+
+    {/* Contact number — primary customer lookup field */}
+    <div className="min-w-0">
+      <label htmlFor="sar-contact-number" className="block text-sm font-semibold text-slate-700 mb-1.5">
+        Contact Number <span className="text-red-500">*</span>
+      </label>
+      <div className="relative">
+        <input
+          id="sar-contact-number"
+          inputMode="tel"
+          autoComplete="off"
+          value={formData.contactNumber}
+          onChange={e => {
+            const v = e.target.value;
+            onFieldChange('contactNumber', v);
+            // Drive customer search from contact number
+            onCustSearchChange(v);
+          }}
+          placeholder="5000 0001 or +974 5000 0001 — type to search existing clients"
+          className={`${INPUT_STYLES} ${formErrors.contactNumber ? 'border-red-400' : ''}`}
+        />
+        {custLoading && (
+          <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
+        )}
+      </div>
+      {/* Results sit in the flow directly under the field (they never float over the next input or the Save button) */}
+      {custResultsShown.length > 0 && (
+        <div data-testid="sar-customer-results" role="region" aria-live="polite" aria-label="Matching clients" className="mt-1.5 bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <div className="max-h-[9.5rem] overflow-y-auto overscroll-contain">
+            <CustomerMatchList matches={custResultsShown} onPick={onSelectCustomer} dense testId="sar-customer-matches" />
+          </div>
+        </div>
+      )}
+      {/* No match — new client */}
+      {!custLoading && custResults.length === 0 && formData.contactNumber.replace(/[^0-9]/g,'').length >= 4 && (
+        <p className="mt-1.5 text-xs text-slate-500 flex flex-wrap items-center gap-x-2">
+          <span>No existing client found</span>
+          <span className="text-emerald-600 font-semibold inline-flex items-center gap-1"><Plus size={11} /> New client will be created</span>
+        </p>
+      )}
+      <p className="mt-1 text-xs text-slate-400">
+        Type a number to search — select the existing client, or enter a name below to create a new one
+      </p>
+      {phoneLookup && <PhoneLookupNotice lookup={phoneLookup} prefix="sar" onUseExisting={onSelectCustomer} dense />}
+      <FieldError msg={formErrors.contactNumber} />
+
+      {/* Existing-job heads-up — non-blocking. Sales has no visibility
+          into field work, so this surfaces it before they submit. */}
+      {checkingExistingJob && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+          <Loader2 size={12} className="animate-spin" /> Checking for existing jobs…
+        </div>
+      )}
+      {!checkingExistingJob && existingJobMatches.length > 0 && (
+        <div className="mt-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-1.5">
+            <AlertCircle size={14} />
+            {existingJobMatches.length === 1 ? 'This customer already has a job' : `This customer already has ${existingJobMatches.length} jobs`}
+          </div>
+          <div className="space-y-1.5">
+            {existingJobMatches.map((m: any) => (
+              <div key={m.activityId} className="text-xs text-amber-700 break-words">
+                <span className="font-mono font-semibold">{m.activityId}</span>
+                {' — '}
+                <span className="font-semibold">{m.status === 'CARRY_FORWARD' ? 'Carry Forward' : m.status === 'DONE' ? 'Completed' : m.status === 'IN_PROGRESS' ? 'In Progress' : 'Planned'}</span>
+                {m.serviceCategory && <span> · {m.serviceCategory}</span>}
+                {m.carryForwardNote && (
+                  <div className="mt-0.5 text-amber-600 italic">"{m.carryForwardNote}"</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-amber-600">
+            If this request is about the same work, mention it in Remarks below — your Team Lead can link it to the existing job instead of creating a new one.
+          </p>
+        </div>
+      )}
+    </div>
+
+    {/* Customer Name — auto-filled from client lookup, or enter manually for new client */}
+    <div className="min-w-0">
+      <label htmlFor="sar-customer-name" className="block text-sm font-semibold text-slate-700 mb-1.5">
+        Customer Name <span className="text-red-500">*</span>
+      </label>
+      <input
+        id="sar-customer-name"
+        autoComplete="off"
+        value={formData.customerName}
+        onChange={e => onFieldChange('customerName', e.target.value)}
+        placeholder="Auto-filled from existing client, or enter new client name"
+        className={`${INPUT_STYLES} ${formErrors.customerName ? 'border-red-400' : ''}`}
+      />
+      {nameResultsShown.length > 0 && (
+        <div data-testid="sar-name-results" role="region" aria-live="polite" aria-label="Existing clients — select to avoid a duplicate" className="mt-1.5 bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1 bg-slate-50 border-b border-slate-100">
+            <span className="min-w-0 text-[10px] leading-tight font-semibold uppercase tracking-wide text-slate-500">Existing clients — select to avoid a duplicate</span>
+            <button type="button" onClick={onDismissNameResults} className="shrink-0 text-[11px] text-slate-500 hover:text-slate-700 px-1 min-h-[1.75rem]">Not them</button>
+          </div>
+          <div className="max-h-[9.5rem] overflow-y-auto overscroll-contain">
+            <CustomerMatchList matches={nameResultsShown} onPick={onSelectCustomer} dense testId="sar-name-matches" />
+          </div>
+        </div>
+      )}
+      <FieldError msg={formErrors.customerName} />
+    </div>
+
+    {/* Location URL | House number — two columns from 640px up */}
+    <div className="qn-rm-grid qn-rm-grid-2">
+      <div className="min-w-0">
+        <label htmlFor="sar-location-url" className="block text-sm font-semibold text-slate-700 mb-1.5">
+          Location URL <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="sar-location-url"
+          inputMode="url"
+          autoComplete="off"
+          value={formData.locationUrl}
+          onChange={e => onFieldChange('locationUrl', e.target.value)}
+          placeholder="https://maps.google.com/…"
+          className={`${INPUT_STYLES} ${formErrors.locationUrl ? 'border-red-400' : ''}`}
+        />
+        <FieldError msg={formErrors.locationUrl} />
+      </div>
+      <div className="min-w-0">
+        <label htmlFor="sar-house-number" className="block text-sm font-semibold text-slate-700 mb-1.5">
+          House / Building Number <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="sar-house-number"
+          autoComplete="off"
+          value={formData.houseNumber}
+          onChange={e => onFieldChange('houseNumber', e.target.value)}
+          placeholder="Building 12, Villa 5A…"
+          className={`${INPUT_STYLES} ${formErrors.houseNumber ? 'border-red-400' : ''}`}
+        />
+        <FieldError msg={formErrors.houseNumber} />
+      </div>
+    </div>
+    {locConflict && (
+      <div data-testid="location-conflict" className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+        <div className="font-semibold">The selected client has a different saved location.</div>
+        <div className="mt-0.5">The location you entered for this job was kept. Replace it with the client's saved one?</div>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <button type="button" data-testid="use-client-location" onClick={onUseClientLocation} className="qn-touch px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
+          <button type="button" data-testid="keep-job-location" onClick={onKeepJobLocation} className="qn-touch px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
+        </div>
+      </div>
+    )}
+
+    {/* Odoo CRM link | Activity type */}
+    <div className="qn-rm-grid qn-rm-grid-2">
+      <div className="min-w-0">
+        <label htmlFor="sar-odoo" className="block text-sm font-semibold text-slate-700 mb-1.5">
+          Odoo CRM Link{formData.activityType !== 'Troubleshooting' && <span className="text-red-500"> *</span>}
+          {formData.activityType === 'Troubleshooting' && <span className="text-slate-400 font-normal text-xs ml-1">(optional)</span>}
+        </label>
+        <input
+          id="sar-odoo"
+          inputMode="url"
+          autoComplete="off"
+          value={formData.odooReference}
+          onChange={e => onFieldChange('odooReference', e.target.value)}
+          placeholder="https://odoo.qonnect.com/web#id=XXXX&model=crm.lead"
+          className={`${INPUT_STYLES} ${formErrors.odooReference ? 'border-red-400' : ''}`}
+        />
+        <FieldError msg={formErrors.odooReference} />
+      </div>
+      <div className="min-w-0">
+        <label htmlFor="sar-activity-type" className="block text-sm font-semibold text-slate-700 mb-1.5">
+          Activity Type <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="sar-activity-type"
+          value={formData.activityType}
+          onChange={e => onFieldChange('activityType', e.target.value)}
+          className={`${INPUT_STYLES} ${formErrors.activityType ? 'border-red-400' : ''}`}
+        >
+          {SALES_ACTIVITY_TYPES.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <FieldError msg={formErrors.activityType} />
+      </div>
+    </div>
+
+    {/* Service Category (multi-select chips) */}
+    <div className="min-w-0">
+      <div id="sar-service-cat-label" className="block text-sm font-semibold text-slate-700 mb-1.5">
+        Service Category <span className="text-red-500">*</span>
+      </div>
+      <div className="flex flex-wrap gap-2" role="group" aria-labelledby="sar-service-cat-label">
+        {SERVICE_CATEGORIES.map(cat => {
+          const selected = formData.serviceCategory.includes(cat);
+          return (
+            <button
+              key={cat}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onToggleServiceCat(cat)}
+              className={`px-3 py-1.5 min-h-[2.25rem] rounded-xl text-xs font-semibold border transition-colors ${
+                selected
+                  ? 'bg-amber-400 text-slate-900 border-amber-400 shadow-sm'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-amber-300 hover:bg-amber-50'
+              }`}
+            >
+              {cat}
+            </button>
+          );
+        })}
+      </div>
+      <FieldError msg={formErrors.serviceCategory} />
+    </div>
+
+    {/* Remarks (optional) */}
+    <div className="min-w-0">
+      <label htmlFor="sar-remarks" className="block text-sm font-semibold text-slate-700 mb-1.5">Remarks (Optional)</label>
+      <textarea
+        id="sar-remarks"
+        value={formData.remarks}
+        onChange={e => onFieldChange('remarks', e.target.value)}
+        rows={3}
+        placeholder="Any special notes or instructions…"
+        className={INPUT_STYLES}
+      />
+    </div>
+  </ResponsiveModal>
+  );
+};
 
 // ─── Schedule Modal ───────────────────────────────────────────────────────────
 

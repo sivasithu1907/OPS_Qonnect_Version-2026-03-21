@@ -29,25 +29,25 @@ export const PhoneLookupNotice: React.FC<{
   if (existing) {
     const building = getCustomerBuilding(existing);
     return (
-      <div data-testid={rootTestId || `${prefix}-duplicate`} role="alert" className={`mt-1.5 ${dense ? 'p-2' : 'p-3'} rounded-lg border border-amber-300 bg-amber-50 text-amber-900`}>
-        <div className="flex items-start gap-2">
-          <AlertCircle size={dense ? 14 : 16} className="mt-0.5 shrink-0 text-amber-600" />
+      <div data-testid={rootTestId || `${prefix}-duplicate`} role="alert" className={`mt-1.5 ${dense ? 'p-2' : 'p-2.5'} rounded-lg border border-amber-300 bg-amber-50 text-amber-900 min-w-0`}>
+        <div className="flex items-start gap-2 min-w-0">
+          <AlertCircle size={dense ? 14 : 16} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <div className="text-xs font-bold">This mobile number is already registered.</div>
-            <div className="text-xs mt-0.5">
+            <div className="text-xs mt-0.5 break-words">
               <span data-testid={`${prefix}-duplicate-name`} className="font-bold">{existing.name}</span>
-              {' · '}<span data-testid={`${prefix}-duplicate-phone`} className="font-mono">{formatPhoneDisplay(existing.phone)}</span>
+              {' · '}<span data-testid={`${prefix}-duplicate-phone`} className="font-mono whitespace-nowrap">{formatPhoneDisplay(existing.phone)}</span>
               {building ? <span className="text-amber-700"> · {building}</span> : null}
               {!getCustomerMapUrl(existing) && <span className="text-amber-700"> · Location missing</span>}
             </div>
-            {onUseExisting && (
-              <button type="button" data-testid={useTestId || `${prefix}-use-existing`} onClick={() => onUseExisting(existing)}
-                className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700">
-                <UserCheck size={12} /> {useLabel}
-              </button>
-            )}
           </div>
         </div>
+        {onUseExisting && (
+          <button type="button" data-testid={useTestId || `${prefix}-use-existing`} onClick={() => onUseExisting(existing)}
+            className="mt-2 w-full sm:w-auto inline-flex items-center justify-center gap-1 text-xs font-bold px-3 min-h-[2.25rem] rounded-lg bg-amber-600 text-white hover:bg-amber-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">
+            <UserCheck size={12} aria-hidden="true" /> {useLabel}
+          </button>
+        )}
       </div>
     );
   }
@@ -64,7 +64,12 @@ export const PhoneLookupNotice: React.FC<{
   return null;
 };
 
-/** Existing customers whose number starts like the incomplete number being typed + similar names (labelled suggestions). */
+/**
+ * Existing customers whose number starts like the incomplete number being typed + similar names (labelled suggestions).
+ * One compact panel directly under the field it belongs to: same width as the field, a short heading, at most ~3 rows
+ * visible (the rest scroll inside the panel — it never grows the form), and customers listed in `exclude` (already shown
+ * in the other panel, or already shown in the duplicate warning) are left out. Suggestions never select or change anything.
+ */
 export const CustomerSuggestions: React.FC<{
   lookup: CustomerLookup;
   prefix: string;
@@ -72,16 +77,24 @@ export const CustomerSuggestions: React.FC<{
   /** which part of the lookup to show */
   show?: 'name' | 'phone' | 'both';
   heading?: string;
-}> = ({ lookup, prefix, onPick, show = 'both', heading = 'Existing clients — suggestions, not matched automatically' }) => {
+  /** customer ids already shown elsewhere in the form (the name panel, when this is the phone panel) */
+  exclude?: readonly string[];
+}> = ({ lookup, prefix, onPick, show = 'both', heading, exclude = [] }) => {
+  const title = heading || (show === 'phone' ? 'Similar numbers — suggestions only' : show === 'name' ? 'Similar names — suggestions only' : 'Existing clients — suggestions only');
   const matches = [
     ...(show !== 'name' ? lookup.phoneMatches : []),
     ...(show !== 'phone' ? lookup.nameMatches : []),
-  ].filter((m, i, a) => a.findIndex(x => x.customer.id === m.customer.id) === i);
+  ].filter((m, i, a) => a.findIndex(x => x.customer.id === m.customer.id) === i && !exclude.includes(m.customer.id));
   if (!matches.length) return null;
   return (
-    <div data-testid={`${prefix}-suggestions`} className="mt-1.5 bg-white border border-slate-200 rounded-lg overflow-hidden">
-      <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold uppercase text-slate-500">{heading}</div>
-      <CustomerMatchList matches={matches} onPick={onPick} dense testId={`${prefix}-suggestion-list`} />
+    <div data-testid={`${prefix}-suggestions`} role="region" aria-live="polite" aria-label={`${title} (${matches.length})`}
+      className="mt-1.5 w-full min-w-0 bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div className="px-2.5 py-1 bg-slate-50 border-b border-slate-100 text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate">{title}</span><span className="shrink-0 font-mono text-slate-400">{matches.length}</span>
+      </div>
+      <div className="max-h-[8.5rem] overflow-y-auto overscroll-contain">
+        <CustomerMatchList matches={matches} onPick={onPick} dense testId={`${prefix}-suggestion-list`} label={title} />
+      </div>
     </div>
   );
 };

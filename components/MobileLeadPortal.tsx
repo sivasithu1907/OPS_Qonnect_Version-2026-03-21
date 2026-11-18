@@ -26,6 +26,7 @@ import { isDuplicateCustomerError } from '../utils/customerErrors';
 import CustomerMatchList from './shared/CustomerMatchList';
 import { lookupCustomers } from '../utils/useCustomerLookup';
 import { PhoneLookupNotice } from './shared/CustomerLookupNotice';
+import ResponsiveModal from './shared/ResponsiveModal';
 import type { ActivityFreelancerAssignment } from '../types';
 
 // --- Props ---
@@ -4175,13 +4176,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
 
       {/* --- Create Activity Modal (matches PlanningModule exactly) --- */}
       {showCreateActivity && onAddActivity && (
-          <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => { setShowCreateActivity(false); setIsPlanningActivity(false); }}>
-              <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
-                      <h3 className="font-bold text-lg text-slate-900">Plan New Activity</h3>
-                      <button onClick={() => { setShowCreateActivity(false); setIsPlanningActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ ...EMPTY_CREATE_FORM }); }}><X size={20} className="text-slate-400" /></button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <ResponsiveModal bare portal={false} size="sm" zIndexClass="z-[60]" backdropClose ariaLabel="Plan New Activity" testId="mobile-activity-sheet" onClose={() => { setShowCreateActivity(false); setIsPlanningActivity(false); }}>
+              <div className="qn-rm-header">
+                  <h3 className="qn-rm-title">Plan New Activity</h3>
+                  <button type="button" aria-label="Close dialog" className="qn-rm-close" onClick={() => { setShowCreateActivity(false); setIsPlanningActivity(false); setActPhoneSearch(''); setActCustSearch(''); setActSelectedCustomer(null); setActNewCustName(''); setActCustError(''); setActServiceCats([]); setCreateActivityForm({ ...EMPTY_CREATE_FORM }); }}><X size={20} aria-hidden="true" /></button>
+              </div>
+              <div className="qn-rm-body space-y-3">
                       {/* Customer — phone-first search */}
                       <div>
                           <label className="text-xs font-semibold text-slate-500 uppercase">Customer <span className="text-red-500">*</span></label>
@@ -4435,7 +4435,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               rows={2} placeholder="Scope of work..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
                       </div>
                   </div>
-                  <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+                  <div className="qn-rm-footer">
                       <button
                           disabled={isPlanningActivity}
                           onClick={() => {
@@ -4496,19 +4496,17 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                           className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
                       >{isPlanningActivity ? 'Planning…' : 'Plan Activity'}</button>
                   </div>
-              </div>
-          </div>
+          </ResponsiveModal>
       )}
 
-            {/* Create Ticket Modal — Phone-search-first customer flow */}
+{/* Create Ticket Modal — Phone-search-first customer flow */}
       {showCreateTicket && onCreateTicket && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}>
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0">
-              <h3 className="font-bold text-lg text-slate-900">Create Ticket</h3>
-              <button onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}><X size={20} className="text-slate-400" /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <ResponsiveModal bare portal={false} size="sm" zIndexClass="z-[60]" backdropClose ariaLabel="Create Ticket" testId="mobile-ticket-sheet" onClose={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}>
+              <div className="qn-rm-header">
+                  <h3 className="qn-rm-title">Create Ticket</h3>
+                  <button type="button" aria-label="Close dialog" className="qn-rm-close" onClick={() => { setShowCreateTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}><X size={20} aria-hidden="true" /></button>
+              </div>
+              <div className="qn-rm-body space-y-3">
               {/* Step 1: Search customer by phone */}
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number or Name *</label>
@@ -4672,7 +4670,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 </div>
               )}
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
+            <div className="qn-rm-footer">
               <button
                 disabled={isCreatingTicket}
                 onClick={() => { setShowCreateTicket(false); setIsCreatingTicket(false); setTicketPhoneSearch(''); setTicketSelectedCustomer(null); }}
@@ -4740,11 +4738,10 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 className="flex-1 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
               >{isCreatingTicket ? 'Creating…' : 'Create Ticket'}</button>
             </div>
-          </div>
-        </div>
+          </ResponsiveModal>
       )}
 
-    {/* ── Activity Cancel Modal ── */}
+{/* ── Activity Cancel Modal ── */}
     {showActivityCancel && cancelActivityTarget && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowActivityCancel(false)}>
             <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>

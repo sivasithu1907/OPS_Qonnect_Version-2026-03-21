@@ -8,6 +8,7 @@ import { validateGoogleMapsUrl, getCustomerMapUrl, getCustomerBuilding } from '.
 import { isDuplicateCustomerError } from '../utils/customerErrors';
 import { useCustomerLookup } from '../utils/useCustomerLookup';
 import { PhoneLookupNotice, CustomerSuggestions } from './shared/CustomerLookupNotice';
+import ResponsiveModal from './shared/ResponsiveModal';
 import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight, ClipboardList } from 'lucide-react';
 import { ContextualActions, whatsappAction, createTicketAction, createActivityAction } from './shared/ContextualActions';
 import { CustomerTimelineSkeleton } from './shared/Skeletons';
@@ -862,187 +863,177 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
 
         {/* --- Modals --- */}
 
-        {/* Add/Edit Modal */}
+        {/* Add/Edit Modal — shared responsive shell: fixed header + sticky Save/Cancel, only the form body scrolls */}
         {(modalType === 'add' || modalType === 'edit') && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm qn-modal-backdrop">
-                 <div className={`bg-white rounded-2xl shadow-2xl w-full ${isMobile ? 'h-full rounded-none' : 'max-w-lg'} overflow-hidden flex flex-col`}>
-                    <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                         <h3 className="font-bold text-lg text-slate-900">
-                             {modalType === 'edit' ? 'Edit Client' : 'New Client'}
-                         </h3>
-                         <button onClick={closeModal}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+            <ResponsiveModal
+                key={activeItem?.id ?? '__new_customer__'}
+                as="form"
+                onSubmit={handleSubmit}
+                testId="client-form-modal"
+                size="md"
+                title={modalType === 'edit' ? 'Edit Client' : 'New Client'}
+                onClose={closeModal}
+                busy={submitting}
+                status={formError ? (
+                    <div role="alert" className="p-2 bg-red-50 text-red-600 text-xs rounded border border-red-100 flex items-start gap-1">
+                        <span className="font-bold shrink-0">Error:</span> <span className="min-w-0 break-words">{formError}</span>
                     </div>
-                    
-                    <form key={activeItem?.id ?? '__new_customer__'} onSubmit={handleSubmit} className="p-6 space-y-4 bg-white flex-1 overflow-y-auto">
-                        
-                        {/* Avatar Upload */}
-                        <div className="flex flex-col items-center mb-4">
-                            <div className="relative group cursor-pointer" onClick={() => !readOnly && fileInputRef.current?.click()}>
-                                <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-slate-200 overflow-hidden mb-2">
-                                    {avatarPreview ? (
-                                        <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                            <Camera size={32} />
-                                        </div>
-                                    )}
+                ) : undefined}
+                footer={!readOnly ? (
+                    <>
+                        {activeItem ? (
+                            <button type="button" onClick={(e) => handleDelete(activeItem.id, e)} className="qn-touch text-red-500 hover:text-red-700 text-sm flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition-colors">
+                                <Trash2 size={16} className="pointer-events-none" /> Delete
+                            </button>
+                        ) : null}
+                        <div className="qn-rm-actions">
+                            <button type="button" onClick={closeModal} className="qn-touch px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
+                            <button type="submit" disabled={submitting} className="qn-touch px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                                {submitting ? 'Saving…' : activeItem ? 'Save Changes' : 'Create Record'}
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    <button type="button" onClick={closeModal} className="qn-touch px-4 py-2 bg-slate-900 text-white rounded-lg font-medium">Close</button>
+                )}
+            >
+                {/* Photo — one compact row (it used to take a full 130px block of the form) */}
+                <div className="flex items-center gap-4">
+                    <div className="relative group cursor-pointer shrink-0" onClick={() => !readOnly && fileInputRef.current?.click()}>
+                        <div className="w-16 h-16 rounded-full bg-slate-100 border-2 border-slate-200 overflow-hidden">
+                            {avatarPreview ? (
+                                <img src={avatarPreview} alt="Client photo preview" className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                    <Camera size={24} aria-hidden="true" />
                                 </div>
-                                {!readOnly && (
-                                    <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                        <Upload className="text-white" size={24} />
-                                    </div>
-                                )}
-                            </div>
-                            {!readOnly && (
-                                <>
-                                    <input 
-                                        type="file" 
-                                        ref={fileInputRef} 
-                                        onChange={handleFileChange} 
-                                        accept="image/*" 
-                                        className="hidden" 
-                                    />
-                                    <button type="button" onClick={() => fileInputRef.current?.click()} className="text-sm text-emerald-600 font-medium hover:text-emerald-700">
-                                        {avatarPreview ? 'Change Photo' : 'Upload Photo'}
-                                    </button>
-                                </>
                             )}
                         </div>
-
-                        {/* Fields */}
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
-                            <input name="name" defaultValue={activeItem?.name} onChange={e => setLiveName(e.target.value)} required disabled={readOnly} autoComplete="off" className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" placeholder="e.g. John Doe"/>
-                            {modalType === 'add' && (
-                              <CustomerSuggestions lookup={formLookup} prefix="client-name" show="name" onPick={(c) => openModal('view', c)}
-                                heading="Existing clients with this or a similar name — suggestions only, nothing is merged" />
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
-                                <div className="flex">
-                                    <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 text-slate-500"><Phone size={14} /></span>
-                                    <input 
-                                        name="phone" 
-                                        data-testid="client-phone-input"
-                                        defaultValue={activeItem?.phone ? formatPhoneDisplay(activeItem.phone) : ''}
-                                        onChange={e => { setLivePhone(e.target.value); setDuplicateOf(null); }}
-                                        inputMode="tel"
-                                        autoComplete="off"
-                                        required 
-                                        disabled={readOnly}
-                                        className="rounded-none rounded-r-lg flex-1 bg-white border border-slate-300 p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
-                                        placeholder="5000 0001 or +974 5000 0001"
-                                    />
-                                </div>
-                                {!readOnly && (
-                                  <>
-                                    <PhoneLookupNotice lookup={formLookup} prefix="client" onUseExisting={(c) => openModal('view', c)} useLabel="Open existing client" useTestId="client-duplicate-open" />
-                                    <CustomerSuggestions lookup={formLookup} prefix="client-phone" show="phone" onPick={(c) => openModal('view', c)}
-                                      heading="Existing clients with a similar number — suggestions only" />
-                                  </>
-                                )}
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500 uppercase">
-                                    Email <span className="text-slate-400 font-normal lowercase">(optional)</span>
-                                </label>
-                                <input 
-                                    name="email" 
-                                    defaultValue={activeItem?.email} 
-                                    type="email" 
-                                    disabled={readOnly}
-                                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
-                                    placeholder="email@example.com"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-1">
-                            <label htmlFor="client-location-url" className="text-xs font-semibold text-slate-500 uppercase">
-                                Google Maps URL <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                id="client-location-url"
-                                data-testid="client-location-url"
-                                name="address"
-                                type="text"
-                                inputMode="url"
-                                autoComplete="off"
-                                aria-required="true"
-                                defaultValue={getCustomerMapUrl(activeItem)}
-                                disabled={readOnly}
-                                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100"
-                                placeholder="https://maps.app.goo.gl/… or https://www.google.com/maps/…"
-                            />
-                            {activeItem && !getCustomerMapUrl(activeItem) && (
-                                <p data-testid="location-required-hint" className="text-[11px] text-amber-600">
-                                    This client has no Google Maps link yet — add one to save changes.
-                                    {activeItem.address && !/^https?:\/\//i.test(String(activeItem.address)) ? ' The old address text is kept in the notes.' : ''}
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-500 uppercase">
-                                Building / Villa Number <span className="text-slate-400 font-normal lowercase">(optional)</span>
-                            </label>
-                            <input 
-                                name="buildingNumber" 
-                                defaultValue={getCustomerBuilding(activeItem?.buildingNumber === activeItem?.address ? { buildingNumber: '' } : activeItem)} 
-                                disabled={readOnly}
-                                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
-                                placeholder="e.g. Bldg 10, Zone 55"
-                            />
-                        </div>
-
-                        {duplicateOf && !(formLookup.existing && formLookup.existing.id === duplicateOf.id) && (
-                            <div data-testid="client-duplicate" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
-                                <div className="font-semibold">This mobile number already belongs to an existing client.</div>
-                                <div className="mt-1"><span data-testid="client-duplicate-name" className="font-bold">{duplicateOf.name}</span> · <span className="font-mono">{formatPhoneDisplay(duplicateOf.phone)}</span></div>
-                                <div className="text-xs mt-1 text-amber-800">Nothing was saved and the existing client was not changed. What you typed is kept below.</div>
-                                <button type="button" data-testid="client-duplicate-open" onClick={() => {
-                                    const ex = customers.find(c => c.id === duplicateOf.id) || duplicateOf;
-                                    setDuplicateOf(null);
-                                    openModal('view', ex);
-                                }} className="mt-2 px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-amber-900 hover:bg-amber-100">
-                                    Open existing client
-                                </button>
-                            </div>
-                        )}
-
-                        {formError && (
-                            <div className="p-2 bg-red-50 text-red-600 text-xs rounded border border-red-100 flex items-center gap-1">
-                                <span className="font-bold">Error:</span> {formError}
-                            </div>
-                        )}
-
                         {!readOnly && (
-                            <div className="pt-4 flex justify-between items-center border-t border-slate-100 mt-2">
-                                 {activeItem ? (
-                                    <button type="button" onClick={(e) => handleDelete(activeItem.id, e)} className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1 hover:bg-red-50 px-2 py-1 rounded transition-colors">
-                                        <Trash2 size={16} className="pointer-events-none" /> Delete
-                                    </button>
-                                 ) : <div></div>}
-                                 <div className="flex gap-3">
-                                    <button type="button" onClick={closeModal} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
-                                    <button type="submit" disabled={submitting} className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
-                                        {submitting ? 'Saving…' : activeItem ? 'Save Changes' : 'Create Record'}
-                                    </button>
-                                 </div>
+                            <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Upload className="text-white" size={18} aria-hidden="true" />
                             </div>
                         )}
-                        {readOnly && (
-                            <div className="pt-4 flex justify-end border-t border-slate-100 mt-2">
-                                <button type="button" onClick={closeModal} className="px-4 py-2 bg-slate-900 text-white rounded-lg font-medium">Close</button>
-                            </div>
-                        )}
+                    </div>
+                    {!readOnly && (
+                        <div className="min-w-0">
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" aria-label="Client photo" />
+                            <button type="button" onClick={() => fileInputRef.current?.click()} className="qn-touch text-sm text-emerald-600 font-medium hover:text-emerald-700">
+                                {avatarPreview ? 'Change Photo' : 'Upload Photo'}
+                            </button>
+                            <p className="text-xs text-slate-400">Optional</p>
+                        </div>
+                    )}
+                </div>
 
-                    </form>
-                 </div>
-            </div>
+                {/* Name */}
+                <div className="space-y-1 min-w-0">
+                    <label htmlFor="client-name" className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
+                    <input id="client-name" name="name" defaultValue={activeItem?.name} onChange={e => setLiveName(e.target.value)} required disabled={readOnly} autoComplete="off" className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" placeholder="e.g. John Doe"/>
+                    {modalType === 'add' && (
+                        <CustomerSuggestions lookup={formLookup} prefix="client-name" show="name" onPick={(c) => openModal('view', c)} />
+                    )}
+                </div>
+
+                {/* Phone | Email — two columns from 640px up, one column below; each suggestion panel sits under its own field */}
+                <div className="qn-rm-grid qn-rm-grid-2">
+                    <div className="space-y-1 min-w-0">
+                        <label htmlFor="client-phone" className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
+                        <div className="flex min-w-0">
+                            <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 text-slate-500" aria-hidden="true"><Phone size={14} /></span>
+                            <input
+                                id="client-phone"
+                                name="phone"
+                                data-testid="client-phone-input"
+                                defaultValue={activeItem?.phone ? formatPhoneDisplay(activeItem.phone) : ''}
+                                onChange={e => { setLivePhone(e.target.value); setDuplicateOf(null); }}
+                                inputMode="tel"
+                                autoComplete="off"
+                                required
+                                disabled={readOnly}
+                                className="rounded-none rounded-r-lg flex-1 min-w-0 bg-white border border-slate-300 p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100"
+                                placeholder="5000 0001 or +974 5000 0001"
+                            />
+                        </div>
+                        {!readOnly && (
+                            <>
+                                <PhoneLookupNotice lookup={formLookup} prefix="client" onUseExisting={(c) => openModal('view', c)} useLabel="Open existing client" useTestId="client-duplicate-open" dense />
+                                <CustomerSuggestions lookup={formLookup} prefix="client-phone" show="phone" onPick={(c) => openModal('view', c)}
+                                    exclude={modalType === 'add' ? formLookup.nameMatches.map(m => m.customer.id) : []} />
+                            </>
+                        )}
+                    </div>
+                    <div className="space-y-1 min-w-0">
+                        <label htmlFor="client-email" className="text-xs font-semibold text-slate-500 uppercase">
+                            Email <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                        </label>
+                        <input
+                            id="client-email"
+                            name="email"
+                            defaultValue={activeItem?.email}
+                            type="email"
+                            disabled={readOnly}
+                            autoComplete="off"
+                            className="w-full min-w-0 bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 text-ellipsis"
+                            placeholder="email@example.com"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-1 min-w-0">
+                    <label htmlFor="client-location-url" className="text-xs font-semibold text-slate-500 uppercase">
+                        Google Maps URL <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                        id="client-location-url"
+                        data-testid="client-location-url"
+                        name="address"
+                        type="text"
+                        inputMode="url"
+                        autoComplete="off"
+                        aria-required="true"
+                        defaultValue={getCustomerMapUrl(activeItem)}
+                        disabled={readOnly}
+                        className="w-full min-w-0 bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100 text-ellipsis"
+                        placeholder="https://maps.app.goo.gl/… or https://www.google.com/maps/…"
+                    />
+                    {activeItem && !getCustomerMapUrl(activeItem) && (
+                        <p data-testid="location-required-hint" className="text-[11px] text-amber-600">
+                            This client has no Google Maps link yet — add one to save changes.
+                            {activeItem.address && !/^https?:\/\//i.test(String(activeItem.address)) ? ' The old address text is kept in the notes.' : ''}
+                        </p>
+                    )}
+                </div>
+
+                <div className="space-y-1 min-w-0">
+                    <label htmlFor="client-building" className="text-xs font-semibold text-slate-500 uppercase">
+                        Building / Villa Number <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                    </label>
+                    <input
+                        id="client-building"
+                        name="buildingNumber"
+                        defaultValue={getCustomerBuilding(activeItem?.buildingNumber === activeItem?.address ? { buildingNumber: '' } : activeItem)}
+                        disabled={readOnly}
+                        className="w-full min-w-0 bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100"
+                        placeholder="e.g. Bldg 10, Zone 55"
+                    />
+                </div>
+
+                {duplicateOf && !(formLookup.existing && formLookup.existing.id === duplicateOf.id) && (
+                    <div data-testid="client-duplicate" ref={el => { if (el) el.scrollIntoView({ block: 'nearest' }); }} role="alert" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                        <div className="font-semibold">This mobile number already belongs to an existing client.</div>
+                        <div className="mt-1 break-words"><span data-testid="client-duplicate-name" className="font-bold">{duplicateOf.name}</span> · <span className="font-mono whitespace-nowrap">{formatPhoneDisplay(duplicateOf.phone)}</span></div>
+                        <div className="text-xs mt-1 text-amber-800">Nothing was saved and the existing client was not changed. What you typed is kept below.</div>
+                        <button type="button" data-testid="client-duplicate-open" onClick={() => {
+                            const ex = customers.find(c => c.id === duplicateOf.id) || duplicateOf;
+                            setDuplicateOf(null);
+                            openModal('view', ex);
+                        }} className="qn-touch mt-2 px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                            Open existing client
+                        </button>
+                    </div>
+                )}
+            </ResponsiveModal>
         )}
 
         {/* View Details & History Modal */}
