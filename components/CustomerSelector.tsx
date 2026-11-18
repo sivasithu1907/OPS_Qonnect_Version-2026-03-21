@@ -4,6 +4,10 @@ import { Customer } from '../types';
 import { validatePhone, formatPhoneDisplay, normalizePhone } from '../utils/phoneUtils';
 import { Search, UserPlus, CheckCircle2, X, Phone, User, Save, AlertCircle, Loader2 } from 'lucide-react';
 import { generateCustomerId } from '../utils/idUtils';
+import { searchCustomers } from '../utils/customerSearch';
+import { isDuplicateCustomerError } from '../utils/customerErrors';
+import { phoneKey, samePhone } from '../utils/phoneUtils';
+import CustomerMatchList from './shared/CustomerMatchList';
 
 interface CustomerSelectorProps {
   customers: Customer[];
@@ -40,6 +44,8 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // A client that already owns the typed mobile number (found on this screen or reported by the server).
+  const [duplicate, setDuplicate] = useState<Customer | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedCustomer = useMemo(
@@ -53,22 +59,19 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
 
   const inputDigits = searchTerm.replace(/\D/g, '');
   const isSelectedName = selectedCustomer && searchTerm === selectedCustomer.name;
+  const typedTerm = searchTerm.trim();
+  const looksLikePhone = inputDigits.length > 0 && inputDigits.length >= typedTerm.replace(/[\s+()\-.]/g, '').length * 0.8;
 
-  const exactMatch = useMemo(() => {
-    if (!inputDigits || inputDigits.length < 4) return null;
-    return customers.find(c => normalizePhone(c.phone).endsWith(inputDigits)) || null;
-  }, [customers, inputDigits]);
-
-  const partialMatches = useMemo(() => {
-    if (!inputDigits || inputDigits.length < 2) return [];
-    return customers
-      .filter(c => normalizePhone(c.phone).includes(inputDigits) && c !== exactMatch)
-      .slice(0, 8);
-  }, [customers, inputDigits, exactMatch]);
+  // One shared ranking: exact mobile → exact name → partial → close spelling (suggestions, labelled).
+  const matches = useMemo(
+    () => (isSelectedName || typedTerm.length < 2 ? [] : searchCustomers(customers, typedTerm, { limit: 8, fuzzy: true })),
+    [customers, typedTerm, isSelectedName]
+  );
+  const exactMatch = useMemo(() => matches.find(m => m.kind === 'phone-exact')?.customer || null, [matches]);
+  const listMatches = useMemo(() => matches.filter(m => m.customer !== exactMatch), [matches, exactMatch]);
 
   const showBanner = !!exactMatch && !selectedCustomer;
-  const showDropdown =
-    isOpen && !isSelectedName && (partialMatches.length > 0 || (!exactMatch && inputDigits.length > 0));
+  const showDropdown = isOpen && !isSelectedName && typedTerm.length >= 2 && (listMatches.length > 0 || !exactMatch);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -98,9 +101,10 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
     }
 
     const formattedPhone = validation.formatted || newPhone;
-    const exists = customers.find(c => c.phone === formattedPhone);
+    // Same number in any format (50000001 = +974 5000 0001 = 97450000001) is the same client — never create a second one.
+    const exists = customers.find(c => samePhone(c.phone, formattedPhone));
     if (exists) {
-      setPhoneError(`Number already registered for ${exists.name}.`);
+      setDuplicate(exists);
       return;
     }
 
@@ -132,7 +136,12 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
       setShowCreateModal(false);
     } catch (err) {
       console.error('Save customer error:', err);
-      setSaveError((err as any)?.message || 'Failed to save. Please try again.');
+      if (isDuplicateCustomerError(err)) {
+        // The server found the number under another client: show it and offer to use it. What was typed stays in the form.
+        setDuplicate((err as any).existing);
+      } else {
+        setSaveError((err as any)?.message || 'Failed to save. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -154,7 +163,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
               <h3 className="font-bold text-lg text-slate-900">Add New Customer</h3>
               <button
                 type="button"
-                onClick={() => { setShowCreateModal(false); setNewName(''); setNewPhone(''); setPhoneError(null); setSaveError(null); }}
+                onClick={() => { setShowCreateModal(false); setNewName(''); setNewPhone(''); setPhoneError(null); setSaveError(null); setDuplicate(null); }}
                 disabled={isSaving}
                 className="text-slate-400 hover:text-slate-600 disabled:opacity-40"
               >
@@ -172,7 +181,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
                 <input
                   type="text"
                   value={newName}
-                  onChange={e => setNewName(e.target.value)}
+                  onChange={e => { setNewName(e.target.value); setDuplicate(null); }}
                   disabled={isSaving}
                   placeholder="e.g. John Doe"
                   className="w-full bg-white text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60"
@@ -191,7 +200,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
                 <input
                   type="text"
                   value={newPhone}
-                  onChange={e => { setNewPhone(e.target.value); setPhoneError(null); }}
+                  onChange={e => { setNewPhone(e.target.value); setPhoneError(null); setDuplicate(null); }}
                   disabled={isSaving}
                   placeholder="3300 0000"
                   className={`w-full bg-white text-slate-900 border rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 ${phoneError ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}
@@ -201,6 +210,29 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
               {phoneError && <p className="text-xs text-red-600 mt-1 font-medium">{phoneError}</p>}
               <p className="text-[10px] text-slate-400 mt-1">Default country: Qatar (+974)</p>
             </div>
+
+            {duplicate && (
+              <div data-testid="duplicate-customer" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 mb-4">
+                <div className="font-bold flex items-center gap-1.5"><AlertCircle size={14} /> This mobile number is already registered</div>
+                <div className="mt-1 text-sm"><b>{duplicate.name}</b> <span className="font-mono">{formatPhoneDisplay(duplicate.phone)}</span></div>
+                <div className="mt-0.5 text-[11px] text-amber-800">No new client was created and the existing record was not changed. What you typed is kept.</div>
+                <button
+                  type="button"
+                  data-testid="use-existing-customer"
+                  onClick={() => {
+                    const ex = duplicate;
+                    const full = customers.find(c => c.id === ex.id) || ex;
+                    onSelect(full);
+                    setSearchTerm(full.name);
+                    setNewName(''); setNewPhone(''); setDuplicate(null); setPhoneError(null); setSaveError(null);
+                    setShowCreateModal(false);
+                  }}
+                  className="mt-2 w-full bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg font-bold"
+                >
+                  Use existing client
+                </button>
+              </div>
+            )}
 
             {saveError && (
               <div className="p-2 bg-red-50 border border-red-100 rounded text-xs text-red-700 flex items-center gap-1.5 mb-4">
@@ -240,7 +272,7 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
           value={searchTerm}
           onChange={e => { setSearchTerm(e.target.value); setIsOpen(true); }}
           onFocus={() => setIsOpen(true)}
-          placeholder="Search by phone..."
+          placeholder="Search by name or mobile number…"
           className="w-full bg-white text-slate-900 border border-slate-300 rounded-lg p-2.5 pl-9 text-sm focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-slate-400"
         />
         <Search size={16} className="absolute left-3 top-3 text-slate-400" />
@@ -271,17 +303,16 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
 
       {/* Dropdown */}
       {showDropdown && (
-        <div className={`absolute left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-xl max-h-60 overflow-y-auto z-10 ${showBanner ? 'top-[calc(100%+80px)]' : 'top-full mt-1'}`}>
-          {partialMatches.map(c => (
-            <div
-              key={c.id}
-              onClick={() => { onSelect(c); setSearchTerm(c.name); setIsOpen(false); }}
-              className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 flex flex-col"
-            >
-              <span className="text-sm font-bold text-slate-900">{c.name}</span>
-              <span className="text-xs text-slate-500 font-mono mt-0.5">{formatPhoneDisplay(c.phone)}</span>
-            </div>
-          ))}
+        <div data-testid="customer-dropdown" className={`absolute left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-xl max-h-72 overflow-y-auto z-10 ${showBanner ? 'top-[calc(100%+80px)]' : 'top-full mt-1'}`}>
+          {listMatches.length > 0 && (
+            <CustomerMatchList
+              matches={listMatches}
+              onPick={(c) => { onSelect(c); setSearchTerm(c.name); setIsOpen(false); }}
+            />
+          )}
+          {listMatches.length === 0 && !exactMatch && (
+            <div className="p-3 text-xs text-slate-500">No existing client matches “{typedTerm}”.</div>
+          )}
 
           {!exactMatch && (
             <div className="p-2 sticky bottom-0 bg-white border-t border-slate-100">
@@ -292,7 +323,9 @@ const CustomerSelector: React.FC<CustomerSelectorProps> = ({
                     onManualCreate(searchTerm);
                     setIsOpen(false);
                   } else {
-                    setNewPhone(searchTerm);
+                    // A typed number pre-fills the mobile field, a typed name pre-fills the name field.
+                    if (looksLikePhone) { setNewPhone(searchTerm); setNewName(''); } else { setNewName(searchTerm.trim()); setNewPhone(''); }
+                    setDuplicate(null);
                     setShowCreateModal(true);
                     setIsOpen(false);
                   }

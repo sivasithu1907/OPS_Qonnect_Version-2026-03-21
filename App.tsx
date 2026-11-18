@@ -3,6 +3,7 @@ import toast, { Toaster } from './components/Toast';
 import { generateActivityId } from './utils/idUtils';
 import { realPhotosOnly, withoutPlaceholderPhotos } from './utils/photoUtils';
 import { Ticket, TicketStatus, TicketType, Priority, Technician, Customer, Activity, Team, Site, MessageSender, Role } from './types';
+import { DuplicateCustomerError, isDuplicateCustomerError } from './utils/customerErrors';
 import { APP_NAME, NAVIGATION_ITEMS } from './constants';
 import {
   Menu, X, Search, Bell, LogOut, ChevronDown, Maximize2, Minimize2, KeyRound, EyeOff, Eye as EyeIcon, RefreshCw, Command as CommandIcon
@@ -108,6 +109,21 @@ const QonnectLogo = ({ className, size = 30 }: { className?: string; size?: numb
   </svg>
 );
 
+// Per-user key for the remembered module (never shared between users of the same browser).
+// Role-fixed mobile portals are chosen from the role and screen size at login; they are never "remembered" (a remembered
+// portal would send a desktop session of the same user to a phone layout).
+const isRememberableView = (view: string | null | undefined, role: string): boolean =>
+  !!view && view !== 'lead_portal' && view !== 'tech_portal' &&
+  NAVIGATION_ITEMS.some(item => item.id === view && item.roles.includes(role as any));
+const NAV_KEY_PREFIX = 'qonnect_active_view:';
+const navKeyFor = (userId: string | number | undefined | null) => `${NAV_KEY_PREFIX}${userId ?? ''}`;
+const clearRememberedViews = (userId?: string | number | null) => {
+  try {
+    localStorage.removeItem('qonnect_active_view');                       // legacy single key (shared by all users)
+    if (userId !== undefined && userId !== null && userId !== '') localStorage.removeItem(navKeyFor(userId));
+  } catch { /* ignore */ }
+};
+
 function App() {
   // --- Auth Helper — must be first so all handlers can use it ---
   const getAuthHeaders = (): Record<string, string> => ({
@@ -160,13 +176,16 @@ function App() {
 
   const [activeView, setActiveView] = useState('master_dashboard');
 
-  // Persist the current page so a browser refresh can restore it (see the
-  // session-restore effect below) — only meaningful for Admin/desktop Team
-  // Lead, who have free navigation across the app; other roles always
-  // re-route to their dedicated view on refresh regardless of this value.
+  // Remember the current module per signed-in user so a browser refresh returns to it (restored in the session-restore
+  // effect below). Nothing is written until that restore has finished (`navReady`) — the old code wrote the default
+  // 'master_dashboard' here on first render, i.e. BEFORE the restore could read the saved value, so every refresh
+  // came back to the dashboard. The key includes the user id, so another user on the same browser never sees it.
+  const [navReady, setNavReady] = useState(false);
   useEffect(() => {
-    localStorage.setItem('qonnect_active_view', activeView);
-  }, [activeView]);
+    if (!currentUser || !navReady) return;
+    if (!isRememberableView(activeView, currentUser.role)) return;   // role-fixed portals and unknown views are never remembered
+    try { localStorage.setItem(navKeyFor(currentUser.id), activeView); } catch { /* storage unavailable: just don't remember */ }
+  }, [activeView, currentUser?.id, currentUser?.role, navReady]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [ticketFilter, setTicketFilter] = useState<TicketFilter | null>(null);
   const [prefillActivity, setPrefillActivity] = useState<any>(null);
@@ -553,6 +572,8 @@ const handleLogin = async (email: string, pass: string) => {
           } else {
               setActiveView('master_dashboard');
           }
+          clearRememberedViews(null);     // drop the legacy shared key; this user starts at the dashboard
+          setNavReady(true);
 
       } catch (error) {
           console.error("Login Error:", error);
@@ -561,9 +582,14 @@ const handleLogin = async (email: string, pass: string) => {
   };
 
 const handleLogout = useCallback(() => {
+      // Forget the remembered module of the user who is signing out (and any legacy shared key) so the next person
+      // on this browser can never be taken to — or learn — the previous user's module.
+      let uid: string | undefined;
+      try { uid = JSON.parse(localStorage.getItem('qonnect_user') || 'null')?.id; } catch { /* ignore */ }
+      clearRememberedViews(uid);
       localStorage.removeItem('qonnect_token');
       localStorage.removeItem('qonnect_user');
-      localStorage.removeItem('qonnect_active_view');
+      setNavReady(false);
       setCurrentUser(null);
       setActiveView('master_dashboard');
   }, []);
@@ -945,11 +971,14 @@ const loadTickets = async () => {
   };
   
 // Customer Handlers (API-first)
-// `opts.strict` is used ONLY by the Clients page "Add Client" form: the server then answers 409 instead of silently
-// merging into (and renaming) an existing contact with the same phone, and the Building Number typed in the form is
-// saved. Every other caller (activity / ticket / sales forms) keeps the original lenient behaviour unchanged.
-const handleAddCustomer = async (c: Customer, opts?: { strict?: boolean }): Promise<Customer | null> => {
+// Creates a customer. By default (strict) the server NEVER merges into, renames or overwrites an existing client: when the
+// mobile number (in any format) already belongs to a client it answers 409, and this throws a DuplicateCustomerError that
+// carries that client so the form can show it and offer "use existing". opts.requireLocation = the Clients form: a valid
+// Google Maps URL is mandatory (also enforced by the server). opts.strict === false keeps the old "return the existing
+// client" behaviour for any caller that still wants it.
+const handleAddCustomer = async (c: Customer, opts?: { strict?: boolean; requireLocation?: boolean }): Promise<Customer | null> => {
   try {
+    const strict = opts?.strict !== false;
     const res = await fetch("/api/customers", {
       method: "POST",
       headers: getAuthHeaders(),
@@ -960,18 +989,24 @@ const handleAddCustomer = async (c: Customer, opts?: { strict?: boolean }): Prom
         address: (c as any).address,
         notes: (c as any).notes,
         is_active: (c as any).is_active ?? true,
-        ...(opts?.strict ? { buildingNumber: (c as any).buildingNumber, strictCreate: true } : {}),
+        buildingNumber: (c as any).buildingNumber,
+        ...(strict ? { strictCreate: true } : {}),
+        ...(opts?.requireLocation ? { requireLocation: true } : {}),
       }),
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      if (res.status === 409 && err?.code === 'DUPLICATE_PHONE' && err?.existing) {
+        const ex = err.existing;
+        throw new DuplicateCustomerError(err.error || 'A client with this mobile number already exists.', {
+          id: ex.id, name: ex.name, phone: ex.phone || '', address: ex.address || '', buildingNumber: ex.buildingNumber || '',
+        } as Customer);
+      }
       throw new Error(err?.error || `Failed to create customer (HTTP ${res.status})`);
     }
 
-    // Return the DB-created customer (with real server-assigned ID). When the
-    // phone already belongs to a customer, the server returns that existing
-    // record (canonical ID) instead — callers must use this returned ID.
+    // Return the DB-created customer (with real server-assigned ID).
     const created = await res.json();
     if (!created || !created.id) throw new Error("Server did not return a customer ID");
     // Show it immediately and keep it visible until a server list includes it.
@@ -983,6 +1018,8 @@ const handleAddCustomer = async (c: Customer, opts?: { strict?: boolean }): Prom
     return created as Customer;
   } catch (e: any) {
     console.error(e);
+    // Duplicates keep their type (and the existing client) so the caller can offer to use it.
+    if (isDuplicateCustomerError(e)) throw e;
     // Throw (rather than return null + toast) so each caller can show the real
     // reason where its user can see it — the standalone Team Lead portal has no
     // toast host mounted, so a toast raised here would never be displayed there.
@@ -991,9 +1028,7 @@ const handleAddCustomer = async (c: Customer, opts?: { strict?: boolean }): Prom
   }
 };
 
-// Edits an EXISTING client. Throws (instead of toasting) so the Edit form can show the real reason and keep what the
-// user typed. Creating a client never comes through here — see handleAddCustomer.
-const handleUpdateCustomer = async (c: Customer): Promise<void> => {
+const handleUpdateCustomer = async (c: Customer, opts?: { requireLocation?: boolean }): Promise<void> => {
   const id = (c as any)?.id ? String((c as any).id).trim() : "";
   if (!id) {
     console.error("🚨 Update customer called without id:", c);
@@ -1008,6 +1043,7 @@ const handleUpdateCustomer = async (c: Customer): Promise<void> => {
     buildingNumber: (c as any).buildingNumber,
     notes: (c as any).notes,
     is_active: (c as any).is_active ?? true,
+    ...(opts?.requireLocation ? { requireLocation: true } : {}),
   };
 
   let res: Response;
@@ -1025,6 +1061,10 @@ const handleUpdateCustomer = async (c: Customer): Promise<void> => {
   if (!res.ok) {
     const err = await res.json().catch(() => ({} as any));
     console.error("Update failed:", res.status, err);
+    if (res.status === 409 && err?.code === 'DUPLICATE_PHONE' && err?.existing) {
+      const ex = err.existing;
+      throw new DuplicateCustomerError(err.error || 'A client with this mobile number already exists.', { id: ex.id, name: ex.name, phone: ex.phone || '', address: ex.address || '', buildingNumber: ex.buildingNumber || '' } as Customer);
+    }
     throw new Error(`Customer was not saved: ${err?.error || `HTTP ${res.status}`}`);
   }
 
@@ -1344,15 +1384,14 @@ const loadCustomers = async () => {
           // whatever activeView's default happened to be (Service
           // Dashboard) — this is the actual fix for that, not just
           // changing the default.
-          const savedView = localStorage.getItem('qonnect_active_view');
-          const isValidForRole = savedView && NAVIGATION_ITEMS.some(
-            item => item.id === savedView && item.roles.includes(user.role)
-          );
-          // If the saved view doesn't exist or isn't allowed for this role
-          // (e.g. stale data from a previous account), fall back to Master
-          // Dashboard rather than risk landing on a blank screen.
-          setActiveView(isValidForRole ? savedView : 'master_dashboard');
+          let savedView: string | null = null;
+          try { savedView = localStorage.getItem(navKeyFor(user.id)); } catch { /* storage unavailable */ }
+          const isValidForRole = isRememberableView(savedView, user.role);
+          // Nothing saved for THIS user, or the saved module is no longer allowed for the role → Master Dashboard.
+          setActiveView(isValidForRole ? (savedView as string) : 'master_dashboard');
         }
+        try { localStorage.removeItem('qonnect_active_view'); } catch { /* legacy key cleanup */ }
+        setNavReady(true);            // only now may the current module be remembered
       })
       .catch(() => {
         // Token expired or invalid — clear and show login
@@ -1360,6 +1399,7 @@ const loadCustomers = async () => {
         localStorage.removeItem('qonnect_user');
         localStorage.removeItem('qonnect_active_view');
         setCurrentUser(null);
+        setNavReady(false);
       });
   }, []);
   
@@ -2439,6 +2479,7 @@ useEffect(() => {
               recentViews={recentViews.filter(v => v !== activeView)}
               onSelect={handlePaletteSelect}
               onSelectRecord={handleRecordSelect}
+              customers={customers}
             />
           </Suspense>
         )}

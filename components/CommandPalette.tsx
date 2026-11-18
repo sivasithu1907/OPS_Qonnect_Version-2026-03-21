@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Search, CornerDownLeft, SearchX, Loader2, Contact, Calendar, Ticket, ClipboardList, AlertCircle } from 'lucide-react';
 import { CommandItem, searchCommands, IS_APPLE_PLATFORM } from './commandRegistry';
+import { searchCustomers } from '../utils/customerSearch';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Command Palette (Sprint 2.1 + 3.1A)
@@ -73,6 +74,8 @@ interface CommandPaletteProps {
   recentViews: string[];
   onSelect: (command: CommandItem) => void;
   onSelectRecord: (item: RecordItem) => void;
+  /** Already-loaded client list (same data/permissions as the Clients screen) — used only to suggest close spellings. */
+  customers?: Array<{ id: string; name: string; phone?: string; buildingNumber?: string; email?: string }>;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -108,7 +111,7 @@ function getAuthHeaders(): Record<string, string> {
 
 // ── Main component ────────────────────────────────────────────────────────
 const CommandPalette: React.FC<CommandPaletteProps> = ({
-  onClose, commands, recentViews, onSelect, onSelectRecord
+  onClose, commands, recentViews, onSelect, onSelectRecord, customers
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -248,8 +251,28 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({
       }
     }
 
+    // Close spellings of a client name ("Abdhulla" → "Abdullah") — clearly labelled as suggestions, never mixed into the results.
+    if (customers && customers.length) {
+      const have = new Set((recordResults?.clients || []).map(c => c.id));
+      const similar = searchCustomers(customers, trimmed, { limit: 0, fuzzy: true, fuzzyLimit: 3 })
+        .filter(m => m.kind === 'fuzzy' && !have.has(m.customer.id));
+      if (similar.length) {
+        out.push({
+          heading: 'Similar clients — suggestions',
+          items: similar.map((m): RecordItem => ({
+            id: `record:client:${m.customer.id}`,
+            kind: 'record',
+            recordType: 'client',
+            label: m.customer.name,
+            sublabel: [m.customer.phone, (m.customer as any).buildingNumber].filter(Boolean).join(' · '),
+            recordId: m.customer.id,
+          })),
+        });
+      }
+    }
+
     return out;
-  }, [query, commands, recentViews, recordResults]);
+  }, [query, commands, recentViews, recordResults, customers]);
 
   // Flat list for keyboard navigation
   const flatItems = useMemo(() => sections.flatMap(s => s.items), [sections]);

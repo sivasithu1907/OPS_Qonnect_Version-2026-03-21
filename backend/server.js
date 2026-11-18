@@ -22,6 +22,7 @@ import {
 } from './photos.js';
 
 import { allowed, isEnabled, guardedFetch, callN8n, switchStates, assertStagingIsolation, logBlocked } from './integrations.js';
+import { phoneKey, phoneKeySql, canonicalPhone, findCustomerByPhone, lockCustomerPhone, withCustomerPhoneLock, customerSummary, validateGoogleMapsUrl, hasUnsafeScheme } from './customers.js';
 
 dotenv.config();
 // APP_ENV=staging: refuse to start if the configuration could reach production services or real external APIs.
@@ -294,16 +295,21 @@ function makeTicketId() {
 }
 
 async function upsertWhatsAppCustomer(phone, name) {
-  const customerId = `c-${phone}`;
-  await pool.query(
-    `INSERT INTO customers (id, name, phone)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (id) DO UPDATE
-     SET name = COALESCE(EXCLUDED.name, customers.name),
-         phone = EXCLUDED.phone`,
-    [customerId, name || "Valued Client", phone]
-  );
-  return customerId;
+  // Customer MATCHING only (no message is sent here): the same number in any format is the same client, so an existing
+  // client is reused as-is (never renamed) and a new one is created under the per-number lock.
+  return withCustomerPhoneLock(pool, phone, async (client, existing) => {
+    if (existing) return existing.id;
+    const customerId = `c-${phone}`;
+    await client.query(
+      `INSERT INTO customers (id, name, phone)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE
+       SET name = COALESCE(EXCLUDED.name, customers.name),
+           phone = EXCLUDED.phone`,
+      [customerId, name || "Valued Client", canonicalPhone(phone) || phone]
+    );
+    return customerId;
+  });
 }
 
 // WhatsApp support interactions create TICKETS only, not activities
@@ -1517,6 +1523,34 @@ app.get("/api/tickets/:id/full", authenticate, async (req, res) => {
 });
 
 // 2. Create a new ticket in DB (Fixed for Foreign Key sync)
+// Customer resolution for a new ticket (runs inside the ticket's transaction `client`).
+async function resolveCustomerForTicket(client, { customerId, customerName, phoneNumber, locationUrl, houseNumber }) {
+  const key = phoneKey(phoneNumber);
+  if (key && key.length > 4) {
+    await lockCustomerPhone(client, phoneNumber);
+    const existing = await findCustomerByPhone(client, phoneNumber);
+    if (existing) {
+      await client.query(
+        `UPDATE customers SET
+           building_number = COALESCE(NULLIF(building_number,''), NULLIF($1,'')),
+           address         = COALESCE(NULLIF(address,''), NULLIF($2,''))
+         WHERE id = $3`,
+        [houseNumber || '', locationUrl || '', existing.id]
+      );
+      return existing.id;           // the existing client wins; no second record is created
+    }
+  }
+  await client.query(`
+    INSERT INTO customers (id, name, phone, address, building_number)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (id) DO UPDATE SET
+      phone           = COALESCE(NULLIF(customers.phone,''), NULLIF(EXCLUDED.phone,'')),
+      building_number = COALESCE(NULLIF(customers.building_number,''), NULLIF(EXCLUDED.building_number,'')),
+      address         = COALESCE(NULLIF(customers.address,''), NULLIF(EXCLUDED.address,''))
+  `, [customerId, customerName, (phoneNumber ? canonicalPhone(phoneNumber) : '') || '', locationUrl || '', houseNumber || '']);
+  return customerId;
+}
+
 app.post("/api/tickets", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -1533,48 +1567,10 @@ app.post("/api/tickets", authenticate, requireRoles(STAFF_MANAGERS), writeRateLi
 
     await client.query('BEGIN');
 
-    // STEP A: Check for existing customer by phone (prevent duplicates)
-    let actualCustomerId = customerId;
-    if (phoneNumber && String(phoneNumber).trim().length > 4) {
-      // Unified normalization: strip all non-digit/non-plus characters
-      const normalizedPhone = String(phoneNumber).trim().replace(/[^0-9+]/g, '');
-      const existingCust = await client.query(
-        `SELECT id FROM customers WHERE REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') = $1 LIMIT 1`,
-        [normalizedPhone]
-      );
-      if (existingCust.rows.length > 0) {
-        // Customer already exists — use their canonical ID, update enriched fields
-        actualCustomerId = existingCust.rows[0].id;
-        await client.query(
-          `UPDATE customers SET
-             name             = COALESCE(NULLIF($1,''), name),
-             building_number  = COALESCE(NULLIF($2,''), building_number),
-             address          = COALESCE(NULLIF($3,''), address)
-           WHERE id = $4`,
-          [customerName, houseNumber || '', locationUrl || '', actualCustomerId]
-        );
-        // IMPORTANT: do NOT insert a new customer — existing one wins
-      } else {
-        // New customer — server uses the client-provided ID (already a QNC-CUST-XXXX from backend)
-        await client.query(`
-          INSERT INTO customers (id, name, phone, address, building_number)
-          VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT (id) DO UPDATE SET 
-            name = COALESCE(EXCLUDED.name, customers.name), 
-            phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone),
-            building_number = COALESCE(NULLIF(EXCLUDED.building_number, ''), customers.building_number)
-        `, [customerId, customerName, phoneNumber || '', locationUrl || '', houseNumber || '']);
-      }
-    } else {
-      await client.query(`
-        INSERT INTO customers (id, name, phone, address, building_number)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (id) DO UPDATE SET 
-          name = COALESCE(EXCLUDED.name, customers.name), 
-          phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone),
-          building_number = COALESCE(NULLIF(EXCLUDED.building_number, ''), customers.building_number)
-      `, [customerId, customerName, phoneNumber || '', locationUrl || '', houseNumber || '']);
-    }
+    // STEP A: Resolve the customer (prevent duplicates). The number is compared in every format
+    // (50000001 = +974 5000 0001 = 97450000001) under a per-number lock; an existing client is LINKED, never renamed
+    // or overwritten (location details are only filled in where the client has none yet).
+    const actualCustomerId = await resolveCustomerForTicket(client, { customerId, customerName, phoneNumber, locationUrl, houseNumber });
 
     // STEP B: Now create the ticket safely
     // NOTE: phone_number and ai_summary (the ticket "description" shown in the
@@ -2021,8 +2017,10 @@ function toCustomerId(n) {
   return `QNC-CUST-${String(n).padStart(4, "0")}`;
 }
 
-async function nextCustomerId() {
-  const { rows } = await pool.query(
+async function nextCustomerId(db = pool) {
+  // `db` = the connection that already holds the per-number lock, so a burst of same-number requests can never exhaust
+  // the pool while the lock holder waits for a second connection just to number the new client.
+  const { rows } = await db.query(
     "INSERT INTO customer_id_seq DEFAULT VALUES RETURNING id"
   );
   return toCustomerId(Number(rows[0].id));
@@ -2083,9 +2081,10 @@ app.get("/api/customers", authenticate, async (req, res) => {
         `
         SELECT * FROM customers
         WHERE id ILIKE $1 OR name ILIKE $1 OR phone ILIKE $1 OR email ILIKE $1
+           OR ($2 <> '' AND ${phoneKeySql('phone')} LIKE '%' || $2 || '%')
         ORDER BY created_at DESC
         `,
-        [`%${q}%`]
+        [`%${q}%`, (/\d/.test(q) && q.replace(/\D/g, '').length >= q.replace(/[\s+()\-.]/g, '').length * 0.8) ? phoneKey(q) : '']
       );
     } else {
       result = await pool.query(
@@ -2112,112 +2111,92 @@ app.get("/api/customers", authenticate, async (req, res) => {
 });
 
 // Create customer (with duplicate phone prevention)
+//  • The phone is compared in every format (50000001 = +974 5000 0001 = 97450000001) and the check + insert run in one
+//    transaction holding a per-number advisory lock, so two simultaneous requests can never both create it.
+//  • An existing number is NEVER modified or renamed. strictCreate:true → 409 DUPLICATE_PHONE with the existing client's
+//    name/phone (the form offers "use existing"); without it (older screens) the existing client is returned unchanged.
+//  • requireLocation:true (the Clients form) → a valid Google Maps URL is mandatory in `address`.
 app.post("/api/customers", authenticate, requireRoles(STAFF_MANAGERS), writeRateLimit, async (req, res) => {
   try {
     const { name, phone, email, address, notes, is_active, buildingNumber } = req.body || {};
+    const strict = req.body && req.body.strictCreate === true;
+    const requireLocation = req.body && req.body.requireLocation === true;
 
     if (!name || String(name).trim().length < 2) {
       return res.status(400).json({ error: "Customer name is required" });
     }
-
-    // Normalize phone to canonical E.164 (Qatar +974 prefix for 8-digit locals)
-    const normalizeQatarPhone = (raw) => {
-        if (!raw) return null;
-        let clean = String(raw).replace(/[^0-9+]/g, '');
-        if (!clean) return null;
-        if (/^[0-9]{8}$/.test(clean)) return `+974${clean}`;
-        if (clean.startsWith('00')) clean = '+' + clean.substring(2);
-        if (!clean.startsWith('+') && clean.startsWith('974')) clean = '+' + clean;
-        // Still 8 digits with no prefix — Qatar local
-        if (!clean.startsWith('+') && clean.length === 8) return `+974${clean}`;
-        return clean;
-    };
-    const canonicalPhone = phone ? normalizeQatarPhone(phone) : null;
-
-    // Check for existing customer with same phone number (compare normalized values both sides)
-    if (canonicalPhone && canonicalPhone.length > 4) {
-      const existing = await pool.query(
-        `SELECT * FROM customers WHERE REGEXP_REPLACE(REGEXP_REPLACE(phone, '[^0-9+]', '', 'g'), '^00', '+') = $1
-           OR REGEXP_REPLACE(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), '^974', '+974') = $1
-           OR phone = $1
-         LIMIT 1`,
-        [canonicalPhone]
-      );
-      if (existing.rows.length > 0) {
-        const r = existing.rows[0];
-        // Opt-in strict mode (the Clients page "Add Client" form): report the duplicate instead of silently renaming
-        // the existing contact. Callers that do not send strictCreate keep the original merge behaviour below.
-        if (req.body && req.body.strictCreate === true) {
-          return res.status(409).json({
-            error: `A client with this mobile number already exists: ${r.name}`,
-            code: 'DUPLICATE_PHONE',
-            existingId: r.id,
-          });
-        }
-        // Update name/address if provided and different
-        if (name && name !== r.name) {
-          await pool.query(`UPDATE customers SET name=$1 WHERE id=$2`, [String(name).trim(), r.id]);
-        }
-        if (buildingNumber && buildingNumber !== r.building_number) {
-          await pool.query(`UPDATE customers SET building_number=$1 WHERE id=$2`, [String(buildingNumber).trim(), r.id]);
-        }
-        return res.json({
-          id: r.id,
-          name: name || r.name,
-          phone: r.phone || '',
-          email: r.email || '',
-          address: r.address || '',
-          buildingNumber: buildingNumber || r.building_number || r.address || '',
-          avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
-          isActive: r.is_active !== false,
-          notes: r.notes || '',
-          createdAt: r.created_at || null,
-          existed: true
-        });
-      }
+    if (hasUnsafeScheme(address) || hasUnsafeScheme(buildingNumber)) {
+      return res.status(400).json({ error: "The location must be a normal web link or plain text", code: 'INVALID_LOCATION' });
+    }
+    if (requireLocation) {
+      const v = validateGoogleMapsUrl(address);
+      if (!v.ok) return res.status(400).json({ error: `Google Maps URL: ${v.error}`, code: 'INVALID_LOCATION' });
     }
 
-    const id = await nextCustomerId();
+    const canonical = phone ? canonicalPhone(phone) : null;
+    const key = phoneKey(phone);
 
-    const { rows } = await pool.query(
-      `
-      INSERT INTO customers (id, name, phone, email, address, notes, is_active, building_number)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-      RETURNING *
-      `,
-      [
-        id,
-        String(name).trim(),
-        canonicalPhone || null,
-        email ? String(email).trim() : null,
-        address ? String(address).trim() : null,
-        notes ? String(notes).trim() : null,
-        typeof is_active === "boolean" ? is_active : true,
-        buildingNumber ? String(buildingNumber).trim() : null,
-      ]
-    );
-
-    const r = rows[0];
-    logAudit(req, {
-      action: 'CREATE',
-      entityType: 'CUSTOMER',
-      entityId: id,
-      entityLabel: r.name,
-      details: { phone: r.phone || undefined },
+    const out = await withCustomerPhoneLock(pool, key ? phone : null, async (client, existing) => {
+      if (key && key.length > 4 && existing) return { existing };
+      const id = await nextCustomerId(client);
+      const { rows } = await client.query(
+        `
+        INSERT INTO customers (id, name, phone, email, address, notes, is_active, building_number)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        RETURNING *
+        `,
+        [
+          id,
+          String(name).trim(),
+          canonical || null,
+          email ? String(email).trim() : null,
+          address ? String(address).trim() : null,
+          notes ? String(notes).trim() : null,
+          typeof is_active === "boolean" ? is_active : true,
+          buildingNumber ? String(buildingNumber).trim() : null,
+        ]
+      );
+      return { created: rows[0] };
     });
-    // Return same shape as GET /api/customers so frontend can use immediately
-    res.status(201).json({
+
+    const shape = (r, extra = {}) => ({
       id: r.id,
       name: r.name,
       phone: r.phone || '',
       email: r.email || '',
       address: r.address || '',
-      buildingNumber: r.building_number || '',
+      buildingNumber: r.building_number || (extra.existed ? (r.address || '') : ''),
       avatar: r.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(r.name || 'C')}&background=random`,
       isActive: r.is_active !== false,
       notes: r.notes || '',
-      createdAt: r.created_at || null
+      createdAt: r.created_at || null,
+      ...extra,
     });
+
+    if (out.existing) {
+      const r = out.existing;
+      if (strict) {
+        return res.status(409).json({
+          error: `A client with this mobile number already exists: ${r.name} (${r.phone || canonical})`,
+          code: 'DUPLICATE_PHONE',
+          existingId: r.id,
+          existing: customerSummary(r),
+        });
+      }
+      // Older screens: hand back the existing client exactly as stored — nothing is renamed or overwritten.
+      return res.json(shape(r, { existed: true }));
+    }
+
+    const r = out.created;
+    logAudit(req, {
+      action: 'CREATE',
+      entityType: 'CUSTOMER',
+      entityId: r.id,
+      entityLabel: r.name,
+      details: { phone: r.phone || undefined },
+    });
+    // Return same shape as GET /api/customers so frontend can use immediately
+    res.status(201).json(shape(r));
   } catch (e) {
     console.error("customers create error:", e);
     res.status(500).json({ error: "Failed to create customer" });
@@ -2253,12 +2232,26 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
       if ((cur.rows[0].building_number || '').trim()) buildingNumber = undefined;
     }
 
+    // Location safety + (Clients form) mandatory Google Maps URL. requireLocation:true is sent only by the Clients form.
+    if (hasUnsafeScheme(address) || hasUnsafeScheme(buildingNumber)) {
+      return res.status(400).json({ error: "The location must be a normal web link or plain text", code: 'INVALID_LOCATION' });
+    }
+    if (req.body && req.body.requireLocation === true) {
+      const v = validateGoogleMapsUrl(address);
+      if (!v.ok) return res.status(400).json({ error: `Google Maps URL: ${v.error}`, code: 'INVALID_LOCATION' });
+    }
+
     const before = await pool.query(
       `SELECT name, phone, email, address, building_number, notes, is_active FROM customers WHERE id = $1`,
       [id]
     );
+    if (!before.rows[0]) return res.status(404).json({ error: "Not found" });
 
-    const { rows } = await pool.query(
+    // A number written in any format is stored in one canonical format.
+    const newPhone = phone !== undefined ? (phone ? canonicalPhone(phone) : null) : null;
+    const phoneChanged = phone !== undefined && !!phone && phoneKey(phone) !== phoneKey(before.rows[0].phone);
+
+    const runUpdate = (db) => db.query(
       `
       UPDATE customers
       SET
@@ -2276,7 +2269,7 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
       [
         id,
         name !== undefined ? String(name).trim() : null,
-        phone !== undefined ? (phone ? String(phone).trim() : null) : null,
+        newPhone,
         email !== undefined ? (email ? String(email).trim() : null) : null,
         address !== undefined ? (address ? String(address).trim() : null) : null,
         notes !== undefined ? (notes ? String(notes).trim() : null) : null,
@@ -2284,6 +2277,26 @@ app.put("/api/customers/:id", authenticate, writeRateLimit, async (req, res) => 
         buildingNumber !== undefined ? (buildingNumber ? String(buildingNumber).trim() : null) : null,
       ]
     );
+
+    let rows;
+    if (phoneChanged) {
+      // Changing the number: it must not already belong to another client (checked under the same per-number lock as creation).
+      const out = await withCustomerPhoneLock(pool, phone, async (client, other) => {
+        if (other) return { other };
+        return { res: await runUpdate(client) };
+      }, id);
+      if (out.other) {
+        return res.status(409).json({
+          error: `A client with this mobile number already exists: ${out.other.name} (${out.other.phone})`,
+          code: 'DUPLICATE_PHONE',
+          existingId: out.other.id,
+          existing: customerSummary(out.other),
+        });
+      }
+      rows = out.res.rows;
+    } else {
+      rows = (await runUpdate(pool)).rows;
+    }
 
     if (!rows[0]) return res.status(404).json({ error: "Not found" });
     const r = rows[0];
@@ -4949,44 +4962,32 @@ app.post('/api/sales-appointment-requests', authenticate, requireRoles(ROLE.ADMI
         const newId   = `SAR-${String(lastNum + 1).padStart(5, '0')}`;
 
         // ── Auto-upsert customer record ──────────────────────────────────────
-        // Normalise phone to full E.164 format (+974XXXXXXXX for Qatar numbers)
-        // so it matches how CustomerRecords stores and searches phones.
+        // Same number in ANY format (50000001 = +974 5000 0001 = 97450000001) is one client: look it up and, if it is new,
+        // create it under the per-number lock so two simultaneous requests cannot create it twice.
         const rawPhone = contactNumber?.trim() || '';
-        let normPhone = rawPhone.replace(/[\s\-]/g, '');
-        if (/^[0-9]{8}$/.test(normPhone)) normPhone = `+974${normPhone}`;
-        else if (/^974[0-9]{8}$/.test(normPhone)) normPhone = `+${normPhone}`;
-        else if (normPhone.startsWith('00974')) normPhone = `+974${normPhone.slice(5)}`;
 
         let resolvedCustomerId = customerId || null;
-        if (!resolvedCustomerId && normPhone) {
-            // Search by normalised phone — try exact match first, then stripped-prefix match
-            const existingCust = await pool.query(
-                `SELECT id FROM customers WHERE
-                   REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') = REGEXP_REPLACE($1, '[^0-9+]', '', 'g')
-                 LIMIT 1`,
-                [normPhone]
-            );
-            if (existingCust.rows[0]) {
-                resolvedCustomerId = existingCust.rows[0].id;
-            } else {
-                // Create new customer with properly formatted phone
-                const custId = `CUST-${Date.now()}`;
-                const custRes = await pool.query(
+        if (!resolvedCustomerId && phoneKey(rawPhone)) {
+            resolvedCustomerId = await withCustomerPhoneLock(pool, rawPhone, async (dbc, existing) => {
+                if (existing) return existing.id;
+                const custId = `CUST-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                const custRes = await dbc.query(
                     `INSERT INTO customers (id, name, phone, address, building_number, is_active)
                      VALUES ($1, $2, $3, $4, $5, true)
                      ON CONFLICT DO NOTHING
                      RETURNING id`,
-                    [custId, customerName.trim(), normPhone,
+                    [custId, customerName.trim(), canonicalPhone(rawPhone),
                      locationUrl?.trim() || null, houseNumber?.trim() || null]
                 );
-                if (custRes.rows[0]) resolvedCustomerId = custRes.rows[0].id;
-            }
+                return custRes.rows[0] ? custRes.rows[0].id : null;
+            });
         } else if (resolvedCustomerId) {
-            // Customer exists — update address and building number if provided
+            // Customer exists — fill the saved location / building ONLY where the client has none yet. A job-specific
+            // location on a request must never silently replace the client's saved Google Maps link.
             await pool.query(
                 `UPDATE customers SET
-                   address         = COALESCE(NULLIF($1,''), address),
-                   building_number = COALESCE(NULLIF($2,''), building_number)
+                   address         = COALESCE(NULLIF(address,''), NULLIF($1,'')),
+                   building_number = COALESCE(NULLIF(building_number,''), NULLIF($2,''))
                  WHERE id = $3`,
                 [locationUrl?.trim() || '', houseNumber?.trim() || '', resolvedCustomerId]
             );
@@ -6492,6 +6493,12 @@ app.get('/api/search/records', authenticate, async (req, res) => {
         // ── CLIENTS ──────────────────────────────────────────────────────────
         // All roles that can reach this endpoint can see customers
         // (FIELD_ENGINEER sees customers via /api/mobile/tech already).
+        // A mobile number typed in any format ("5000 0001", "+974 5000 0001", "97450000001") is compared on its
+        // normalised digits, so every spelling of the same number finds the same client.
+        const qDigits = q.replace(/\D/g, '');
+        const looksLikePhone = qDigits.length >= 3 && qDigits.length >= q.replace(/[\s+()\-.]/g, '').length * 0.8;
+        const qKey = looksLikePhone ? phoneKey(q) : '';
+        const keyExpr = phoneKeySql('phone');
         const clientQ = await pool.query(
             `SELECT id, name, phone, email, address AS location_url, building_number, notes
              FROM customers
@@ -6500,8 +6507,11 @@ app.get('/api/search/records', authenticate, async (req, res) => {
                 OR email ILIKE $2
                 OR building_number ILIKE $2
                 OR REGEXP_REPLACE(phone, '[^0-9+]', '', 'g') LIKE REGEXP_REPLACE($3, '[^0-9+]', '', 'g')
+                OR ($4 <> '' AND ${keyExpr} LIKE '%' || $4 || '%')
+                OR ($5 <> '' AND ${keyExpr} LIKE '%' || $5 || '%')
              ORDER BY
                CASE
+                 WHEN $4 <> '' AND ${keyExpr} = $4    THEN 0
                  WHEN LOWER(name) = LOWER($1)         THEN 1
                  WHEN LOWER(phone) = LOWER($1)        THEN 2
                  WHEN name ILIKE $3                   THEN 3
@@ -6509,7 +6519,7 @@ app.get('/api/search/records', authenticate, async (req, res) => {
                  ELSE 5
                END
              LIMIT 5`,
-            [exact, partial, prefix]
+            [exact, partial, prefix, qKey, looksLikePhone ? qDigits : '']
         );
 
         // ── ACTIVITIES ───────────────────────────────────────────────────────

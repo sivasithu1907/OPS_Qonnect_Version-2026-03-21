@@ -2,7 +2,10 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { EmptyClients } from './shared/EmptyState';
 import { Customer, Activity, Technician, Site, Ticket, SalesAppointmentRequest } from '../types';
-import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
+import { validatePhone, normalizePhone, formatPhoneDisplay, samePhone } from '../utils/phoneUtils';
+import { searchCustomers, filterCustomers, MATCH_LABEL } from '../utils/customerSearch';
+import { validateGoogleMapsUrl, getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
+import { isDuplicateCustomerError } from '../utils/customerErrors';
 import { Search, Edit, Trash2, Eye, Plus, X, Mail, Phone, MapPin, Camera, Upload, Contact, Calendar, Clock, ArrowRight, Home, RotateCcw, FileText, MessageSquare, Ticket as TicketIcon, ChevronRight, ClipboardList } from 'lucide-react';
 import { ContextualActions, whatsappAction, createTicketAction, createActivityAction } from './shared/ContextualActions';
 import { CustomerTimelineSkeleton } from './shared/Skeletons';
@@ -38,11 +41,11 @@ interface CustomerRecordsProps {
   // existed for the same person.
   salesAppointmentRequests?: SalesAppointmentRequest[];
   // EDIT an existing client. May reject with an Error whose message is shown in the form.
-  onSaveCustomer: (customer: Customer) => void | Promise<void>;
+  onSaveCustomer: (customer: Customer, opts?: { requireLocation?: boolean }) => void | Promise<void>;
   // CREATE a new client (the server assigns the ID). Must be provided for the "Add Client" form to work; resolves with
   // the saved client, rejects with an Error whose message is shown in the form. `strict` = report a duplicate phone
   // instead of merging into the existing client.
-  onAddCustomer?: (customer: Customer, opts?: { strict?: boolean }) => Promise<Customer | null> | void;
+  onAddCustomer?: (customer: Customer, opts?: { strict?: boolean; requireLocation?: boolean }) => Promise<Customer | null> | void;
   onDeleteCustomer: (id: string) => void;
   readOnly?: boolean;
   isMobile?: boolean;
@@ -54,6 +57,8 @@ interface CustomerRecordsProps {
   autoOpenCreate?: boolean;
   onAutoOpenHandled?: () => void;
 }
+
+const isCreateModal = (t: string | null) => t === 'add';
 
 const CustomerRecords: React.FC<CustomerRecordsProps> = ({ 
     customers,
@@ -93,6 +98,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [duplicateOf, setDuplicateOf] = useState<Customer | null>(null);   // existing client that owns the typed mobile number
   const [submitting, setSubmitting] = useState(false);          // blocks a second Save while a request is in flight
   const justCreatedIdRef = useRef<string | null>(null);        // new client to scroll to once it is in the list
   
@@ -117,25 +123,16 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
   const suppressLetterSyncUntilRef = useRef(0);
 
   // --- Filtering Logic ---
+  // Strict list filter (name / phone / email) from the shared search; close-spelling suggestions are kept separate
+  // so a similar name is never mixed into the results as if it were the same person.
   const filteredCustomers = useMemo(() => {
       if (!searchTerm.trim()) return customers;
-      
-      const lowerTerm = searchTerm.toLowerCase();
-      const safeSearch = normalizePhone(searchTerm); // Use safe normalized value for comparison
+      return filterCustomers(customers, searchTerm);
+  }, [customers, searchTerm]);
 
-      return customers.filter(c => {
-          const nameMatch = (c.name || '').toLowerCase().includes(lowerTerm);
-          const emailMatch = c.email?.toLowerCase().includes(lowerTerm);
-          
-          // Phone match: only when search term actually contains digits (avoid "" matching everything)
-          const hasDigits = /[0-9]/.test(searchTerm);
-          const phoneMatch = hasDigits && safeSearch.length > 0 && (
-              normalizePhone(c.phone).includes(safeSearch) ||
-              (c.phone || '').replace(/\s/g, '').includes(searchTerm.replace(/\s/g, ''))
-          );
-
-          return nameMatch || emailMatch || phoneMatch;
-      });
+  const similarSuggestions = useMemo(() => {
+      if (!searchTerm.trim()) return [];
+      return searchCustomers(customers, searchTerm, { limit: 0, fuzzy: true, fuzzyLimit: 5 }).filter(m => m.kind === 'fuzzy');
   }, [customers, searchTerm]);
 
   const suggestions = useMemo(() => {
@@ -256,6 +253,21 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // "Did you mean" list for close spellings — always labelled as suggestions, never merged into the real results.
+  const similarBlock = similarSuggestions.length > 0 ? (
+      <div data-testid="similar-clients" className="mt-3 text-left max-w-sm mx-auto not-italic">
+          <div className="text-[11px] font-semibold uppercase text-amber-700 mb-1">Similar names — suggestions</div>
+          {similarSuggestions.map(m => (
+              <button key={m.customer.id} type="button" data-customer-id={m.customer.id} data-match-kind="fuzzy"
+                  onClick={() => handleSuggestionClick(m.customer)}
+                  className="w-full text-left p-2 rounded-lg border border-amber-200 bg-amber-50/50 hover:bg-amber-50 mb-1">
+                  <span className="text-sm font-bold text-slate-800">{m.customer.name}</span>
+                  <span className="block text-xs text-slate-500 font-mono">{formatPhoneDisplay(m.customer.phone)}</span>
+              </button>
+          ))}
+      </div>
+  ) : null;
+
   const handleSuggestionClick = (c: Customer) => {
       setSearchTerm(c.name);
       setPage(1);
@@ -267,6 +279,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       setModalType(type);
       setActiveItem(item || null);
       setFormError(null);
+      setDuplicateOf(null);
       if (item?.avatar) {
           setAvatarPreview(item.avatar);
       } else {
@@ -279,6 +292,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       setActiveItem(null);
       setAvatarPreview(null);
       setFormError(null);
+      setDuplicateOf(null);
   };
 
   // Command Palette quick action — opens the same "Add Client" modal the
@@ -330,18 +344,40 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
 
       const cleanPhone = phoneValidation.formatted!;
 
-      // 4. Check Uniqueness (compare normalised numbers, so "+974 5512 3456", "55123456" and "+97455123456" are one number)
-      const duplicate = customers.find(c => c.id !== activeItem?.id && normalizePhone(c.phone) === cleanPhone);
-      if (duplicate) {
-          setFormError(`This mobile number already exists for client: ${duplicate.name}`);
+      // Google Maps URL is mandatory in the Clients form (new clients, and existing clients the next time they are edited).
+      const mapsCheck = validateGoogleMapsUrl(rawData.address);
+      if (!mapsCheck.ok) {
+          setDuplicateOf(null);
+          setFormError(mapsCheck.error || 'A valid Google Maps URL is required.');
           return;
       }
+
+      // Check uniqueness on the normalised number ("+974 5512 3456", "55123456" and "97455123456" are one number).
+      // The server repeats this check; this one just answers quickly without losing what was typed.
+      const duplicate = customers.find(c => c.id !== activeItem?.id && samePhone(c.phone, cleanPhone));
+      if (duplicate) {
+          setFormError(null);
+          setDuplicateOf(duplicate);
+          return;
+      }
+      setDuplicateOf(null);
 
       // Build payload but NEVER trust form fields for id
       const data: any = {
         ...rawData,
         phone: cleanPhone,
+        address: mapsCheck.url,
+        buildingNumber: String(rawData.buildingNumber ?? '').trim(),
       };
+      // A legacy plain-text address is being replaced by the Maps link: keep the old text in the notes, never lose it.
+      if (!isCreateModal(modalType) && activeItem) {
+          const oldAddr = String(activeItem.address ?? '').trim();
+          if (oldAddr && oldAddr !== data.address && !/^https?:\/\//i.test(oldAddr)) {
+              const note = `Previous address: ${oldAddr}`;
+              const prevNotes = String((activeItem as any).notes ?? '').trim();
+              if (!prevNotes.includes(note)) data.notes = prevNotes ? `${prevNotes}\n${note}` : note;
+          }
+      }
 
       // Remove any accidental id coming from the form
       delete data.id;
@@ -370,17 +406,23 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       setSubmitting(true);
       try {
         if (isCreate) {
-          const created = await Promise.resolve(onAddCustomer!(data as Customer, { strict: true }));
+          const created = await Promise.resolve(onAddCustomer!(data as Customer, { strict: true, requireLocation: true }));
           if (!created || !(created as any).id) throw new Error('Customer was not saved: the server did not confirm it.');
           // Show the new client straight away: clear any search that would hide it and jump to its page.
           setSearchTerm('');
           justCreatedIdRef.current = (created as any).id;
         } else {
-          await Promise.resolve(onSaveCustomer(data as Customer));
+          await Promise.resolve(onSaveCustomer(data as Customer, { requireLocation: true }));
         }
         closeModal();
       } catch (err: any) {
-        setFormError(err?.message || 'Customer was not saved.');
+        if (isDuplicateCustomerError(err) && err.existing) {
+          // Somebody else saved this number first (or the list was stale): show who owns it, keep everything typed.
+          setFormError(null);
+          setDuplicateOf({ ...(err.existing as any) } as Customer);
+        } else {
+          setFormError(err?.message || 'Customer was not saved.');
+        }
       } finally {
         setSubmitting(false);
       }
@@ -587,7 +629,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                     />
                     
                     {/* Autocomplete Dropdown */}
-                    {showSuggestions && searchTerm && suggestions.length > 0 && (
+                    {showSuggestions && searchTerm && (suggestions.length > 0 || similarSuggestions.length > 0) && (
                         <div className="absolute top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
                             {suggestions.map(c => (
                                 <div 
@@ -599,6 +641,18 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                                     <div className="text-xs text-slate-500">{formatPhoneDisplay(c.phone)}</div>
                                 </div>
                             ))}
+                            {similarSuggestions.length > 0 && (
+                                <div data-testid="similar-suggestions">
+                                    <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase text-amber-700 bg-amber-50/60">Similar names — suggestions</div>
+                                    {similarSuggestions.map(m => (
+                                        <div key={m.customer.id} data-customer-id={m.customer.id} data-match-kind="fuzzy" onClick={() => handleSuggestionClick(m.customer)}
+                                             className="p-3 hover:bg-amber-50 cursor-pointer border-b border-slate-50 last:border-0 bg-amber-50/30">
+                                            <div className="text-sm font-bold text-slate-800">{m.customer.name}</div>
+                                            <div className="text-xs text-slate-500">{formatPhoneDisplay(m.customer.phone)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -622,12 +676,12 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                     {totalFiltered === 0 ? (
                         <div className="p-8 text-center text-slate-400 italic">
                             {searchTerm.trim() ? <>No clients found matching "{searchTerm}"</> : 'No clients yet. Use Add Client to create the first one.'}
+                            {searchTerm.trim() && similarBlock}
                         </div>
                     ) : (
                         pageCustomers.map(cust => {
-                            const mapUrl = (cust.address && cust.address.startsWith('http')) ? cust.address 
-                                : (cust.buildingNumber && cust.buildingNumber.startsWith('http')) ? cust.buildingNumber : '';
-                            const bldg = cust.buildingNumber && cust.buildingNumber !== 'N/A' && !cust.buildingNumber.startsWith('http') ? cust.buildingNumber : '';
+                            const mapUrl = getCustomerMapUrl(cust);
+                            const bldg = getCustomerBuilding(cust);
                             const historyCount = getCustomerHistory(cust.id).length;
                             return (
                                 <div key={cust.id} data-client-id={cust.id} data-client-letter={getNameLetter(cust.name)} className={`scroll-mt-16 bg-white rounded-xl border shadow-sm overflow-hidden transition-colors ${flashId === cust.id ? 'border-amber-300 ring-2 ring-amber-200' : 'border-slate-200'}`}>
@@ -661,12 +715,12 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                                         {mapUrl ? (
                                             <a href={mapUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-blue-600 active:bg-blue-50 transition-colors">
                                                 <MapPin size={14} />
-                                                <span className="text-[11px] font-bold">Map</span>
+                                                <span className="text-[11px] font-bold">View on Map</span>
                                             </a>
                                         ) : (
-                                            <div className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-slate-300">
+                                            <div data-testid="location-missing" className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-amber-500">
                                                 <MapPin size={14} />
-                                                <span className="text-[11px] font-bold">No Map</span>
+                                                <span className="text-[11px] font-bold">Location Missing</span>
                                             </div>
                                         )}
                                         <button onClick={() => openModal('view', cust)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-slate-600 active:bg-slate-50 transition-colors">
@@ -696,6 +750,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                                 <tr>
                                     <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">
                                         {searchTerm.trim() ? <>No clients found matching "{searchTerm}"</> : 'No clients yet. Use Add Client to create the first one.'}
+                                        {searchTerm.trim() && similarBlock}
                                     </td>
                                 </tr>
                             ) : (
@@ -733,24 +788,21 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">
                                             <div className="overflow-hidden">
-                                                {cust.buildingNumber && cust.buildingNumber !== 'N/A' && !cust.buildingNumber.startsWith('http') ? (
-                                                    <div className="font-medium text-slate-800 truncate">{cust.buildingNumber}</div>
-                                                ) : !cust.buildingNumber || cust.buildingNumber === 'N/A' ? (
+                                                {getCustomerBuilding(cust) ? (
+                                                    <div className="font-medium text-slate-800 truncate">{getCustomerBuilding(cust)}</div>
+                                                ) : (
                                                     <div className="text-slate-400 text-xs italic">No building</div>
-                                                ) : null}
-                                                {/* Show map link if address or buildingNumber contains a URL */}
-                                                {(() => {
-                                                    const mapUrl = (cust.address && cust.address.startsWith('http')) ? cust.address 
-                                                        : (cust.buildingNumber && cust.buildingNumber.startsWith('http')) ? cust.buildingNumber 
-                                                        : null;
-                                                    return mapUrl ? (
-                                                        <a href={mapUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
-                                                            <MapPin size={10} className="shrink-0" /> View Map
-                                                        </a>
-                                                    ) : cust.address && cust.address !== cust.buildingNumber ? (
-                                                        <div className="text-xs text-slate-500 truncate mt-0.5">{cust.address}</div>
-                                                    ) : null;
-                                                })()}
+                                                )}
+                                                {/* A short link instead of the long URL; "Location Missing" when the client has no Maps link yet */}
+                                                {getCustomerMapUrl(cust) ? (
+                                                    <a href={getCustomerMapUrl(cust)} target="_blank" rel="noopener noreferrer" data-testid="view-on-map" className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
+                                                        <MapPin size={10} className="shrink-0" /> View on Map
+                                                    </a>
+                                                ) : (
+                                                    <span data-testid="location-missing" className="text-[11px] text-amber-600 flex items-center gap-1 mt-0.5">
+                                                        <MapPin size={10} className="shrink-0" /> Location Missing
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -881,30 +933,57 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                         </div>
 
                         <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-500 uppercase">
-                                Location (URL)
+                            <label htmlFor="client-location-url" className="text-xs font-semibold text-slate-500 uppercase">
+                                Google Maps URL <span className="text-red-500">*</span>
                             </label>
-                            <input 
-                                name="address" 
-                                defaultValue={activeItem?.address} 
+                            <input
+                                id="client-location-url"
+                                data-testid="client-location-url"
+                                name="address"
+                                type="text"
+                                inputMode="url"
+                                autoComplete="off"
+                                aria-required="true"
+                                defaultValue={getCustomerMapUrl(activeItem)}
                                 disabled={readOnly}
-                                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
-                                placeholder="https://maps.google.com..."
+                                className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100"
+                                placeholder="https://maps.app.goo.gl/… or https://www.google.com/maps/…"
                             />
+                            {activeItem && !getCustomerMapUrl(activeItem) && (
+                                <p data-testid="location-required-hint" className="text-[11px] text-amber-600">
+                                    This client has no Google Maps link yet — add one to save changes.
+                                    {activeItem.address && !/^https?:\/\//i.test(String(activeItem.address)) ? ' The old address text is kept in the notes.' : ''}
+                                </p>
+                            )}
                         </div>
 
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-500 uppercase">
-                                Building Number
+                                Building / Villa Number <span className="text-slate-400 font-normal lowercase">(optional)</span>
                             </label>
                             <input 
                                 name="buildingNumber" 
-                                defaultValue={activeItem?.buildingNumber} 
+                                defaultValue={getCustomerBuilding(activeItem?.buildingNumber === activeItem?.address ? { buildingNumber: '' } : activeItem)} 
                                 disabled={readOnly}
                                 className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-slate-100" 
                                 placeholder="e.g. Bldg 10, Zone 55"
                             />
                         </div>
+
+                        {duplicateOf && (
+                            <div data-testid="client-duplicate" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                                <div className="font-semibold">This mobile number already belongs to an existing client.</div>
+                                <div className="mt-1"><span data-testid="client-duplicate-name" className="font-bold">{duplicateOf.name}</span> · <span className="font-mono">{formatPhoneDisplay(duplicateOf.phone)}</span></div>
+                                <div className="text-xs mt-1 text-amber-800">Nothing was saved and the existing client was not changed. What you typed is kept below.</div>
+                                <button type="button" data-testid="client-duplicate-open" onClick={() => {
+                                    const ex = customers.find(c => c.id === duplicateOf.id) || duplicateOf;
+                                    setDuplicateOf(null);
+                                    openModal('view', ex);
+                                }} className="mt-2 px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                                    Open existing client
+                                </button>
+                            </div>
+                        )}
 
                         {formError && (
                             <div className="p-2 bg-red-50 text-red-600 text-xs rounded border border-red-100 flex items-center gap-1">
@@ -995,9 +1074,8 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                             )}
                             {/* Map button — tappable, opens maps app */}
                             {(() => {
-                                const mapUrl = (activeItem.address && activeItem.address.startsWith('http')) ? activeItem.address 
-                                    : (activeItem.buildingNumber && activeItem.buildingNumber.startsWith('http')) ? activeItem.buildingNumber : '';
-                                const bldg = activeItem.buildingNumber && activeItem.buildingNumber !== 'N/A' && !activeItem.buildingNumber.startsWith('http') ? activeItem.buildingNumber : '';
+                                const mapUrl = getCustomerMapUrl(activeItem);
+                                const bldg = getCustomerBuilding(activeItem);
                                 return mapUrl ? (
                                     <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 text-slate-700 p-2.5 bg-white rounded-xl shadow-sm border border-slate-100 active:bg-blue-50 transition-colors">
                                         <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><MapPin size={18}/></div>
@@ -1013,7 +1091,8 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
                                         <div className="p-2 bg-slate-50 rounded-lg text-slate-300"><MapPin size={18}/></div>
                                         <div className="flex-1">
                                             <div className="text-xs text-slate-400 font-bold uppercase">Location</div>
-                                            {bldg ? <span className="text-sm text-slate-600">{bldg}</span> : <span className="text-sm text-slate-400">Not set</span>}
+                                            {bldg && <span className="text-sm text-slate-600 block">{bldg}</span>}
+                                            <span data-testid="location-missing" className="text-sm text-amber-600">Location Missing</span>
                                         </div>
                                     </div>
                                 );

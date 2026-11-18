@@ -70,3 +70,30 @@ export const formatPhoneDisplay = (input: unknown): string => {
     }
     return e164;
 };
+
+/**
+ * Canonical COMPARISON key for a phone number — the same rule the backend uses (backend/customers.js `phoneKey`).
+ * Two numbers are "the same mobile number" exactly when their keys are equal and non-empty.
+ *
+ *   50000001 · +974 5000 0001 · 97450000001 · 0097450000001 · (+974)5000-0001   → 97450000001
+ *
+ * Rules: digits only; a leading "+" means "international, as written"; a leading "00" is the international prefix;
+ * a bare 8-digit number is a Qatar local number (country code 974 added). Anything else is compared digit-for-digit.
+ * Never used for display or storage — only to decide whether two numbers are one number.
+ */
+export const phoneKey = (input: unknown): string => {
+  const s = String(input ?? '').trim();
+  if (!s) return '';
+  const hasPlus = s.startsWith('+') || s.startsWith('(+');
+  let d = s.replace(/\D/g, '');
+  if (!d) return '';
+  if (!hasPlus && d.startsWith('00')) d = d.slice(2);
+  else if (!hasPlus && d.length === 8) d = '974' + d;
+  return d;
+};
+
+/** True when both values are the same mobile number once normalised. */
+export const samePhone = (a: unknown, b: unknown): boolean => {
+  const ka = phoneKey(a);
+  return ka !== '' && ka === phoneKey(b);
+};

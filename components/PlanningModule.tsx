@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import toast from './Toast';
 import { Activity, Team, Site, Customer, ActivityStatus, Priority, ActivityType, Technician, ServiceCategory, Role, ActivityFreelancerAssignment } from '../types';
 import { 
@@ -8,6 +8,7 @@ import {
   CheckCircle2, AlertCircle, X, Save, BriefcaseBusiness, Link as LinkIcon
 } from 'lucide-react';
 import CustomerSelector from './CustomerSelector';
+import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
 import { getActivityStatusLabel } from '../constants';
 import { EmptyKanbanColumn } from './shared/EmptyState';
 import { ContextualActions, callAction, whatsappAction, navigateAction, odooAction } from './shared/ContextualActions';
@@ -94,6 +95,10 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
   
   // Location auto-fill state (controlled, populated from customer on select)
   const [locationUrl, setLocationUrl] = useState('');
+  // The chosen client's saved location is offered, never forced over a job location that was typed on purpose.
+  const [locationConflict, setLocationConflict] = useState<{ url: string; building: string } | null>(null);
+  const lastPrefillRef = useRef<{ url: string; building: string }>({ url: '', building: '' });
+  const pendingPrefillRef = useRef<{ customerId?: string; salesLeadId?: string } | null>(null);
   const [serviceCats, setServiceCats] = useState<string[]>([]);
   const [selectedLeadTechId, setSelectedLeadTechId] = useState('');
 
@@ -174,8 +179,9 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
       if (prefillActivity) {
           setEditingActivity(null);
           if (prefillActivity.customerId) setSelectedCustomerId(prefillActivity.customerId);
-          if (prefillActivity.locationUrl) { /* already in customer */ }
           if (prefillActivity.salesLeadId) setSalesLeadIdState(prefillActivity.salesLeadId);
+          // The modal's "clean slate" effect runs after this one — keep the prefill and re-apply it there.
+          pendingPrefillRef.current = { customerId: prefillActivity.customerId, salesLeadId: prefillActivity.salesLeadId };
           setIsModalOpen(true);
           onClearPrefill?.();
       }
@@ -229,7 +235,21 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
             setAssistantTechState([]);
             setServiceCats([]);
             setSelectedLeadTechId('');
+            const pending = pendingPrefillRef.current;
+            pendingPrefillRef.current = null;
+            lastPrefillRef.current = { url: '', building: '' };
+            if (pending?.customerId) {
+                setSelectedCustomerId(pending.customerId);
+                const pc = customers.find(c => c.id === pending.customerId);
+                if (pc) {
+                    const url = getCustomerMapUrl(pc), bld = getCustomerBuilding(pc);
+                    setLocationUrl(url); setHouseNumber(bld);
+                    lastPrefillRef.current = { url, building: bld };
+                }
+            }
+            if (pending?.salesLeadId) setSalesLeadIdState(pending.salesLeadId);
         }
+        setLocationConflict(null);
     }
   }, [isModalOpen, editingActivity]);
 
@@ -1076,15 +1096,18 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                         selectedCustomerId={selectedCustomerId}
                         onSelect={(c) => {
                             setSelectedCustomerId(c.id);
-                            // Auto-fill location from customer record
-                            // address field often contains the location URL
-                            const custUrl = c.address && c.address.startsWith('http') ? c.address : 
-                                           c.buildingNumber && c.buildingNumber.startsWith('http') ? c.buildingNumber : '';
-                            const custHouse = c.buildingNumber && !c.buildingNumber.startsWith('http') ? c.buildingNumber : '';
-                            if (custUrl) setLocationUrl(custUrl);
-                            if (custHouse) setHouseNumber(custHouse);
-                            // If address is not a URL, use it as house/building info
-                            if (c.address && !c.address.startsWith('http') && !custHouse) setHouseNumber(c.address);
+                            // Prefill the client's saved location. A job location already typed (not just filled from the
+                            // previously selected client) is kept, and the user is asked before it is replaced.
+                            const custUrl = getCustomerMapUrl(c);
+                            const custHouse = getCustomerBuilding(c);
+                            const last = lastPrefillRef.current;
+                            const urlFree = !locationUrl || locationUrl === last.url;
+                            const bldFree = !houseNumber || houseNumber === last.building;
+                            if (urlFree) setLocationUrl(custUrl);
+                            if (bldFree) setHouseNumber(custHouse);
+                            lastPrefillRef.current = { url: urlFree ? custUrl : last.url, building: bldFree ? custHouse : last.building };
+                            const differs = (!urlFree && !!custUrl && custUrl !== locationUrl) || (!bldFree && !!custHouse && custHouse !== houseNumber);
+                            setLocationConflict(differs ? { url: custUrl, building: custHouse } : null);
                         }}
                         onCreateNew={handleNewCustomer}
                       />
@@ -1137,6 +1160,21 @@ const PlanningModule: React.FC<PlanningModuleProps> = ({
                               <input type="text" name="houseNumber" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} placeholder="Villa / Apt No." className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-sm" />
                           </div>
                       </div>
+                      {locationConflict && (
+                          <div data-testid="location-conflict" className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                              <div className="font-semibold">The selected client has a different saved location.</div>
+                              <div className="mt-0.5">Your job location was kept. Replace it with the client's saved one?</div>
+                              <div className="flex gap-2 mt-2">
+                                  <button type="button" data-testid="use-client-location" onClick={() => {
+                                      if (locationConflict.url) setLocationUrl(locationConflict.url);
+                                      if (locationConflict.building) setHouseNumber(locationConflict.building);
+                                      lastPrefillRef.current = { url: locationConflict.url, building: locationConflict.building };
+                                      setLocationConflict(null);
+                                  }} className="px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
+                                  <button type="button" data-testid="keep-job-location" onClick={() => setLocationConflict(null)} className="px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
+                              </div>
+                          </div>
+                      )}
                   </div>
                   
                   {/* Date & Time Selection (Grouped) */}

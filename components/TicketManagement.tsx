@@ -1,11 +1,13 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, MessageSender, Priority, Technician, TicketType, TicketFilter, Customer, Role, AnalysisResult } from '../types';
 import { TICKET_CATEGORIES, SEARCH_INPUT_STYLES, INPUT_STYLES } from '../constants';
 import { analyzeTicketMessage } from '../services/geminiService';
 import CustomerSelector from './CustomerSelector';
-import { validatePhone, normalizePhone, formatPhoneDisplay } from '../utils/phoneUtils';
+import { validatePhone, normalizePhone, formatPhoneDisplay, samePhone } from '../utils/phoneUtils';
+import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
+import { isDuplicateCustomerError } from '../utils/customerErrors';
 import { Send, Sparkles, MoreHorizontal, Plus, X, Calendar, Save, AlertCircle, Filter, MapPin, Link as LinkIcon, Home, History, Clock, User, AlertTriangle, Search as SearchIcon, ChevronDown, RefreshCw, UserPlus, CheckCircle2, Unlink, UserCheck, MessageSquare, Wrench, Wifi, Trash2, Eye, Edit, Phone as PhoneIcon, RotateCcw, Briefcase, ExternalLink } from 'lucide-react';
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
 import { StatusBadge } from './shared/StatusBadge';
@@ -186,6 +188,9 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   // New Client Creation Mode State
   const [isNewClientMode, setIsNewClientMode] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<Customer | null>(null);
+  // The selected client's saved location differs from a job location already typed: ask before replacing it.
+  const [locationConflict, setLocationConflict] = useState<{ url: string; building: string } | null>(null);
+  const lastPrefillRef = useRef<{ url: string; building: string }>({ url: '', building: '' });
 
   // --- Edit Form State ---
   // Expanded to include Customer Linking fields
@@ -230,16 +235,20 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       }));
       setIsNewClientMode(false);
       setDuplicateWarning(null);
+      setLocationConflict(null);
+      lastPrefillRef.current = { url: '', building: '' };
     } else {
       setCreateForm(initialCreateState);
+      setLocationConflict(null);
+      lastPrefillRef.current = { url: '', building: '' };
     }
   }, [isCreateModalOpen]);
 
   // Duplicate Check Effect
   useEffect(() => {
       if (isNewClientMode && createForm.phone) {
-          const normalizedInput = safeNormalize(createForm.phone);
-          const match = customers.find(c => safeNormalize(c.phone) === normalizedInput);
+          // same number in any format (50000001 / +974 5000 0001 / 97450000001)
+          const match = customers.find(c => samePhone(c.phone, createForm.phone));
           setDuplicateWarning(match || null);
       } else {
           setDuplicateWarning(null);
@@ -589,7 +598,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
       // Await the API call to get the DB-generated customer (with proper QNC-CUST-XXXX ID)
       let created: Customer | null = null;
       try { created = (await onAddCustomer(newCustomer)) as unknown as Customer | null; }
-      catch (err: any) { toast.error(err?.message || 'Customer could not be saved. Please try again.'); return; }
+      catch (err: any) {
+          if (isDuplicateCustomerError(err) && err.existing) {
+              setDuplicateWarning(customers.find(c => c.id === err.existing!.id) || (err.existing as Customer));
+              toast.error(`This mobile number already belongs to ${err.existing.name}. Select the existing client instead.`);
+              return;
+          }
+          toast.error(err?.message || 'Customer could not be saved. Please try again.');
+          return;
+      }
 
       // Only link a customer the server actually saved — never the temporary
       // local ID, which does not exist in the database.
@@ -704,7 +721,15 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
           // Await API to get the DB-generated customer ID (QNC-CUST-XXXX)
           let created: Customer | null = null;
       try { created = (await onAddCustomer(newCustomer)) as unknown as Customer | null; }
-      catch (err: any) { toast.error(err?.message || 'Customer could not be saved. Please try again.'); return; }
+      catch (err: any) {
+          if (isDuplicateCustomerError(err) && err.existing) {
+              setDuplicateWarning(customers.find(c => c.id === err.existing!.id) || (err.existing as Customer));
+              toast.error(`This mobile number already belongs to ${err.existing.name}. Select the existing client instead.`);
+              return;
+          }
+          toast.error(err?.message || 'Customer could not be saved. Please try again.');
+          return;
+      }
           // Only use a customer the server actually saved — never the temporary
           // local ID, which does not exist in the database.
           if (!created?.id) {
@@ -752,18 +777,42 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   };
 
   const handleCustomerSelect = (cust: Customer) => {
+      const clientUrl = getCustomerMapUrl(cust);
+      const clientBuilding = getCustomerBuilding(cust);
+      const last = lastPrefillRef.current;
+      // A field may be filled from the client when it is empty, or still holds what the previous client filled in.
+      const urlFree = !createForm.locationUrl || createForm.locationUrl === last.url;
+      const bldFree = !createForm.houseNumber || createForm.houseNumber === last.building;
+      const conflict = (!urlFree && clientUrl && clientUrl !== createForm.locationUrl) || (!bldFree && clientBuilding && clientBuilding !== createForm.houseNumber);
       setCreateForm(prev => ({
           ...prev,
           customerId: cust.id,
           customerName: cust.name,
           phone: cust.phone,
-          houseNumber: prev.houseNumber || cust.buildingNumber || cust.address || ''
+          locationUrl: urlFree ? clientUrl : prev.locationUrl,
+          houseNumber: bldFree ? clientBuilding : prev.houseNumber,
       }));
+      lastPrefillRef.current = {
+          url: urlFree ? clientUrl : last.url,
+          building: bldFree ? clientBuilding : last.building,
+      };
+      setLocationConflict(conflict ? { url: clientUrl, building: clientBuilding } : null);
+  };
+
+  const useClientLocation = () => {
+      if (!locationConflict) return;
+      setCreateForm(prev => ({
+          ...prev,
+          locationUrl: locationConflict.url || prev.locationUrl,
+          houseNumber: locationConflict.building || prev.houseNumber,
+      }));
+      lastPrefillRef.current = { url: locationConflict.url, building: locationConflict.building };
+      setLocationConflict(null);
   };
 
   const handleSelectExistingFromWarning = () => {
       if (duplicateWarning) {
-          handleCustomerSelect(duplicateWarning);
+          handleCustomerSelect(customers.find(c => c.id === duplicateWarning.id) || duplicateWarning);
           setIsNewClientMode(false);
           setDuplicateWarning(null);
       }
@@ -787,8 +836,7 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
   // Derived Match for Unlinked Ticket
   const potentialMatch = useMemo(() => {
       if (!editForm || editForm.customerId) return null;
-      const normalizedTicketPhone = safeNormalize(editForm.phoneNumber);
-      return customers.find(c => safeNormalize(c.phone) === normalizedTicketPhone);
+      return customers.find(c => samePhone(c.phone, editForm.phoneNumber));
   }, [editForm, customers]);
 
   const linkedCustomer = useMemo(() => {
@@ -1348,8 +1396,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                     onClick={() => {
                                         updateField('customerId', potentialMatch.id);
                                         updateField('customerName', potentialMatch.name);
-                                        if (editForm && !editForm.houseNumber && potentialMatch.buildingNumber) updateField('houseNumber', potentialMatch.buildingNumber);
-                                        if (editForm && !editForm.locationUrl && potentialMatch.address) updateField('locationUrl', potentialMatch.address);
+                                        if (editForm && !editForm.houseNumber && getCustomerBuilding(potentialMatch)) updateField('houseNumber', getCustomerBuilding(potentialMatch));
+                                        if (editForm && !editForm.locationUrl && getCustomerMapUrl(potentialMatch)) updateField('locationUrl', getCustomerMapUrl(potentialMatch));
                                     }}
                                     className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-colors shadow-sm"
                                 >
@@ -1373,8 +1421,8 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                         onSelect={(c) => {
                                             updateField('customerId', c.id);
                                             updateField('customerName', c.name);
-                                            if (editForm && !editForm.houseNumber && c.buildingNumber) updateField('houseNumber', c.buildingNumber);
-                                            if (editForm && !editForm.locationUrl && c.address) updateField('locationUrl', c.address);
+                                            if (editForm && !editForm.houseNumber && getCustomerBuilding(c)) updateField('houseNumber', getCustomerBuilding(c));
+                                            if (editForm && !editForm.locationUrl && getCustomerMapUrl(c)) updateField('locationUrl', getCustomerMapUrl(c));
                                             setClientLinkMode('view');
                                         }}
                                         onCreateNew={() => {}}
@@ -1716,6 +1764,16 @@ const TicketManagement: React.FC<TicketManagementProps> = ({
                                 placeholder="Building/Villa No."
                             />
                         </div>
+                        {locationConflict && (
+                            <div data-testid="location-conflict" className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                                <div className="font-semibold">The selected client has a different saved location.</div>
+                                <div className="mt-0.5">Your job location was kept. Replace it with the client's saved one?</div>
+                                <div className="flex gap-2 mt-2">
+                                    <button type="button" data-testid="use-client-location" onClick={useClientLocation} className="px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
+                                    <button type="button" data-testid="keep-job-location" onClick={() => setLocationConflict(null)} className="px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

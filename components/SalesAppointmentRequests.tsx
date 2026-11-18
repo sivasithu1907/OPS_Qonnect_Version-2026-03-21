@@ -10,7 +10,7 @@
  *                planned Activity via POST /api/sales-appointment-requests/:id/schedule
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import toast from './Toast';
 import {
   Plus, Search, X, Calendar, Clock, User as UserIcon,
@@ -24,6 +24,9 @@ import {
 import { Role, SalesAppointmentRequest, SalesRequestStatus, Technician } from '../types';
 import { INPUT_STYLES, SEARCH_INPUT_STYLES, SALES_ACTIVITY_TYPES, SERVICE_CATEGORIES } from '../constants';
 import api from '../services/api';
+import { searchCustomers, CustomerMatch } from '../utils/customerSearch';
+import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
+import CustomerMatchList from './shared/CustomerMatchList';
 import { SarListSkeleton } from './shared/Skeletons';
 import { EmptySAR } from './shared/EmptyState';
 import { ContextualActions, callAction, whatsappAction, navigateAction, odooAction } from './shared/ContextualActions';
@@ -134,8 +137,15 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
 
   // Customer search
   const [custSearch, setCustSearch]   = useState('');
-  const [custResults, setCustResults] = useState<any[]>([]);
+  const [custResults, setCustResults] = useState<CustomerMatch<any>[]>([]);
   const [custLoading, setCustLoading] = useState(false);
+  // The customer list is fetched once per opening of the form and searched locally (name, phone, close spelling) —
+  // one request instead of one per keystroke.
+  const [custList, setCustList] = useState<any[]>([]);
+  const custListLoadedRef = useRef(false);
+  const [nameDismissed, setNameDismissed] = useState(false);
+  const [locConflict, setLocConflict] = useState<{ url: string; building: string } | null>(null);
+  const lastPrefillRef = useRef<{ url: string; building: string }>({ url: '', building: '' });
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>();
 
   // Existing-job heads-up — non-blocking notice shown when the entered phone
@@ -231,28 +241,41 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     return () => document.removeEventListener('mousedown', handler);
   }, [isStatusMenuOpen]);
 
-  // ── Customer search by phone number (debounced) ───────────────────────────
+  // ── Customer list (loaded once while the form is open) ───────────────────
   useEffect(() => {
-    // Strip non-digits for search, need at least 4 local digits
-    const digits = custSearch.replace(/[^0-9]/g, '');
-    if (digits.length < 4) { setCustResults([]); return; }
-    const t = setTimeout(async () => {
-      setCustLoading(true);
+    if (!showForm) { custListLoadedRef.current = false; return; }
+    if (custListLoadedRef.current) return;
+    custListLoadedRef.current = true;
+    let cancelled = false;
+    setCustLoading(true);
+    (async () => {
       try {
         const all = await api.get('/api/customers');
-        // Normalise both sides: digits only
-        const normalise = (v: string) => (v || '').replace(/[^0-9]/g, '');
-        const q = normalise(custSearch);
-        setCustResults(
-          (all as any[]).filter((c: any) =>
-            normalise(c.phone || '').includes(q)
-          ).slice(0, 8)
-        );
-      } catch { /* silent */ }
-      finally { setCustLoading(false); }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [custSearch]);
+        if (!cancelled && Array.isArray(all)) setCustList(all);
+      } catch { /* silent — the form still works without suggestions */ }
+      finally { if (!cancelled) setCustLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [showForm]);
+
+  // ── Customer search by phone number (local, shared implementation) ────────
+  useEffect(() => {
+    // Need at least 4 digits (any format: 5000, +974 5000 0001, 97450000001)
+    const digits = custSearch.replace(/[^0-9]/g, '');
+    if (digits.length < 4) { setCustResults([]); return; }
+    // Just picked a client: its own number must not reopen the list
+    const picked = selectedCustomerId ? custList.find(c => c.id === selectedCustomerId) : undefined;
+    if (picked && picked.phone === custSearch) { setCustResults([]); return; }
+    setCustResults(searchCustomers(custList, custSearch, { limit: 8, fuzzy: false, minDigits: 4 }));
+  }, [custSearch, custList, selectedCustomerId]);
+
+  // Name lookup under "Customer Name": existing clients with the same / similar name (close spellings labelled as suggestions).
+  const nameResults = useMemo(() => {
+    if (!showForm || selectedCustomerId || nameDismissed) return [] as CustomerMatch<any>[];
+    const q = formData.customerName.trim();
+    if (q.length < 2) return [] as CustomerMatch<any>[];
+    return searchCustomers(custList, q, { limit: 5, fuzzy: true, fuzzyLimit: 3 });
+  }, [showForm, selectedCustomerId, nameDismissed, formData.customerName, custList]);
 
   // ── Existing-job heads-up (debounced, fires on a complete phone number) ──
   useEffect(() => {
@@ -358,6 +381,9 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     setCustSearch('');
     setCustResults([]);
     setSelectedCustomerId(undefined);
+    setNameDismissed(false);
+    setLocConflict(null);
+    lastPrefillRef.current = { url: '', building: '' };
     setShowForm(true);
   };
 
@@ -386,6 +412,9 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     setSelectedCustomerId(r.customerId);
     setCustSearch(r.contactNumber);   // phone-first — seed search from contact number
     setCustResults([]);
+    setNameDismissed(false);
+    setLocConflict(null);
+    lastPrefillRef.current = { url: '', building: '' };
     setFormErrors({});
     setShowForm(true);
   };
@@ -394,13 +423,33 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
     setSelectedCustomerId(c.id);
     setCustSearch(c.phone || '');   // keep search state in sync with phone
     setCustResults([]);
+    // Prefill the client's saved location. A job location typed on purpose (not just filled by a previous pick) is kept
+    // and the user is asked before it is replaced.
+    const url = getCustomerMapUrl(c);
+    const building = getCustomerBuilding(c);
+    const last = lastPrefillRef.current;
+    const urlFree = !formData.locationUrl.trim() || formData.locationUrl === last.url;
+    const bldFree = !formData.houseNumber.trim() || formData.houseNumber === last.building;
+    lastPrefillRef.current = { url: urlFree && url ? url : last.url, building: bldFree && building ? building : last.building };
+    setLocConflict(((!urlFree && url && url !== formData.locationUrl) || (!bldFree && building && building !== formData.houseNumber)) ? { url, building } : null);
     setFormData(prev => ({
       ...prev,
       customerName:  c.name || '',
       contactNumber: c.phone || prev.contactNumber,
-      locationUrl:   c.address || prev.locationUrl,
-      houseNumber:   c.buildingNumber || c.building_number || prev.houseNumber,
+      locationUrl:   urlFree && url ? url : prev.locationUrl,
+      houseNumber:   bldFree && building ? building : prev.houseNumber,
     }));
+  };
+
+  const useClientLocation = () => {
+    if (!locConflict) return;
+    setFormData(prev => ({
+      ...prev,
+      locationUrl: locConflict.url || prev.locationUrl,
+      houseNumber: locConflict.building || prev.houseNumber,
+    }));
+    lastPrefillRef.current = { url: locConflict.url, building: locConflict.building };
+    setLocConflict(null);
   };
 
   const toggleServiceCat = (cat: string) => {
@@ -829,6 +878,11 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           formErrors={formErrors}
           submitting={submitting}
           custResults={custResults}
+          nameResults={nameResults}
+          onDismissNameResults={() => setNameDismissed(true)}
+          locConflict={locConflict}
+          onUseClientLocation={useClientLocation}
+          onKeepJobLocation={() => setLocConflict(null)}
           custLoading={custLoading}
           existingJobMatches={existingJobMatches}
           checkingExistingJob={checkingExistingJob}
@@ -836,6 +890,7 @@ const SalesAppointmentRequests: React.FC<Props> = ({ currentUser, technicians, a
           onSelectCustomer={selectCustomer}
           onToggleServiceCat={toggleServiceCat}
           onFieldChange={(field, value) => {
+            if (field === 'customerName') setNameDismissed(false);
             setFormData(p => ({ ...p, [field]: value }));
             // When activity type changes, dynamically update CRM link validation error
             if (field === 'activityType') {
@@ -1473,7 +1528,12 @@ interface FormModalProps {
   formData: typeof EMPTY_FORM;
   formErrors: Record<string, string>;
   submitting: boolean;
-  custResults: any[];
+  custResults: CustomerMatch<any>[];
+  nameResults: CustomerMatch<any>[];
+  onDismissNameResults: () => void;
+  locConflict: { url: string; building: string } | null;
+  onUseClientLocation: () => void;
+  onKeepJobLocation: () => void;
   custLoading: boolean;
   existingJobMatches: any[];
   checkingExistingJob: boolean;
@@ -1488,7 +1548,8 @@ interface FormModalProps {
 
 const FormModal: React.FC<FormModalProps> = ({
   editing, formData, formErrors, submitting,
-  custResults, custLoading, existingJobMatches, checkingExistingJob, salesLeadName,
+  custResults, nameResults, onDismissNameResults, locConflict, onUseClientLocation, onKeepJobLocation,
+  custLoading, existingJobMatches, checkingExistingJob, salesLeadName,
   onCustSearchChange, onSelectCustomer, onToggleServiceCat, onFieldChange,
   onClose, onSubmit
 }) => (
@@ -1550,20 +1611,10 @@ const FormModal: React.FC<FormModalProps> = ({
             {custLoading && (
               <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
             )}
-            {/* Results dropdown */}
+            {/* Results dropdown (shared match list: exact number first, close spellings labelled as suggestions) */}
             {custResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-48 overflow-y-auto">
-                {custResults.map((c: any) => (
-                  <button
-                    key={c.id}
-                    onClick={() => onSelectCustomer(c)}
-                    className="w-full text-left px-4 py-3 hover:bg-amber-50 text-sm border-b border-slate-100 last:border-0 transition-colors"
-                  >
-                    <span className="font-semibold text-slate-800">{c.name}</span>
-                    <span className="ml-2 text-amber-600 font-mono text-xs">{c.phone}</span>
-                    {c.buildingNumber && <span className="ml-2 text-slate-400 text-xs">{c.buildingNumber}</span>}
-                  </button>
-                ))}
+              <div data-testid="sar-customer-results" className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden max-h-56 overflow-y-auto">
+                <CustomerMatchList matches={custResults} onPick={onSelectCustomer} dense testId="sar-customer-matches" />
               </div>
             )}
             {/* No match — offer create new */}
@@ -1627,6 +1678,15 @@ const FormModal: React.FC<FormModalProps> = ({
             placeholder="Auto-filled from existing client, or enter new client name"
             className={`${INPUT_STYLES} ${formErrors.customerName ? 'border-red-400' : ''}`}
           />
+          {nameResults.length > 0 && (
+            <div data-testid="sar-name-results" className="mt-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-100">
+                <span className="text-[11px] font-semibold uppercase text-slate-500">Existing clients — select to avoid a duplicate</span>
+                <button type="button" onClick={onDismissNameResults} className="text-[11px] text-slate-400 hover:text-slate-600">Not them</button>
+              </div>
+              <CustomerMatchList matches={nameResults} onPick={onSelectCustomer} dense testId="sar-name-matches" />
+            </div>
+          )}
           <FieldError msg={formErrors.customerName} />
         </div>
 
@@ -1656,6 +1716,16 @@ const FormModal: React.FC<FormModalProps> = ({
             className={`${INPUT_STYLES} ${formErrors.houseNumber ? 'border-red-400' : ''}`}
           />
           <FieldError msg={formErrors.houseNumber} />
+          {locConflict && (
+            <div data-testid="location-conflict" className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+              <div className="font-semibold">The selected client has a different saved location.</div>
+              <div className="mt-0.5">The location you entered for this job was kept. Replace it with the client's saved one?</div>
+              <div className="flex gap-2 mt-2">
+                <button type="button" data-testid="use-client-location" onClick={onUseClientLocation} className="px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
+                <button type="button" data-testid="keep-job-location" onClick={onKeepJobLocation} className="px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Odoo CRM Link */}

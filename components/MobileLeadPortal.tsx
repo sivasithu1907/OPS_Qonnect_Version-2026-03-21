@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import toast from './Toast';
 import { Ticket, TicketStatus, TicketType, Technician, Activity, Team, Customer, Priority, Role, Site } from '../types';
 import { getTicketHealth, getHealthColor } from '../utils/ticketUtils';
@@ -19,7 +19,11 @@ const FreelancerManagement = lazy(() => import('./FreelancerManagement'));
 import FreelancerAssignmentPicker from './shared/FreelancerAssignmentPicker';
 import { INPUT_STYLES, SEARCH_INPUT_STYLES } from '../constants';
 import { MyJobTaskView } from './MyJobTaskView';
-import { normalizePhone, validatePhone, formatPhoneDisplay } from '../utils/phoneUtils';
+import { normalizePhone, validatePhone, formatPhoneDisplay, samePhone } from '../utils/phoneUtils';
+import { searchCustomers } from '../utils/customerSearch';
+import { getCustomerMapUrl, getCustomerBuilding } from '../utils/mapsUrl';
+import { isDuplicateCustomerError } from '../utils/customerErrors';
+import CustomerMatchList from './shared/CustomerMatchList';
 import type { ActivityFreelancerAssignment } from '../types';
 
 // --- Props ---
@@ -245,6 +249,44 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
   // Create Ticket — customer phone search
   const [ticketPhoneSearch, setTicketPhoneSearch] = useState('');
   const [ticketSelectedCustomer, setTicketSelectedCustomer] = useState<Customer | null>(null);
+  // Duplicate-number answers from the server ("this number already belongs to …") for both create flows
+  const [actDuplicate, setActDuplicate] = useState<Customer | null>(null);
+  const [ticketDuplicate, setTicketDuplicate] = useState<Customer | null>(null);
+  // Saved client location offered to the forms; a job location typed on purpose is never replaced silently
+  const actLastPrefill = useRef<{ url: string; building: string }>({ url: '', building: '' });
+  const [actLocConflict, setActLocConflict] = useState<{ url: string; building: string } | null>(null);
+  const ticketLastPrefill = useRef<{ url: string; building: string }>({ url: '', building: '' });
+  const [ticketLocConflict, setTicketLocConflict] = useState<{ url: string; building: string } | null>(null);
+
+  // Prefill the selected client's saved location into the Create Activity form
+  useEffect(() => {
+    const c = actSelectedCustomer;
+    if (!c) { actLastPrefill.current = { url: '', building: '' }; setActLocConflict(null); return; }
+    const url = getCustomerMapUrl(c), building = getCustomerBuilding(c);
+    const last = actLastPrefill.current, f = createActivityForm;
+    const urlFree = !f.locationUrl || f.locationUrl === last.url;
+    const bldFree = !f.houseNumber || f.houseNumber === last.building;
+    if (urlFree || bldFree) {
+      setCreateActivityForm(p => ({ ...p, locationUrl: urlFree ? url : p.locationUrl, houseNumber: bldFree ? building : p.houseNumber }));
+    }
+    actLastPrefill.current = { url: urlFree ? url : last.url, building: bldFree ? building : last.building };
+    setActLocConflict(((!urlFree && url && url !== f.locationUrl) || (!bldFree && building && building !== f.houseNumber)) ? { url, building } : null);
+  }, [actSelectedCustomer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Same for the Create Ticket form
+  useEffect(() => {
+    const c = ticketSelectedCustomer;
+    if (!c) { ticketLastPrefill.current = { url: '', building: '' }; setTicketLocConflict(null); return; }
+    const url = getCustomerMapUrl(c), building = getCustomerBuilding(c);
+    const last = ticketLastPrefill.current, f = createTicketForm;
+    const urlFree = !f.locationUrl || f.locationUrl === last.url;
+    const bldFree = !f.houseNumber || f.houseNumber === last.building;
+    if (urlFree || bldFree) {
+      setCreateTicketForm(p => ({ ...p, locationUrl: urlFree ? url : p.locationUrl, houseNumber: bldFree ? building : p.houseNumber }));
+    }
+    ticketLastPrefill.current = { url: urlFree ? url : last.url, building: bldFree ? building : last.building };
+    setTicketLocConflict(((!urlFree && url && url !== f.locationUrl) || (!bldFree && building && building !== f.houseNumber)) ? { url, building } : null);
+  }, [ticketSelectedCustomer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize focused ticket
   useEffect(() => {
@@ -4164,60 +4206,50 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               <>
                                   {/* ── Step 1: Phone Number input ── */}
                                   <div className="mt-1">
-                                      <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number *</label>
+                                      <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number or Name *</label>
                                       <input
+                                          data-testid="mobile-act-search"
                                           value={actPhoneSearch}
                                           onChange={e => {
                                               const val = e.target.value;
                                               setActPhoneSearch(val);
                                               setActNewCustName('');
                                               setActCustError('');
-                                              // Auto-select on exact normalized match
-                                              const normVal = normalizePhone(val);
-                                              if (normVal.length >= 4) {
-                                                  const exactMatch = (customers || []).find(
-                                                      c => c.phone && normalizePhone(c.phone) === normVal
-                                                  );
+                                              setActDuplicate(null);
+                                              // Auto-select on a complete number that matches in any format (50000001 / +974 5000 0001 / 97450000001)
+                                              if (val.replace(/\D/g, '').length >= 8 && !/[A-Za-z]/.test(val)) {
+                                                  const exactMatch = (customers || []).find(c => c.phone && samePhone(c.phone, val));
                                                   if (exactMatch) setActSelectedCustomer(exactMatch);
                                               }
                                           }}
-                                          placeholder="Enter phone number to search..."
+                                          placeholder="Enter phone number or name to search..."
                                           className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1"
                                       />
                                   </div>
 
-                                  {/* ── Partial-match suggestions (while typing, no exact match yet) ── */}
-                                  {actPhoneSearch.length >= 3 && (() => {
-                                      const normVal = normalizePhone(actPhoneSearch);
-                                      const exact = (customers || []).find(c => c.phone && normalizePhone(c.phone) === normVal);
-                                      if (exact) return null; // will be shown as selected card on next render
-                                      const partials = (customers || []).filter(
-                                          c => c.phone && normalizePhone(c.phone).includes(normVal) && normVal.length > 0
-                                      );
-                                      return partials.length > 0 ? (
-                                          <div className="mt-1 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
-                                              {partials.slice(0, 5).map(c => (
-                                                  <button
-                                                      key={c.id}
-                                                      onClick={() => { setActSelectedCustomer(c); setActPhoneSearch(c.phone || actPhoneSearch); setActNewCustName(''); setActCustError(''); }}
-                                                      className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0"
-                                                  >
-                                                      <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
-                                                      <div className="min-w-0">
-                                                          <div className="text-sm font-medium text-slate-800 truncate">{c.name}</div>
-                                                          <div className="text-[10px] text-slate-400">{c.phone || 'No phone'}</div>
-                                                      </div>
-                                                  </button>
-                                              ))}
+                                  {/* ── Matches: exact number, exact/partial name, then close spellings (labelled suggestions) ── */}
+                                  {actPhoneSearch.trim().length >= 2 && (() => {
+                                      const found = searchCustomers(customers || [], actPhoneSearch, { limit: 5, fuzzy: true, fuzzyLimit: 3, minDigits: 3 });
+                                      return found.length > 0 ? (
+                                          <div data-testid="mobile-act-matches" className="mt-1 border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                                              <CustomerMatchList matches={found} dense testId="mobile-act-match-list"
+                                                  onPick={c => { setActSelectedCustomer(c); setActPhoneSearch(c.phone || actPhoneSearch); setActNewCustName(''); setActCustError(''); setActDuplicate(null); }} />
                                           </div>
                                       ) : null;
                                   })()}
 
                                   {/* ── No match found: show name field + Create Customer button ── */}
                                   {actPhoneSearch.length >= 4 && (() => {
-                                      const normVal = normalizePhone(actPhoneSearch);
-                                      const hasAnyMatch = (customers || []).some(c => c.phone && normalizePhone(c.phone).includes(normVal));
+                                      const looksLikePhone = !/[A-Za-z]/.test(actPhoneSearch) && actPhoneSearch.replace(/\D/g, '').length >= 4;
+                                      const hasAnyMatch = searchCustomers(customers || [], actPhoneSearch, { limit: 1, fuzzy: false, minDigits: 3 }).length > 0;
                                       if (hasAnyMatch) return null;
+                                      if (!looksLikePhone) {
+                                          return (
+                                              <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                                                  <p className="text-xs text-amber-700 font-medium">No existing client has this name. To add a new client, enter their mobile number above.</p>
+                                              </div>
+                                          );
+                                      }
                                       return (
                                           <div className="mt-2 space-y-2">
                                               <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
@@ -4234,6 +4266,14 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                               </div>
                                               {actCustError && (
                                                   <p className="text-xs text-red-600 font-medium">{actCustError}</p>
+                                              )}
+                                              {actDuplicate && (
+                                                  <div data-testid="mobile-act-duplicate" className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                                                      <div className="font-semibold">This mobile number already belongs to an existing client.</div>
+                                                      <div className="mt-0.5"><b>{actDuplicate.name}</b> · <span className="font-mono">{formatPhoneDisplay(actDuplicate.phone)}</span></div>
+                                                      <button type="button" data-testid="mobile-act-use-existing" onClick={() => { const ex = (customers || []).find(c => c.id === actDuplicate.id) || actDuplicate; setActSelectedCustomer(ex); setActDuplicate(null); setActCustError(''); }}
+                                                          className="mt-2 px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use existing client</button>
+                                                  </div>
                                               )}
                                               <button
                                                   disabled={actCreatingCust}
@@ -4274,7 +4314,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                                                           if (!created || !created.id) throw new Error('Customer could not be saved, so nothing was created. Please check the details and your connection, then try again.');
                                                           setActSelectedCustomer(created);
                                                       } catch (err: any) {
-                                                          setActCustError(err?.message || 'Customer creation failed. Please try again.');
+                                                          if (isDuplicateCustomerError(err) && err.existing) {
+                                                              setActCustError('');
+                                                              setActDuplicate((customers || []).find(c => c.id === err.existing!.id) || (err.existing as Customer));
+                                                          } else {
+                                                              setActCustError(err?.message || 'Customer creation failed. Please try again.');
+                                                          }
                                                       } finally {
                                                           setActCreatingCust(false);
                                                       }
@@ -4335,6 +4380,20 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                               <input value={createActivityForm.houseNumber} onChange={e => setCreateActivityForm(p => ({...p, houseNumber: e.target.value}))}
                                   placeholder="House/Bldg No." className="border border-slate-300 rounded-lg p-2 text-sm" />
                           </div>
+                          {actLocConflict && (
+                              <div data-testid="location-conflict" className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                                  <div className="font-semibold">The selected client has a different saved location.</div>
+                                  <div className="mt-0.5">Your job location was kept. Replace it with the client's saved one?</div>
+                                  <div className="flex gap-2 mt-2">
+                                      <button type="button" data-testid="use-client-location" onClick={() => {
+                                          setCreateActivityForm(p => ({ ...p, locationUrl: actLocConflict.url || p.locationUrl, houseNumber: actLocConflict.building || p.houseNumber }));
+                                          actLastPrefill.current = { url: actLocConflict.url, building: actLocConflict.building };
+                                          setActLocConflict(null);
+                                      }} className="px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
+                                      <button type="button" data-testid="keep-job-location" onClick={() => setActLocConflict(null)} className="px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
+                                  </div>
+                              </div>
+                          )}
                       </div>
 
                       {/* Date & Time */}
@@ -4445,56 +4504,73 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {/* Step 1: Search customer by phone */}
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number *</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Phone Number or Name *</label>
                 <div className="flex gap-2 mt-1">
                     <input 
+                        data-testid="mobile-ticket-search"
                         value={ticketPhoneSearch} 
                         onChange={e => {
                             const val = e.target.value;
                             setTicketPhoneSearch(val);
                             setTicketSelectedCustomer(null);
-                            setCreateTicketForm(p => ({...p, phone: val, customerName: ''}));
-                            // Auto-search with normalized comparison (handles +974, 00974, 8-digit local)
-                            if (val.length >= 4) {
-                                const normVal = normalizePhone(val);
-                                const found = (customers || []).find(c => c.phone && normalizePhone(c.phone) === normVal);
+                            setTicketDuplicate(null);
+                            // Only a typed mobile number goes into the phone field; a name is just a search
+                            const isName = /[A-Za-z]/.test(val);
+                            setCreateTicketForm(p => ({...p, phone: isName ? '' : val, customerName: ''}));
+                            // Auto-select a complete number that matches in any format (+974, 00974, 8-digit local)
+                            if (!isName && val.replace(/\D/g, '').length >= 8) {
+                                const found = (customers || []).find(c => c.phone && samePhone(c.phone, val));
                                 if (found) {
                                     setTicketSelectedCustomer(found);
                                     setCreateTicketForm(p => ({...p, customerName: found.name, phone: found.phone || val}));
                                 }
                             }
                         }}
-                        placeholder="Enter phone number to search..."
+                        placeholder="Enter phone number or name to search..."
                         className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm"
                     />
                 </div>
-                {/* Search results */}
-                {ticketPhoneSearch.length >= 3 && !ticketSelectedCustomer && (() => {
-                    const normSearch = normalizePhone(ticketPhoneSearch);
-                    const matches = (customers || []).filter(c => c.phone && normalizePhone(c.phone).includes(normSearch));
-                    return matches.length > 0 ? (
-                        <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
-                            {matches.slice(0, 5).map(c => (
-                                <button key={c.id} onClick={() => {
-                                    setTicketSelectedCustomer(c);
-                                    setTicketPhoneSearch(c.phone || ticketPhoneSearch);
-                                    setCreateTicketForm(p => ({...p, customerName: c.name, phone: c.phone || ticketPhoneSearch}));
-                                }} className="w-full flex items-center gap-2 p-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
-                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">{c.name.charAt(0)}</div>
-                                    <div>
-                                        <div className="text-sm font-medium text-slate-800">{c.name}</div>
-                                        <div className="text-[10px] text-slate-400">{c.phone}</div>
-                                    </div>
-                                </button>
-                            ))}
+                {/* Search results: exact number, name, then close spellings (labelled suggestions) */}
+                {ticketPhoneSearch.trim().length >= 2 && !ticketSelectedCustomer && (() => {
+                    const found = searchCustomers(customers || [], ticketPhoneSearch, { limit: 5, fuzzy: true, fuzzyLimit: 3, minDigits: 3 });
+                    const isName = /[A-Za-z]/.test(ticketPhoneSearch);
+                    const strict = found.filter(m => m.kind !== 'fuzzy');
+                    return found.length > 0 ? (
+                        <div data-testid="mobile-ticket-matches" className="mt-2 border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                            <CustomerMatchList matches={found} dense testId="mobile-ticket-match-list" onPick={c => {
+                                setTicketSelectedCustomer(c);
+                                setTicketPhoneSearch(c.phone || ticketPhoneSearch);
+                                setTicketDuplicate(null);
+                                setCreateTicketForm(p => ({...p, customerName: c.name, phone: c.phone || ticketPhoneSearch}));
+                            }} />
+                        </div>
+                    ) : null;
+                })()}
+                {ticketPhoneSearch.trim().length >= 3 && !ticketSelectedCustomer && searchCustomers(customers || [], ticketPhoneSearch, { limit: 1, fuzzy: false, minDigits: 3 }).length === 0 && (
+                    /[A-Za-z]/.test(ticketPhoneSearch) ? (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p className="text-xs text-amber-700 font-medium">No existing client has this name</p>
+                            <p className="text-[10px] text-amber-600 mt-0.5">To add a new client, enter their mobile number above</p>
                         </div>
                     ) : (
                         <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                             <p className="text-xs text-amber-700 font-medium">No customer found with this number</p>
                             <p className="text-[10px] text-amber-600 mt-0.5">A new customer will be created when you submit the ticket</p>
                         </div>
-                    );
-                })()}
+                    )
+                )}
+                {ticketDuplicate && (
+                    <div data-testid="mobile-ticket-duplicate" className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                        <div className="font-semibold">This mobile number already belongs to an existing client.</div>
+                        <div className="mt-0.5"><b>{ticketDuplicate.name}</b> · <span className="font-mono">{formatPhoneDisplay(ticketDuplicate.phone)}</span></div>
+                        <button type="button" data-testid="mobile-ticket-use-existing" onClick={() => {
+                            const ex = (customers || []).find(c => c.id === ticketDuplicate.id) || ticketDuplicate;
+                            setTicketSelectedCustomer(ex); setTicketPhoneSearch(ex.phone || ticketPhoneSearch);
+                            setCreateTicketForm(p => ({...p, customerName: ex.name, phone: ex.phone || p.phone}));
+                            setTicketDuplicate(null);
+                        }} className="mt-2 px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use existing client</button>
+                    </div>
+                )}
                 {ticketSelectedCustomer && (
                     <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2">
                         <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
@@ -4507,7 +4583,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 )}
               </div>
               {/* Customer name — only show if no match found */}
-              {!ticketSelectedCustomer && ticketPhoneSearch.length >= 3 && (
+              {!ticketSelectedCustomer && ticketPhoneSearch.length >= 3 && !/[A-Za-z]/.test(ticketPhoneSearch) && (
                   <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Customer Name *</label>
                       <input value={createTicketForm.customerName} onChange={e => setCreateTicketForm(p => ({...p, customerName: e.target.value}))}
@@ -4570,6 +4646,20 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                 <input value={createTicketForm.houseNumber} onChange={e => setCreateTicketForm(p => ({...p, houseNumber: e.target.value}))}
                   placeholder="e.g. Villa 42" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mt-1" />
               </div>
+              {ticketLocConflict && (
+                <div data-testid="location-conflict" className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                  <div className="font-semibold">The selected client has a different saved location.</div>
+                  <div className="mt-0.5">Your job location was kept. Replace it with the client's saved one?</div>
+                  <div className="flex gap-2 mt-2">
+                    <button type="button" data-testid="use-client-location" onClick={() => {
+                      setCreateTicketForm(p => ({ ...p, locationUrl: ticketLocConflict.url || p.locationUrl, houseNumber: ticketLocConflict.building || p.houseNumber }));
+                      ticketLastPrefill.current = { url: ticketLocConflict.url, building: ticketLocConflict.building };
+                      setTicketLocConflict(null);
+                    }} className="px-2.5 py-1 bg-white border border-amber-300 rounded font-semibold hover:bg-amber-100">Use client's saved location</button>
+                    <button type="button" data-testid="keep-job-location" onClick={() => setTicketLocConflict(null)} className="px-2.5 py-1 bg-white border border-slate-300 rounded font-semibold hover:bg-slate-50">Keep mine</button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0">
               <button
@@ -4602,7 +4692,7 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     if (!ticketSelectedCustomer) {
                         const newCust: Customer = {
                             id: `c${Date.now()}`, name,
-                            phone: canonicalPhone, address: createTicketForm.houseNumber, email: '',
+                            phone: canonicalPhone, address: createTicketForm.locationUrl || '', buildingNumber: createTicketForm.houseNumber || '', email: '',
                             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
                         };
                         const created = onAddCustomer ? await onAddCustomer(newCust) : null;
@@ -4626,7 +4716,12 @@ export const MobileLeadPortal: React.FC<MobileLeadPortalProps> = ({
                     setTicketSelectedCustomer(null);
                     setCreateTicketForm({ customerName: '', phone: '', category: '', type: '', priority: 'MEDIUM', description: '', locationUrl: '', houseNumber: '' });
                   } catch (err: any) {
-                    toast.error(err?.message || 'Failed to create ticket — please try again.');
+                    if (isDuplicateCustomerError(err) && err.existing) {
+                      setTicketDuplicate((customers || []).find(c => c.id === err.existing!.id) || (err.existing as Customer));
+                      toast.error(`This mobile number already belongs to ${err.existing.name}. Use the existing client.`);
+                    } else {
+                      toast.error(err?.message || 'Failed to create ticket — please try again.');
+                    }
                   } finally {
                     setIsCreatingTicket(false);
                   }

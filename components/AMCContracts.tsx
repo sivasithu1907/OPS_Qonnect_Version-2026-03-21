@@ -16,11 +16,13 @@
  * managing the contracts themselves (create / pause / resume / delete) and
  * seeing what's overdue or coming up.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from './Toast';
 import api from '../services/api';
 import { Plus, RefreshCw, Calendar, AlertCircle } from 'lucide-react';
 import { Customer } from '../types';
+import { searchCustomers } from '../utils/customerSearch';
+import { formatPhoneDisplay } from '../utils/phoneUtils';
 import { AmcSkeleton } from './shared/Skeletons';
 import { EmptyAMC } from './shared/EmptyState';
 interface AMCContractsProps {
@@ -43,6 +45,17 @@ const AMCContracts: React.FC<AMCContractsProps> = ({ customers }) => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formSaving, setFormSaving] = useState(false);
+  // Client picker: whole list when nothing is typed; otherwise the shared name / mobile search (close spellings labelled).
+  const [clientQuery, setClientQuery] = useState('');
+  const clientOptions = useMemo(() => {
+    const q = clientQuery.trim();
+    let list: { customer: Customer; kind: string }[] = q
+      ? searchCustomers(customers, q, { limit: 50, fuzzy: true, fuzzyLimit: 5, minDigits: 1 })
+      : customers.map(c => ({ customer: c, kind: 'all' }));
+    const picked = form.customerId ? customers.find(c => c.id === form.customerId) : undefined;
+    if (picked && !list.some(o => o.customer.id === picked.id)) list = [{ customer: picked, kind: 'selected' }, ...list];
+    return list;
+  }, [clientQuery, customers, form.customerId]);
 
   const fetchSchedules = useCallback(async () => {
     setLoading(true);
@@ -82,7 +95,7 @@ const AMCContracts: React.FC<AMCContractsProps> = ({ customers }) => {
     try {
       await api.post('/api/recurring-schedules', form);
       setShowForm(false);
-      setForm(EMPTY_FORM);
+      setForm(EMPTY_FORM); setClientQuery("");
       toast.success('AMC contract created.');
       await fetchSchedules();
     } catch (e: any) {
@@ -224,12 +237,18 @@ const AMCContracts: React.FC<AMCContractsProps> = ({ customers }) => {
             <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Client</label>
-                <select value={form.customerId} onChange={e => {
+                <input data-testid="amc-client-search" value={clientQuery} onChange={e => setClientQuery(e.target.value)}
+                  placeholder="Search by name or mobile number…" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm mb-1.5" />
+                <select data-testid="amc-client-select" value={form.customerId} onChange={e => {
                   const cust = customers.find(c => c.id === e.target.value);
                   setForm(p => ({ ...p, customerId: e.target.value, customerName: cust?.name || '' }));
                 }} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm">
-                  <option value="">Select client...</option>
-                  {customers.map(cust => <option key={cust.id} value={cust.id}>{cust.name}</option>)}
+                  <option value="">{clientQuery.trim() && clientOptions.length === 0 ? 'No client matches' : 'Select client...'}</option>
+                  {clientOptions.map(o => (
+                    <option key={o.customer.id} value={o.customer.id}>
+                      {o.customer.name}{o.customer.phone ? ` — ${formatPhoneDisplay(o.customer.phone)}` : ''}{o.kind === 'fuzzy' ? ' (similar name — suggestion)' : ''}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
