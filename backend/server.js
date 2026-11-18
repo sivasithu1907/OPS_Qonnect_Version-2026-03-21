@@ -395,6 +395,10 @@ async function initDb() {
       );
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS building_number TEXT;
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS avatar TEXT;
+      -- PUT /api/customers/:id writes updated_at. Databases that had DATABASE_MIGRATION.sql applied already have it; a
+      -- database created by this start-up code alone (e.g. a fresh staging DB) did not, so every client edit failed with HTTP 500.
+      -- Idempotent: a no-op where the column exists.
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
     `);
 
     // 2. Tickets Table
@@ -2141,6 +2145,15 @@ app.post("/api/customers", authenticate, requireRoles(STAFF_MANAGERS), writeRate
       );
       if (existing.rows.length > 0) {
         const r = existing.rows[0];
+        // Opt-in strict mode (the Clients page "Add Client" form): report the duplicate instead of silently renaming
+        // the existing contact. Callers that do not send strictCreate keep the original merge behaviour below.
+        if (req.body && req.body.strictCreate === true) {
+          return res.status(409).json({
+            error: `A client with this mobile number already exists: ${r.name}`,
+            code: 'DUPLICATE_PHONE',
+            existingId: r.id,
+          });
+        }
         // Update name/address if provided and different
         if (name && name !== r.name) {
           await pool.query(`UPDATE customers SET name=$1 WHERE id=$2`, [String(name).trim(), r.id]);

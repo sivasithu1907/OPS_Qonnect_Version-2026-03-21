@@ -945,7 +945,10 @@ const loadTickets = async () => {
   };
   
 // Customer Handlers (API-first)
-const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
+// `opts.strict` is used ONLY by the Clients page "Add Client" form: the server then answers 409 instead of silently
+// merging into (and renaming) an existing contact with the same phone, and the Building Number typed in the form is
+// saved. Every other caller (activity / ticket / sales forms) keeps the original lenient behaviour unchanged.
+const handleAddCustomer = async (c: Customer, opts?: { strict?: boolean }): Promise<Customer | null> => {
   try {
     const res = await fetch("/api/customers", {
       method: "POST",
@@ -957,6 +960,7 @@ const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
         address: (c as any).address,
         notes: (c as any).notes,
         is_active: (c as any).is_active ?? true,
+        ...(opts?.strict ? { buildingNumber: (c as any).buildingNumber, strictCreate: true } : {}),
       }),
     });
 
@@ -987,44 +991,44 @@ const handleAddCustomer = async (c: Customer): Promise<Customer | null> => {
   }
 };
 
-const handleUpdateCustomer = async (c: Customer) => {
+// Edits an EXISTING client. Throws (instead of toasting) so the Edit form can show the real reason and keep what the
+// user typed. Creating a client never comes through here — see handleAddCustomer.
+const handleUpdateCustomer = async (c: Customer): Promise<void> => {
+  const id = (c as any)?.id ? String((c as any).id).trim() : "";
+  if (!id) {
+    console.error("🚨 Update customer called without id:", c);
+    throw new Error("Missing customer ID. Close and reopen the client, then try again.");
+  }
+
+  const payload = {
+    name: c.name,
+    phone: (c as any).phone,
+    email: (c as any).email,
+    address: (c as any).address,
+    buildingNumber: (c as any).buildingNumber,
+    notes: (c as any).notes,
+    is_active: (c as any).is_active ?? true,
+  };
+
+  let res: Response;
   try {
-    const id = (c as any)?.id ? String((c as any).id).trim() : "";
-    if (!id) {
-      console.error("🚨 Update customer called without id:", c);
-      toast.error("Failed to update customer: missing ID.");
-      return;
-    }
-
-    const payload = {
-      name: c.name,
-      phone: (c as any).phone,
-      email: (c as any).email,
-      address: (c as any).address,
-      buildingNumber: (c as any).buildingNumber,
-      notes: (c as any).notes,
-      is_active: (c as any).is_active ?? true,
-    };
-
-
-    const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
+    res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
       method: "PUT",
       headers: getAuthHeaders(),
       body: JSON.stringify(payload),
     });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      console.error("Update failed:", res.status, text);
-      toast.error(`Failed to update customer (${res.status})`);
-      return;
-    }
-
-    await loadCustomers();
   } catch (e) {
     console.error("Update exception:", e);
-    toast.error("Failed to update customer");
+    throw new Error("Customer was not saved: network error — check your connection");
   }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({} as any));
+    console.error("Update failed:", res.status, err);
+    throw new Error(`Customer was not saved: ${err?.error || `HTTP ${res.status}`}`);
+  }
+
+  await loadCustomers();
 };
 
 const handleDeleteCustomer = async (id: string) => {
@@ -2266,6 +2270,7 @@ useEffect(() => {
                         technicians={technicians}
                         sites={sites}
                         salesAppointmentRequests={salesAppointmentRequests}
+                        onAddCustomer={handleAddCustomer}
                         onSaveCustomer={handleUpdateCustomer}
                         onDeleteCustomer={handleDeleteCustomer}
                         onCreateTicket={(data) => { handleCreateTicket(data); setActiveView('tickets'); }}

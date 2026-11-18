@@ -37,7 +37,12 @@ interface CustomerRecordsProps {
   // SAR-00004 get created without anyone noticing QNC-ACT-000172 already
   // existed for the same person.
   salesAppointmentRequests?: SalesAppointmentRequest[];
-  onSaveCustomer: (customer: Customer) => void;
+  // EDIT an existing client. May reject with an Error whose message is shown in the form.
+  onSaveCustomer: (customer: Customer) => void | Promise<void>;
+  // CREATE a new client (the server assigns the ID). Must be provided for the "Add Client" form to work; resolves with
+  // the saved client, rejects with an Error whose message is shown in the form. `strict` = report a duplicate phone
+  // instead of merging into the existing client.
+  onAddCustomer?: (customer: Customer, opts?: { strict?: boolean }) => Promise<Customer | null> | void;
   onDeleteCustomer: (id: string) => void;
   readOnly?: boolean;
   isMobile?: boolean;
@@ -58,6 +63,7 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
     sites,
     salesAppointmentRequests = [],
     onSaveCustomer,
+    onAddCustomer,
     onDeleteCustomer,
     readOnly = false,
     isMobile = false,
@@ -87,6 +93,8 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);          // blocks a second Save while a request is in flight
+  const justCreatedIdRef = useRef<string | null>(null);        // new client to scroll to once it is in the list
   
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
@@ -304,9 +312,9 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
       }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (readOnly) return;
+      if (readOnly || submitting) return;
       setFormError(null);
       
       const formData = new FormData(e.target as HTMLFormElement);
@@ -322,39 +330,74 @@ const CustomerRecords: React.FC<CustomerRecordsProps> = ({
 
       const cleanPhone = phoneValidation.formatted!;
 
-      // 4. Check Uniqueness
-      const duplicate = customers.find(c => c.phone === cleanPhone && c.id !== activeItem?.id);
+      // 4. Check Uniqueness (compare normalised numbers, so "+974 5512 3456", "55123456" and "+97455123456" are one number)
+      const duplicate = customers.find(c => c.id !== activeItem?.id && normalizePhone(c.phone) === cleanPhone);
       if (duplicate) {
           setFormError(`This mobile number already exists for client: ${duplicate.name}`);
           return;
       }
 
+      // Build payload but NEVER trust form fields for id
+      const data: any = {
+        ...rawData,
+        phone: cleanPhone,
+      };
 
-// Build payload but NEVER trust form fields for id
-const data: any = {
-  ...rawData,
-  phone: cleanPhone,
-};
+      // Remove any accidental id coming from the form
+      delete data.id;
 
-// Remove any accidental id coming from the form
-delete data.id;
+      // CREATE and UPDATE are different operations. Only the modal type decides which one runs — never the presence of an id.
+      const isCreate = modalType === 'add';
+      if (isCreate) {
+        // ID comes from backend
+        data.avatar = avatarPreview || `https://ui-avatars.com/api/?name=${data.name}&background=random`;
+        if (!onAddCustomer) {
+          setFormError('Adding clients is not available here.');
+          return;
+        }
+      } else {
+        // Must have activeItem with a real id
+        if (!activeItem?.id) {
+          setFormError("Missing customer ID. Please close and reopen the client, then try again.");
+          return;
+        }
+        data.id = activeItem.id;
+        data.avatar = avatarPreview || activeItem.avatar;
+      }
 
-if (modalType === 'add') {
-  // ID comes from backend
-  data.avatar = avatarPreview || `https://ui-avatars.com/api/?name=${data.name}&background=random`;
-} else {
-  // Must have activeItem with a real id
-  if (!activeItem?.id) {
-    setFormError("Missing customer ID. Please close and reopen the client, then try again.");
-    return;
-  }
-  data.id = activeItem.id;
-  data.avatar = avatarPreview || activeItem.avatar;
-}
-
-onSaveCustomer(data as Customer);
-      closeModal();
+      // Keep the form open until the server has accepted the change: on any failure the user sees the reason and
+      // everything they typed is still in the form (the inputs stay mounted), ready to correct and retry.
+      setSubmitting(true);
+      try {
+        if (isCreate) {
+          const created = await Promise.resolve(onAddCustomer!(data as Customer, { strict: true }));
+          if (!created || !(created as any).id) throw new Error('Customer was not saved: the server did not confirm it.');
+          // Show the new client straight away: clear any search that would hide it and jump to its page.
+          setSearchTerm('');
+          justCreatedIdRef.current = (created as any).id;
+        } else {
+          await Promise.resolve(onSaveCustomer(data as Customer));
+        }
+        closeModal();
+      } catch (err: any) {
+        setFormError(err?.message || 'Customer was not saved.');
+      } finally {
+        setSubmitting(false);
+      }
   };
+
+  // After a successful create: once the new client is part of the sorted list, switch to the page that holds it and scroll/flash it.
+  useEffect(() => {
+      const id = justCreatedIdRef.current;
+      if (!id) return;
+      const idx = sortedCustomers.findIndex(c => c.id === id);
+      if (idx < 0) return;
+      justCreatedIdRef.current = null;
+      pendingJumpIdRef.current = id;
+      suppressLetterSyncUntilRef.current = Date.now() + 700;
+      setPage(Math.floor(idx / pageSize) + 1);
+      setJumpTick(n => n + 1);
+  }, [sortedCustomers, pageSize]);
 
   // Unified Client History — activities + tickets, sorted newest first
   type TimelineItem = {
@@ -578,7 +621,7 @@ onSaveCustomer(data as Customer);
                 <div className="p-3 space-y-3">
                     {totalFiltered === 0 ? (
                         <div className="p-8 text-center text-slate-400 italic">
-                            No clients found matching "{searchTerm}"
+                            {searchTerm.trim() ? <>No clients found matching "{searchTerm}"</> : 'No clients yet. Use Add Client to create the first one.'}
                         </div>
                     ) : (
                         pageCustomers.map(cust => {
@@ -652,7 +695,7 @@ onSaveCustomer(data as Customer);
                             {totalFiltered === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">
-                                        No clients found matching "{searchTerm}"
+                                        {searchTerm.trim() ? <>No clients found matching "{searchTerm}"</> : 'No clients yet. Use Add Client to create the first one.'}
                                     </td>
                                 </tr>
                             ) : (
@@ -878,8 +921,8 @@ onSaveCustomer(data as Customer);
                                  ) : <div></div>}
                                  <div className="flex gap-3">
                                     <button type="button" onClick={closeModal} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Cancel</button>
-                                    <button type="submit" className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all">
-                                        {activeItem ? 'Save Changes' : 'Create Record'}
+                                    <button type="submit" disabled={submitting} className="px-6 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+                                        {submitting ? 'Saving…' : activeItem ? 'Save Changes' : 'Create Record'}
                                     </button>
                                  </div>
                             </div>
